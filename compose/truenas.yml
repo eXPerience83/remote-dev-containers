@@ -1,0 +1,63 @@
+services:
+  codex:
+    image: ghcr.io/experience83/codex-remote-dev:stable
+    container_name: codex-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      WORKSPACE: /workspace
+      CODEX_HOME: /root/.codex
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7681"
+      WEB_BASE_PATH: /
+      WEB_USERNAME: codex
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: "1"
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "0"
+      START_MODE: menu
+      TMUX_SESSION: codex
+
+      GH_HOST: github.com
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      DO_NOT_TRACK: "1"
+
+      # Optional. Prefer ChatGPT device-code login instead of an API key.
+      OPENAI_API_KEY: ""
+      GIT_USER_NAME: ""
+      GIT_USER_EMAIL: ""
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      # Replace with the LAN or Tailscale IP of TrueNAS.
+      - "192.168.1.10:7681:7681"
+
+    volumes:
+      - /mnt/Pool1/codex/workspace:/workspace
+      - /mnt/Pool1/codex/config:/root/.codex
+      - /mnt/Pool1/codex/gh:/root/.config/gh
+      - /mnt/Pool1/codex/git:/root/.config/git
+      - /mnt/Pool1/codex/ssh:/root/.ssh
+      - /mnt/Pool1/codex/secrets/web_password.txt:/run/secrets/web_password:ro
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+x-portals:
+  - host: truenas
+    name: "Codex Web Terminal"
+    path: /
+    port: 7681
+    scheme: http

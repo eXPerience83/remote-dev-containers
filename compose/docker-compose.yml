@@ -1,0 +1,64 @@
+services:
+  codex:
+    image: ${CODEX_IMAGE:-ghcr.io/experience83/codex-remote-dev:stable}
+    container_name: codex-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      WORKSPACE: /workspace
+      CODEX_HOME: /root/.codex
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7681"
+      WEB_BASE_PATH: ${WEB_BASE_PATH:-/}
+      WEB_USERNAME: ${WEB_USERNAME:-codex}
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: ${WEB_MAX_CLIENTS:-1}
+      WEB_CHECK_ORIGIN: ${WEB_CHECK_ORIGIN:-1}
+      ALLOW_INSECURE_WEB: ${ALLOW_INSECURE_WEB:-0}
+      START_MODE: ${START_MODE:-menu}
+      TMUX_SESSION: ${TMUX_SESSION:-codex}
+
+      GIT_USER_NAME: ${GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
+      GH_HOST: ${GH_HOST:-github.com}
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      DO_NOT_TRACK: "1"
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CODEX_CA_CERTIFICATE: ${CODEX_CA_CERTIFICATE:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "${WEB_PUBLISH_IP:-127.0.0.1}:${WEB_PUBLISH_PORT:-7681}:7681"
+
+    volumes:
+      - ${CODEX_DATA_ROOT:-./data}/workspace:/workspace
+      - ${CODEX_DATA_ROOT:-./data}/codex:/root/.codex
+      - ${CODEX_DATA_ROOT:-./data}/gh:/root/.config/gh
+      - ${CODEX_DATA_ROOT:-./data}/git:/root/.config/git
+      - ${CODEX_DATA_ROOT:-./data}/ssh:/root/.ssh
+
+    secrets:
+      - web_password
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+secrets:
+  web_password:
+    file: ${WEB_PASSWORD_PATH:-./secrets/web_password.txt}

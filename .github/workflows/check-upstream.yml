@@ -1,0 +1,53 @@
+name: Check upstream versions
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check stable upstream releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source versions.env
+
+          latest_codex=$(gh api repos/openai/codex/releases/latest --jq .tag_name)
+          latest_gh=$(gh api repos/cli/cli/releases/latest --jq '.tag_name | ltrimstr("v")')
+          latest_ttyd=$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)
+          latest_mise=$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')
+
+          sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
+          sed -i "s/^GH_VERSION=.*/GH_VERSION=${latest_gh}/" versions.env
+          sed -i "s/^TTYD_VERSION=.*/TTYD_VERSION=${latest_ttyd}/" versions.env
+          sed -i "s/^MISE_VERSION=.*/MISE_VERSION=${latest_mise}/" versions.env
+
+          if git diff --quiet -- versions.env; then
+            echo "No upstream release changes."
+            exit 0
+          fi
+
+          branch="automation/update-upstreams-$(date -u +%Y%m%d)"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -b "$branch"
+          git add versions.env
+          git commit -m "chore: update upstream versions"
+          git push -u origin "$branch"
+          gh pr create \
+            --title "chore: update upstream versions" \
+            --body "Automated upstream release update. Merge only after the AMD64 build and smoke tests pass." \
+            --base main \
+            --head "$branch"

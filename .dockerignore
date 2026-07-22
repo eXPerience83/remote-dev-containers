@@ -1,0 +1,8 @@
+.git
+.github
+.data
+data
+secrets
+*.zip
+*.tar
+*.tar.gz
