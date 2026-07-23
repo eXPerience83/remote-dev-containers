@@ -34,4 +34,5 @@ docker build \
   "$ROOT"
 
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$CODEX_IMAGE"
+bash "$ROOT/scripts/runtime-smoke-test.sh" "$CODEX_IMAGE"
 docker image inspect "$BASE_IMAGE" "$CODEX_IMAGE" --format '{{.RepoTags}} {{.Size}}'
