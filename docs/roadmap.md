@@ -9,14 +9,16 @@
 - Enable branch protection and GHCR.
 - Confirm Apache-2.0 licensing and third-party notices.
 
-## Milestone 1 — local AMD64 proof
+## Milestone 1 — private AMD64 edge proof
 
-- Build the shared base on TrueNAS or another AMD64 Docker host.
+- Publish private `edge` and immutable `sha-...` AMD64 images from `main`.
+- Deploy an immutable edge image on TrueNAS.
 - Measure compressed and unpacked sizes.
 - Verify Python, Node, uv, GitHub CLI and ttyd.
-- Verify Codex device-code login and persistence.
+- Verify browser access and reconnection through tmux.
+- Verify Codex device-code login and persistence across container recreation.
 - Verify GitHub login, `gh auth setup-git`, clone, push and PR creation.
-- Verify browser reconnection through tmux.
+- Record the tested image digest, source commit and rollback image.
 
 ## Milestone 2 — hardening
 
@@ -31,6 +33,7 @@
 - Publish AMD64 images only.
 - Document TrueNAS and generic Docker Compose installation.
 - Publish update and rollback instructions.
+- Complete the changelog, public repository metadata, topics and CodeRabbit configuration.
 - Open issues for requested tools instead of expanding the image preemptively.
 
 ## Later

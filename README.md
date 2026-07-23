@@ -2,7 +2,7 @@
 
 Community-maintained, browser-accessible Codex CLI development environment for Docker, NAS and homelab systems.
 
-> Status: design and implementation starter. Not yet a published or security-audited image. Not affiliated with or endorsed by OpenAI.
+> Status: design and implementation starter. Not yet a published or security-audited stable image. Not affiliated with or endorsed by OpenAI.
 
 ## Goal
 
@@ -43,6 +43,26 @@ Open the published web address and choose:
 3. Diagnostics
 4. Start Codex
 
+## Private edge testing
+
+The `edge` image is an unstable validation build published manually from `main`. It must be tested before any stable version tag is created.
+
+For the generic Compose file, set:
+
+```dotenv
+CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
+```
+
+The TrueNAS example accepts the same `CODEX_IMAGE` variable. Keep the repository and GHCR packages private during this phase.
+
+For a reproducible deployment, prefer the immutable tag shown by the edge workflow:
+
+```text
+ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>
+```
+
+See `docs/releases.md` for release channels, promotion criteria and rollback guidance.
+
 ## Important warnings
 
 - Do not publish the terminal port directly to the Internet.
@@ -50,13 +70,16 @@ Open the published web address and choose:
 - Do not use privileged mode.
 - Anyone with terminal access can read mounted repositories and credentials.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
+- `edge` is not a stable release and may be replaced without notice.
 
 ## Documentation
 
+- `CHANGELOG.md`
 - `docs/architecture.md`
 - `docs/tool-matrix.md`
 - `docs/security.md`
 - `docs/decisions.md`
+- `docs/releases.md`
 - `docs/roadmap.md`
 
 ## Upstream references
