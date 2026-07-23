@@ -20,6 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validate repository configuration
+        run: |
+          bash -n scripts/*.sh
+          bash scripts/validate-version-pins.sh
+          jq -e . renovate.json >/dev/null
+
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
