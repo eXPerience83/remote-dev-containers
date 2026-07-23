@@ -10,7 +10,7 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 
 ## Decisiones principales
 
-- Base compartida ligera sobre Ubuntu 24.04.
+- Base compartida ligera sobre Ubuntu 26.04 LTS.
 - Ejecución como root.
 - Codex CLI desde una release oficial fijada y verificada.
 - GitHub CLI incluido desde el principio.
