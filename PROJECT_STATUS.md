@@ -1,5 +1,7 @@
 # Project status
 
+> Current maturity: **active development / experimental**. Public access is intended for collaborative testing and review, not as a claim of production or stable-release readiness.
+
 ## Locked
 
 - Shared lightweight base plus Codex child
@@ -11,7 +13,7 @@
 - AMD64 stable first
 - Image rebuild/update workflow rather than in-container upgrades
 
-## Must validate before publication
+## Must validate before the first stable release
 
 - Exact image size
 - Ubuntu 26.04 package compatibility and build stability
@@ -46,4 +48,4 @@
 - ttyd: `1.7.7`
 - mise: `2026.5.3`
 
-These pins remain subject to the first real AMD64 build and checksum validation.
+These pins have passed the automated AMD64 build and smoke tests but remain subject to real TrueNAS deployment, authentication, persistence and sandbox validation.
