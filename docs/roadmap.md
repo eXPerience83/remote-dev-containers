@@ -12,8 +12,8 @@
 
 ## Milestone 1 — AMD64 edge proof
 
-- Publish experimental `edge` and immutable `sha-...` AMD64 images from `main`.
-- Deploy an immutable edge image on TrueNAS.
+- Publish experimental `edge` and commit-addressed `sha-...` AMD64 images from `main`.
+- Deploy the edge image on TrueNAS pinned by its published digest.
 - Measure compressed and unpacked sizes.
 - Verify Python, Node, uv, GitHub CLI and ttyd.
 - Verify browser access and reconnection through tmux.
