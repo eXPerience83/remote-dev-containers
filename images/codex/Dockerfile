@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.25
 ARG BASE_IMAGE=codex-remote-dev-base:local
 FROM ${BASE_IMAGE}
 
