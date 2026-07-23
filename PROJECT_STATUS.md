@@ -3,7 +3,7 @@
 ## Locked
 
 - Shared lightweight base plus Codex child
-- Ubuntu 24.04
+- Ubuntu 26.04 LTS
 - Root runtime
 - GitHub CLI essential
 - Python 3.14, Node 24, uv and mise
@@ -14,6 +14,7 @@
 ## Must validate before publication
 
 - Exact image size
+- Ubuntu 26.04 package compatibility and build stability
 - Codex binary release and digest resolution
 - GitHub CLI checksum installation
 - ttyd authentication and origin checking
@@ -34,8 +35,9 @@
 - Office/VBA tools
 - Multi-user service
 
-## Initial upstream pins reviewed on 2026-07-22
+## Initial upstream pins reviewed on 2026-07-23
 
+- Ubuntu: `26.04` LTS
 - Codex CLI: `rust-v0.144.4` stable
 - Python: `3.14.6`
 - Node.js: `24.17.0` LTS

@@ -10,7 +10,7 @@ Keep development tools, repositories and Codex on a remote Docker host so the pe
 
 ## Design
 
-- Shared lightweight Ubuntu 24.04 base
+- Shared lightweight Ubuntu 26.04 LTS base
 - Root runtime for predictable tool permissions
 - Codex CLI from an official pinned release asset
 - GitHub CLI as a core tool

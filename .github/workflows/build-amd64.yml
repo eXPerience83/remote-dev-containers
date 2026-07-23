@@ -21,9 +21,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Validate scripts and Compose files
+      - name: Validate repository configuration
         run: |
           bash -n scripts/*.sh
+          bash scripts/validate-version-pins.sh
+          jq -e . renovate.json >/dev/null
           for file in compose/*.yml; do
             docker compose -f "$file" config --quiet
             echo "OK $file"

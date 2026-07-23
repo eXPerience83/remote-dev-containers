@@ -2,5 +2,32 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update the effective Ubuntu base pin in versions.env",
+      "managerFilePatterns": [
+        "/^versions\\.env$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>docker) depName=(?<depName>ubuntu) versioning=(?<versioning>ubuntu)\\nUBUNTU_VERSION=(?<currentValue>\\d+\\.\\d+)"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Track Ubuntu LTS releases only and group all base-image references",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ubuntu",
+        "docker.io/library/ubuntu"
+      ],
+      "versioning": "ubuntu",
+      "allowedVersions": "/^(?:[0-9]*[02468])\\.04$/",
+      "groupName": "Ubuntu LTS base"
+    }
   ]
 }

@@ -3,7 +3,7 @@
 ## Locked decisions
 
 - OpenCode remains independent and continues deriving from its official image.
-- This repository builds a shared Ubuntu 24.04 development base.
+- This repository builds a shared Ubuntu 26.04 LTS development base.
 - The first child image is Codex Remote Dev.
 - A future Antigravity child may reuse the same base, but is out of scope for v0.1.
 - The runtime user is root to avoid fighting toolchain permissions.
@@ -15,7 +15,7 @@
 ## Image graph
 
 ```text
-ubuntu:24.04
+ubuntu:26.04
 └── remote-dev-base
     ├── Git, Git LFS, GitHub CLI, SSH
     ├── Python 3.14, Node 24, uv, mise

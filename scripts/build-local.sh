@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT/versions.env"
 
+bash "$ROOT/scripts/validate-version-pins.sh"
+
 BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
@@ -32,4 +34,5 @@ docker build \
   "$ROOT"
 
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$CODEX_IMAGE"
+bash "$ROOT/scripts/runtime-smoke-test.sh" "$CODEX_IMAGE"
 docker image inspect "$BASE_IMAGE" "$CODEX_IMAGE" --format '{{.RepoTags}} {{.Size}}'
