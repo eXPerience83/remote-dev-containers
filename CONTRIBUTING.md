@@ -19,10 +19,10 @@ Thank you for helping improve Remote Dev Containers.
 3. Update documentation and `CHANGELOG.md` when behavior changes.
 4. Run the relevant validation:
 
-```bash
-make validate
-./scripts/build-local.sh
-```
+   ```bash
+   make validate
+   ./scripts/build-local.sh
+   ```
 
 5. Open a pull request using the repository template.
 6. Address CI and CodeRabbit findings that are valid for the current implementation.
