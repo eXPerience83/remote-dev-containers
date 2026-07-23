@@ -3,15 +3,16 @@
 ## Milestone 0 — repository bootstrap
 
 - Review image names and project name.
-- Create the private GitHub repository.
-- Keep it private until the first image is validated, licensed and documented.
+- Create the GitHub repository.
+- Make the repository and GHCR packages available as a clearly marked development preview.
+- Add CodeRabbit configuration for pull-request reviews.
 - Copy this starter kit.
 - Enable branch protection and GHCR.
 - Confirm Apache-2.0 licensing and third-party notices.
 
-## Milestone 1 — private AMD64 edge proof
+## Milestone 1 — AMD64 edge proof
 
-- Publish private `edge` and immutable `sha-...` AMD64 images from `main`.
+- Publish experimental `edge` and immutable `sha-...` AMD64 images from `main`.
 - Deploy an immutable edge image on TrueNAS.
 - Measure compressed and unpacked sizes.
 - Verify Python, Node, uv, GitHub CLI and ttyd.
@@ -27,13 +28,14 @@
 - Test Codex sandbox and approval behavior inside Docker.
 - Generate SBOMs and provenance attestations.
 - Add secret scanning, Dockerfile linting and vulnerability scanning.
+- Review CodeRabbit findings without treating AI review as a replacement for CI or manual testing.
 
-## Milestone 3 — first public release
+## Milestone 3 — first stable release
 
 - Publish AMD64 images only.
 - Document TrueNAS and generic Docker Compose installation.
 - Publish update and rollback instructions.
-- Complete the changelog, public repository metadata, topics and CodeRabbit configuration.
+- Complete the changelog, repository metadata, topics, contribution guidance and third-party notices.
 - Open issues for requested tools instead of expanding the image preemptively.
 
 ## Later
