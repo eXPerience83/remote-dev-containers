@@ -3,17 +3,27 @@ set -euo pipefail
 
 image="${1:-codex-remote-dev:local}"
 name="codex-remote-dev-smoke-${RANDOM}-$$"
+guard_name="${name}-guard"
 log_file="$(mktemp)"
 
 cleanup() {
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$guard_name" >/dev/null 2>&1 || true
   rm -f "$log_file"
 }
 trap cleanup EXIT
 
 # Secure by default: startup without a password must fail unless explicitly overridden.
-if docker run --rm "$image" >"$log_file" 2>&1; then
+set +e
+timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1
+guard_status=$?
+set -e
+
+if (( guard_status == 0 )); then
   echo "ERROR: container started without web authentication" >&2
+  exit 1
+fi
+if (( guard_status == 124 )); then
+  echo "ERROR: unauthenticated startup did not fail within 15 seconds" >&2
   exit 1
 fi
 if ! grep -Fq "web authentication is not configured" "$log_file"; then
