@@ -60,10 +60,16 @@ For the generic or TrueNAS Compose file, set:
 CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
 ```
 
-For a reproducible deployment, prefer the immutable tag shown by the edge workflow and package page:
+For a source-commit-addressed deployment, use the `sha-...` tag shown by the edge workflow and package page:
 
 ```text
 ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>
+```
+
+GHCR tags are mutable. For immutable reproduction or rollback, record the published digest and pin the image as:
+
+```text
+ghcr.io/experience83/codex-remote-dev@sha256:<digest>
 ```
 
 See `docs/releases.md` for release channels, promotion criteria and rollback guidance.
