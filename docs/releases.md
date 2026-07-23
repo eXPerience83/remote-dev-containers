@@ -2,7 +2,7 @@
 
 ## Edge
 
-`edge` is the private validation channel for the current `main` branch.
+`edge` is the public experimental development channel for the current `main` branch.
 
 It is published manually through the **Publish edge AMD64** workflow and may change without notice. Each run publishes:
 
@@ -12,9 +12,12 @@ It is published manually through the **Publish edge AMD64** workflow and may cha
 - `ghcr.io/experience83/codex-remote-dev:edge-amd64`
 - `ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>`
 
-Use the immutable `sha-...` tag when reproducing a specific test. Use `edge-amd64` when following the latest private test build.
+Public container-registry images can be pulled without authentication. Use the immutable `sha-...` tag when reproducing a specific test. Use `edge-amd64` only when intentionally following the latest development build.
 
 The workflow refuses to publish from a branch other than `main`.
+
+> [!WARNING]
+> Public availability does not make `edge` stable or production-ready. Breaking changes are possible, and the ttyd port must not be exposed directly to the Internet.
 
 ## Stable
 
