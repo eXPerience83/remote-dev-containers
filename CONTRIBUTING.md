@@ -15,17 +15,17 @@ Thank you for helping improve Remote Dev Containers.
 ## Development workflow
 
 1. Create a branch from `main`.
-2. Make the smallest coherent change.
-3. Update documentation and `CHANGELOG.md` when behavior changes.
-4. Run the relevant validation:
+1. Make the smallest coherent change.
+1. Update documentation and `CHANGELOG.md` when behavior changes.
+1. Run the relevant validation:
 
    ```bash
    make validate
    ./scripts/build-local.sh
    ```
 
-5. Open a pull request using the repository template.
-6. Address CI and CodeRabbit findings that are valid for the current implementation.
+1. Open a pull request using the repository template.
+1. Address CI and CodeRabbit findings that are valid for the current implementation.
 
 ## Review expectations
 
