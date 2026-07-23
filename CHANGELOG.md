@@ -36,4 +36,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Stable images require an exact `vMAJOR.MINOR.PATCH` tag.
 - The first stable section will replace relevant entries from `Unreleased` when `v0.1.0` is prepared.
 
-[Unreleased]: https://github.com/eXPerience83/remote-dev-containers/compare/HEAD...HEAD
+[Unreleased]: https://github.com/eXPerience83/remote-dev-containers/commits/main
