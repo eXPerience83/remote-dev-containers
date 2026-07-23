@@ -7,6 +7,7 @@ build:
 
 smoke:
 	docker run --rm --entrypoint /usr/local/bin/codex-smoke-test codex-remote-dev:local
+	bash scripts/runtime-smoke-test.sh codex-remote-dev:local
 
 validate:
 	bash -n scripts/*.sh
