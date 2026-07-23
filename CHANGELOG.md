@@ -18,21 +18,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Secure-by-default web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates.
+- Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
+- CodeRabbit configuration focused on Dockerfiles, Bash, GitHub Actions, Compose and security-sensitive changes.
 
 ### Changed
 
 - Migrated the effective base image from Ubuntu 24.04 to Ubuntu 26.04 LTS.
 - Updated maintained GitHub Actions to their current major releases.
+- Changed the edge channel from private validation to public experimental development testing.
+- Updated project documentation to state clearly that no stable release exists yet.
 
 ### Security
 
 - Web authentication is required by default.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
 - Image startup and publication fail when repository version pins are inconsistent.
+- Public availability does not change the warning against exposing the ttyd port directly to the Internet.
 
 ## Release policy
 
-- `edge` images are manually published from the current `main` branch for private validation.
+- `edge` images are public experimental builds published manually from the current `main` branch.
 - Stable images require an exact `vMAJOR.MINOR.PATCH` tag.
 - The first stable section will replace relevant entries from `Unreleased` when `v0.1.0` is prepared.
 

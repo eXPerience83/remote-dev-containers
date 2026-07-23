@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: true
+  collapse_walkthrough: false
+  poem: false
+  in_progress_fortune: false
+  enable_prompt_for_ai_agents: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  path_instructions:
+    - path: "images/**/Dockerfile"
+      instructions: |
+        Review for reproducibility, supply-chain security and minimal image growth.
+        Require pinned upstream versions and checksum or digest verification for downloaded binaries.
+        Flag secrets, floating base tags, unsafe remote-script execution, broken multi-architecture logic,
+        cache misuse, unnecessary packages and changes that weaken the secure-by-default runtime.
+
+    - path: "scripts/**/*.sh"
+      instructions: |
+        Review as production Bash. Check quoting, set -euo pipefail behavior, cleanup traps,
+        bounded retries and timeouts, non-interactive execution, idempotency and useful failure messages.
+        Flag commands that can hang, leak credentials, silently ignore failures or mutate persistent data unexpectedly.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Review GitHub Actions for least-privilege permissions, safe event triggers, untrusted input handling,
+        accidental publication, tag-channel correctness, secret exposure, reproducible builds, SBOM/provenance
+        generation and appropriate validation before pushing images.
+
+    - path: "compose/**"
+      instructions: |
+        Review Docker Compose files for TrueNAS and generic Docker compatibility.
+        Flag privileged mode, host networking, Docker socket mounts, overly broad host mounts,
+        missing authentication, unsafe public bindings and persistence paths that could lose credentials or workspaces.
+
+    - path: "**/*.md"
+      instructions: |
+        Check that documentation matches the implemented behavior and clearly distinguishes experimental edge builds
+        from stable releases. Flag outdated versions, unsafe deployment guidance and claims not proven by CI or testing.
+
+chat:
+  auto_reply: true
