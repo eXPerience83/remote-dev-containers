@@ -23,3 +23,7 @@ Accepted. Authentication, cloning, pull requests and Actions diagnostics are exp
 ## D006 — image rebuilds replace r14-style mutation
 
 Accepted. The image contains required common tools. Runtime scripts diagnose and configure credentials but do not perform broad package upgrades.
+
+## D007 — latest Ubuntu LTS base
+
+Accepted. The project targets Ubuntu 26.04 LTS and will track later Ubuntu LTS releases through tested migration pull requests. Floating tags such as `latest` are not used in reproducible builds. The effective pin in `versions.env` and the Dockerfile default must remain synchronized and are checked before every build.
