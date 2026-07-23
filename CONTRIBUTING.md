@@ -47,4 +47,4 @@ CodeRabbit comments are advisory. CI, source review and manual testing remain au
 
 ## Reporting security problems
 
-Do not publish exploitable credentials or sensitive deployment details in a public issue. Use GitHub private vulnerability reporting when available; otherwise contact the maintainer privately before disclosing details.
+Do not publish exploit details, credentials or sensitive deployment information in a public issue or pull request. Follow `SECURITY.md` and use GitHub Private Vulnerability Reporting.
