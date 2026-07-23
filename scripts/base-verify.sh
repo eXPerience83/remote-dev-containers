@@ -14,6 +14,20 @@ if (( missing != 0 )); then
   exit 1
 fi
 
+if [[ ! -r /etc/os-release ]]; then
+  echo "MISSING: /etc/os-release" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1091
+source /etc/os-release
+expected_ubuntu="${REMOTE_DEV_UBUNTU_VERSION:-}"
+printf 'Base OS: %s %s (expected Ubuntu %s)\n' "${ID:-unknown}" "${VERSION_ID:-unknown}" "${expected_ubuntu:-unset}"
+if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$expected_ubuntu" ]]; then
+  echo "ERROR: unexpected base operating system" >&2
+  exit 1
+fi
+
 python --version
 node --version
 npm --version
