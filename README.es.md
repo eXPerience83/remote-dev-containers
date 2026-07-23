@@ -34,10 +34,16 @@ Para Docker Compose o TrueNAS:
 CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
 ```
 
-Para repetir una prueba concreta, utiliza preferentemente la etiqueta inmutable mostrada en GHCR:
+Para identificar la compilación correspondiente a un commit concreto, utiliza la etiqueta `sha-...` mostrada en GHCR:
 
 ```text
 ghcr.io/experience83/codex-remote-dev:sha-<commit-completo>
+```
+
+Las etiquetas de GHCR son mutables. Para una reproducción o rollback inmutable, registra el digest publicado y fija la imagen así:
+
+```text
+ghcr.io/experience83/codex-remote-dev@sha256:<digest>
 ```
 
 ## Desarrollo y revisiones
