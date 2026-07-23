@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT/versions.env"
 
+bash "$ROOT/scripts/validate-version-pins.sh"
+
 BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
