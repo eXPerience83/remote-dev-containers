@@ -2,6 +2,8 @@
 ARG UBUNTU_VERSION=26.04
 FROM ubuntu:${UBUNTU_VERSION}
 
+# Re-declare the pre-FROM argument so it is available inside this build stage.
+ARG UBUNTU_VERSION
 ARG TARGETARCH
 ARG BASE_VERSION=0.1.0-dev
 ARG GH_VERSION=2.96.0
@@ -14,6 +16,7 @@ ARG UV_VERSION=0.11.30
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
+      org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -23,6 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HOME=/root \
     TERM=xterm-256color \
     COLORTERM=truecolor \
+    REMOTE_DEV_UBUNTU_VERSION=${UBUNTU_VERSION} \
     MISE_DATA_DIR=/opt/remote-dev/mise \
     MISE_CACHE_DIR=/opt/remote-dev/mise-cache \
     MISE_CONFIG_DIR=/etc/mise \
