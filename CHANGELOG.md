@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Secure-by-default web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates.
-- Public experimental `edge` images with immutable `sha-...` tags for reproducible testing.
+- Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
 - CodeRabbit configuration focused on Dockerfiles, Bash, GitHub Actions, Compose and security-sensitive changes.
 
 ### Changed
