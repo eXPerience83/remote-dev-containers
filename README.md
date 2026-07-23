@@ -2,7 +2,8 @@
 
 Community-maintained, browser-accessible Codex CLI development environment for Docker, NAS and homelab systems.
 
-> Status: design and implementation starter. Not yet a published or security-audited stable image. Not affiliated with or endorsed by OpenAI.
+> [!WARNING]
+> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose the web terminal directly to the Internet. This project is not affiliated with or endorsed by OpenAI.
 
 ## Goal
 
@@ -43,19 +44,23 @@ Open the published web address and choose:
 3. Diagnostics
 4. Start Codex
 
-## Private edge testing
+## Public edge testing
 
-The `edge` image is an unstable validation build published manually from `main`. It must be tested before any stable version tag is created.
+The `edge` image is an unstable development build published manually from `main`. It is available publicly for testing, but it must not be treated as a stable release.
 
-For the generic Compose file, set:
+Pull the current AMD64 edge image without registry credentials:
+
+```bash
+docker pull ghcr.io/experience83/codex-remote-dev:edge-amd64
+```
+
+For the generic or TrueNAS Compose file, set:
 
 ```dotenv
 CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
 ```
 
-The TrueNAS example accepts the same `CODEX_IMAGE` variable. Keep the repository and GHCR packages private during this phase.
-
-For a reproducible deployment, prefer the immutable tag shown by the edge workflow:
+For a reproducible deployment, prefer the immutable tag shown by the edge workflow and package page:
 
 ```text
 ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>
@@ -70,11 +75,17 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not use privileged mode.
 - Anyone with terminal access can read mounted repositories and credentials.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
-- `edge` is not a stable release and may be replaced without notice.
+- `edge` is experimental and may be replaced without notice.
+- Breaking configuration and persistence changes are still possible before `v0.1.0`.
+
+## Development and reviews
+
+Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
 
 ## Documentation
 
 - `CHANGELOG.md`
+- `PROJECT_STATUS.md`
 - `docs/architecture.md`
 - `docs/tool-matrix.md`
 - `docs/security.md`
