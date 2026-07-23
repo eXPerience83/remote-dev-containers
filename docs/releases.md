@@ -12,7 +12,7 @@ It is published manually through the **Publish edge AMD64** workflow and may cha
 - `ghcr.io/experience83/codex-remote-dev:edge-amd64`
 - `ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>`
 
-Public container-registry images can be pulled without authentication. Use the immutable `sha-...` tag when reproducing a specific test. Use `edge-amd64` only when intentionally following the latest development build.
+Public container-registry images can be pulled without authentication. The `sha-...` tag identifies the source commit, but container tags remain mutable in GHCR. Record and deploy the published `sha256:...` digest when immutable reproduction is required. Use `edge-amd64` only when intentionally following the latest development build.
 
 The workflow refuses to publish from a branch other than `main`.
 
@@ -51,4 +51,4 @@ Before creating a stable version tag:
 
 ## Rollback
 
-Do not depend exclusively on moving tags. Record the tested `sha-...` image tag and the source commit. To roll back, set `CODEX_IMAGE` to a previously validated immutable tag and recreate the container.
+Do not depend exclusively on moving tags. Record the tested image digest, its `sha-...` tag and the source commit. For an immutable rollback, set `CODEX_IMAGE` to `ghcr.io/experience83/codex-remote-dev@sha256:<digest>` and recreate the container.
