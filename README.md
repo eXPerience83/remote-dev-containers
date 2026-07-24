@@ -88,9 +88,13 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
 
+Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repository template, and GitHub requests review from the code owner when a non-draft pull request is ready for review.
+
 ## Documentation
 
 - `CHANGELOG.md`
+- `CONTRIBUTING.md`
+- `SECURITY.md`
 - `PROJECT_STATUS.md`
 - `docs/architecture.md`
 - `docs/tool-matrix.md`
