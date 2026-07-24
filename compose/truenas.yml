@@ -1,6 +1,6 @@
 services:
   codex:
-    image: ${CODEX_IMAGE:-ghcr.io/experience83/codex-remote-dev:stable}
+    image: ${CODEX_IMAGE:-ghcr.io/experience83/codex-remote-dev:edge-amd64}
     container_name: codex-remote-dev
     restart: unless-stopped
     user: "0:0"
