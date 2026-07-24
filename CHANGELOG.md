@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated maintained GitHub Actions to their current major releases.
 - Changed the edge channel from private validation to public experimental development testing.
 - Updated project documentation to state clearly that no stable release exists yet.
+- Changed the generic and TrueNAS Compose defaults to the published `edge-amd64` image until the first stable release exists.
 
 ### Security
 
