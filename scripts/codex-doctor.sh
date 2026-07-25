@@ -37,12 +37,13 @@ node --version 2>/dev/null || true
 uv --version 2>/dev/null || true
 
 echo
-printf 'Bubblewrap sandbox: '
+printf 'Nested bubblewrap sandbox: '
 if bwrap --ro-bind / / /bin/true >/dev/null 2>&1; then
   echo OK
 else
-  echo FAILED
-  status=1
+  echo 'UNAVAILABLE (host namespace or AppArmor policy)'
+  echo 'INFO: bubblewrap is installed, but the outer container host controls whether nested user namespaces are permitted.'
+  echo 'INFO: do not add privileged mode, SYS_ADMIN or an unconfined seccomp profile just to silence this diagnostic.'
 fi
 
 printf 'Codex auth: '
