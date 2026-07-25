@@ -24,18 +24,27 @@ GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_HEADER
 
 echo
-for cmd in codex gh git python node npm uv mise ttyd tmux ssh rg fd; do
+for cmd in codex bwrap gh git python node npm uv mise ttyd tmux ssh rg fd; do
   check_cmd "$cmd"
 done
 
 echo
 codex --version 2>/dev/null || true
+bwrap --version 2>/dev/null || true
 gh --version 2>/dev/null | head -n 1 || true
 python --version 2>/dev/null || true
 node --version 2>/dev/null || true
 uv --version 2>/dev/null || true
 
 echo
+printf 'Bubblewrap sandbox: '
+if bwrap --ro-bind / / /bin/true >/dev/null 2>&1; then
+  echo OK
+else
+  echo FAILED
+  status=1
+fi
+
 printf 'Codex auth: '
 if codex login status >/dev/null 2>&1; then
   echo OK
@@ -73,6 +82,7 @@ if [[ -f "${CODEX_HOME:-/root/.codex}/auth.json" ]]; then
   echo "Codex auth.json permissions: ${mode:-unknown}"
   if [[ "$mode" != 600 && "$mode" != 400 ]]; then
     echo 'WARNING: auth.json should normally be readable only by root.'
+    status=1
   fi
 fi
 
