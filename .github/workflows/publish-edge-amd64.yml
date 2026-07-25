@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - ".dockerignore"
       - "versions.env"
       - "images/**"
       - "scripts/**"
