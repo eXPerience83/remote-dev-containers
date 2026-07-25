@@ -10,6 +10,8 @@ bash "$ROOT/scripts/validate-version-pins.sh"
 BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
+PROJECT_VERSION="${PROJECT_VERSION:-$BASE_VERSION}"
+SOURCE_REVISION="${SOURCE_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')}"
 
 common_args=(
   --platform "$PLATFORM"
@@ -28,7 +30,8 @@ docker build \
   --platform "$PLATFORM" \
   --build-arg "BASE_IMAGE=$BASE_IMAGE" \
   --build-arg "CODEX_RELEASE_TAG=$CODEX_RELEASE_TAG" \
-  --build-arg "PROJECT_VERSION=$BASE_VERSION" \
+  --build-arg "PROJECT_VERSION=$PROJECT_VERSION" \
+  --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
   -t "$CODEX_IMAGE" \
   -f "$ROOT/images/codex/Dockerfile" \
   "$ROOT"
