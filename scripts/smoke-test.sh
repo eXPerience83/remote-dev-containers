@@ -43,6 +43,9 @@ fi
 default_output="$(remote-dev-version)"
 menu_output="$(remote-dev-version --menu)"
 short_revision="${source_revision:0:12}"
+if [[ "$source_revision" == *-dirty ]]; then
+  short_revision="${short_revision}-dirty"
+fi
 
 for expected_line in \
   "Image version: $image_version" \
