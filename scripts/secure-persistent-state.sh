@@ -29,12 +29,14 @@ secure_dir "$ssh_dir"
 secure_file "$codex_home/auth.json"
 secure_file "$gh_config_dir/hosts.yml"
 secure_file "$git_config_global"
-secure_file "$ssh_dir/id_ed25519"
-secure_file "$ssh_dir/id_rsa"
+secure_file "$ssh_dir/config"
 
-for public_key in "$ssh_dir"/*.pub; do
-  [[ -e "$public_key" ]] || continue
-  chmod 644 "$public_key"
+for ssh_key in "$ssh_dir"/id_*; do
+  [[ -f "$ssh_key" ]] || continue
+  case "$ssh_key" in
+    *.pub) chmod 644 "$ssh_key" ;;
+    *) secure_file "$ssh_key" ;;
+  esac
 done
 
 if [[ -f "$ssh_dir/known_hosts" ]]; then
