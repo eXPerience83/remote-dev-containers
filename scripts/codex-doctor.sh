@@ -24,12 +24,15 @@ GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_HEADER
 
 echo
-for cmd in codex bwrap gh git python node npm uv mise ttyd tmux ssh rg fd; do
+for cmd in codex bwrap gh git python node npm uv mise ttyd tmux ssh rg fd remote-dev-version; do
   check_cmd "$cmd"
 done
 
 echo
-codex --version 2>/dev/null || true
+remote-dev-version 2>/dev/null || {
+  echo 'Image metadata: unavailable'
+  status=1
+}
 bwrap --version 2>/dev/null || true
 gh --version 2>/dev/null | head -n 1 || true
 python --version 2>/dev/null || true
