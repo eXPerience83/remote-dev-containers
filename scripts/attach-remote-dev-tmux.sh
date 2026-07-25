@@ -33,26 +33,20 @@ if [[ -n "${TMUX_SOCKET_NAME:-}" ]]; then
   tmux_cmd+=(-L "$TMUX_SOCKET_NAME")
 fi
 
-if "${tmux_cmd[@]}" has-session -t "=$session" 2>/dev/null; then
-  active_window="$("${tmux_cmd[@]}" display-message -p -t "=$session" '#{window_id}')"
-  "${tmux_cmd[@]}" rename-window -t "$active_window" "$window_name"
-
-  if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
-    exit 0
+create_error=""
+if ! create_error="$("${tmux_cmd[@]}" new-session -d -s "$session" -n "$window_name" "$session_command" 2>&1)"; then
+  if ! "${tmux_cmd[@]}" has-session -t "=$session" 2>/dev/null; then
+    echo "ERROR: failed to create tmux session $session" >&2
+    [[ -n "$create_error" ]] && printf '%s\n' "$create_error" >&2
+    exit 1
   fi
-
-  exec "${tmux_cmd[@]}" attach-session -t "=$session"
 fi
 
-new_session=(new-session)
-if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
-  new_session+=(-d)
-fi
-new_session+=(-s "$session" -n "$window_name" "$session_command")
+active_window="$("${tmux_cmd[@]}" display-message -p -t "=$session" '#{window_id}')"
+"${tmux_cmd[@]}" rename-window -t "$active_window" "$window_name"
 
 if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
-  "${tmux_cmd[@]}" "${new_session[@]}"
   exit 0
 fi
 
-exec "${tmux_cmd[@]}" "${new_session[@]}"
+exec "${tmux_cmd[@]}" attach-session -t "=$session"
