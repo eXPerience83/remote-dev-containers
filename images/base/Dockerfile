@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
+        bubblewrap \
         build-essential \
         ca-certificates \
         curl \
@@ -149,8 +150,10 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
     && uv --version \
     && rm -rf "$MISE_CACHE_DIR"/*
 
+COPY config/tmux.conf /etc/tmux.conf
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify
-RUN chmod 0755 /usr/local/bin/remote-dev-base-verify \
+RUN chmod 0644 /etc/tmux.conf \
+    && chmod 0755 /usr/local/bin/remote-dev-base-verify \
     && remote-dev-base-verify
 
 WORKDIR /workspace
