@@ -60,13 +60,13 @@ fi
 
 case "$START_MODE" in
   menu)
-    child=(tmux new-session -A -s "$TMUX_SESSION" /usr/local/bin/codex-menu)
+    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev /usr/local/bin/codex-menu)
     ;;
   codex)
-    child=(tmux new-session -A -s "$TMUX_SESSION" "cd '$WORKSPACE' && exec codex")
+    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev "cd '$WORKSPACE' && exec codex")
     ;;
   shell)
-    child=(tmux new-session -A -s "$TMUX_SESSION" "cd '$WORKSPACE' && exec bash --login")
+    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev "cd '$WORKSPACE' && exec bash --login")
     ;;
   *)
     echo "ERROR: unsupported START_MODE=$START_MODE (menu|codex|shell)" >&2
