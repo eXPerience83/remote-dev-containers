@@ -1,6 +1,16 @@
 name: Publish edge AMD64
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "versions.env"
+      - "images/**"
+      - "scripts/**"
+      - "config/**"
+      - "third_party/**"
+      - ".github/workflows/publish-edge-amd64.yml"
   workflow_dispatch:
 
 permissions:
