@@ -79,7 +79,7 @@ RUN chmod 0755 \
       /root/.config/git \
       /root/.ssh \
     && /usr/local/bin/secure-persistent-state \
-    && codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
+    && REMOTE_DEV_SKIP_TMUX_SMOKE=1 codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
 EXPOSE 7681
