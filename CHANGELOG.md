@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Ubuntu `bubblewrap` package plus diagnostics for host-dependent nested-sandbox compatibility.
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
-- Embedded image channel, source revision and Codex CLI metadata exposed in the menu, diagnostics and `remote-dev-version` command.
+- Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
 
 ### Changed
 
