@@ -12,6 +12,7 @@ ARG MISE_VERSION=2026.5.3
 ARG PYTHON_VERSION=3.14.6
 ARG NODE_VERSION=24.17.0
 ARG UV_VERSION=0.11.30
+ARG BUBBLEWRAP_VERSION=0.11.1-1ubuntu0.1
 
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
@@ -46,7 +47,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
-        bubblewrap \
+        bubblewrap=${BUBBLEWRAP_VERSION} \
         build-essential \
         ca-certificates \
         curl \
