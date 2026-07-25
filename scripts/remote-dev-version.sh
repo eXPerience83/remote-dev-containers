@@ -38,6 +38,9 @@ source_revision="$(read_metadata source-revision)"
 codex_version="$(codex --version 2>/dev/null || printf 'unavailable')"
 
 short_revision="${source_revision:0:12}"
+if [[ "$source_revision" == *-dirty ]]; then
+  short_revision="${short_revision}-dirty"
+fi
 
 validate_metadata() {
   local result=0
