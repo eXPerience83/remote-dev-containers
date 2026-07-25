@@ -4,6 +4,7 @@ set -euo pipefail
 cd "${WORKSPACE:-/workspace}"
 
 run_interactive_and_harden() {
+  clear
   "$@" || true
   /usr/local/bin/secure-persistent-state
 }
@@ -35,12 +36,14 @@ MENU
       run_interactive_and_harden codex login --device-auth
       ;;
     4)
+      clear
       if gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
         gh auth setup-git || true
       fi
       /usr/local/bin/secure-persistent-state
       ;;
     5)
+      clear
       codex-doctor
       read -r -p "Press Enter to continue..." _
       ;;
