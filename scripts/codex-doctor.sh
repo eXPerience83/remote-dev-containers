@@ -29,10 +29,13 @@ for cmd in codex bwrap gh git python node npm uv mise ttyd tmux ssh rg fd remote
 done
 
 echo
-remote-dev-version 2>/dev/null || {
-  echo 'Image metadata: unavailable'
+if remote-dev-version --check; then
+  remote-dev-version
+else
+  echo 'Image metadata: unavailable or invalid'
+  remote-dev-version 2>/dev/null || true
   status=1
-}
+fi
 bwrap --version 2>/dev/null || true
 gh --version 2>/dev/null | head -n 1 || true
 python --version 2>/dev/null || true
