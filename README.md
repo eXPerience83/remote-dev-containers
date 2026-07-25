@@ -72,7 +72,7 @@ GHCR tags are mutable. For immutable reproduction or rollback, record the publis
 ghcr.io/experience83/codex-remote-dev@sha256:<digest>
 ```
 
-The web menu shows the image channel, abbreviated source revision and Codex CLI version. To display the complete embedded metadata from the menu diagnostics or a shell, run:
+The web menu shows the embedded image channel, abbreviated embedded source revision and installed Codex CLI version detected at runtime. To display the complete embedded image metadata together with the runtime Codex CLI version from the menu diagnostics or a shell, run:
 
 ```bash
 remote-dev-version
