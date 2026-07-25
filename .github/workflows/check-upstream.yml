@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -78,7 +79,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')
 
-          body="Automated stable upstream release update. Merge only after the required AMD64 build, runtime smoke tests and review pass. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release update. Merge only after the required AMD64 build, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
@@ -91,3 +92,8 @@ jobs:
               --base main \
               --head "$branch"
           fi
+
+          # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
+          # workflow_dispatch is an explicit exception, so dispatch the required build
+          # against the exact automation branch without introducing a PAT or app secret.
+          gh workflow run build-amd64.yml --ref "$branch"
