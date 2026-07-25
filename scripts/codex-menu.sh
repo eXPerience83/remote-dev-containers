@@ -18,16 +18,38 @@ Codex Remote Dev
 MENU
   read -r -p "> " choice
   case "$choice" in
-    1) codex ;;
-    2) codex resume ;;
-    3) codex login --device-auth ;;
-    4)
-      gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web
-      gh auth setup-git || true
+    1)
+      codex
+      /usr/local/bin/secure-persistent-state
       ;;
-    5) codex-doctor; read -r -p "Press Enter to continue..." _ ;;
-    6) bash --login ;;
-    7) exit 0 ;;
-    *) sleep 1 ;;
+    2)
+      codex resume
+      /usr/local/bin/secure-persistent-state
+      ;;
+    3)
+      if codex login --device-auth; then
+        /usr/local/bin/secure-persistent-state
+      fi
+      ;;
+    4)
+      if gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
+        gh auth setup-git || true
+        /usr/local/bin/secure-persistent-state
+      fi
+      ;;
+    5)
+      codex-doctor
+      read -r -p "Press Enter to continue..." _
+      ;;
+    6)
+      bash --login
+      /usr/local/bin/secure-persistent-state
+      ;;
+    7)
+      exit 0
+      ;;
+    *)
+      sleep 1
+      ;;
   esac
 done
