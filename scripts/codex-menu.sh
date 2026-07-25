@@ -9,9 +9,11 @@ run_interactive_and_harden() {
 }
 
 while true; do
+  version_summary="$(remote-dev-version --menu 2>/dev/null || printf 'Image metadata unavailable')"
   clear
-  cat <<'MENU'
+  cat <<MENU
 Codex Remote Dev
+${version_summary}
 ================
 1) Start Codex
 2) Resume a Codex session
