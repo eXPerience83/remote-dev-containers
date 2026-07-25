@@ -36,21 +36,29 @@ jobs:
           fi
 
           branch="automation/update-upstreams"
-          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+          existing_pr=$(gh pr list \
+            --head "$branch" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
 
-          if git show "origin/$branch:versions.env" >/tmp/existing-versions.env 2>/dev/null; then
-            existing_codex=$(sed -n 's/^CODEX_RELEASE_TAG=//p' /tmp/existing-versions.env)
-            existing_gh=$(sed -n 's/^GH_VERSION=//p' /tmp/existing-versions.env)
-            existing_ttyd=$(sed -n 's/^TTYD_VERSION=//p' /tmp/existing-versions.env)
-            existing_mise=$(sed -n 's/^MISE_VERSION=//p' /tmp/existing-versions.env)
-            if [[ "$existing_codex" == "$latest_codex" &&
-                  "$existing_gh" == "$latest_gh" &&
-                  "$existing_ttyd" == "$latest_ttyd" &&
-                  "$existing_mise" == "$latest_mise" ]]; then
-              echo "The existing upstream update PR already contains the latest stable releases."
-              exit 0
+          if [[ "$CODEX_RELEASE_TAG" == "$latest_codex" &&
+                "$GH_VERSION" == "$latest_gh" &&
+                "$TTYD_VERSION" == "$latest_ttyd" &&
+                "$MISE_VERSION" == "$latest_mise" ]]; then
+            echo "No upstream release changes."
+            if [[ -n "$existing_pr" ]]; then
+              gh pr close "$existing_pr" \
+                --comment "Closing because main already contains the latest tracked stable releases."
             fi
+            exit 0
           fi
+
+          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -B "$branch"
 
           sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
           sed -i "s/^ARG CODEX_RELEASE_TAG=.*/ARG CODEX_RELEASE_TAG=${latest_codex}/" images/codex/Dockerfile
@@ -58,20 +66,20 @@ jobs:
           sed -i "s/^TTYD_VERSION=.*/TTYD_VERSION=${latest_ttyd}/" versions.env
           sed -i "s/^MISE_VERSION=.*/MISE_VERSION=${latest_mise}/" versions.env
 
-          if git diff --quiet -- versions.env images/codex/Dockerfile; then
-            echo "No upstream release changes."
-            exit 0
-          fi
-
           bash scripts/validate-version-pins.sh
-
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git checkout -B "$branch"
           git add versions.env images/codex/Dockerfile
           git commit -m "chore: update upstream versions"
-          git push --force-with-lease -u origin "$branch"
 
+          remote_ref="refs/remotes/origin/$branch"
+          if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
+             [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
+            echo "The automation branch already contains the desired update."
+            git reset --hard "$remote_ref"
+          else
+            git push --force-with-lease -u origin "$branch"
+          fi
+
+          branch_head=$(git rev-parse HEAD)
           existing_pr=$(gh pr list \
             --head "$branch" \
             --base main \
@@ -96,4 +104,17 @@ jobs:
           # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
           # workflow_dispatch is an explicit exception, so dispatch the required build
           # against the exact automation branch without introducing a PAT or app secret.
-          gh workflow run build-amd64.yml --ref "$branch"
+          dispatched_runs=$(gh run list \
+            --workflow build-amd64.yml \
+            --branch "$branch" \
+            --event workflow_dispatch \
+            --commit "$branch_head" \
+            --limit 1 \
+            --json databaseId \
+            --jq 'length')
+
+          if [[ "$dispatched_runs" == "0" ]]; then
+            gh workflow run build-amd64.yml --ref "$branch"
+          else
+            echo "Build AMD64 is already dispatched for $branch_head."
+          fi
