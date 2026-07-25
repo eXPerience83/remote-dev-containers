@@ -108,7 +108,8 @@ jobs:
           build-args: |
             BASE_IMAGE=ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:sha-${{ github.sha }}
             CODEX_RELEASE_TAG=${{ steps.metadata.outputs.codex_tag }}
-            PROJECT_VERSION=edge-${{ github.sha }}
+            PROJECT_VERSION=edge
+            SOURCE_REVISION=${{ github.sha }}
           tags: |
             ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge
             ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge-amd64
