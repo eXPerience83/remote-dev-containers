@@ -86,31 +86,35 @@ printf 'print("ok")\n' > smoke.py
 python smoke.py | grep -Fx ok
 node -e 'console.log("ok")' | grep -Fx ok
 
-REMOTE_DEV_TMUX_DETACHED=1 \
-TMUX_SOCKET_NAME="$tmux_socket" \
-TMUX_SESSION=fresh-session \
-START_MODE=shell \
-WORKSPACE=/workspace \
-  /usr/local/bin/attach-remote-dev-tmux
+if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
+  REMOTE_DEV_TMUX_DETACHED=1 \
+  TMUX_SOCKET_NAME="$tmux_socket" \
+  TMUX_SESSION=fresh-session \
+  START_MODE=shell \
+  WORKSPACE=/workspace \
+    /usr/local/bin/attach-remote-dev-tmux
 
-fresh_name="$(tmux -L "$tmux_socket" display-message -p -t '=fresh-session' '#{window_name}')"
-if [[ "$fresh_name" != remote-dev ]]; then
-  echo "ERROR: fresh tmux session window name is $fresh_name, expected remote-dev" >&2
-  exit 1
+  fresh_name="$(tmux -L "$tmux_socket" display-message -p -t '=fresh-session' '#{window_name}')"
+  if [[ "$fresh_name" != remote-dev ]]; then
+    echo "ERROR: fresh tmux session window name is $fresh_name, expected remote-dev" >&2
+    exit 1
+  fi
+
+  tmux -L "$tmux_socket" new-session -d -s existing-session -n legacy-name 'sleep 30'
+  REMOTE_DEV_TMUX_DETACHED=1 \
+  TMUX_SOCKET_NAME="$tmux_socket" \
+  TMUX_SESSION=existing-session \
+  START_MODE=shell \
+  WORKSPACE=/workspace \
+    /usr/local/bin/attach-remote-dev-tmux
+
+  existing_name="$(tmux -L "$tmux_socket" display-message -p -t '=existing-session' '#{window_name}')"
+  if [[ "$existing_name" != remote-dev ]]; then
+    echo "ERROR: existing tmux session window name is $existing_name, expected remote-dev" >&2
+    exit 1
+  fi
+
+  echo "Tmux fresh and existing session naming: OK"
+else
+  echo "Tmux runtime smoke test: skipped during image build"
 fi
-
-tmux -L "$tmux_socket" new-session -d -s existing-session -n legacy-name 'sleep 30'
-REMOTE_DEV_TMUX_DETACHED=1 \
-TMUX_SOCKET_NAME="$tmux_socket" \
-TMUX_SESSION=existing-session \
-START_MODE=shell \
-WORKSPACE=/workspace \
-  /usr/local/bin/attach-remote-dev-tmux
-
-existing_name="$(tmux -L "$tmux_socket" display-message -p -t '=existing-session' '#{window_name}')"
-if [[ "$existing_name" != remote-dev ]]; then
-  echo "ERROR: existing tmux session window name is $existing_name, expected remote-dev" >&2
-  exit 1
-fi
-
-echo "Tmux fresh and existing session naming: OK"
