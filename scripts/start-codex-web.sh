@@ -59,14 +59,8 @@ if [[ -n "$credential" ]]; then
 fi
 
 case "$START_MODE" in
-  menu)
-    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev /usr/local/bin/codex-menu)
-    ;;
-  codex)
-    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev "cd '$WORKSPACE' && exec codex")
-    ;;
-  shell)
-    child=(tmux new-session -A -s "$TMUX_SESSION" -n remote-dev "cd '$WORKSPACE' && exec bash --login")
+  menu|codex|shell)
+    child=(/usr/local/bin/attach-remote-dev-tmux)
     ;;
   *)
     echo "ERROR: unsupported START_MODE=$START_MODE (menu|codex|shell)" >&2
