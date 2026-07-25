@@ -36,6 +36,7 @@ echo "Secure startup guard: OK"
 
 docker run -d \
   --name "$name" \
+  --security-opt no-new-privileges:true \
   --env ALLOW_INSECURE_WEB=1 \
   --env WEB_CHECK_ORIGIN=0 \
   --env START_MODE=shell \
@@ -44,7 +45,9 @@ docker run -d \
 for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
+    docker exec "$name" bwrap --ro-bind / / /bin/true
     echo "Web entrypoint smoke test: OK"
+    echo "Bubblewrap sandbox smoke test: OK"
     exit 0
   fi
 
