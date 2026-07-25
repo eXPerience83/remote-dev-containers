@@ -34,6 +34,18 @@ jobs:
             echo "ERROR: GitHub latest release is not an exact stable Codex tag: $latest_codex" >&2
             exit 1
           fi
+          if [[ ! "$latest_gh" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: GitHub CLI latest release has an unexpected tag: $latest_gh" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_ttyd" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: ttyd latest release has an unexpected tag: $latest_ttyd" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_mise" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: mise latest release has an unexpected tag: $latest_mise" >&2
+            exit 1
+          fi
 
           branch="automation/update-upstreams"
           existing_pr=$(gh pr list \
@@ -60,6 +72,8 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$branch"
 
+          # All values are constrained to exact safe tag formats above before
+          # they are written to versions.env, which is sourced by build workflows.
           sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
           sed -i "s/^ARG CODEX_RELEASE_TAG=.*/ARG CODEX_RELEASE_TAG=${latest_codex}/" images/codex/Dockerfile
           sed -i "s/^GH_VERSION=.*/GH_VERSION=${latest_gh}/" versions.env
@@ -104,17 +118,23 @@ jobs:
           # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
           # workflow_dispatch is an explicit exception, so dispatch the required build
           # against the exact automation branch without introducing a PAT or app secret.
-          dispatched_runs=$(gh run list \
+          run_json=$(gh run list \
             --workflow build-amd64.yml \
             --branch "$branch" \
             --event workflow_dispatch \
             --commit "$branch_head" \
             --limit 1 \
-            --json databaseId \
-            --jq 'length')
+            --json databaseId,status,conclusion \
+            --jq '.[0] // {}')
+          run_id=$(jq -r '.databaseId // empty' <<<"$run_json")
+          run_status=$(jq -r '.status // empty' <<<"$run_json")
+          run_conclusion=$(jq -r '.conclusion // empty' <<<"$run_json")
 
-          if [[ "$dispatched_runs" == "0" ]]; then
+          if [[ -z "$run_id" ]]; then
+            gh workflow run build-amd64.yml --ref "$branch"
+          elif [[ "$run_status" == "completed" && "$run_conclusion" != "success" ]]; then
+            echo "Previous Build AMD64 run $run_id completed with $run_conclusion; dispatching a retry."
             gh workflow run build-amd64.yml --ref "$branch"
           else
-            echo "Build AMD64 is already dispatched for $branch_head."
+            echo "Build AMD64 run $run_id is already $run_status${run_conclusion:+/$run_conclusion} for $branch_head."
           fi
