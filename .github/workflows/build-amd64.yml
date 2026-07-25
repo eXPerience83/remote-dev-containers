@@ -32,22 +32,4 @@ jobs:
           done
 
       - name: Build and smoke test
-        run: |
-          set -euo pipefail
-          log_file="/tmp/remote-dev-build.log"
-          failure_tail="/tmp/build-failure-tail.log"
-          if ! PLATFORM=linux/amd64 ./scripts/build-local.sh >"$log_file" 2>&1; then
-            echo "Build or smoke test failed. Final log lines:" >&2
-            tail -n 160 "$log_file" | tee "$failure_tail" >&2
-            exit 1
-          fi
-          tail -n 80 "$log_file"
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-failure-tail
-          path: /tmp/build-failure-tail.log
-          if-no-files-found: ignore
-          retention-days: 1
+        run: PLATFORM=linux/amd64 ./scripts/build-local.sh
