@@ -32,4 +32,12 @@ jobs:
           done
 
       - name: Build and smoke test
-        run: PLATFORM=linux/amd64 ./scripts/build-local.sh
+        run: |
+          set -euo pipefail
+          log_file="$(mktemp)"
+          if ! PLATFORM=linux/amd64 ./scripts/build-local.sh >"$log_file" 2>&1; then
+            echo "Build or smoke test failed. Final log lines:" >&2
+            tail -n 160 "$log_file" >&2
+            exit 1
+          fi
+          tail -n 80 "$log_file"
