@@ -5,7 +5,7 @@ FROM ${BASE_IMAGE}
 ARG TARGETARCH
 ARG CODEX_RELEASE_TAG=rust-v0.145.0
 ARG PROJECT_VERSION=0.1.0-dev
-ARG SOURCE_REVISION=unknown
+ARG SOURCE_REVISION=local-untracked
 
 LABEL org.opencontainers.image.title="Codex Remote Dev" \
       org.opencontainers.image.description="Community browser-hosted Codex CLI development container" \
@@ -50,6 +50,7 @@ RUN case "${TARGETARCH:-amd64}" in \
     && rm -rf "$workdir"
 
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
+COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
@@ -59,6 +60,7 @@ COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 
 RUN chmod 0755 \
       /usr/local/bin/start-codex-web \
+      /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/codex-menu \
       /usr/local/bin/codex-doctor \
       /usr/local/bin/remote-dev-version \
@@ -77,7 +79,7 @@ RUN chmod 0755 \
       /root/.config/git \
       /root/.ssh \
     && /usr/local/bin/secure-persistent-state \
-    && codex-smoke-test
+    && codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
 EXPOSE 7681
