@@ -40,7 +40,9 @@ run_github_login() {
 
   clear
   if gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
-    if ! gh auth setup-git; then
+    if gh auth setup-git; then
+      :
+    else
       action_status=$?
       echo "ERROR: GitHub authentication succeeded, but Git credential setup failed" >&2
     fi
