@@ -2,7 +2,7 @@ name: Check upstream versions
 
 on:
   schedule:
-    - cron: "17 5 * * 1"
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,25 +29,65 @@ jobs:
           latest_ttyd=$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)
           latest_mise=$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')
 
+          if [[ ! "$latest_codex" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: GitHub latest release is not an exact stable Codex tag: $latest_codex" >&2
+            exit 1
+          fi
+
+          branch="automation/update-upstreams"
+          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+
+          if git show "origin/$branch:versions.env" >/tmp/existing-versions.env 2>/dev/null; then
+            existing_codex=$(sed -n 's/^CODEX_RELEASE_TAG=//p' /tmp/existing-versions.env)
+            existing_gh=$(sed -n 's/^GH_VERSION=//p' /tmp/existing-versions.env)
+            existing_ttyd=$(sed -n 's/^TTYD_VERSION=//p' /tmp/existing-versions.env)
+            existing_mise=$(sed -n 's/^MISE_VERSION=//p' /tmp/existing-versions.env)
+            if [[ "$existing_codex" == "$latest_codex" &&
+                  "$existing_gh" == "$latest_gh" &&
+                  "$existing_ttyd" == "$latest_ttyd" &&
+                  "$existing_mise" == "$latest_mise" ]]; then
+              echo "The existing upstream update PR already contains the latest stable releases."
+              exit 0
+            fi
+          fi
+
           sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
+          sed -i "s/^ARG CODEX_RELEASE_TAG=.*/ARG CODEX_RELEASE_TAG=${latest_codex}/" images/codex/Dockerfile
           sed -i "s/^GH_VERSION=.*/GH_VERSION=${latest_gh}/" versions.env
           sed -i "s/^TTYD_VERSION=.*/TTYD_VERSION=${latest_ttyd}/" versions.env
           sed -i "s/^MISE_VERSION=.*/MISE_VERSION=${latest_mise}/" versions.env
 
-          if git diff --quiet -- versions.env; then
+          if git diff --quiet -- versions.env images/codex/Dockerfile; then
             echo "No upstream release changes."
             exit 0
           fi
 
-          branch="automation/update-upstreams-$(date -u +%Y%m%d)"
+          bash scripts/validate-version-pins.sh
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git checkout -b "$branch"
-          git add versions.env
+          git checkout -B "$branch"
+          git add versions.env images/codex/Dockerfile
           git commit -m "chore: update upstream versions"
-          git push -u origin "$branch"
-          gh pr create \
-            --title "chore: update upstream versions" \
-            --body "Automated upstream release update. Merge only after the AMD64 build and smoke tests pass." \
+          git push --force-with-lease -u origin "$branch"
+
+          existing_pr=$(gh pr list \
+            --head "$branch" \
             --base main \
-            --head "$branch"
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          body="Automated stable upstream release update. Merge only after the required AMD64 build, runtime smoke tests and review pass. Merging publishes a new public edge image; stable image tags are not changed."
+
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" \
+              --title "chore: update stable upstream versions" \
+              --body "$body"
+          else
+            gh pr create \
+              --title "chore: update stable upstream versions" \
+              --body "$body" \
+              --base main \
+              --head "$branch"
+          fi
