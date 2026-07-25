@@ -3,7 +3,7 @@ ARG BASE_IMAGE=codex-remote-dev-base:local
 FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
-ARG CODEX_RELEASE_TAG=rust-v0.144.4
+ARG CODEX_RELEASE_TAG=rust-v0.145.0
 ARG PROJECT_VERSION=0.1.0-dev
 
 LABEL org.opencontainers.image.title="Codex Remote Dev" \
@@ -50,6 +50,7 @@ RUN case "${TARGETARCH:-amd64}" in \
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
+COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 
@@ -57,6 +58,7 @@ RUN chmod 0755 \
       /usr/local/bin/start-codex-web \
       /usr/local/bin/codex-menu \
       /usr/local/bin/codex-doctor \
+      /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
     && mkdir -p \
       /workspace \
@@ -64,6 +66,7 @@ RUN chmod 0755 \
       /root/.config/gh \
       /root/.config/git \
       /root/.ssh \
+    && /usr/local/bin/secure-persistent-state \
     && codex-smoke-test
 
 WORKDIR /workspace

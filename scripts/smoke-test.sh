@@ -16,6 +16,7 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
 fi
 
 codex --version
+bwrap --version
 gh --version | head -n 1
 git --version
 python --version

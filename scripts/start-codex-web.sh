@@ -3,10 +3,7 @@ set -euo pipefail
 
 umask 077
 mkdir -p "$WORKSPACE" "$CODEX_HOME" "$GH_CONFIG_DIR" "$(dirname "$GIT_CONFIG_GLOBAL")" /root/.ssh
-
-chmod 700 /root/.ssh 2>/dev/null || true
-chmod 600 /root/.ssh/id_ed25519 /root/.ssh/id_rsa 2>/dev/null || true
-chmod 644 /root/.ssh/*.pub /root/.ssh/known_hosts 2>/dev/null || true
+/usr/local/bin/secure-persistent-state
 
 # Shared-workspace defaults. Never trust every path globally.
 git config --global core.filemode false || true
@@ -20,6 +17,7 @@ fi
 if gh auth status >/dev/null 2>&1; then
   gh auth setup-git >/dev/null 2>&1 || true
 fi
+/usr/local/bin/secure-persistent-state
 
 credential=""
 if [[ -n "${WEB_PASSWORD_FILE:-}" ]]; then

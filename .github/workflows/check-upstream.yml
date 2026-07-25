@@ -2,10 +2,11 @@ name: Check upstream versions
 
 on:
   schedule:
-    - cron: "17 5 * * 1"
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -29,25 +30,111 @@ jobs:
           latest_ttyd=$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)
           latest_mise=$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')
 
+          if [[ ! "$latest_codex" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: GitHub latest release is not an exact stable Codex tag: $latest_codex" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_gh" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: GitHub CLI latest release has an unexpected tag: $latest_gh" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_ttyd" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: ttyd latest release has an unexpected tag: $latest_ttyd" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_mise" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: mise latest release has an unexpected tag: $latest_mise" >&2
+            exit 1
+          fi
+
+          branch="automation/update-upstreams"
+          existing_pr=$(gh pr list \
+            --head "$branch" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [[ "$CODEX_RELEASE_TAG" == "$latest_codex" &&
+                "$GH_VERSION" == "$latest_gh" &&
+                "$TTYD_VERSION" == "$latest_ttyd" &&
+                "$MISE_VERSION" == "$latest_mise" ]]; then
+            echo "No upstream release changes."
+            if [[ -n "$existing_pr" ]]; then
+              gh pr close "$existing_pr" \
+                --comment "Closing because main already contains the latest tracked stable releases."
+            fi
+            exit 0
+          fi
+
+          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -B "$branch"
+
+          # All values are constrained to exact safe tag formats above before
+          # they are written to versions.env, which is sourced by build workflows.
           sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
+          sed -i "s/^ARG CODEX_RELEASE_TAG=.*/ARG CODEX_RELEASE_TAG=${latest_codex}/" images/codex/Dockerfile
           sed -i "s/^GH_VERSION=.*/GH_VERSION=${latest_gh}/" versions.env
           sed -i "s/^TTYD_VERSION=.*/TTYD_VERSION=${latest_ttyd}/" versions.env
           sed -i "s/^MISE_VERSION=.*/MISE_VERSION=${latest_mise}/" versions.env
 
-          if git diff --quiet -- versions.env; then
-            echo "No upstream release changes."
-            exit 0
+          bash scripts/validate-version-pins.sh
+          git add versions.env images/codex/Dockerfile
+          git commit -m "chore: update upstream versions"
+
+          remote_ref="refs/remotes/origin/$branch"
+          if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
+             [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
+            echo "The automation branch already contains the desired update."
+            git reset --hard "$remote_ref"
+          else
+            git push --force-with-lease -u origin "$branch"
           fi
 
-          branch="automation/update-upstreams-$(date -u +%Y%m%d)"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git checkout -b "$branch"
-          git add versions.env
-          git commit -m "chore: update upstream versions"
-          git push -u origin "$branch"
-          gh pr create \
-            --title "chore: update upstream versions" \
-            --body "Automated upstream release update. Merge only after the AMD64 build and smoke tests pass." \
+          branch_head=$(git rev-parse HEAD)
+          existing_pr=$(gh pr list \
+            --head "$branch" \
             --base main \
-            --head "$branch"
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          body="Automated stable upstream release update. Merge only after the required AMD64 build, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" \
+              --title "chore: update stable upstream versions" \
+              --body "$body"
+          else
+            gh pr create \
+              --title "chore: update stable upstream versions" \
+              --body "$body" \
+              --base main \
+              --head "$branch"
+          fi
+
+          # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
+          # workflow_dispatch is an explicit exception, so dispatch the required build
+          # against the exact automation branch without introducing a PAT or app secret.
+          run_json=$(gh run list \
+            --workflow build-amd64.yml \
+            --branch "$branch" \
+            --event workflow_dispatch \
+            --commit "$branch_head" \
+            --limit 1 \
+            --json databaseId,status,conclusion \
+            --jq '.[0] // {}')
+          run_id=$(jq -r '.databaseId // empty' <<<"$run_json")
+          run_status=$(jq -r '.status // empty' <<<"$run_json")
+          run_conclusion=$(jq -r '.conclusion // empty' <<<"$run_json")
+
+          if [[ -z "$run_id" ]]; then
+            gh workflow run build-amd64.yml --ref "$branch"
+          elif [[ "$run_status" == "completed" && "$run_conclusion" != "success" ]]; then
+            echo "Previous Build AMD64 run $run_id completed with $run_conclusion; dispatching a retry."
+            gh workflow run build-amd64.yml --ref "$branch"
+          else
+            echo "Build AMD64 run $run_id is already $run_status${run_conclusion:+/$run_conclusion} for $branch_head."
+          fi

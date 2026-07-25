@@ -14,12 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Python 3.14, Node.js 24, npm, uv and mise.
 - Separate persistent paths for workspaces and Codex, GitHub, Git and SSH configuration.
 - AMD64 build, configuration validation and runtime smoke tests.
-- Verification that the effective Ubuntu build pin matches the Dockerfile default and the resulting image.
+- Verification that the effective Ubuntu and Codex release pins match their Dockerfile defaults.
 - Secure-by-default web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
 - CodeRabbit configuration focused on Dockerfiles, Bash, GitHub Actions, Compose and security-sensitive changes.
+- Ubuntu `bubblewrap` package plus diagnostics for host-dependent nested-sandbox compatibility.
+- Shared tmux mouse and scrollback configuration for browser terminals.
+- Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
 
 ### Changed
 
@@ -28,17 +31,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed the edge channel from private validation to public experimental development testing.
 - Updated project documentation to state clearly that no stable release exists yet.
 - Changed the generic and TrueNAS Compose defaults to the published `edge-amd64` image until the first stable release exists.
+- Updated the pinned Codex CLI from `0.144.4` to stable `0.145.0`.
+- Changed stable upstream checks from weekly to daily and made the update branch reusable.
+- Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
+- Changed the bubblewrap runtime probe to report host namespace restrictions without weakening the container or failing unrelated image validation.
 
 ### Security
 
 - Web authentication is required by default.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
 - Image startup and publication fail when repository version pins are inconsistent.
+- Codex stable release tags are validated to reject prerelease identifiers.
+- Codex and GitHub credential files are tightened after startup, login and interactive sessions.
+- Runtime tests keep `no-new-privileges`; they do not add `SYS_ADMIN`, privileged mode or an unconfined seccomp profile to force nested bubblewrap support.
 - Public availability does not change the warning against exposing the ttyd port directly to the Internet.
 
 ## Release policy
 
-- `edge` images are public experimental builds published manually from the current `main` branch.
+- `edge` images are public experimental builds published automatically after relevant changes merge into `main`, and may also be published manually from `main`.
 - Stable images require an exact `vMAJOR.MINOR.PATCH` tag.
 - The first stable section will replace relevant entries from `Unreleased` when `v0.1.0` is prepared.
 
