@@ -46,7 +46,7 @@ Las etiquetas de GHCR son mutables. Para una reproducción o rollback inmutable,
 ghcr.io/experience83/codex-remote-dev@sha256:<digest>
 ```
 
-El menú web muestra el canal de la imagen, la revisión abreviada y la versión de Codex CLI. Para consultar los metadatos completos desde los diagnósticos o desde un shell:
+El menú web muestra el canal de imagen embebido, la revisión de origen embebida en forma abreviada y la versión instalada de Codex CLI detectada en tiempo de ejecución. Para consultar los metadatos completos de la imagen junto con la versión de Codex CLI en ejecución desde los diagnósticos o desde un shell:
 
 ```bash
 remote-dev-version
