@@ -15,6 +15,11 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
   exit 1
 fi
 
+test -s /usr/share/remote-dev/image-version
+test -s /usr/share/remote-dev/source-revision
+remote-dev-version
+remote-dev-version --menu | grep -F 'Image:'
+
 codex --version
 bwrap --version
 gh --version | head -n 1
