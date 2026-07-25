@@ -50,4 +50,9 @@ if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
 fi
 new_session+=(-s "$session" -n "$window_name" "$session_command")
 
+if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
+  "${tmux_cmd[@]}" "${new_session[@]}"
+  exit 0
+fi
+
 exec "${tmux_cmd[@]}" "${new_session[@]}"
