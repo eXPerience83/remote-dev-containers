@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd "${WORKSPACE:-/workspace}"
 
+run_interactive_and_harden() {
+  "$@" || true
+  /usr/local/bin/secure-persistent-state
+}
+
 while true; do
   clear
   cat <<'MENU'
@@ -19,31 +24,26 @@ MENU
   read -r -p "> " choice
   case "$choice" in
     1)
-      codex
-      /usr/local/bin/secure-persistent-state
+      run_interactive_and_harden codex
       ;;
     2)
-      codex resume
-      /usr/local/bin/secure-persistent-state
+      run_interactive_and_harden codex resume
       ;;
     3)
-      if codex login --device-auth; then
-        /usr/local/bin/secure-persistent-state
-      fi
+      run_interactive_and_harden codex login --device-auth
       ;;
     4)
       if gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
         gh auth setup-git || true
-        /usr/local/bin/secure-persistent-state
       fi
+      /usr/local/bin/secure-persistent-state
       ;;
     5)
       codex-doctor
       read -r -p "Press Enter to continue..." _
       ;;
     6)
-      bash --login
-      /usr/local/bin/secure-persistent-state
+      run_interactive_and_harden bash --login
       ;;
     7)
       exit 0
