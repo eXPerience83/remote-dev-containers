@@ -33,14 +33,20 @@ validate_value() {
   esac
 }
 
+format_short_revision() {
+  local revision="$1"
+
+  if [[ "$revision" =~ ^([0-9a-fA-F]{12,})(-dirty)?$ ]]; then
+    printf '%s%s' "${BASH_REMATCH[1]:0:12}" "${BASH_REMATCH[2]:-}"
+  else
+    printf '%s' "$revision"
+  fi
+}
+
 image_version="$(read_metadata image-version)"
 source_revision="$(read_metadata source-revision)"
 codex_version="$(codex --version 2>/dev/null || printf 'unavailable')"
-
-short_revision="${source_revision:0:12}"
-if [[ "$source_revision" == *-dirty ]]; then
-  short_revision="${short_revision}-dirty"
-fi
+short_revision="$(format_short_revision "$source_revision")"
 
 validate_metadata() {
   local result=0
