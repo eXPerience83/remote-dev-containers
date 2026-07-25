@@ -42,7 +42,11 @@ if ! create_error="$("${tmux_cmd[@]}" new-session -d -s "$session" -n "$window_n
   fi
 fi
 
-active_window="$("${tmux_cmd[@]}" display-message -p -t "=$session" '#{window_id}')"
+active_window="$("${tmux_cmd[@]}" display-message -p -t "=$session:" '#{window_id}')"
+if [[ -z "$active_window" ]]; then
+  echo "ERROR: tmux session $session has no active window" >&2
+  exit 1
+fi
 "${tmux_cmd[@]}" rename-window -t "$active_window" "$window_name"
 
 if [[ "${REMOTE_DEV_TMUX_DETACHED:-0}" == "1" ]]; then
