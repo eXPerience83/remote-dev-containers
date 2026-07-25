@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck disable=SC1091
 source "$ROOT/versions.env"
 
@@ -13,14 +13,7 @@ PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-$BASE_VERSION}"
 
 if [[ -z "${SOURCE_REVISION+x}" ]]; then
-  if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
-    SOURCE_REVISION="$(git -C "$ROOT" rev-parse HEAD)"
-    if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]]; then
-      SOURCE_REVISION="${SOURCE_REVISION}-dirty"
-    fi
-  else
-    SOURCE_REVISION=local-untracked
-  fi
+  SOURCE_REVISION="$(bash "$ROOT/scripts/detect-source-revision.sh" "$ROOT")"
 fi
 
 common_args=(
