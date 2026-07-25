@@ -20,6 +20,24 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
   exit 1
 fi
 
+workdir="$(mktemp -d)"
+tmux_socket="remote-dev-smoke-$$"
+cleanup() {
+  tmux -L "$tmux_socket" kill-server >/dev/null 2>&1 || true
+  rm -rf "$workdir"
+}
+trap cleanup EXIT
+
+format_short_revision() {
+  local revision="$1"
+
+  if [[ "$revision" =~ ^([0-9a-fA-F]{12,})(-dirty)?$ ]]; then
+    printf '%s%s' "${BASH_REMATCH[1]:0:12}" "${BASH_REMATCH[2]:-}"
+  else
+    printf '%s' "$revision"
+  fi
+}
+
 metadata_dir=/usr/share/remote-dev
 if ! remote-dev-version --check; then
   echo "ERROR: embedded image metadata is missing or invalid" >&2
@@ -42,10 +60,7 @@ fi
 
 default_output="$(remote-dev-version)"
 menu_output="$(remote-dev-version --menu)"
-short_revision="${source_revision:0:12}"
-if [[ "$source_revision" == *-dirty ]]; then
-  short_revision="${short_revision}-dirty"
-fi
+short_revision="$(format_short_revision "$source_revision")"
 
 for expected_line in \
   "Image version: $image_version" \
@@ -60,8 +75,19 @@ if ! grep -Fxq "Image: $image_version @ $short_revision" <<<"$menu_output"; then
   exit 1
 fi
 
+marker_metadata_dir="$workdir/marker-metadata"
+mkdir -p "$marker_metadata_dir"
+printf 'local\n' > "$marker_metadata_dir/image-version"
+printf 'local-untracked\n' > "$marker_metadata_dir/source-revision"
+marker_menu_output="$(REMOTE_DEV_METADATA_DIR="$marker_metadata_dir" remote-dev-version --menu)"
+if ! grep -Fxq 'Image: local @ local-untracked' <<<"$marker_menu_output"; then
+  echo "ERROR: semantic source revision markers must not be abbreviated" >&2
+  exit 1
+fi
+
 printf '%s\n' "$default_output"
 printf '%s\n' "$menu_output"
+echo "Semantic source revision marker display: OK"
 
 codex --version
 bwrap --version
@@ -74,14 +100,6 @@ uv --version
 ttyd --version
 tmux -V
 mise --version
-
-workdir="$(mktemp -d)"
-tmux_socket="remote-dev-smoke-$$"
-cleanup() {
-  tmux -L "$tmux_socket" kill-server >/dev/null 2>&1 || true
-  rm -rf "$workdir"
-}
-trap cleanup EXIT
 
 cd "$workdir"
 git init -q
