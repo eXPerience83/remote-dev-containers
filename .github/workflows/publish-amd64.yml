@@ -99,6 +99,7 @@ jobs:
             BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base:${{ github.ref_name }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
             PROJECT_VERSION=${{ github.ref_name }}
+            SOURCE_REVISION=${{ github.sha }}
           tags: |
             ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:${{ github.ref_name }}
             ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:stable
