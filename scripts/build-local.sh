@@ -11,7 +11,7 @@ BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-$BASE_VERSION}"
-SOURCE_REVISION="${SOURCE_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')}"
+SOURCE_REVISION="${SOURCE_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf 'local-untracked')}"
 
 common_args=(
   --platform "$PLATFORM"
