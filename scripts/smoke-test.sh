@@ -94,7 +94,7 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   WORKSPACE=/workspace \
     /usr/local/bin/attach-remote-dev-tmux
 
-  fresh_name="$(tmux -L "$tmux_socket" display-message -p -t '=fresh-session' '#{window_name}')"
+  fresh_name="$(tmux -L "$tmux_socket" display-message -p -t '=fresh-session:' '#{window_name}')"
   if [[ "$fresh_name" != remote-dev ]]; then
     echo "ERROR: fresh tmux session window name is $fresh_name, expected remote-dev" >&2
     exit 1
@@ -108,7 +108,7 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   WORKSPACE=/workspace \
     /usr/local/bin/attach-remote-dev-tmux
 
-  existing_name="$(tmux -L "$tmux_socket" display-message -p -t '=existing-session' '#{window_name}')"
+  existing_name="$(tmux -L "$tmux_socket" display-message -p -t '=existing-session:' '#{window_name}')"
   if [[ "$existing_name" != remote-dev ]]; then
     echo "ERROR: existing tmux session window name is $existing_name, expected remote-dev" >&2
     exit 1
