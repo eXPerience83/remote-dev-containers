@@ -11,7 +11,17 @@ BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-$BASE_VERSION}"
-SOURCE_REVISION="${SOURCE_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf 'local-untracked')}"
+
+if [[ -z "${SOURCE_REVISION+x}" ]]; then
+  if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
+    SOURCE_REVISION="$(git -C "$ROOT" rev-parse HEAD)"
+    if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]]; then
+      SOURCE_REVISION="${SOURCE_REVISION}-dirty"
+    fi
+  else
+    SOURCE_REVISION=local-untracked
+  fi
+fi
 
 common_args=(
   --platform "$PLATFORM"
