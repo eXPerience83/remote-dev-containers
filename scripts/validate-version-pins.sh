@@ -46,6 +46,49 @@ require_sha256() {
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
 
+require_frontend_pin() {
+  local file="$1"
+  local first_line=""
+  local pattern='^# syntax=docker/dockerfile:[0-9]+\.[0-9]+(\.[0-9]+)?@sha256:[0-9a-f]{64}$'
+
+  first_line="$(head -n 1 "$file")"
+  if [[ ! "$first_line" =~ $pattern ]]; then
+    echo "ERROR: $file must pin the Dockerfile frontend to an exact version and digest" >&2
+    exit 1
+  fi
+  printf '%s\n' "$first_line"
+}
+
+require_action_shas() {
+  local workflow=""
+  local reference=""
+
+  while IFS= read -r workflow; do
+    while IFS= read -r reference; do
+      reference="${reference%%[[:space:]]#*}"
+      if [[ "$reference" == ./* ]]; then
+        continue
+      fi
+      if [[ ! "$reference" =~ ^[^@[:space:]]+/[^@[:space:]]+@[0-9a-f]{40}$ ]]; then
+        echo "ERROR: $workflow uses a mutable or invalid GitHub Action reference: $reference" >&2
+        exit 1
+      fi
+    done < <(sed -n 's/^[[:space:]]*-[[:space:]]*uses:[[:space:]]*//p' "$workflow")
+  done < <(find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print)
+}
+
+base_frontend="$(require_frontend_pin "$base_dockerfile")"
+codex_frontend="$(require_frontend_pin "$codex_dockerfile")"
+if [[ "$base_frontend" != "$codex_frontend" ]]; then
+  echo "ERROR: Dockerfiles must use the same pinned frontend image" >&2
+  exit 1
+fi
+if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must bind Ubuntu to UBUNTU_DIGEST" >&2
+  exit 1
+fi
+require_action_shas
+
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]+\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
   exit 1
