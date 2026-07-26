@@ -41,7 +41,9 @@ jobs:
 
       - name: Validate repository configuration
         run: |
-          bash -n scripts/*.sh
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' -print0)
           bash scripts/validate-version-pins.sh
           jq -e . renovate.json >/dev/null
           for file in compose/*.yml; do
