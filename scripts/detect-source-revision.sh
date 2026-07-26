@@ -34,7 +34,13 @@ if [[ -z "$revision" ]]; then
   exit 0
 fi
 
-if [[ -n "$(git -C "$source_root_physical" status --porcelain --untracked-files=normal)" ]]; then
+worktree_status=""
+if ! worktree_status="$(git -C "$source_root_physical" status --porcelain --untracked-files=normal 2>/dev/null)"; then
+  echo "ERROR: unable to inspect Git worktree status for $source_root_physical" >&2
+  exit 1
+fi
+
+if [[ -n "$worktree_status" ]]; then
   revision="${revision}-dirty"
 fi
 
