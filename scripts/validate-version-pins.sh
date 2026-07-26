@@ -113,6 +113,10 @@ if [[ ! "$MISE_VERSION" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
   echo "ERROR: MISE_VERSION must be an exact stable release version: $MISE_VERSION" >&2
   exit 1
 fi
+if [[ ! "$NPM_VERSION" =~ ^11\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: NPM_VERSION must be an exact supported npm 11 release: $NPM_VERSION" >&2
+  exit 1
+fi
 
 for variable in \
   CODEX_AMD64_SHA256 \
@@ -137,7 +141,8 @@ for variable in \
   TTYD_ARM64_SHA256 \
   MISE_VERSION \
   MISE_AMD64_SHA256 \
-  MISE_ARM64_SHA256; do
+  MISE_ARM64_SHA256 \
+  NPM_VERSION; do
   require_synced_arg "$variable" "$base_dockerfile"
 done
 
@@ -150,4 +155,5 @@ done
 
 printf 'Ubuntu base pin: %s@%s\n' "$UBUNTU_VERSION" "$UBUNTU_DIGEST"
 printf 'Codex release pin: %s\n' "$CODEX_RELEASE_TAG"
+printf 'npm release pin: %s\n' "$NPM_VERSION"
 echo "Release asset SHA-256 pins are present and synchronized."
