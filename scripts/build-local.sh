@@ -55,6 +55,7 @@ common_args=(
   --build-arg "MISE_ARM64_SHA256=$MISE_ARM64_SHA256"
   --build-arg "PYTHON_VERSION=$PYTHON_VERSION"
   --build-arg "NODE_VERSION=$NODE_VERSION"
+  --build-arg "NPM_VERSION=$NPM_VERSION"
   --build-arg "UV_VERSION=$UV_VERSION"
 )
 
