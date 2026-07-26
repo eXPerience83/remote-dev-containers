@@ -45,6 +45,7 @@ jobs:
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
           bash scripts/validate-version-pins.sh
+          bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
           for file in compose/*.yml; do
             docker compose -f "$file" config --quiet
