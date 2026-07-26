@@ -42,10 +42,17 @@ require_build_value SOURCE_REVISION "$SOURCE_REVISION"
 common_args=(
   --platform "$PLATFORM"
   --build-arg "UBUNTU_VERSION=$UBUNTU_VERSION"
+  --build-arg "UBUNTU_DIGEST=$UBUNTU_DIGEST"
   --build-arg "BASE_VERSION=$BASE_VERSION"
   --build-arg "GH_VERSION=$GH_VERSION"
+  --build-arg "GH_AMD64_SHA256=$GH_AMD64_SHA256"
+  --build-arg "GH_ARM64_SHA256=$GH_ARM64_SHA256"
   --build-arg "TTYD_VERSION=$TTYD_VERSION"
+  --build-arg "TTYD_AMD64_SHA256=$TTYD_AMD64_SHA256"
+  --build-arg "TTYD_ARM64_SHA256=$TTYD_ARM64_SHA256"
   --build-arg "MISE_VERSION=$MISE_VERSION"
+  --build-arg "MISE_AMD64_SHA256=$MISE_AMD64_SHA256"
+  --build-arg "MISE_ARM64_SHA256=$MISE_ARM64_SHA256"
   --build-arg "PYTHON_VERSION=$PYTHON_VERSION"
   --build-arg "NODE_VERSION=$NODE_VERSION"
   --build-arg "UV_VERSION=$UV_VERSION"
@@ -56,6 +63,8 @@ docker build \
   --platform "$PLATFORM" \
   --build-arg "BASE_IMAGE=$BASE_IMAGE" \
   --build-arg "CODEX_RELEASE_TAG=$CODEX_RELEASE_TAG" \
+  --build-arg "CODEX_AMD64_SHA256=$CODEX_AMD64_SHA256" \
+  --build-arg "CODEX_ARM64_SHA256=$CODEX_ARM64_SHA256" \
   --build-arg "PROJECT_VERSION=$PROJECT_VERSION" \
   --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
   -t "$CODEX_IMAGE" \
