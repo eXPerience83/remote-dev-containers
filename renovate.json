@@ -22,8 +22,11 @@
         "/^(?:versions\\.env|images/base/Dockerfile)$/"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>npm) depName=(?<depName>npm) versioning=(?<versioning>semver)\\n(?:ARG )?NPM_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ]
+        "(?:# renovate: datasource=npm depName=npm versioning=semver\\n)?(?:ARG )?NPM_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "npm",
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
