@@ -19,6 +19,7 @@ ARG MISE_AMD64_SHA256=9a4f228158a316b236653ff615e9955f50c56c6a3ef719135d327c7fc6
 ARG MISE_ARM64_SHA256=602a202118dc7710badace4d60f4de48f3f382b0e2f8d02085a62cd161832917
 ARG PYTHON_VERSION=3.14.6
 ARG NODE_VERSION=24.17.0
+ARG NPM_VERSION=11.18.0
 ARG UV_VERSION=0.11.30
 ARG BUBBLEWRAP_VERSION=0.11.1-1ubuntu0.1
 
@@ -148,9 +149,10 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
         "python@${PYTHON_VERSION}" \
         "node@${NODE_VERSION}" \
         "uv@${UV_VERSION}" \
+    && npm install --global --ignore-scripts --no-audit --no-fund "npm@${NPM_VERSION}" \
     && python --version \
     && node --version \
-    && npm --version \
+    && test "$(npm --version)" = "$NPM_VERSION" \
     && uv --version \
     && rm -rf "$MISE_CACHE_DIR"/*
 
