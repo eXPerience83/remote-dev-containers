@@ -26,8 +26,13 @@ source "$lib_dir/format-short-revision.sh"
 
 workdir="$(mktemp -d)"
 tmux_socket="remote-dev-smoke-$$"
+direct_codex_socket="${tmux_socket}-direct-codex"
+direct_shell_socket="${tmux_socket}-direct-shell"
 cleanup() {
-  tmux -L "$tmux_socket" kill-server >/dev/null 2>&1 || true
+  local socket=""
+  for socket in "$tmux_socket" "$direct_codex_socket" "$direct_shell_socket"; do
+    tmux -L "$socket" kill-server >/dev/null 2>&1 || true
+  done
   rm -rf "$workdir"
 }
 trap cleanup EXIT
@@ -40,6 +45,41 @@ assert_short_revision() {
   actual="$(format_short_revision "$input")"
   if [[ "$actual" != "$expected" ]]; then
     echo "ERROR: revision formatting mismatch for $input: expected $expected, got $actual" >&2
+    exit 1
+  fi
+}
+
+wait_for_tmux_session_exit() {
+  local socket="$1"
+  local session="$2"
+  local attempt=""
+
+  for attempt in $(seq 1 50); do
+    if ! tmux -L "$socket" has-session -t "=$session" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "ERROR: tmux session $session did not exit after its direct command completed" >&2
+  tmux -L "$socket" capture-pane -p -t "=$session:" >&2 || true
+  exit 1
+}
+
+assert_auth_hardened() {
+  local label="$1"
+  local codex_home="$2"
+  local auth_file="$codex_home/auth.json"
+  local mode=""
+
+  if [[ ! -f "$auth_file" ]]; then
+    echo "ERROR: $label did not create $auth_file" >&2
+    exit 1
+  fi
+
+  mode="$(stat -c '%a' "$auth_file")"
+  if [[ "$mode" != 600 ]]; then
+    echo "ERROR: $label left auth.json with mode $mode, expected 600" >&2
     exit 1
   fi
 }
@@ -131,6 +171,20 @@ printf 'print("ok")\n' > smoke.py
 python smoke.py | grep -Fx ok
 node -e 'console.log("ok")' | grep -Fx ok
 
+wrapper_state="$workdir/direct-wrapper-state"
+mkdir -p "$wrapper_state"
+wrapper_status=0
+CODEX_HOME="$wrapper_state" \
+  /usr/local/bin/run-direct-session \
+  bash -c 'umask 000; printf "token\n" > "$CODEX_HOME/auth.json"; chmod 0660 "$CODEX_HOME/auth.json"; exit 23' \
+  || wrapper_status=$?
+if (( wrapper_status != 23 )); then
+  echo "ERROR: direct-session wrapper returned $wrapper_status, expected the command status 23" >&2
+  exit 1
+fi
+assert_auth_hardened "Direct-session wrapper" "$wrapper_state"
+echo "Direct-session wrapper preserves status and hardens state: OK"
+
 if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   REMOTE_DEV_TMUX_DETACHED=1 \
   TMUX_SOCKET_NAME="$tmux_socket" \
@@ -190,7 +244,48 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
     exit 1
   fi
 
+  direct_codex_state="$workdir/direct-codex-state"
+  fake_bin="$workdir/fake-bin"
+  mkdir -p "$direct_codex_state" "$fake_bin"
+  cat > "$fake_bin/codex" <<'FAKE_CODEX'
+#!/usr/bin/env bash
+set -euo pipefail
+umask 000
+printf 'token\n' > "$CODEX_HOME/auth.json"
+chmod 0660 "$CODEX_HOME/auth.json"
+sleep 1
+FAKE_CODEX
+  chmod 0755 "$fake_bin/codex"
+
+  REMOTE_DEV_TMUX_DETACHED=1 \
+  TMUX_SOCKET_NAME="$direct_codex_socket" \
+  TMUX_SESSION=direct-codex \
+  START_MODE=codex \
+  WORKSPACE=/workspace \
+  CODEX_HOME="$direct_codex_state" \
+  PATH="$fake_bin:$PATH" \
+    /usr/local/bin/attach-remote-dev-tmux
+
+  wait_for_tmux_session_exit "$direct_codex_socket" direct-codex
+  assert_auth_hardened "START_MODE=codex" "$direct_codex_state"
+
+  direct_shell_state="$workdir/direct-shell-state"
+  mkdir -p "$direct_shell_state"
+  REMOTE_DEV_TMUX_DETACHED=1 \
+  TMUX_SOCKET_NAME="$direct_shell_socket" \
+  TMUX_SESSION=direct-shell \
+  START_MODE=shell \
+  WORKSPACE=/workspace \
+  CODEX_HOME="$direct_shell_state" \
+    /usr/local/bin/attach-remote-dev-tmux
+
+  tmux -L "$direct_shell_socket" send-keys -t '=direct-shell:' \
+    'umask 000; printf "token\n" > "$CODEX_HOME/auth.json"; chmod 0660 "$CODEX_HOME/auth.json"; exit' C-m
+  wait_for_tmux_session_exit "$direct_shell_socket" direct-shell
+  assert_auth_hardened "START_MODE=shell" "$direct_shell_state"
+
   echo "Tmux fresh, existing and concurrent session paths: OK"
+  echo "Direct codex and shell start modes harden state after exit: OK"
 else
   echo "Tmux runtime smoke test: skipped during image build"
 fi
