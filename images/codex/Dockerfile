@@ -5,10 +5,12 @@ FROM ${BASE_IMAGE}
 ARG TARGETARCH
 ARG CODEX_RELEASE_TAG=rust-v0.145.0
 ARG PROJECT_VERSION=0.1.0-dev
+ARG SOURCE_REVISION=local-untracked
 
 LABEL org.opencontainers.image.title="Codex Remote Dev" \
       org.opencontainers.image.description="Community browser-hosted Codex CLI development container" \
       org.opencontainers.image.version="${PROJECT_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI"
 
@@ -48,18 +50,30 @@ RUN case "${TARGETARCH:-amd64}" in \
     && rm -rf "$workdir"
 
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
+COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
+COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
+COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 
 RUN chmod 0755 \
       /usr/local/bin/start-codex-web \
+      /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/codex-menu \
       /usr/local/bin/codex-doctor \
+      /usr/local/bin/remote-dev-version \
       /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
+    && chmod 0644 /usr/local/lib/remote-dev/format-short-revision.sh \
+    && install -d -m 0755 /usr/share/remote-dev \
+    && printf '%s\n' "$PROJECT_VERSION" > /usr/share/remote-dev/image-version \
+    && printf '%s\n' "$SOURCE_REVISION" > /usr/share/remote-dev/source-revision \
+    && chmod 0444 \
+      /usr/share/remote-dev/image-version \
+      /usr/share/remote-dev/source-revision \
     && mkdir -p \
       /workspace \
       /root/.codex \
@@ -67,7 +81,7 @@ RUN chmod 0755 \
       /root/.config/git \
       /root/.ssh \
     && /usr/local/bin/secure-persistent-state \
-    && codex-smoke-test
+    && REMOTE_DEV_SKIP_TMUX_SMOKE=1 codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
 EXPOSE 7681

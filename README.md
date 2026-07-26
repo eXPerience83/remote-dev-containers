@@ -46,7 +46,7 @@ Open the published web address and choose:
 
 ## Public edge testing
 
-The `edge` image is an unstable development build published manually from `main`. It is available publicly for testing, but it must not be treated as a stable release.
+The `edge` image is an unstable development build published automatically after relevant changes merge into `main`. It is available publicly for testing, but it must not be treated as a stable release.
 
 Pull the current AMD64 edge image without registry credentials:
 
@@ -70,6 +70,20 @@ GHCR tags are mutable. For immutable reproduction or rollback, record the publis
 
 ```text
 ghcr.io/experience83/codex-remote-dev@sha256:<digest>
+```
+
+The web menu shows the embedded image channel, abbreviated embedded source revision and installed Codex CLI version detected at runtime. To display the complete embedded image metadata together with the runtime Codex CLI version from the menu diagnostics or a shell, run:
+
+```bash
+remote-dev-version
+```
+
+Expected edge output:
+
+```text
+Image version: edge
+Source revision: <full-commit-sha>
+Codex CLI: codex-cli <version>
 ```
 
 See `docs/releases.md` for release channels, promotion criteria and rollback guidance.

@@ -22,7 +22,7 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 
 ## Prueba pública de la imagen edge
 
-La imagen `edge` es una compilación experimental de desarrollo publicada desde `main`. Puede descargarse sin credenciales:
+La imagen `edge` es una compilación experimental publicada automáticamente después de fusionar en `main` cambios relevantes para la imagen o el runtime. Puede descargarse sin credenciales:
 
 ```bash
 docker pull ghcr.io/experience83/codex-remote-dev:edge-amd64
@@ -44,6 +44,20 @@ Las etiquetas de GHCR son mutables. Para una reproducción o rollback inmutable,
 
 ```text
 ghcr.io/experience83/codex-remote-dev@sha256:<digest>
+```
+
+El menú web muestra el canal de imagen embebido, la revisión de origen embebida en forma abreviada y la versión instalada de Codex CLI detectada en tiempo de ejecución. Para consultar los metadatos completos de la imagen junto con la versión de Codex CLI en ejecución desde los diagnósticos o desde un shell:
+
+```bash
+remote-dev-version
+```
+
+Salida esperada para `edge`:
+
+```text
+Image version: edge
+Source revision: <commit-completo>
+Codex CLI: codex-cli <versión>
 ```
 
 ## Desarrollo y revisiones

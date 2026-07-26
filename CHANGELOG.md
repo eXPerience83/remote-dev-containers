@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Ubuntu `bubblewrap` package plus diagnostics for host-dependent nested-sandbox compatibility.
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
+- Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed stable upstream checks from weekly to daily and made the update branch reusable.
 - Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
 - Changed the bubblewrap runtime probe to report host namespace restrictions without weakening the container or failing unrelated image validation.
+- Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
 
 ### Security
 
@@ -42,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
 - Image startup and publication fail when repository version pins are inconsistent.
 - Codex stable release tags are validated to reject prerelease identifiers.
+- Stable image publication also requires the tagged commit to belong to `main` history.
 - Codex and GitHub credential files are tightened after startup, login and interactive sessions.
 - Runtime tests keep `no-new-privileges`; they do not add `SYS_ADMIN`, privileged mode or an unconfined seccomp profile to force nested bubblewrap support.
 - Public availability does not change the warning against exposing the ttyd port directly to the Internet.
@@ -49,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Release policy
 
 - `edge` images are public experimental builds published automatically after relevant changes merge into `main`, and may also be published manually from `main`.
-- Stable images require an exact `vMAJOR.MINOR.PATCH` tag.
+- Stable images require an exact `vMAJOR.MINOR.PATCH` tag whose commit belongs to `main` history.
 - The first stable section will replace relevant entries from `Unreleased` when `v0.1.0` is prepared.
 
 [Unreleased]: https://github.com/eXPerience83/remote-dev-containers/commits/main

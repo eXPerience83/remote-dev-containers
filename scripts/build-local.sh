@@ -1,15 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck disable=SC1091
 source "$ROOT/versions.env"
 
 bash "$ROOT/scripts/validate-version-pins.sh"
 
+require_build_value() {
+  local label="$1"
+  local value="$2"
+
+  if [[ -z "$value" ]]; then
+    echo "ERROR: $label must not be empty" >&2
+    exit 1
+  fi
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    echo "ERROR: $label must be a single-line value" >&2
+    exit 1
+  fi
+  case "$value" in
+    unknown|unavailable)
+      echo "ERROR: $label must identify the build, not use the reserved value $value" >&2
+      exit 1
+      ;;
+  esac
+}
+
 BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
 CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
 PLATFORM="${PLATFORM:-linux/amd64}"
+PROJECT_VERSION="${PROJECT_VERSION:-${BASE_VERSION:-}}"
+
+if [[ -z "${SOURCE_REVISION:-}" ]]; then
+  SOURCE_REVISION="$(bash "$ROOT/scripts/detect-source-revision.sh" "$ROOT")"
+fi
+
+require_build_value PROJECT_VERSION "$PROJECT_VERSION"
+require_build_value SOURCE_REVISION "$SOURCE_REVISION"
 
 common_args=(
   --platform "$PLATFORM"
@@ -28,7 +56,8 @@ docker build \
   --platform "$PLATFORM" \
   --build-arg "BASE_IMAGE=$BASE_IMAGE" \
   --build-arg "CODEX_RELEASE_TAG=$CODEX_RELEASE_TAG" \
-  --build-arg "PROJECT_VERSION=$BASE_VERSION" \
+  --build-arg "PROJECT_VERSION=$PROJECT_VERSION" \
+  --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
   -t "$CODEX_IMAGE" \
   -f "$ROOT/images/codex/Dockerfile" \
   "$ROOT"

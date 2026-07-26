@@ -22,6 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Validate stable release tag
         run: |
@@ -30,10 +32,21 @@ jobs:
             exit 1
           fi
 
+      - name: Require the tagged commit from main history
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "ERROR: stable publication requires a tag whose commit belongs to main history" >&2
+            exit 1
+          fi
+
       - name: Validate repository configuration
         run: |
-          bash -n scripts/*.sh
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' -print0)
           bash scripts/validate-version-pins.sh
+          bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
 
       - uses: docker/login-action@v4
@@ -99,6 +112,7 @@ jobs:
             BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base:${{ github.ref_name }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
             PROJECT_VERSION=${{ github.ref_name }}
+            SOURCE_REVISION=${{ github.sha }}
           tags: |
             ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:${{ github.ref_name }}
             ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:stable
