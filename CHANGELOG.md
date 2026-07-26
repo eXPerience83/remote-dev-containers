@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
 - Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
+- Trivy scans for fixable critical vulnerabilities in both locally built container images.
 
 ### Changed
 
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
 - Changed the bubblewrap runtime probe to report host namespace restrictions without weakening the container or failing unrelated image validation.
 - Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
+- Changed upstream automation to update release versions and their architecture-specific SHA-256 pins together.
 
 ### Security
 
@@ -49,6 +51,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Direct `START_MODE=codex` and `START_MODE=shell` sessions reapply credential hardening when their foreground process exits.
 - Runtime tests keep `no-new-privileges`; they do not add `SYS_ADMIN`, privileged mode or an unconfined seccomp profile to force nested bubblewrap support.
 - Public availability does not change the warning against exposing the ttyd port directly to the Internet.
+- Third-party GitHub Actions are pinned to immutable commit SHAs.
+- The Ubuntu base image is pinned to an immutable OCI digest.
+- Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 
 ## Release policy
 
