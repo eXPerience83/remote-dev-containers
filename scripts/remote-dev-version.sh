@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-metadata_dir="${REMOTE_DEV_METADATA_DIR:-/usr/share/remote-dev}"
-lib_dir="${REMOTE_DEV_LIB_DIR:-/usr/local/lib/remote-dev}"
+metadata_dir=/usr/share/remote-dev
+lib_dir=/usr/local/lib/remote-dev
 
 # shellcheck source=/usr/local/lib/remote-dev/format-short-revision.sh
 source "$lib_dir/format-short-revision.sh"
