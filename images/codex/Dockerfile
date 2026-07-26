@@ -4,6 +4,8 @@ FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
 ARG CODEX_RELEASE_TAG=rust-v0.145.0
+ARG CODEX_AMD64_SHA256=bfaf13c9ba34f2ad764e4a916c49cf7177aeba329cf0f719e2227566fc8d662a
+ARG CODEX_ARM64_SHA256=d384f90bc842450b42bd675feef06a12a46a3b1ca97efcb22566b270e4a11227
 ARG PROJECT_VERSION=0.1.0-dev
 ARG SOURCE_REVISION=local-untracked
 
@@ -31,19 +33,16 @@ ENV HOME=/root \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Codex CLI: pinned official release asset + SHA-256 digest from GitHub release metadata.
+# Codex CLI: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH:-amd64}" in \
-      amd64) asset="codex-x86_64-unknown-linux-musl.tar.gz"; binary="codex-x86_64-unknown-linux-musl" ;; \
-      arm64) asset="codex-aarch64-unknown-linux-musl.tar.gz"; binary="codex-aarch64-unknown-linux-musl" ;; \
+      amd64) asset="codex-x86_64-unknown-linux-musl.tar.gz"; binary="codex-x86_64-unknown-linux-musl"; expected_sha="$CODEX_AMD64_SHA256" ;; \
+      arm64) asset="codex-aarch64-unknown-linux-musl.tar.gz"; binary="codex-aarch64-unknown-linux-musl"; expected_sha="$CODEX_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
-    && curl -fsSL "https://api.github.com/repos/openai/codex/releases/tags/${CODEX_RELEASE_TAG}" -o release.json \
-    && digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest' release.json)" \
-    && test -n "$digest" && test "$digest" != null \
     && curl -fsSL "https://github.com/openai/codex/releases/download/${CODEX_RELEASE_TAG}/${asset}" -o codex.tar.gz \
-    && printf '%s  %s\n' "${digest#sha256:}" codex.tar.gz | sha256sum -c - \
+    && printf '%s  %s\n' "$expected_sha" codex.tar.gz | sha256sum -c - \
     && tar -xzf codex.tar.gz \
     && install -m 0755 "$binary" /usr/local/bin/codex \
     && cd / \
