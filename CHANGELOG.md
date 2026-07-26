@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Codex stable release tags are validated to reject prerelease identifiers.
 - Stable image publication also requires the tagged commit to belong to `main` history.
 - Codex and GitHub credential files are tightened after startup, login and interactive sessions.
+- Direct `START_MODE=codex` and `START_MODE=shell` sessions reapply credential hardening when their foreground process exits.
 - Runtime tests keep `no-new-privileges`; they do not add `SYS_ADMIN`, privileged mode or an unconfined seccomp profile to force nested bubblewrap support.
 - Public availability does not change the warning against exposing the ttyd port directly to the Internet.
 
