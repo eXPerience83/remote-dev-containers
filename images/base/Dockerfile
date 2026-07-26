@@ -1,14 +1,22 @@
 # syntax=docker/dockerfile:1.25
 ARG UBUNTU_VERSION=26.04
-FROM ubuntu:${UBUNTU_VERSION}
+ARG UBUNTU_DIGEST=sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
+FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}
 
-# Re-declare the pre-FROM argument so it is available inside this build stage.
+# Re-declare the pre-FROM arguments so they are available inside this build stage.
 ARG UBUNTU_VERSION
+ARG UBUNTU_DIGEST
 ARG TARGETARCH
 ARG BASE_VERSION=0.1.0-dev
 ARG GH_VERSION=2.96.0
+ARG GH_AMD64_SHA256=83d5c2ccad5498f58bf6368acb1ab32588cf43ab3a4b1c301bf36328b1c8bd60
+ARG GH_ARM64_SHA256=06f86ec7103d41993b76cd78072f43595c34aaa56506d971d9860e67140bf909
 ARG TTYD_VERSION=1.7.7
+ARG TTYD_AMD64_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+ARG TTYD_ARM64_SHA256=b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165
 ARG MISE_VERSION=2026.5.3
+ARG MISE_AMD64_SHA256=9a4f228158a316b236653ff615e9955f50c56c6a3ef719135d327c7fc632b89b
+ARG MISE_ARM64_SHA256=602a202118dc7710badace4d60f4de48f3f382b0e2f8d02085a62cd161832917
 ARG PYTHON_VERSION=3.14.6
 ARG NODE_VERSION=24.17.0
 ARG UV_VERSION=0.11.30
@@ -17,7 +25,7 @@ ARG BUBBLEWRAP_VERSION=0.11.1-1ubuntu0.1
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
-      org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}" \
+      org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -87,53 +95,48 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
-# GitHub CLI: official release tarball + official checksum file.
+# GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH:-amd64}" in \
-      amd64) gh_arch=amd64 ;; \
-      arm64) gh_arch=arm64 ;; \
+      amd64) gh_arch=amd64; expected_sha="$GH_AMD64_SHA256" ;; \
+      arm64) gh_arch=arm64; expected_sha="$GH_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && archive="gh_${GH_VERSION}_linux_${gh_arch}.tar.gz" \
-    && curl -fsSLO "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" \
-    && curl -fsSLO "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" \
-    && grep " ${archive}$" "gh_${GH_VERSION}_checksums.txt" | sha256sum -c - \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" -o "$archive" \
+    && printf '%s  %s\n' "$expected_sha" "$archive" | sha256sum -c - \
     && tar -xzf "$archive" \
     && install -m 0755 "gh_${GH_VERSION}_linux_${gh_arch}/bin/gh" /usr/local/bin/gh \
     && cd / \
     && rm -rf "$workdir"
 
-# ttyd: official static binary + official SHA256SUMS.
+# ttyd: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH:-amd64}" in \
-      amd64) ttyd_arch=x86_64 ;; \
-      arm64) ttyd_arch=aarch64 ;; \
+      amd64) ttyd_arch=x86_64; expected_sha="$TTYD_AMD64_SHA256" ;; \
+      arm64) ttyd_arch=aarch64; expected_sha="$TTYD_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && asset="ttyd.${ttyd_arch}" \
-    && curl -fsSLO "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/${asset}" \
-    && curl -fsSLO "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/SHA256SUMS" \
-    && grep " ${asset}$" SHA256SUMS | sha256sum -c - \
+    && curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/${asset}" -o "$asset" \
+    && printf '%s  %s\n' "$expected_sha" "$asset" | sha256sum -c - \
     && install -m 0755 "$asset" /usr/local/bin/ttyd \
     && cd / \
     && rm -rf "$workdir"
 
-# mise: official release asset; digest is read from the pinned GitHub release metadata.
+# mise: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH:-amd64}" in \
-      amd64) mise_arch=x64 ;; \
-      arm64) mise_arch=arm64 ;; \
+      amd64) mise_arch=x64; expected_sha="$MISE_AMD64_SHA256" ;; \
+      arm64) mise_arch=arm64; expected_sha="$MISE_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && asset="mise-v${MISE_VERSION}-linux-${mise_arch}" \
-    && curl -fsSL "https://api.github.com/repos/jdx/mise/releases/tags/v${MISE_VERSION}" -o release.json \
-    && digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest' release.json)" \
-    && test -n "$digest" && test "$digest" != null \
     && curl -fsSL "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/${asset}" -o mise \
-    && printf '%s  %s\n' "${digest#sha256:}" mise | sha256sum -c - \
+    && printf '%s  %s\n' "$expected_sha" mise | sha256sum -c - \
     && install -m 0755 mise /usr/local/bin/mise \
     && cd / \
     && rm -rf "$workdir"
