@@ -37,6 +37,17 @@ head_revision="$(git -C "$own" rev-parse HEAD)"
 assert_equal "$head_revision" "$(bash "$helper" "$own")" "clean source worktree"
 
 printf 'modified\n' >> "$own/tracked.txt"
-assert_equal "${head_revision}-dirty" "$(bash "$helper" "$own")" "dirty source worktree"
+assert_equal "${head_revision}-dirty" "$(bash "$helper" "$own")" "tracked modification"
+
+git -C "$own" checkout -q -- tracked.txt
+printf 'untracked\n' > "$own/untracked.txt"
+assert_equal "${head_revision}-dirty" "$(bash "$helper" "$own")" "untracked file"
+rm -f "$own/untracked.txt"
+
+printf 'invalid-index\n' > "$workdir/invalid-index"
+if GIT_INDEX_FILE="$workdir/invalid-index" bash "$helper" "$own" >/dev/null 2>&1; then
+  echo "ERROR: Git status failures must not be reported as a clean revision" >&2
+  exit 1
+fi
 
 echo "Source revision detection: OK"
