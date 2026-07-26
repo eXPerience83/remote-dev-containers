@@ -41,20 +41,71 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: codex-remote-dev-base:local
-          format: table
+          format: json
+          output: trivy-base.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Scan Codex image for fixable critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: codex-remote-dev:local
-          format: table
+          format: json
+          output: trivy-codex.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
+
+      - name: Upload vulnerability scan reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: trivy-reports
+          path: |
+            trivy-base.json
+            trivy-codex.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce no fixable critical vulnerabilities
+        run: |
+          set -euo pipefail
+          findings=0
+
+          for entry in \
+            "base:trivy-base.json" \
+            "codex:trivy-codex.json"; do
+            label="${entry%%:*}"
+            report="${entry#*:}"
+            count="$(jq '[
+              .Results[]?
+              | .Vulnerabilities[]?
+              | select(.Severity == "CRITICAL")
+              | select((.FixedVersion // "") != "")
+            ] | length' "$report")"
+
+            if (( count > 0 )); then
+              echo "ERROR: fixable CRITICAL vulnerabilities in $label image:" >&2
+              jq -r '
+                .Results[]? as $result
+                | $result.Vulnerabilities[]?
+                | select(.Severity == "CRITICAL")
+                | select((.FixedVersion // "") != "")
+                | "- \(.VulnerabilityID) | \(.PkgName) | \(.InstalledVersion) -> \(.FixedVersion) | \($result.Target)"
+              ' "$report" >&2
+            else
+              echo "No fixable CRITICAL vulnerabilities in $label image."
+            fi
+
+            findings=$((findings + count))
+          done
+
+          if (( findings > 0 )); then
+            echo "ERROR: vulnerability gate found $findings fixable CRITICAL finding(s)" >&2
+            exit 1
+          fi
