@@ -60,13 +60,13 @@ run_github_login() {
   return "$action_status"
 }
 
-while true; do
-  if remote-dev-version --check >/dev/null 2>&1; then
-    version_summary="$(remote-dev-version --menu)"
-  else
-    version_summary="Image metadata unavailable"
-  fi
+if remote-dev-version --check >/dev/null 2>&1; then
+  version_summary="$(remote-dev-version --menu)"
+else
+  version_summary="Image metadata unavailable"
+fi
 
+while true; do
   clear
   cat <<MENU
 Codex Remote Dev
