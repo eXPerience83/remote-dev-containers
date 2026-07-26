@@ -20,6 +20,10 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
   exit 1
 fi
 
+lib_dir="${REMOTE_DEV_LIB_DIR:-/usr/local/lib/remote-dev}"
+# shellcheck source=/usr/local/lib/remote-dev/format-short-revision.sh
+source "$lib_dir/format-short-revision.sh"
+
 workdir="$(mktemp -d)"
 tmux_socket="remote-dev-smoke-$$"
 cleanup() {
@@ -28,15 +32,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-format_short_revision() {
-  local revision="$1"
+assert_short_revision() {
+  local input="$1"
+  local expected="$2"
+  local actual=""
 
-  if [[ "$revision" =~ ^([0-9a-fA-F]{12,})(-dirty)?$ ]]; then
-    printf '%s%s' "${BASH_REMATCH[1]:0:12}" "${BASH_REMATCH[2]:-}"
-  else
-    printf '%s' "$revision"
+  actual="$(format_short_revision "$input")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "ERROR: revision formatting mismatch for $input: expected $expected, got $actual" >&2
+    exit 1
   fi
 }
+
+sample_revision=0123456789abcdef0123456789abcdef01234567
+assert_short_revision "$sample_revision" 0123456789ab
+assert_short_revision "${sample_revision}-dirty" 0123456789ab-dirty
+assert_short_revision local-untracked local-untracked
+assert_short_revision release-marker release-marker
+echo "Source revision formatting cases: OK"
 
 metadata_dir=/usr/share/remote-dev
 if ! remote-dev-version --check; then
