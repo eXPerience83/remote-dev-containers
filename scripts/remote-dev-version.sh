@@ -2,6 +2,10 @@
 set -euo pipefail
 
 metadata_dir="${REMOTE_DEV_METADATA_DIR:-/usr/share/remote-dev}"
+lib_dir="${REMOTE_DEV_LIB_DIR:-/usr/local/lib/remote-dev}"
+
+# shellcheck source=/usr/local/lib/remote-dev/format-short-revision.sh
+source "$lib_dir/format-short-revision.sh"
 
 read_metadata() {
   local name="$1"
@@ -31,16 +35,6 @@ validate_value() {
       return 1
       ;;
   esac
-}
-
-format_short_revision() {
-  local revision="$1"
-
-  if [[ "$revision" =~ ^([0-9a-fA-F]{12,})(-dirty)?$ ]]; then
-    printf '%s%s' "${BASH_REMATCH[1]:0:12}" "${BASH_REMATCH[2]:-}"
-  else
-    printf '%s' "$revision"
-  fi
 }
 
 image_version="$(read_metadata image-version)"
