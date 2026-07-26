@@ -51,6 +51,7 @@ RUN case "${TARGETARCH:-amd64}" in \
 
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
+COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
@@ -62,6 +63,7 @@ COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 RUN chmod 0755 \
       /usr/local/bin/start-codex-web \
       /usr/local/bin/attach-remote-dev-tmux \
+      /usr/local/bin/run-direct-session \
       /usr/local/bin/codex-menu \
       /usr/local/bin/codex-doctor \
       /usr/local/bin/remote-dev-version \
