@@ -16,10 +16,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Resolve mise asset digests for pinning
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source versions.env
+          release="$(gh api "repos/jdx/mise/releases/tags/v${MISE_VERSION}")"
+          for asset in \
+            "mise-v${MISE_VERSION}-linux-x64" \
+            "mise-v${MISE_VERSION}-linux-arm64"; do
+            digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest' <<<"$release")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: missing digest for $asset: $digest" >&2
+              exit 1
+            fi
+            echo "PIN $asset ${digest#sha256:}"
+          done
+          exit 1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Validate repository configuration
         run: |
