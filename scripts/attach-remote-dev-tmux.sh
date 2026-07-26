@@ -16,11 +16,11 @@ case "${START_MODE:-menu}" in
     ;;
   codex)
     printf -v quoted_workspace '%q' "$workspace"
-    session_command="cd $quoted_workspace && exec codex"
+    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session codex"
     ;;
   shell)
     printf -v quoted_workspace '%q' "$workspace"
-    session_command="cd $quoted_workspace && exec bash --login"
+    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session bash --login"
     ;;
   *)
     echo "ERROR: unsupported START_MODE=${START_MODE:-unset} (menu|codex|shell)" >&2
