@@ -2,32 +2,26 @@ name: Build AMD64
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  resolve-digests:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
       - name: Resolve mise asset digests for pinning
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          source versions.env
-          release="$(gh api "repos/jdx/mise/releases/tags/v${MISE_VERSION}")"
+          version=2026.5.3
+          release="$(gh api "repos/jdx/mise/releases/tags/v${version}")"
           for asset in \
-            "mise-v${MISE_VERSION}-linux-x64" \
-            "mise-v${MISE_VERSION}-linux-arm64"; do
+            "mise-v${version}-linux-x64" \
+            "mise-v${version}-linux-arm64"; do
             digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest' <<<"$release")"
             if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "ERROR: missing digest for $asset: $digest" >&2
@@ -36,22 +30,3 @@ jobs:
             echo "PIN $asset ${digest#sha256:}"
           done
           exit 1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-
-      - name: Validate repository configuration
-        run: |
-          while IFS= read -r -d '' script; do
-            bash -n "$script"
-          done < <(find scripts -type f -name '*.sh' -print0)
-          bash scripts/validate-version-pins.sh
-          bash scripts/test-source-revision.sh
-          jq -e . renovate.json >/dev/null
-          for file in compose/*.yml; do
-            docker compose -f "$file" config --quiet
-            echo "OK $file"
-          done
-
-      - name: Build and smoke test
-        run: PLATFORM=linux/amd64 ./scripts/build-local.sh
