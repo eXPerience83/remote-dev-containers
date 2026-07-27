@@ -17,19 +17,6 @@
       "datasourceTemplate": "docker",
       "depNameTemplate": "ubuntu",
       "versioningTemplate": "ubuntu"
-    },
-    {
-      "customType": "regex",
-      "description": "Keep the supported npm release synchronized between versions.env and the base Dockerfile",
-      "managerFilePatterns": [
-        "/^(?:versions\\.env|images/base/Dockerfile)$/"
-      ],
-      "matchStrings": [
-        "(?:# renovate: datasource=npm depName=npm versioning=semver\\n)?(?:ARG )?NPM_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
-      "datasourceTemplate": "npm",
-      "depNameTemplate": "npm",
-      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
@@ -45,17 +32,6 @@
       "versioning": "ubuntu",
       "allowedVersions": "/^(?:[0-9]*[02468])\\.04$/",
       "groupName": "Ubuntu LTS base"
-    },
-    {
-      "description": "Stay on the selected npm 12 line; future major migrations require explicit review",
-      "matchDatasources": [
-        "npm"
-      ],
-      "matchPackageNames": [
-        "npm"
-      ],
-      "allowedVersions": "/^12\\./",
-      "groupName": "npm 12 runtime"
     }
   ]
 }
