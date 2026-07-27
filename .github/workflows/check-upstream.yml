@@ -13,7 +13,10 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # This workflow intentionally retains checkout credentials because it maintains
+      # the dedicated automation branch with the repository-scoped GITHUB_TOKEN.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -25,6 +28,17 @@ jobs:
           set -euo pipefail
           source versions.env
 
+          curl_args=(
+            --fail
+            --silent
+            --show-error
+            --location
+            --retry 3
+            --retry-all-errors
+            --connect-timeout 10
+            --max-time 300
+          )
+
           latest_codex="$(gh api repos/openai/codex/releases/latest --jq .tag_name)"
           latest_gh="$(gh api repos/cli/cli/releases/latest --jq '.tag_name | ltrimstr("v")')"
           latest_ttyd="$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)"
@@ -34,28 +48,29 @@ jobs:
           python_line="${PYTHON_VERSION%.*}"
           python_pattern="${python_line//./[.]}"
           mapfile -t python_candidates < <(
-            curl -fsSL https://www.python.org/ftp/python/ \
+            curl "${curl_args[@]}" https://www.python.org/ftp/python/ \
               | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
               | sed -E 's/^href="//; s|/$||' \
               | sort -Vr
           )
           latest_python=""
           for candidate in "${python_candidates[@]}"; do
-            if curl -fsIL "https://www.python.org/ftp/python/${candidate}/Python-${candidate}.tar.xz" >/dev/null; then
+            if curl "${curl_args[@]}" --head \
+              "https://www.python.org/ftp/python/${candidate}/Python-${candidate}.tar.xz" >/dev/null; then
               latest_python="$candidate"
               break
             fi
           done
 
           node_major="${NODE_VERSION%%.*}"
-          latest_node="$(curl -fsSL https://nodejs.org/dist/index.json \
+          latest_node="$(curl "${curl_args[@]}" https://nodejs.org/dist/index.json \
             | jq -r --arg prefix "v${node_major}." \
               '[.[] | select(.lts != false and (.version | startswith($prefix))) | .version | ltrimstr("v")]
                | sort_by(split(".") | map(tonumber))
                | last')"
 
           npm_major="${NPM_VERSION%%.*}"
-          latest_npm="$(curl -fsSL https://registry.npmjs.org/npm \
+          latest_npm="$(curl "${curl_args[@]}" https://registry.npmjs.org/npm \
             | jq -r --arg prefix "${npm_major}." \
               '.versions | keys[] | select(startswith($prefix)) | select(contains("-") | not)' \
             | sort -V \
@@ -115,7 +130,7 @@ jobs:
 
             checksum_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url // empty' "$release_json")"
             if [[ -n "$checksum_url" ]]; then
-              digest="$(curl -fsSL "$checksum_url" \
+              digest="$(curl "${curl_args[@]}" "$checksum_url" \
                 | awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }')"
             fi
 
@@ -151,6 +166,8 @@ jobs:
           replace_env() {
             local name="$1"
             local value="$2"
+            grep -q "^${name}=" versions.env \
+              || { echo "ERROR: versions.env has no ${name} pin" >&2; exit 1; }
             sed -i "s|^${name}=.*|${name}=${value}|" versions.env
           }
 
@@ -158,6 +175,8 @@ jobs:
             local file="$1"
             local name="$2"
             local value="$3"
+            grep -q "^ARG ${name}=" "$file" \
+              || { echo "ERROR: $file has no ARG ${name} default" >&2; exit 1; }
             sed -i "s|^ARG ${name}=.*|ARG ${name}=${value}|" "$file"
           }
 
