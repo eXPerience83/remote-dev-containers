@@ -21,7 +21,6 @@ ARG PYTHON_VERSION=3.14.6
 ARG NODE_VERSION=24.18.0
 ARG NPM_VERSION=12.0.1
 ARG UV_VERSION=0.11.32
-ARG BUBBLEWRAP_VERSION=0.11.1-1ubuntu0.1
 
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
@@ -51,12 +50,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# APT repositories are moving inputs even when the Ubuntu image digest is pinned.
+# Install Ubuntu's current bubblewrap security revision instead of an exact package
+# version that may disappear after it is superseded; final images are smoke-tested
+# and scanned before public tags are promoted.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
-        bubblewrap=${BUBBLEWRAP_VERSION} \
+        bubblewrap \
         build-essential \
         ca-certificates \
         curl \
@@ -97,7 +100,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
-RUN case "${TARGETARCH:-amd64}" in \
+RUN case "${TARGETARCH}" in \
       amd64) gh_arch=amd64; expected_sha="$GH_AMD64_SHA256" ;; \
       arm64) gh_arch=arm64; expected_sha="$GH_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
@@ -105,7 +108,8 @@ RUN case "${TARGETARCH:-amd64}" in \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && archive="gh_${GH_VERSION}_linux_${gh_arch}.tar.gz" \
-    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" -o "$archive" \
+    && curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 300 \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" -o "$archive" \
     && printf '%s  %s\n' "$expected_sha" "$archive" | sha256sum -c - \
     && tar -xzf "$archive" \
     && install -m 0755 "gh_${GH_VERSION}_linux_${gh_arch}/bin/gh" /usr/local/bin/gh \
@@ -113,7 +117,7 @@ RUN case "${TARGETARCH:-amd64}" in \
     && rm -rf "$workdir"
 
 # ttyd: exact release asset verified against a repository-controlled SHA-256.
-RUN case "${TARGETARCH:-amd64}" in \
+RUN case "${TARGETARCH}" in \
       amd64) ttyd_arch=x86_64; expected_sha="$TTYD_AMD64_SHA256" ;; \
       arm64) ttyd_arch=aarch64; expected_sha="$TTYD_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
@@ -121,14 +125,15 @@ RUN case "${TARGETARCH:-amd64}" in \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && asset="ttyd.${ttyd_arch}" \
-    && curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/${asset}" -o "$asset" \
+    && curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 300 \
+      "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/${asset}" -o "$asset" \
     && printf '%s  %s\n' "$expected_sha" "$asset" | sha256sum -c - \
     && install -m 0755 "$asset" /usr/local/bin/ttyd \
     && cd / \
     && rm -rf "$workdir"
 
 # mise: exact release asset verified against a repository-controlled SHA-256.
-RUN case "${TARGETARCH:-amd64}" in \
+RUN case "${TARGETARCH}" in \
       amd64) mise_arch=x64; expected_sha="$MISE_AMD64_SHA256" ;; \
       arm64) mise_arch=arm64; expected_sha="$MISE_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
@@ -136,7 +141,8 @@ RUN case "${TARGETARCH:-amd64}" in \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
     && asset="mise-v${MISE_VERSION}-linux-${mise_arch}" \
-    && curl -fsSL "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/${asset}" -o mise \
+    && curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 300 \
+      "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/${asset}" -o mise \
     && printf '%s  %s\n' "$expected_sha" mise | sha256sum -c - \
     && install -m 0755 mise /usr/local/bin/mise \
     && cd / \
