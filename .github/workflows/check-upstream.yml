@@ -50,7 +50,9 @@ jobs:
           node_major="${NODE_VERSION%%.*}"
           latest_node="$(curl -fsSL https://nodejs.org/dist/index.json \
             | jq -r --arg prefix "v${node_major}." \
-              '[.[] | select(.lts != false and (.version | startswith($prefix))) | .version | ltrimstr("v")] | first')"
+              '[.[] | select(.lts != false and (.version | startswith($prefix))) | .version | ltrimstr("v")]
+               | sort_by(split(".") | map(tonumber))
+               | last')"
 
           npm_major="${NPM_VERSION%%.*}"
           latest_npm="$(curl -fsSL https://registry.npmjs.org/npm \
