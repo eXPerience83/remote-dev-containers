@@ -17,14 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Verification that the effective Ubuntu and Codex release pins match their Dockerfile defaults.
 - Secure-by-default web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
-- Renovate dependency tracking, including grouped Ubuntu LTS base updates.
+- Renovate dependency tracking, including grouped Ubuntu LTS base updates and immutable GitHub Action pins.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
 - CodeRabbit configuration focused on Dockerfiles, Bash, GitHub Actions, Compose and security-sensitive changes.
 - Ubuntu `bubblewrap` package plus diagnostics for host-dependent nested-sandbox compatibility.
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
 - Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
-- Trivy scans for fixable critical vulnerabilities in both locally built images and the exact pushed base/Codex digests; public tag promotion fails before publication when a fixable `CRITICAL` finding exists.
+- Trivy JSON reports for all critical findings in locally built images and exact publication candidates; only findings with a known fixed version fail the gate.
 
 ### Changed
 
@@ -38,10 +38,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed stable upstream checks from weekly to daily and made the update branch reusable.
 - Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
 - Changed the bubblewrap runtime probe to report host namespace restrictions without weakening the container or failing unrelated image validation.
+- Changed bubblewrap installation to follow Ubuntu's current repository security revision instead of an exact APT version that may disappear when superseded.
 - Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
 - Changed upstream automation to update release versions and their architecture-specific SHA-256 pins together.
 - Extended upstream automation to follow final Codex, GitHub CLI, ttyd, mise and uv releases, plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines; major runtime-line changes remain manual decisions.
+- Assigned npm updates exclusively to the grouped upstream workflow to avoid competing Renovate pull requests.
 - Added an official `SHA256SUMS` fallback for upstream releases such as ttyd that do not expose GitHub asset digest metadata.
+- Centralized the fixable-critical Trivy gate so build, edge and stable workflows share the same enforcement logic.
 
 ### Security
 
@@ -57,3 +60,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
+- Publication workflows scan exact pushed digests before promoting public tags and use only the permissions required to read source and write packages.
