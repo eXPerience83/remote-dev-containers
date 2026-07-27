@@ -215,16 +215,34 @@ jobs:
       - name: Promote scanned digests to public edge tags
         run: |
           set -euo pipefail
-          base_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}"
-          codex_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}"
+          base_digest="${{ steps.base.outputs.digest }}"
+          codex_digest="${{ steps.codex.outputs.digest }}"
+          base_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${base_digest}"
+          codex_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev@${codex_digest}"
 
           docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file base-promotion.json \
             --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:edge-amd64" \
             --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:sha-${GITHUB_SHA}" \
             "$base_ref"
 
           docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file codex-promotion.json \
             --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge" \
             --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge-amd64" \
             --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:sha-${GITHUB_SHA}" \
             "$codex_ref"
+
+          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
+          promoted_codex="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' codex-promotion.json)"
+
+          if [[ "$promoted_base" != "$base_digest" ]]; then
+            echo "ERROR: promoted base digest $promoted_base differs from scanned digest $base_digest" >&2
+            exit 1
+          fi
+          if [[ "$promoted_codex" != "$codex_digest" ]]; then
+            echo "ERROR: promoted Codex digest $promoted_codex differs from scanned digest $codex_digest" >&2
+            exit 1
+          fi
