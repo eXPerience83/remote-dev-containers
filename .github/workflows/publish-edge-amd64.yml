@@ -17,8 +17,6 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write
-  attestations: write
 
 concurrency:
   group: publish-edge-amd64
@@ -31,6 +29,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Require the main branch
         run: |
@@ -117,7 +117,7 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact edge base candidate
+      - name: Scan exact edge base candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
@@ -126,7 +126,6 @@ jobs:
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
-          ignore-unfixed: true
           exit-code: "0"
 
       - name: Build untagged edge Codex candidate
@@ -151,7 +150,7 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact edge Codex candidate
+      - name: Scan exact edge Codex candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}
@@ -160,7 +159,6 @@ jobs:
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
-          ignore-unfixed: true
           exit-code: "0"
 
       - name: Upload publication vulnerability reports
@@ -171,46 +169,14 @@ jobs:
           path: |
             trivy-publish-base.json
             trivy-publish-codex.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Enforce no fixable critical vulnerabilities
         run: |
-          set -euo pipefail
-          findings=0
-
-          for entry in \
-            "base:trivy-publish-base.json" \
-            "codex:trivy-publish-codex.json"; do
-            label="${entry%%:*}"
-            report="${entry#*:}"
-            count="$(jq '[
-              .Results[]?
-              | .Vulnerabilities[]?
-              | select(.Severity == "CRITICAL")
-              | select((.FixedVersion // "") != "")
-            ] | length' "$report")"
-
-            if (( count > 0 )); then
-              echo "ERROR: fixable CRITICAL vulnerabilities in exact $label publication candidate:" >&2
-              jq -r '
-                .Results[]? as $result
-                | $result.Vulnerabilities[]?
-                | select(.Severity == "CRITICAL")
-                | select((.FixedVersion // "") != "")
-                | "- \(.VulnerabilityID) | \(.PkgName) | \(.InstalledVersion) -> \(.FixedVersion) | \($result.Target)"
-              ' "$report" >&2
-            else
-              echo "No fixable CRITICAL vulnerabilities in exact $label publication candidate."
-            fi
-
-            findings=$((findings + count))
-          done
-
-          if (( findings > 0 )); then
-            echo "ERROR: publication vulnerability gate found $findings fixable CRITICAL finding(s)" >&2
-            exit 1
-          fi
+          bash scripts/enforce-trivy-gate.sh \
+            "exact edge base publication candidate:trivy-publish-base.json" \
+            "exact edge Codex publication candidate:trivy-publish-codex.json"
 
       - name: Promote scanned digests to public edge tags
         env:
