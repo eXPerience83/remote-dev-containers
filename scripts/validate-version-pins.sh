@@ -124,8 +124,20 @@ if [[ ! "$MISE_VERSION" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
   echo "ERROR: MISE_VERSION must be an exact stable release version: $MISE_VERSION" >&2
   exit 1
 fi
-if [[ ! "$NPM_VERSION" =~ ^11\.[0-9]+\.[0-9]+$ ]]; then
-  echo "ERROR: NPM_VERSION must be an exact supported npm 11 release: $NPM_VERSION" >&2
+if [[ ! "$PYTHON_VERSION" =~ ^3\.14\.[0-9]+$ ]]; then
+  echo "ERROR: PYTHON_VERSION must be an exact stable Python 3.14 maintenance release: $PYTHON_VERSION" >&2
+  exit 1
+fi
+if [[ ! "$NODE_VERSION" =~ ^24\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: NODE_VERSION must be an exact stable Node 24 LTS maintenance release: $NODE_VERSION" >&2
+  exit 1
+fi
+if [[ ! "$NPM_VERSION" =~ ^12\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: NPM_VERSION must be an exact supported npm 12 release: $NPM_VERSION" >&2
+  exit 1
+fi
+if [[ ! "$UV_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: UV_VERSION must be an exact stable uv release: $UV_VERSION" >&2
   exit 1
 fi
 
@@ -153,7 +165,10 @@ for variable in \
   MISE_VERSION \
   MISE_AMD64_SHA256 \
   MISE_ARM64_SHA256 \
-  NPM_VERSION; do
+  PYTHON_VERSION \
+  NODE_VERSION \
+  NPM_VERSION \
+  UV_VERSION; do
   require_synced_arg "$variable" "$base_dockerfile"
 done
 
@@ -166,5 +181,8 @@ done
 
 printf 'Ubuntu base pin: %s@%s\n' "$UBUNTU_VERSION" "$UBUNTU_DIGEST"
 printf 'Codex release pin: %s\n' "$CODEX_RELEASE_TAG"
+printf 'Python release pin: %s\n' "$PYTHON_VERSION"
+printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
+printf 'uv release pin: %s\n' "$UV_VERSION"
 echo "Release asset SHA-256 pins are present and synchronized."
