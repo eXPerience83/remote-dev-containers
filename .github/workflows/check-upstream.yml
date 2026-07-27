@@ -29,6 +29,27 @@ jobs:
           latest_gh="$(gh api repos/cli/cli/releases/latest --jq '.tag_name | ltrimstr("v")')"
           latest_ttyd="$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)"
           latest_mise="$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')"
+          latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
+
+          python_line="${PYTHON_VERSION%.*}"
+          python_pattern="${python_line//./\\.}"
+          latest_python="$(curl -fsSL https://www.python.org/ftp/python/ \
+            | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
+            | sed -E 's/^href="//; s|/$||' \
+            | sort -V \
+            | tail -n 1)"
+
+          node_major="${NODE_VERSION%%.*}"
+          latest_node="$(curl -fsSL https://nodejs.org/dist/index.json \
+            | jq -r --arg prefix "v${node_major}." \
+              '[.[] | select(.lts != false and (.version | startswith($prefix))) | .version | ltrimstr("v")] | first')"
+
+          npm_major="${NPM_VERSION%%.*}"
+          latest_npm="$(curl -fsSL https://registry.npmjs.org/npm \
+            | jq -r --arg prefix "${npm_major}." \
+              '.versions | keys[] | select(startswith($prefix)) | select(contains("-") | not)' \
+            | sort -V \
+            | tail -n 1)"
 
           if [[ ! "$latest_codex" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "ERROR: GitHub latest release is not an exact stable Codex tag: $latest_codex" >&2
@@ -46,6 +67,22 @@ jobs:
             echo "ERROR: mise latest release has an unexpected tag: $latest_mise" >&2
             exit 1
           fi
+          if [[ ! "$latest_python" =~ ^3\.14\.[0-9]+$ ]]; then
+            echo "ERROR: Python latest maintenance release has an unexpected version: $latest_python" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_node" =~ ^24\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Node latest selected LTS release has an unexpected version: $latest_node" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_npm" =~ ^12\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: npm latest selected major release has an unexpected version: $latest_npm" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_uv" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: uv latest release has an unexpected tag: $latest_uv" >&2
+            exit 1
+          fi
 
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
@@ -58,13 +95,25 @@ jobs:
             local release_json="$1"
             local asset="$2"
             local digest=""
+            local checksum_url=""
 
-            digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest' "$release_json")"
-            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "ERROR: release asset $asset has no valid GitHub SHA-256 digest: $digest" >&2
+            digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest // empty' "$release_json")"
+            if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              printf '%s\n' "${digest#sha256:}"
+              return 0
+            fi
+
+            checksum_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url // empty' "$release_json")"
+            if [[ -n "$checksum_url" ]]; then
+              digest="$(curl -fsSL "$checksum_url" \
+                | awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }')"
+            fi
+
+            if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "ERROR: release asset $asset has no valid GitHub digest or SHA256SUMS entry: $digest" >&2
               exit 1
             fi
-            printf '%s\n' "${digest#sha256:}"
+            printf '%s\n' "$digest"
           }
 
           codex_amd64_sha256="$(release_sha256 "$workdir/codex.json" codex-x86_64-unknown-linux-musl.tar.gz)"
@@ -114,6 +163,10 @@ jobs:
           replace_env MISE_VERSION "$latest_mise"
           replace_env MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_env MISE_ARM64_SHA256 "$mise_arm64_sha256"
+          replace_env PYTHON_VERSION "$latest_python"
+          replace_env NODE_VERSION "$latest_node"
+          replace_env NPM_VERSION "$latest_npm"
+          replace_env UV_VERSION "$latest_uv"
 
           replace_arg images/codex/Dockerfile CODEX_RELEASE_TAG "$latest_codex"
           replace_arg images/codex/Dockerfile CODEX_AMD64_SHA256 "$codex_amd64_sha256"
@@ -127,6 +180,10 @@ jobs:
           replace_arg images/base/Dockerfile MISE_VERSION "$latest_mise"
           replace_arg images/base/Dockerfile MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_arg images/base/Dockerfile MISE_ARM64_SHA256 "$mise_arm64_sha256"
+          replace_arg images/base/Dockerfile PYTHON_VERSION "$latest_python"
+          replace_arg images/base/Dockerfile NODE_VERSION "$latest_node"
+          replace_arg images/base/Dockerfile NPM_VERSION "$latest_npm"
+          replace_arg images/base/Dockerfile UV_VERSION "$latest_uv"
 
           bash scripts/validate-version-pins.sh
 
@@ -159,7 +216,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release and digest update. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release and digest update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
