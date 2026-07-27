@@ -44,15 +44,15 @@
       "groupName": "Ubuntu LTS base"
     },
     {
-      "description": "Stay on the supported npm 11 line for the pinned Node 24 runtime",
+      "description": "Stay on the selected npm 12 line; future major migrations require explicit review",
       "matchDatasources": [
         "npm"
       ],
       "matchPackageNames": [
         "npm"
       ],
-      "allowedVersions": "/^11\\./",
-      "groupName": "npm 11 runtime"
+      "allowedVersions": "/^12\\./",
+      "groupName": "npm 12 runtime"
     }
   ]
 }
