@@ -85,14 +85,14 @@ jobs:
           echo "npm_version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "uv_version=$UV_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish edge base
+      - name: Build untagged edge base candidate
         id: base
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: images/base/Dockerfile
           platforms: linux/amd64
-          push: true
+          outputs: type=image,name=ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             UBUNTU_VERSION=${{ steps.metadata.outputs.ubuntu_version }}
             UBUNTU_DIGEST=${{ steps.metadata.outputs.ubuntu_digest }}
@@ -110,9 +110,6 @@ jobs:
             NODE_VERSION=${{ steps.metadata.outputs.node_version }}
             NPM_VERSION=${{ steps.metadata.outputs.npm_version }}
             UV_VERSION=${{ steps.metadata.outputs.uv_version }}
-          tags: |
-            ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:edge-amd64
-            ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -120,13 +117,26 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Build and publish edge Codex image
+      - name: Scan exact edge base candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          format: json
+          output: trivy-publish-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Build untagged edge Codex candidate
+        id: codex
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: images/codex/Dockerfile
           platforms: linux/amd64
-          push: true
+          outputs: type=image,name=ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             BASE_IMAGE=ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
             CODEX_RELEASE_TAG=${{ steps.metadata.outputs.codex_tag }}
@@ -134,13 +144,87 @@ jobs:
             CODEX_ARM64_SHA256=${{ steps.metadata.outputs.codex_arm64_sha256 }}
             PROJECT_VERSION=edge
             SOURCE_REVISION=${{ github.sha }}
-          tags: |
-            ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge
-            ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge-amd64
-            ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=edge
           provenance: mode=max
           sbom: true
+
+      - name: Scan exact edge Codex candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}
+          format: json
+          output: trivy-publish-codex.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload publication vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: trivy-publication-reports
+          path: |
+            trivy-publish-base.json
+            trivy-publish-codex.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce no fixable critical vulnerabilities
+        run: |
+          set -euo pipefail
+          findings=0
+
+          for entry in \
+            "base:trivy-publish-base.json" \
+            "codex:trivy-publish-codex.json"; do
+            label="${entry%%:*}"
+            report="${entry#*:}"
+            count="$(jq '[
+              .Results[]?
+              | .Vulnerabilities[]?
+              | select(.Severity == "CRITICAL")
+              | select((.FixedVersion // "") != "")
+            ] | length' "$report")"
+
+            if (( count > 0 )); then
+              echo "ERROR: fixable CRITICAL vulnerabilities in exact $label publication candidate:" >&2
+              jq -r '
+                .Results[]? as $result
+                | $result.Vulnerabilities[]?
+                | select(.Severity == "CRITICAL")
+                | select((.FixedVersion // "") != "")
+                | "- \(.VulnerabilityID) | \(.PkgName) | \(.InstalledVersion) -> \(.FixedVersion) | \($result.Target)"
+              ' "$report" >&2
+            else
+              echo "No fixable CRITICAL vulnerabilities in exact $label publication candidate."
+            fi
+
+            findings=$((findings + count))
+          done
+
+          if (( findings > 0 )); then
+            echo "ERROR: publication vulnerability gate found $findings fixable CRITICAL finding(s)" >&2
+            exit 1
+          fi
+
+      - name: Promote scanned digests to public edge tags
+        run: |
+          set -euo pipefail
+          base_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}"
+          codex_ref="ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}"
+
+          docker buildx imagetools create \
+            --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:edge-amd64" \
+            --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base:sha-${GITHUB_SHA}" \
+            "$base_ref"
+
+          docker buildx imagetools create \
+            --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge" \
+            --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:edge-amd64" \
+            --tag "ghcr.io/${{ steps.metadata.outputs.namespace }}/codex-remote-dev:sha-${GITHUB_SHA}" \
+            "$codex_ref"
