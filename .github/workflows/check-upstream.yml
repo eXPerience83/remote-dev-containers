@@ -32,7 +32,7 @@ jobs:
           latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
 
           python_line="${PYTHON_VERSION%.*}"
-          python_pattern="${python_line//./\.}"
+          python_pattern="${python_line//./[.]}"
           mapfile -t python_candidates < <(
             curl -fsSL https://www.python.org/ftp/python/ \
               | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
