@@ -34,14 +34,15 @@ ENV HOME=/root \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Codex CLI: exact release asset verified against a repository-controlled SHA-256.
-RUN case "${TARGETARCH:-amd64}" in \
+RUN case "${TARGETARCH}" in \
       amd64) asset="codex-x86_64-unknown-linux-musl.tar.gz"; binary="codex-x86_64-unknown-linux-musl"; expected_sha="$CODEX_AMD64_SHA256" ;; \
       arm64) asset="codex-aarch64-unknown-linux-musl.tar.gz"; binary="codex-aarch64-unknown-linux-musl"; expected_sha="$CODEX_ARM64_SHA256" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
     && workdir="$(mktemp -d)" \
     && cd "$workdir" \
-    && curl -fsSL "https://github.com/openai/codex/releases/download/${CODEX_RELEASE_TAG}/${asset}" -o codex.tar.gz \
+    && curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 300 \
+      "https://github.com/openai/codex/releases/download/${CODEX_RELEASE_TAG}/${asset}" -o codex.tar.gz \
     && printf '%s  %s\n' "$expected_sha" codex.tar.gz | sha256sum -c - \
     && tar -xzf codex.tar.gz \
     && install -m 0755 "$binary" /usr/local/bin/codex \
