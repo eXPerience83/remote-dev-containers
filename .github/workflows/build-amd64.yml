@@ -10,26 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  audit-upstreams:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Collect latest stable upstream versions
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/report-upstream-versions.sh | tee upstream-report.env
-
-      - name: Upload upstream version report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: upstream-version-report
-          path: upstream-report.env
-          if-no-files-found: error
-          retention-days: 1
-
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
