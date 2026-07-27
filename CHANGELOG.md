@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Shared remote-development base built on Ubuntu 26.04 LTS.
 - Browser-accessible Codex CLI environment using ttyd and persistent tmux sessions.
 - Git, Git LFS, OpenSSH client and GitHub CLI.
-- Python 3.14, Node.js 24, npm, uv and mise.
+- Python 3.14, Node.js 24 LTS, npm 12, uv and mise.
 - Separate persistent paths for workspaces and Codex, GitHub, Git and SSH configuration.
 - AMD64 build, configuration validation and runtime smoke tests.
 - Verification that the effective Ubuntu and Codex release pins match their Dockerfile defaults.
@@ -34,11 +34,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated project documentation to state clearly that no stable release exists yet.
 - Changed the generic and TrueNAS Compose defaults to the published `edge-amd64` image until the first stable release exists.
 - Updated the pinned Codex CLI from `0.144.4` to stable `0.145.0`.
+- Updated the reviewed stable toolchain to mise `2026.7.14`, Node.js `24.18.0` LTS, npm `12.0.1` and uv `0.11.32`; Python `3.14.6`, GitHub CLI `2.96.0` and ttyd `1.7.7` were already current.
 - Changed stable upstream checks from weekly to daily and made the update branch reusable.
 - Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
 - Changed the bubblewrap runtime probe to report host namespace restrictions without weakening the container or failing unrelated image validation.
 - Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
 - Changed upstream automation to update release versions and their architecture-specific SHA-256 pins together.
+- Extended upstream automation to follow final Codex, GitHub CLI, ttyd, mise and uv releases, plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines; major runtime-line changes remain manual decisions.
+- Added an official `SHA256SUMS` fallback for upstream releases such as ttyd that do not expose GitHub asset digest metadata.
 
 ### Security
 
