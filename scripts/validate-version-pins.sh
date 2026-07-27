@@ -66,6 +66,17 @@ require_action_shas() {
   while IFS= read -r workflow; do
     while IFS= read -r reference; do
       reference="${reference%%[[:space:]]#*}"
+      reference="${reference%"${reference##*[![:space:]]}"}"
+
+      case "$reference" in
+        \"*\")
+          reference="${reference:1:${#reference}-2}"
+          ;;
+        \'*\')
+          reference="${reference:1:${#reference}-2}"
+          ;;
+      esac
+
       if [[ "$reference" == ./* ]]; then
         continue
       fi
@@ -73,7 +84,7 @@ require_action_shas() {
         echo "ERROR: $workflow uses a mutable or invalid GitHub Action reference: $reference" >&2
         exit 1
       fi
-    done < <(sed -n 's/^[[:space:]]*-[[:space:]]*uses:[[:space:]]*//p' "$workflow")
+    done < <(sed -n 's/^[[:space:]]*\(-[[:space:]]*\)\?uses:[[:space:]]*//p' "$workflow")
   done < <(find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print)
 }
 
