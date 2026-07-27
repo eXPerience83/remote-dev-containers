@@ -32,12 +32,20 @@ jobs:
           latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
 
           python_line="${PYTHON_VERSION%.*}"
-          python_pattern="${python_line//./\\.}"
-          latest_python="$(curl -fsSL https://www.python.org/ftp/python/ \
-            | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
-            | sed -E 's/^href="//; s|/$||' \
-            | sort -V \
-            | tail -n 1)"
+          python_pattern="${python_line//./\.}"
+          mapfile -t python_candidates < <(
+            curl -fsSL https://www.python.org/ftp/python/ \
+              | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
+              | sed -E 's/^href="//; s|/$||' \
+              | sort -Vr
+          )
+          latest_python=""
+          for candidate in "${python_candidates[@]}"; do
+            if curl -fsIL "https://www.python.org/ftp/python/${candidate}/Python-${candidate}.tar.xz" >/dev/null; then
+              latest_python="$candidate"
+              break
+            fi
+          done
 
           node_major="${NODE_VERSION%%.*}"
           latest_node="$(curl -fsSL https://nodejs.org/dist/index.json \
