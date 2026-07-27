@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
 - Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
-- Trivy scans for fixable critical vulnerabilities in both locally built container images.
+- Trivy scans for fixable critical vulnerabilities in both locally built images and the exact pushed base/Codex digests; public tag promotion fails before publication when a fixable `CRITICAL` finding exists.
 
 ### Changed
 
@@ -57,11 +57,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
-
-## Release policy
-
-- `edge` images are public experimental builds published automatically after relevant changes merge into `main`, and may also be published manually from `main`.
-- Stable images require an exact `vMAJOR.MINOR.PATCH` tag whose commit belongs to `main` history.
-- The first stable section will replace relevant entries from `Unreleased` when `v0.1.0` is prepared.
-
-[Unreleased]: https://github.com/eXPerience83/remote-dev-containers/commits/main
