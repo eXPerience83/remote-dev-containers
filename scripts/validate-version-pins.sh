@@ -100,7 +100,7 @@ if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfil
 fi
 require_action_shas
 
-if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]+\.04$ ]]; then
+if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
   exit 1
 fi
@@ -141,6 +141,11 @@ if [[ ! "$UV_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+if grep -Eq '^ARG BUBBLEWRAP_VERSION=' "$base_dockerfile" || grep -Eq '^[[:space:]]*bubblewrap=' "$base_dockerfile"; then
+  echo "ERROR: bubblewrap must follow Ubuntu repository security updates unless APT snapshots are introduced" >&2
+  exit 1
+fi
+
 for variable in \
   CODEX_AMD64_SHA256 \
   CODEX_ARM64_SHA256 \
@@ -154,6 +159,7 @@ for variable in \
 done
 
 for variable in \
+  BASE_VERSION \
   UBUNTU_VERSION \
   UBUNTU_DIGEST \
   GH_VERSION \
