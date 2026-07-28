@@ -98,8 +98,8 @@ def platform_info(entry: dict[str, Any], platform: str, tool: str) -> dict[str, 
     return cast(dict[str, Any], value)
 
 
-def validate_url(tool: str, version: str, platform: str, url: str) -> None:
-    """Require an artifact URL that matches the approved upstream layout."""
+def validate_url(tool: str, version: str, platform: str, url: str) -> str | None:
+    """Require an approved artifact URL and return Python's build date when present."""
     arch = {"linux-x64": "x86_64", "linux-arm64": "aarch64"}[platform]
     if tool == "node":
         node_arch = "x64" if platform == "linux-x64" else "arm64"
@@ -109,7 +109,7 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> None:
         )
         if url != expected:
             fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")
-        return
+        return None
 
     if tool == "python":
         pattern = re.compile(
@@ -117,9 +117,10 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> None:
             rf"(?P<date>[0-9]{{8}})/cpython-{re.escape(version)}\+(?P=date)-{arch}-unknown-linux-gnu-"
             rf"install_only_stripped\.tar\.gz$"
         )
-        if not pattern.fullmatch(url):
+        match = pattern.fullmatch(url)
+        if match is None:
             fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")
-        return
+        return match.group("date")
 
     if tool == "uv":
         expected = (
@@ -128,7 +129,7 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> None:
         )
         if url != expected:
             fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")
-        return
+        return None
 
     fail(f"no URL policy defined for mise tool {tool}")
 
@@ -185,8 +186,8 @@ def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, st
 
 def validate_artifact(
     tool: str, version: str, platform: str, artifact: dict[str, Any]
-) -> None:
-    """Validate one platform-specific checksum, URL, and provenance record."""
+) -> str | None:
+    """Validate one artifact and return its cross-platform build identifier."""
     require_exact_keys(
         artifact,
         ARTIFACT_KEYS[tool],
@@ -199,7 +200,7 @@ def validate_artifact(
             f"lowercase SHA-256: {checksum}"
         )
     url = expect_string(artifact, "url", f"mise.lock tools.{tool}.{platform}")
-    validate_url(tool, version, platform, url)
+    build_identifier = validate_url(tool, version, platform, url)
 
     if tool in {"python", "uv"} and artifact.get("provenance") != "github-attestations":
         fail(
@@ -212,6 +213,8 @@ def validate_artifact(
         )
         if not UV_API_URL_RE.fullmatch(url_api):
             fail(f"mise.lock uv API URL for {platform} is unexpected: {url_api}")
+
+    return build_identifier
 
 
 def validate_tool_entry(
@@ -252,8 +255,25 @@ def validate_tool_entry(
             f"got {sorted(locked_platforms)}"
         )
 
+    build_identifiers: list[str] = []
+    uv_api_urls: list[str] = []
     for platform in PLATFORMS:
-        validate_artifact(tool, version, platform, platform_info(entry, platform, tool))
+        artifact = platform_info(entry, platform, tool)
+        build_identifier = validate_artifact(tool, version, platform, artifact)
+        if build_identifier is not None:
+            build_identifiers.append(build_identifier)
+        if tool == "uv":
+            uv_api_urls.append(
+                expect_string(artifact, "url_api", f"mise.lock tools.{tool}.{platform}")
+            )
+
+    if tool == "python" and len(set(build_identifiers)) != 1:
+        fail(
+            "mise.lock python artifacts must use one cross-platform build date, "
+            f"got {sorted(set(build_identifiers))}"
+        )
+    if tool == "uv" and len(set(uv_api_urls)) != len(uv_api_urls):
+        fail("mise.lock uv artifacts must use distinct GitHub release asset API URLs")
 
 
 def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str]) -> None:
