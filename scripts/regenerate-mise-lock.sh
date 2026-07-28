@@ -6,9 +6,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 source "$ROOT/versions.env"
 
 MISE_BIN="${MISE_BIN:-mise}"
-MISE_HTTP_TIMEOUT_VALUE="${MISE_HTTP_TIMEOUT:-60}"
+MISE_HTTP_TIMEOUT_VALUE="${MISE_HTTP_TIMEOUT:-60s}"
 MISE_LOCK_TIMEOUT_VALUE="${MISE_LOCK_TIMEOUT:-10m}"
 
+if [[ ! "$MISE_HTTP_TIMEOUT_VALUE" =~ ^[1-9][0-9]*(ms|s|m|h)$ ]]; then
+  echo "ERROR: MISE_HTTP_TIMEOUT must be a positive simple duration such as 60s: $MISE_HTTP_TIMEOUT_VALUE" >&2
+  exit 1
+fi
+if [[ ! "$MISE_LOCK_TIMEOUT_VALUE" =~ ^[1-9][0-9]*(s|m|h|d)$ ]]; then
+  echo "ERROR: MISE_LOCK_TIMEOUT must be a positive GNU timeout duration such as 10m: $MISE_LOCK_TIMEOUT_VALUE" >&2
+  exit 1
+fi
 if ! command -v "$MISE_BIN" >/dev/null 2>&1; then
   echo "ERROR: mise is required to regenerate mise.lock" >&2
   exit 1
@@ -53,11 +61,11 @@ cp "$ROOT/versions.env" "$ROOT/mise.toml" "$ROOT/mise.lock" "$workspace/"
 # below. The lock is generated in a temporary config root so parent/profile files,
 # user caches, installed plugins and partial writes cannot influence the result.
 env_args=()
-while IFS='=' read -r name _; do
+while IFS='=' read -r -d '' name _; do
   if [[ "$name" == MISE_* ]]; then
     env_args+=(-u "$name")
   fi
-done < <(env)
+done < <(env -0)
 
 (
   cd "$workspace"
