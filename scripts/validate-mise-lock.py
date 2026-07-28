@@ -8,15 +8,35 @@ import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 ASSIGNMENT_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+UV_API_URL_RE = re.compile(
+    r"^https://api\.github\.com/repos/astral-sh/uv/releases/assets/[1-9][0-9]*$"
+)
 PLATFORMS = ("linux-x64", "linux-arm64")
 EXPECTED_BACKENDS = {
     "python": "core:python",
     "node": "core:node",
     "uv": "aqua:astral-sh/uv",
+}
+CONFIG_TOP_LEVEL_KEYS = {"settings", "tools"}
+CONFIG_SETTING_KEYS = {
+    "lockfile",
+    "locked_verify_provenance",
+    "lockfile_platforms",
+}
+LOCK_TOP_LEVEL_KEYS = {"tools"}
+TOOL_ENTRY_KEYS = {
+    "version",
+    "backend",
+    *(f"platforms.{platform}" for platform in PLATFORMS),
+}
+ARTIFACT_KEYS = {
+    "node": {"checksum", "url"},
+    "python": {"checksum", "url", "provenance"},
+    "uv": {"checksum", "url", "url_api", "provenance"},
 }
 
 
@@ -49,6 +69,18 @@ def load_toml(path: Path) -> dict[str, Any]:
         fail(f"cannot read valid TOML from {path}: {exc}")
 
 
+def require_exact_keys(
+    mapping: dict[str, Any], expected: set[str], context: str
+) -> None:
+    """Reject missing or unknown keys in a security-sensitive TOML mapping."""
+    actual = set(mapping)
+    if actual != expected:
+        fail(
+            f"{context} keys must be exactly {sorted(expected)}, "
+            f"got {sorted(actual)}"
+        )
+
+
 def expect_string(mapping: dict[str, Any], key: str, context: str) -> str:
     """Return a required non-empty string from a TOML mapping."""
     value = mapping.get(key)
@@ -62,8 +94,8 @@ def platform_info(entry: dict[str, Any], platform: str, tool: str) -> dict[str, 
     key = f"platforms.{platform}"
     value = entry.get(key)
     if not isinstance(value, dict):
-        fail(f"mise.lock has no {tool} artifact entry for {platform}")
-    return value
+        fail(f"mise.lock has no valid {tool} artifact mapping for {platform}")
+    return cast(dict[str, Any], value)
 
 
 def validate_url(tool: str, version: str, platform: str, url: str) -> None:
@@ -116,9 +148,13 @@ def expected_versions_from_env(env: dict[str, str]) -> dict[str, str]:
 
 def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, str]) -> None:
     """Validate mise settings, managed tools, and version coherence."""
+    require_exact_keys(config, CONFIG_TOP_LEVEL_KEYS, "mise.toml top-level")
+
     settings = config.get("settings")
     if not isinstance(settings, dict):
         fail("mise.toml must contain [settings]")
+    settings = cast(dict[str, Any], settings)
+    require_exact_keys(settings, CONFIG_SETTING_KEYS, "mise.toml settings")
     if settings.get("lockfile") is not True:
         fail("mise.toml must enable settings.lockfile")
     if settings.get("locked_verify_provenance") is not True:
@@ -133,6 +169,7 @@ def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, st
     configured_tools = config.get("tools")
     if not isinstance(configured_tools, dict):
         fail("mise.toml must contain [tools]")
+    configured_tools = cast(dict[str, Any], configured_tools)
     if set(configured_tools) != set(expected_versions):
         fail(
             "mise.toml must define exactly the managed runtimes "
@@ -150,6 +187,11 @@ def validate_artifact(
     tool: str, version: str, platform: str, artifact: dict[str, Any]
 ) -> None:
     """Validate one platform-specific checksum, URL, and provenance record."""
+    require_exact_keys(
+        artifact,
+        ARTIFACT_KEYS[tool],
+        f"mise.lock tools.{tool}.{platform}",
+    )
     checksum = expect_string(artifact, "checksum", f"mise.lock tools.{tool}.{platform}")
     if not SHA256_RE.fullmatch(checksum):
         fail(
@@ -158,22 +200,34 @@ def validate_artifact(
         )
     url = expect_string(artifact, "url", f"mise.lock tools.{tool}.{platform}")
     validate_url(tool, version, platform, url)
+
     if tool in {"python", "uv"} and artifact.get("provenance") != "github-attestations":
         fail(
             f"mise.lock {tool} artifact for {platform} must require "
             "GitHub artifact attestations"
         )
+    if tool == "uv":
+        url_api = expect_string(
+            artifact, "url_api", f"mise.lock tools.{tool}.{platform}"
+        )
+        if not UV_API_URL_RE.fullmatch(url_api):
+            fail(f"mise.lock uv API URL for {platform} is unexpected: {url_api}")
 
 
 def validate_tool_entry(
     tool: str,
     expected_version: str,
-    entries: Any,
+    entries: object,
 ) -> None:
     """Validate one managed tool entry and all required platform artifacts."""
-    if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
+    if not isinstance(entries, list) or len(entries) != 1:
         fail(f"mise.lock must contain exactly one {tool} entry")
-    entry = entries[0]
+    raw_entry = entries[0]
+    if not isinstance(raw_entry, dict):
+        fail(f"mise.lock must contain exactly one {tool} entry")
+    entry = cast(dict[str, Any], raw_entry)
+    require_exact_keys(entry, TOOL_ENTRY_KEYS, f"mise.lock tools.{tool}")
+
     version = expect_string(entry, "version", f"mise.lock tools.{tool}")
     backend = expect_string(entry, "backend", f"mise.lock tools.{tool}")
     if version != expected_version:
@@ -189,8 +243,8 @@ def validate_tool_entry(
 
     locked_platforms = {
         key.removeprefix("platforms.")
-        for key, value in entry.items()
-        if key.startswith("platforms.") and isinstance(value, dict)
+        for key in entry
+        if key.startswith("platforms.")
     }
     if locked_platforms != set(PLATFORMS):
         fail(
@@ -204,9 +258,11 @@ def validate_tool_entry(
 
 def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str]) -> None:
     """Validate the lockfile tool set and each locked runtime entry."""
+    require_exact_keys(lock, LOCK_TOP_LEVEL_KEYS, "mise.lock top-level")
     lock_tools = lock.get("tools")
     if not isinstance(lock_tools, dict):
         fail("mise.lock must contain tool entries")
+    lock_tools = cast(dict[str, Any], lock_tools)
     if set(lock_tools) != set(expected_versions):
         fail(
             "mise.lock must contain exactly the managed runtimes "
