@@ -25,7 +25,7 @@ fi
 
 [[ "$PWD" == */workspace ]] || { echo "lock did not run in isolated workspace: $PWD" >&2; exit 81; }
 [[ "${MISE_SAFE:-}" == "1" ]] || { echo "MISE_SAFE was not forced" >&2; exit 82; }
-[[ "${MISE_HTTP_TIMEOUT:-}" == "7" ]] || { echo "HTTP timeout override was not preserved" >&2; exit 83; }
+[[ "${MISE_HTTP_TIMEOUT:-}" == "7s" ]] || { echo "HTTP timeout override was not preserved" >&2; exit 83; }
 [[ -z "${MISE_ENV+x}" ]] || { echo "MISE_ENV leaked into regeneration" >&2; exit 84; }
 [[ -z "${MISE_AQUA_REGISTRY_URL+x}" ]] || { echo "registry override leaked into regeneration" >&2; exit 85; }
 [[ "${MISE_CACHE_DIR:-}" != "$FORBIDDEN_MISE_CACHE_DIR" ]] || { echo "caller cache directory was reused" >&2; exit 86; }
@@ -86,7 +86,7 @@ run_helper() {
     MISE_BIN="$fake_mise" \
     MISE_CACHE_DIR="$forbidden_cache" \
     MISE_ENV="unexpected-profile" \
-    MISE_HTTP_TIMEOUT=7 \
+    MISE_HTTP_TIMEOUT=7s \
     MISE_LOCK_TIMEOUT=5s \
     bash "$fixture_root/scripts/regenerate-mise-lock.sh"
 }
@@ -125,5 +125,33 @@ cmp -s "$ROOT/mise.lock" "$failure_root/mise.lock" \
 failure_scratch="$(cat "$failure_record")"
 [[ ! -e "$failure_scratch" ]] || { echo "failed regeneration scratch was not removed" >&2; exit 1; }
 echo "OK preserve lock after failed regeneration"
+
+bad_http_root="$scratch/bad-http-repo"
+copy_fixture "$bad_http_root"
+if env \
+  MISE_BIN="$fake_mise" \
+  MISE_HTTP_TIMEOUT=60 \
+  MISE_LOCK_TIMEOUT=5s \
+  bash "$bad_http_root/scripts/regenerate-mise-lock.sh"; then
+  echo "ERROR: unitless HTTP timeout was accepted" >&2
+  exit 1
+fi
+cmp -s "$ROOT/mise.lock" "$bad_http_root/mise.lock" \
+  || { echo "ERROR: bad HTTP timeout changed the lock" >&2; exit 1; }
+echo "OK reject unitless HTTP timeout"
+
+bad_lock_root="$scratch/bad-lock-repo"
+copy_fixture "$bad_lock_root"
+if env \
+  MISE_BIN="$fake_mise" \
+  MISE_HTTP_TIMEOUT=7s \
+  MISE_LOCK_TIMEOUT=--help \
+  bash "$bad_lock_root/scripts/regenerate-mise-lock.sh"; then
+  echo "ERROR: option-like lock timeout was accepted" >&2
+  exit 1
+fi
+cmp -s "$ROOT/mise.lock" "$bad_lock_root/mise.lock" \
+  || { echo "ERROR: bad lock timeout changed the lock" >&2; exit 1; }
+echo "OK reject option-like lock timeout"
 
 echo "All isolated mise lock regeneration tests passed."
