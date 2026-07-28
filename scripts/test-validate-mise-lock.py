@@ -65,6 +65,43 @@ def append_to_table(path: Path, table_header: str, text: str) -> None:
     path.write_text(content[:end] + "\n" + text + content[end:], encoding="utf-8")
 
 
+def change_python_x64_build_date(path: Path) -> None:
+    """Keep the Python URL valid while making its x64 build date inconsistent."""
+    content = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'(?P<prefix>url = "https://github\.com/astral-sh/python-build-standalone/'
+        r'releases/download/)(?P<date>[0-9]{8})(?P<middle>/cpython-[^"]+\+)'
+        r'(?P=date)(?P<suffix>-x86_64-unknown-linux-gnu-install_only_stripped\.tar\.gz")'
+    )
+    match = pattern.search(content)
+    if match is None:
+        raise AssertionError("test fixture Python x64 URL not found")
+    new_date = "19990101" if match.group("date") != "19990101" else "19990102"
+    replacement = (
+        match.group("prefix")
+        + new_date
+        + match.group("middle")
+        + new_date
+        + match.group("suffix")
+    )
+    path.write_text(content[: match.start()] + replacement + content[match.end() :], encoding="utf-8")
+
+
+def duplicate_uv_asset_api_url(path: Path) -> None:
+    """Make both uv platforms refer to the same GitHub release asset API URL."""
+    content = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'url_api = "(?P<url>https://api\.github\.com/repos/astral-sh/uv/releases/assets/[0-9]+)"'
+    )
+    matches = list(pattern.finditer(content))
+    if len(matches) != 2:
+        raise AssertionError(f"expected two uv API URLs, found {len(matches)}")
+    first_url = matches[0].group("url")
+    second = matches[1]
+    replacement = f'url_api = "{first_url}"'
+    path.write_text(content[: second.start()] + replacement + content[second.end() :], encoding="utf-8")
+
+
 def run_validator(validator: Path, root: Path) -> subprocess.CompletedProcess[str]:
     """Run the validator against one isolated fixture root."""
     return subprocess.run(
@@ -212,6 +249,20 @@ def main() -> int:
             root / "mise.lock", r'^provenance = "github-attestations"\n', ""
         ),
         "mise.lock tools.python.linux-arm64 keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "mixed Python build dates",
+        lambda root: change_python_x64_build_date(root / "mise.lock"),
+        "must use one cross-platform build date",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "duplicate uv asset API URL",
+        lambda root: duplicate_uv_asset_api_url(root / "mise.lock"),
+        "must use distinct GitHub release asset API URLs",
     )
 
     print("All mise lock validation tests passed.")
