@@ -7,6 +7,8 @@ on:
     paths:
       - ".dockerignore"
       - "versions.env"
+      - "mise.toml"
+      - "mise.lock"
       - "images/**"
       - "scripts/**"
       - "config/**"

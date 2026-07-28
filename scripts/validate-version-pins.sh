@@ -45,6 +45,7 @@ require_sha256() {
 
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
+edge_workflow="$ROOT/.github/workflows/publish-edge-amd64.yml"
 
 require_frontend_pin() {
   local file="$1"
@@ -88,6 +89,14 @@ require_action_shas() {
   done < <(find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print)
 }
 
+require_edge_path_trigger() {
+  local path="$1"
+  if ! grep -Fxq "      - \"$path\"" "$edge_workflow"; then
+    echo "ERROR: edge publication must trigger when $path changes" >&2
+    exit 1
+  fi
+}
+
 base_frontend="$(require_frontend_pin "$base_dockerfile")"
 codex_frontend="$(require_frontend_pin "$codex_dockerfile")"
 if [[ "$base_frontend" != "$codex_frontend" ]]; then
@@ -99,6 +108,28 @@ if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfil
   exit 1
 fi
 require_action_shas
+require_edge_path_trigger mise.toml
+require_edge_path_trigger mise.lock
+
+if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
+  exit 1
+fi
+if ! grep -Fq 'COPY --chmod=0444 mise.toml mise.lock /etc/mise/' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must copy immutable mise config and lock inputs" >&2
+  exit 1
+fi
+if ! grep -Fq 'mise install --locked' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must install mise runtimes in locked mode" >&2
+  exit 1
+fi
+if grep -Fq 'mise use --global' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must not resolve mise runtimes dynamically" >&2
+  exit 1
+fi
+python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
+python3 "$ROOT/scripts/test-validate-mise-lock.py" --root "$ROOT"
+bash "$ROOT/scripts/test-regenerate-mise-lock.sh"
 
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
@@ -191,4 +222,4 @@ printf 'Python release pin: %s\n' "$PYTHON_VERSION"
 printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
 printf 'uv release pin: %s\n' "$UV_VERSION"
-echo "Release asset SHA-256 pins are present and synchronized."
+echo "Release asset SHA-256 pins and mise runtime lock data are present and synchronized."
