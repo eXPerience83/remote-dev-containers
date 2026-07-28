@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
 - Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
 - Trivy JSON reports for all critical findings in locally built images and exact publication candidates; only findings with a known fixed version fail the gate.
+- Committed mise runtime configuration and lock data for Linux AMD64 and ARM64, plus validation and a documented regeneration helper.
 
 ### Changed
 
@@ -45,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Assigned npm updates exclusively to the grouped upstream workflow to avoid competing Renovate pull requests.
 - Added an official `SHA256SUMS` fallback for upstream releases such as ttyd that do not expose GitHub asset digest metadata.
 - Centralized the fixable-critical Trivy gate so build, edge and stable workflows share the same enforcement logic.
+- Extended upstream automation to regenerate and review the mise lock whenever runtime versions or resolved artifacts change.
 
 ### Security
 
@@ -60,4 +62,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
+- Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags and use only the permissions required to read source and write packages.
