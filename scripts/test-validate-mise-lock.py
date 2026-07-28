@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -22,10 +23,46 @@ def replace_once(path: Path, old: str, new: str) -> None:
     path.write_text(content.replace(old, new, 1), encoding="utf-8")
 
 
+def replace_regex_once(path: Path, pattern: str, replacement: str) -> None:
+    """Replace one required regular-expression match in a fixture file."""
+    content = path.read_text(encoding="utf-8")
+    updated, count = re.subn(pattern, replacement, content, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise AssertionError(f"test fixture pattern not found in {path}: {pattern!r}")
+    path.write_text(updated, encoding="utf-8")
+
+
 def append_text(path: Path, text: str) -> None:
     """Append text to one copied fixture file."""
     with path.open("a", encoding="utf-8") as handle:
         handle.write(text)
+
+
+def replace_table_with_scalar(
+    path: Path, table_header: str, next_table_header: str, scalar: str
+) -> None:
+    """Replace one complete TOML table with a literal scalar key."""
+    content = path.read_text(encoding="utf-8")
+    start = content.find(table_header)
+    end = content.find(next_table_header, start + len(table_header))
+    if start < 0 or end < 0:
+        raise AssertionError(
+            f"test fixture table range not found in {path}: "
+            f"{table_header!r} to {next_table_header!r}"
+        )
+    path.write_text(content[:start] + scalar + "\n\n" + content[end:], encoding="utf-8")
+
+
+def append_to_table(path: Path, table_header: str, text: str) -> None:
+    """Append one field before the next TOML table header."""
+    content = path.read_text(encoding="utf-8")
+    start = content.find(table_header)
+    if start < 0:
+        raise AssertionError(f"test fixture table not found in {path}: {table_header!r}")
+    end = content.find("\n[", start + len(table_header))
+    if end < 0:
+        end = len(content)
+    path.write_text(content[:end] + "\n" + text + content[end:], encoding="utf-8")
 
 
 def run_validator(validator: Path, root: Path) -> subprocess.CompletedProcess[str]:
@@ -51,7 +88,7 @@ def expect_failure(
     mutate: Callable[[Path], None],
     expected_message: str,
 ) -> None:
-    """Require one malicious or malformed fixture to be rejected."""
+    """Require one malformed fixture to be rejected."""
     with tempfile.TemporaryDirectory(prefix="mise-lock-test-") as temp_dir:
         fixture_root = Path(temp_dir)
         copied_fixture(source_root, fixture_root)
@@ -79,7 +116,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Validate the real inputs and a set of adversarial mutations."""
+    """Validate the real inputs and a set of malformed mutations."""
     source_root = parse_args().root.resolve()
     validator = source_root / "scripts/validate-mise-lock.py"
 
@@ -92,7 +129,7 @@ def main() -> int:
         source_root,
         validator,
         "unexpected mise.toml section",
-        lambda root: append_text(root / "mise.toml", '\n[env]\nDANGEROUS = "1"\n'),
+        lambda root: append_text(root / "mise.toml", '\n[env]\nUNEXPECTED = "1"\n'),
         "mise.toml top-level keys must be exactly",
     )
     expect_failure(
@@ -110,8 +147,8 @@ def main() -> int:
         source_root,
         validator,
         "runtime version drift",
-        lambda root: replace_once(
-            root / "mise.toml", 'python = "3.14.6"', 'python = "3.14.5"'
+        lambda root: replace_regex_once(
+            root / "mise.toml", r'^python = "[^"]+"$', 'python = "0.0.0"'
         ),
         "does not match versions.env",
     )
@@ -119,17 +156,17 @@ def main() -> int:
         source_root,
         validator,
         "unexpected lockfile section",
-        lambda root: append_text(root / "mise.lock", '\n[metadata]\nowner = "attacker"\n'),
+        lambda root: append_text(root / "mise.lock", '\n[metadata]\nlabel = "unexpected"\n'),
         "mise.lock top-level keys must be exactly",
     )
     expect_failure(
         source_root,
         validator,
         "extra platform scalar",
-        lambda root: replace_once(
+        lambda root: replace_regex_once(
             root / "mise.lock",
-            'backend = "core:node"\n\n',
-            'backend = "core:node"\n"platforms.linux-x64-musl" = "malformed"\n\n',
+            r'^(backend = "core:node")$',
+            r'\1\n"platforms.linux-x64-musl" = "malformed"',
         ),
         "mise.lock tools.node keys must be exactly",
     )
@@ -137,12 +174,11 @@ def main() -> int:
         source_root,
         validator,
         "required platform scalar",
-        lambda root: replace_once(
+        lambda root: replace_table_with_scalar(
             root / "mise.lock",
-            '[tools.node."platforms.linux-arm64"]\n'
-            'checksum = "sha256:6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508"\n'
-            'url = "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.gz"\n',
-            '"platforms.linux-arm64" = "malformed"\n',
+            '[tools.node."platforms.linux-arm64"]',
+            '[tools.node."platforms.linux-x64"]',
+            '"platforms.linux-arm64" = "malformed"',
         ),
         "no valid node artifact mapping for linux-arm64",
     )
@@ -150,10 +186,10 @@ def main() -> int:
         source_root,
         validator,
         "unexpected artifact field",
-        lambda root: replace_once(
+        lambda root: append_to_table(
             root / "mise.lock",
-            'checksum = "sha256:6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508"\n',
-            'checksum = "sha256:6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508"\nsize = 1\n',
+            '[tools.node."platforms.linux-arm64"]',
+            "size = 1\n",
         ),
         "mise.lock tools.node.linux-arm64 keys must be exactly",
     )
@@ -161,10 +197,10 @@ def main() -> int:
         source_root,
         validator,
         "untrusted uv API URL",
-        lambda root: replace_once(
+        lambda root: replace_regex_once(
             root / "mise.lock",
-            "https://api.github.com/repos/astral-sh/uv/releases/assets/487747547",
-            "https://example.invalid/releases/assets/487747547",
+            r'^url_api = "https://api\.github\.com/repos/astral-sh/uv/releases/assets/[0-9]+"$',
+            'url_api = "https://example.invalid/releases/assets/1"',
         ),
         "mise.lock uv API URL for linux-arm64 is unexpected",
     )
@@ -172,8 +208,8 @@ def main() -> int:
         source_root,
         validator,
         "missing provenance",
-        lambda root: replace_once(
-            root / "mise.lock", 'provenance = "github-attestations"\n', ""
+        lambda root: replace_regex_once(
+            root / "mise.lock", r'^provenance = "github-attestations"\n', ""
         ),
         "mise.lock tools.python.linux-arm64 keys must be exactly",
     )
