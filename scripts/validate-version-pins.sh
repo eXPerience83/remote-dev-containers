@@ -118,6 +118,7 @@ if grep -Fq 'mise use --global' "$base_dockerfile"; then
 fi
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
 python3 "$ROOT/scripts/test-validate-mise-lock.py" --root "$ROOT"
+bash "$ROOT/scripts/test-regenerate-mise-lock.sh"
 
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
