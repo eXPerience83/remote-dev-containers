@@ -160,7 +160,7 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
     && node --version \
     && test "$(npm --version)" = "$NPM_VERSION" \
     && uv --version \
-    && rm -rf "$MISE_CACHE_DIR"/*
+    && rm -rf "${MISE_CACHE_DIR:?}"/*
 
 COPY config/tmux.conf /etc/tmux.conf
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify
