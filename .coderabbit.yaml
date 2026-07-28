@@ -14,9 +14,12 @@ reviews:
   in_progress_fortune: false
   enable_prompt_for_ai_agents: true
 
+  # CodeRabbit excludes generic *.lock files by default. Explicitly include this
+  # security-sensitive generated input without force-including every other
+  # generated, binary, media, or dependency file covered by its default filters.
   path_filters:
-    - "**/*"
     - "mise.lock"
+    - "**/mise.lock"
 
   auto_review:
     enabled: true
@@ -28,6 +31,12 @@ reviews:
         Review every locked runtime entry as a security-sensitive supply-chain input.
         Verify exact versions, expected backends, AMD64 and ARM64 platform coverage,
         trusted upstream URLs, lowercase SHA-256 checksums and required provenance metadata.
+
+    - path: "scripts/**/*.py"
+      instructions: |
+        Review security validators as fail-closed parsers. Flag unknown fields that are accepted,
+        malformed TOML shapes that bypass checks, incomplete URL allowlists, broad typing that hides
+        validation gaps, and missing adversarial tests for every rejected input class.
 
     - path: "images/**/Dockerfile"
       instructions: |
