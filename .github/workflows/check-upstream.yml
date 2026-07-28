@@ -180,6 +180,14 @@ jobs:
             sed -i "s|^ARG ${name}=.*|ARG ${name}=${value}|" "$file"
           }
 
+          replace_mise_tool() {
+            local name="$1"
+            local value="$2"
+            grep -q "^${name} = \"" mise.toml \
+              || { echo "ERROR: mise.toml has no ${name} tool pin" >&2; exit 1; }
+            sed -i "s|^${name} = .*|${name} = \"${value}\"|" mise.toml
+          }
+
           replace_env CODEX_RELEASE_TAG "$latest_codex"
           replace_env CODEX_AMD64_SHA256 "$codex_amd64_sha256"
           replace_env CODEX_ARM64_SHA256 "$codex_arm64_sha256"
@@ -214,19 +222,38 @@ jobs:
           replace_arg images/base/Dockerfile NPM_VERSION "$latest_npm"
           replace_arg images/base/Dockerfile UV_VERSION "$latest_uv"
 
+          replace_mise_tool python "$latest_python"
+          replace_mise_tool node "$latest_node"
+          replace_mise_tool uv "$latest_uv"
+
+          mise_bin="$workdir/mise"
+          curl "${curl_args[@]}" \
+            "https://github.com/jdx/mise/releases/download/v${latest_mise}/mise-v${latest_mise}-linux-x64" \
+            -o "$mise_bin"
+          printf '%s  %s\n' "$mise_amd64_sha256" "$mise_bin" | sha256sum -c -
+          chmod 0755 "$mise_bin"
+          MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
+
           bash scripts/validate-version-pins.sh
 
-          if git diff --quiet -- versions.env images/base/Dockerfile images/codex/Dockerfile; then
-            echo "No upstream release or digest changes."
+          tracked_files=(
+            versions.env
+            mise.toml
+            mise.lock
+            images/base/Dockerfile
+            images/codex/Dockerfile
+          )
+          if git diff --quiet -- "${tracked_files[@]}"; then
+            echo "No upstream release, digest or runtime artifact changes."
             if [[ -n "$existing_pr" ]]; then
               gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases and asset digests."
+                --comment "Closing because main already contains the latest tracked stable releases, digests and locked runtime artifacts."
             fi
             exit 0
           fi
 
-          git add versions.env images/base/Dockerfile images/codex/Dockerfile
-          git commit -m "chore: update upstream versions and digests"
+          git add "${tracked_files[@]}"
+          git commit -m "chore: update upstream versions, digests, and runtime lock"
 
           remote_ref="refs/remotes/origin/$branch"
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
@@ -245,15 +272,15 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release and digest update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release, digest and mise runtime-lock update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifact URLs, SHA-256 values and provenance with the verified pinned mise binary. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
-              --title "chore: update stable upstream versions and digests" \
+              --title "chore: update stable upstream versions and runtime lock" \
               --body "$body"
           else
             gh pr create \
-              --title "chore: update stable upstream versions and digests" \
+              --title "chore: update stable upstream versions and runtime lock" \
               --body "$body" \
               --base main \
               --head "$branch"
