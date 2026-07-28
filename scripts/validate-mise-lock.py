@@ -117,6 +117,8 @@ def main() -> int:
         fail("mise.toml must contain [settings]")
     if settings.get("lockfile") is not True:
         fail("mise.toml must enable settings.lockfile")
+    if settings.get("locked_verify_provenance") is not True:
+        fail("mise.toml must enable settings.locked_verify_provenance")
     configured_platforms = settings.get("lockfile_platforms")
     if configured_platforms != list(PLATFORMS):
         fail(
@@ -204,7 +206,7 @@ def main() -> int:
     print(
         "mise runtime lock is coherent for "
         + ", ".join(f"{tool} {version}" for tool, version in expected_versions.items())
-        + " on linux-x64 and linux-arm64."
+        + " on linux-x64 and linux-arm64, with locked provenance re-verification enabled."
     )
     return 0
 
