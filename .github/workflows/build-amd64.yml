@@ -16,10 +16,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Validate repository configuration
         run: |
@@ -36,3 +38,42 @@ jobs:
 
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
+
+      - name: Scan base image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev-base:local
+          format: json
+          output: trivy-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Scan Codex image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev:local
+          format: json
+          output: trivy-codex.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Upload vulnerability scan reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: trivy-reports
+          path: |
+            trivy-base.json
+            trivy-codex.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce no fixable critical vulnerabilities
+        run: |
+          bash scripts/enforce-trivy-gate.sh \
+            "base image:trivy-base.json" \
+            "Codex image:trivy-codex.json"

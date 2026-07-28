@@ -8,8 +8,6 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write
-  attestations: write
 
 concurrency:
   group: publish-stable-amd64
@@ -21,9 +19,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate stable release tag
         run: |
@@ -49,13 +48,13 @@ jobs:
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Resolve lowercase GHCR namespace
         id: registry
@@ -67,33 +66,49 @@ jobs:
           source versions.env
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "ubuntu_version=$UBUNTU_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ubuntu_digest=$UBUNTU_DIGEST" >> "$GITHUB_OUTPUT"
           echo "codex_tag=$CODEX_RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "codex_amd64_sha256=$CODEX_AMD64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "codex_arm64_sha256=$CODEX_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "gh_version=$GH_VERSION" >> "$GITHUB_OUTPUT"
+          echo "gh_amd64_sha256=$GH_AMD64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "gh_arm64_sha256=$GH_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "ttyd_version=$TTYD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ttyd_amd64_sha256=$TTYD_AMD64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "ttyd_arm64_sha256=$TTYD_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "mise_version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "mise_amd64_sha256=$MISE_AMD64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "mise_arm64_sha256=$MISE_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT"
           echo "node_version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm_version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "uv_version=$UV_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish base
-        uses: docker/build-push-action@v7
+      - name: Build untagged stable base candidate
+        id: base
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: images/base/Dockerfile
           platforms: linux/amd64
-          push: true
+          outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             UBUNTU_VERSION=${{ steps.versions.outputs.ubuntu_version }}
+            UBUNTU_DIGEST=${{ steps.versions.outputs.ubuntu_digest }}
             BASE_VERSION=${{ steps.versions.outputs.base_version }}
             GH_VERSION=${{ steps.versions.outputs.gh_version }}
+            GH_AMD64_SHA256=${{ steps.versions.outputs.gh_amd64_sha256 }}
+            GH_ARM64_SHA256=${{ steps.versions.outputs.gh_arm64_sha256 }}
             TTYD_VERSION=${{ steps.versions.outputs.ttyd_version }}
+            TTYD_AMD64_SHA256=${{ steps.versions.outputs.ttyd_amd64_sha256 }}
+            TTYD_ARM64_SHA256=${{ steps.versions.outputs.ttyd_arm64_sha256 }}
             MISE_VERSION=${{ steps.versions.outputs.mise_version }}
+            MISE_AMD64_SHA256=${{ steps.versions.outputs.mise_amd64_sha256 }}
+            MISE_ARM64_SHA256=${{ steps.versions.outputs.mise_arm64_sha256 }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
             NODE_VERSION=${{ steps.versions.outputs.node_version }}
+            NPM_VERSION=${{ steps.versions.outputs.npm_version }}
             UV_VERSION=${{ steps.versions.outputs.uv_version }}
-          tags: |
-            ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base:${{ github.ref_name }}
-            ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base:stable-amd64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -101,26 +116,101 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Build and publish Codex image
-        uses: docker/build-push-action@v7
+      - name: Scan exact stable base candidate for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          format: json
+          output: trivy-publish-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Build untagged stable Codex candidate
+        id: codex
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: images/codex/Dockerfile
           platforms: linux/amd64
-          push: true
+          outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base:${{ github.ref_name }}
+            BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
+            CODEX_AMD64_SHA256=${{ steps.versions.outputs.codex_amd64_sha256 }}
+            CODEX_ARM64_SHA256=${{ steps.versions.outputs.codex_arm64_sha256 }}
             PROJECT_VERSION=${{ github.ref_name }}
             SOURCE_REVISION=${{ github.sha }}
-          tags: |
-            ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:${{ github.ref_name }}
-            ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:stable
-            ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:stable-amd64
-            ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
           provenance: mode=max
           sbom: true
+
+      - name: Scan exact stable Codex candidate for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}
+          format: json
+          output: trivy-publish-codex.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Upload publication vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: trivy-publication-reports
+          path: |
+            trivy-publish-base.json
+            trivy-publish-codex.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce no fixable critical vulnerabilities
+        run: |
+          bash scripts/enforce-trivy-gate.sh \
+            "exact stable base publication candidate:trivy-publish-base.json" \
+            "exact stable Codex publication candidate:trivy-publish-codex.json"
+
+      - name: Promote scanned digests to public stable tags
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          CODEX_DIGEST: ${{ steps.codex.outputs.digest }}
+        run: |
+          set -euo pipefail
+          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
+          codex_ref="ghcr.io/${NAMESPACE}/codex-remote-dev@${CODEX_DIGEST}"
+
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file base-promotion.json \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:${GITHUB_REF_NAME}" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:stable-amd64" \
+            "$base_ref"
+
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file codex-promotion.json \
+            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:${GITHUB_REF_NAME}" \
+            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable" \
+            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable-amd64" \
+            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:latest" \
+            "$codex_ref"
+
+          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
+          promoted_codex="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' codex-promotion.json)"
+
+          if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
+            echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
+            exit 1
+          fi
+          if [[ "$promoted_codex" != "$CODEX_DIGEST" ]]; then
+            echo "ERROR: promoted Codex digest $promoted_codex differs from scanned digest $CODEX_DIGEST" >&2
+            exit 1
+          fi

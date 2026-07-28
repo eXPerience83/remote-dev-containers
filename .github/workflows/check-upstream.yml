@@ -13,8 +13,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      # This workflow intentionally retains checkout credentials because it maintains
+      # the dedicated automation branch with the repository-scoped GITHUB_TOKEN.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -25,10 +28,53 @@ jobs:
           set -euo pipefail
           source versions.env
 
-          latest_codex=$(gh api repos/openai/codex/releases/latest --jq .tag_name)
-          latest_gh=$(gh api repos/cli/cli/releases/latest --jq '.tag_name | ltrimstr("v")')
-          latest_ttyd=$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)
-          latest_mise=$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')
+          curl_args=(
+            --fail
+            --silent
+            --show-error
+            --location
+            --retry 3
+            --retry-all-errors
+            --connect-timeout 10
+            --max-time 300
+          )
+
+          latest_codex="$(gh api repos/openai/codex/releases/latest --jq .tag_name)"
+          latest_gh="$(gh api repos/cli/cli/releases/latest --jq '.tag_name | ltrimstr("v")')"
+          latest_ttyd="$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)"
+          latest_mise="$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')"
+          latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
+
+          python_line="${PYTHON_VERSION%.*}"
+          python_pattern="${python_line//./[.]}"
+          mapfile -t python_candidates < <(
+            curl "${curl_args[@]}" https://www.python.org/ftp/python/ \
+              | grep -oE "href=\"${python_pattern}\.[0-9]+/" \
+              | sed -E 's/^href="//; s|/$||' \
+              | sort -Vr
+          )
+          latest_python=""
+          for candidate in "${python_candidates[@]}"; do
+            if curl "${curl_args[@]}" --head \
+              "https://www.python.org/ftp/python/${candidate}/Python-${candidate}.tar.xz" >/dev/null; then
+              latest_python="$candidate"
+              break
+            fi
+          done
+
+          node_major="${NODE_VERSION%%.*}"
+          latest_node="$(curl "${curl_args[@]}" https://nodejs.org/dist/index.json \
+            | jq -r --arg prefix "v${node_major}." \
+              '[.[] | select(.lts != false and (.version | startswith($prefix))) | .version | ltrimstr("v")]
+               | sort_by(split(".") | map(tonumber))
+               | last')"
+
+          npm_major="${NPM_VERSION%%.*}"
+          latest_npm="$(curl "${curl_args[@]}" https://registry.npmjs.org/npm \
+            | jq -r --arg prefix "${npm_major}." \
+              '.versions | keys[] | select(startswith($prefix)) | select(contains("-") | not)' \
+            | sort -V \
+            | tail -n 1)"
 
           if [[ ! "$latest_codex" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "ERROR: GitHub latest release is not an exact stable Codex tag: $latest_codex" >&2
@@ -46,43 +92,141 @@ jobs:
             echo "ERROR: mise latest release has an unexpected tag: $latest_mise" >&2
             exit 1
           fi
+          if [[ ! "$latest_python" =~ ^3\.14\.[0-9]+$ ]]; then
+            echo "ERROR: Python latest maintenance release has an unexpected version: $latest_python" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_node" =~ ^24\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Node latest selected LTS release has an unexpected version: $latest_node" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_npm" =~ ^12\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: npm latest selected major release has an unexpected version: $latest_npm" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_uv" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: uv latest release has an unexpected tag: $latest_uv" >&2
+            exit 1
+          fi
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          gh api "repos/openai/codex/releases/tags/${latest_codex}" > "$workdir/codex.json"
+          gh api "repos/cli/cli/releases/tags/v${latest_gh}" > "$workdir/gh.json"
+          gh api "repos/tsl0922/ttyd/releases/tags/${latest_ttyd}" > "$workdir/ttyd.json"
+          gh api "repos/jdx/mise/releases/tags/v${latest_mise}" > "$workdir/mise.json"
+
+          release_sha256() {
+            local release_json="$1"
+            local asset="$2"
+            local digest=""
+            local checksum_url=""
+
+            digest="$(jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest // empty' "$release_json")"
+            if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              printf '%s\n' "${digest#sha256:}"
+              return 0
+            fi
+
+            checksum_url="$(jq -r '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url // empty' "$release_json")"
+            if [[ -n "$checksum_url" ]]; then
+              digest="$(curl "${curl_args[@]}" "$checksum_url" \
+                | awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }')"
+            fi
+
+            if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "ERROR: release asset $asset has no valid GitHub digest or SHA256SUMS entry: $digest" >&2
+              exit 1
+            fi
+            printf '%s\n' "$digest"
+          }
+
+          codex_amd64_sha256="$(release_sha256 "$workdir/codex.json" codex-x86_64-unknown-linux-musl.tar.gz)"
+          codex_arm64_sha256="$(release_sha256 "$workdir/codex.json" codex-aarch64-unknown-linux-musl.tar.gz)"
+          gh_amd64_sha256="$(release_sha256 "$workdir/gh.json" "gh_${latest_gh}_linux_amd64.tar.gz")"
+          gh_arm64_sha256="$(release_sha256 "$workdir/gh.json" "gh_${latest_gh}_linux_arm64.tar.gz")"
+          ttyd_amd64_sha256="$(release_sha256 "$workdir/ttyd.json" ttyd.x86_64)"
+          ttyd_arm64_sha256="$(release_sha256 "$workdir/ttyd.json" ttyd.aarch64)"
+          mise_amd64_sha256="$(release_sha256 "$workdir/mise.json" "mise-v${latest_mise}-linux-x64")"
+          mise_arm64_sha256="$(release_sha256 "$workdir/mise.json" "mise-v${latest_mise}-linux-arm64")"
 
           branch="automation/update-upstreams"
-          existing_pr=$(gh pr list \
+          existing_pr="$(gh pr list \
             --head "$branch" \
             --base main \
             --state open \
             --json number \
-            --jq '.[0].number // empty')
-
-          if [[ "$CODEX_RELEASE_TAG" == "$latest_codex" &&
-                "$GH_VERSION" == "$latest_gh" &&
-                "$TTYD_VERSION" == "$latest_ttyd" &&
-                "$MISE_VERSION" == "$latest_mise" ]]; then
-            echo "No upstream release changes."
-            if [[ -n "$existing_pr" ]]; then
-              gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases."
-            fi
-            exit 0
-          fi
+            --jq '.[0].number // empty')"
 
           git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$branch"
 
-          # All values are constrained to exact safe tag formats above before
-          # they are written to versions.env, which is sourced by build workflows.
-          sed -i "s/^CODEX_RELEASE_TAG=.*/CODEX_RELEASE_TAG=${latest_codex}/" versions.env
-          sed -i "s/^ARG CODEX_RELEASE_TAG=.*/ARG CODEX_RELEASE_TAG=${latest_codex}/" images/codex/Dockerfile
-          sed -i "s/^GH_VERSION=.*/GH_VERSION=${latest_gh}/" versions.env
-          sed -i "s/^TTYD_VERSION=.*/TTYD_VERSION=${latest_ttyd}/" versions.env
-          sed -i "s/^MISE_VERSION=.*/MISE_VERSION=${latest_mise}/" versions.env
+          replace_env() {
+            local name="$1"
+            local value="$2"
+            grep -q "^${name}=" versions.env \
+              || { echo "ERROR: versions.env has no ${name} pin" >&2; exit 1; }
+            sed -i "s|^${name}=.*|${name}=${value}|" versions.env
+          }
+
+          replace_arg() {
+            local file="$1"
+            local name="$2"
+            local value="$3"
+            grep -q "^ARG ${name}=" "$file" \
+              || { echo "ERROR: $file has no ARG ${name} default" >&2; exit 1; }
+            sed -i "s|^ARG ${name}=.*|ARG ${name}=${value}|" "$file"
+          }
+
+          replace_env CODEX_RELEASE_TAG "$latest_codex"
+          replace_env CODEX_AMD64_SHA256 "$codex_amd64_sha256"
+          replace_env CODEX_ARM64_SHA256 "$codex_arm64_sha256"
+          replace_env GH_VERSION "$latest_gh"
+          replace_env GH_AMD64_SHA256 "$gh_amd64_sha256"
+          replace_env GH_ARM64_SHA256 "$gh_arm64_sha256"
+          replace_env TTYD_VERSION "$latest_ttyd"
+          replace_env TTYD_AMD64_SHA256 "$ttyd_amd64_sha256"
+          replace_env TTYD_ARM64_SHA256 "$ttyd_arm64_sha256"
+          replace_env MISE_VERSION "$latest_mise"
+          replace_env MISE_AMD64_SHA256 "$mise_amd64_sha256"
+          replace_env MISE_ARM64_SHA256 "$mise_arm64_sha256"
+          replace_env PYTHON_VERSION "$latest_python"
+          replace_env NODE_VERSION "$latest_node"
+          replace_env NPM_VERSION "$latest_npm"
+          replace_env UV_VERSION "$latest_uv"
+
+          replace_arg images/codex/Dockerfile CODEX_RELEASE_TAG "$latest_codex"
+          replace_arg images/codex/Dockerfile CODEX_AMD64_SHA256 "$codex_amd64_sha256"
+          replace_arg images/codex/Dockerfile CODEX_ARM64_SHA256 "$codex_arm64_sha256"
+          replace_arg images/base/Dockerfile GH_VERSION "$latest_gh"
+          replace_arg images/base/Dockerfile GH_AMD64_SHA256 "$gh_amd64_sha256"
+          replace_arg images/base/Dockerfile GH_ARM64_SHA256 "$gh_arm64_sha256"
+          replace_arg images/base/Dockerfile TTYD_VERSION "$latest_ttyd"
+          replace_arg images/base/Dockerfile TTYD_AMD64_SHA256 "$ttyd_amd64_sha256"
+          replace_arg images/base/Dockerfile TTYD_ARM64_SHA256 "$ttyd_arm64_sha256"
+          replace_arg images/base/Dockerfile MISE_VERSION "$latest_mise"
+          replace_arg images/base/Dockerfile MISE_AMD64_SHA256 "$mise_amd64_sha256"
+          replace_arg images/base/Dockerfile MISE_ARM64_SHA256 "$mise_arm64_sha256"
+          replace_arg images/base/Dockerfile PYTHON_VERSION "$latest_python"
+          replace_arg images/base/Dockerfile NODE_VERSION "$latest_node"
+          replace_arg images/base/Dockerfile NPM_VERSION "$latest_npm"
+          replace_arg images/base/Dockerfile UV_VERSION "$latest_uv"
 
           bash scripts/validate-version-pins.sh
-          git add versions.env images/codex/Dockerfile
-          git commit -m "chore: update upstream versions"
+
+          if git diff --quiet -- versions.env images/base/Dockerfile images/codex/Dockerfile; then
+            echo "No upstream release or digest changes."
+            if [[ -n "$existing_pr" ]]; then
+              gh pr close "$existing_pr" \
+                --comment "Closing because main already contains the latest tracked stable releases and asset digests."
+            fi
+            exit 0
+          fi
+
+          git add versions.env images/base/Dockerfile images/codex/Dockerfile
+          git commit -m "chore: update upstream versions and digests"
 
           remote_ref="refs/remotes/origin/$branch"
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
@@ -93,23 +237,23 @@ jobs:
             git push --force-with-lease -u origin "$branch"
           fi
 
-          branch_head=$(git rev-parse HEAD)
-          existing_pr=$(gh pr list \
+          branch_head="$(git rev-parse HEAD)"
+          existing_pr="$(gh pr list \
             --head "$branch" \
             --base main \
             --state open \
             --json number \
-            --jq '.[0].number // empty')
+            --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release update. Merge only after the required AMD64 build, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release and digest update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
-              --title "chore: update stable upstream versions" \
+              --title "chore: update stable upstream versions and digests" \
               --body "$body"
           else
             gh pr create \
-              --title "chore: update stable upstream versions" \
+              --title "chore: update stable upstream versions and digests" \
               --body "$body" \
               --base main \
               --head "$branch"
@@ -118,17 +262,17 @@ jobs:
           # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
           # workflow_dispatch is an explicit exception, so dispatch the required build
           # against the exact automation branch without introducing a PAT or app secret.
-          run_json=$(gh run list \
+          run_json="$(gh run list \
             --workflow build-amd64.yml \
             --branch "$branch" \
             --event workflow_dispatch \
             --commit "$branch_head" \
             --limit 1 \
             --json databaseId,status,conclusion \
-            --jq '.[0] // {}')
-          run_id=$(jq -r '.databaseId // empty' <<<"$run_json")
-          run_status=$(jq -r '.status // empty' <<<"$run_json")
-          run_conclusion=$(jq -r '.conclusion // empty' <<<"$run_json")
+            --jq '.[0] // {}')"
+          run_id="$(jq -r '.databaseId // empty' <<<"$run_json")"
+          run_status="$(jq -r '.status // empty' <<<"$run_json")"
+          run_conclusion="$(jq -r '.conclusion // empty' <<<"$run_json")"
 
           if [[ -z "$run_id" ]]; then
             gh workflow run build-amd64.yml --ref "$branch"

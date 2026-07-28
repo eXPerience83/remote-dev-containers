@@ -16,9 +16,9 @@ Public container-registry images can be pulled without authentication. The `sha-
 
 The workflow refuses to publish from a branch other than `main`.
 
-Stable upstream releases are checked daily. The updater accepts only exact stable Codex tags, updates both version pins together and opens or refreshes a pull request. It never changes image tags directly. Once that PR passes the required build and review and is merged, the edge publication workflow builds and publishes the updated image.
+Stable upstream releases are checked daily. The updater tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines. It updates versions and architecture-specific hashes together and opens or refreshes a pull request; it never changes public image tags directly. Ubuntu LTS tag and digest updates remain managed by Renovate. Once an update PR passes the required build, runtime checks, vulnerability gate and review and is merged, the edge publication workflow builds and publishes the updated image.
 
-The image includes Ubuntu's `bubblewrap` package. Whether Codex can create a second sandbox inside Docker still depends on the outer host kernel, user-namespace and AppArmor policy. Runtime diagnostics report this compatibility separately. The supported deployment does not enable privileged mode, `SYS_ADMIN` or an unconfined seccomp profile merely to make nested bubblewrap work.
+The image includes Ubuntu's `bubblewrap` package. It deliberately follows the current security revision available from the selected Ubuntu repositories rather than pinning an exact APT revision that may disappear after being superseded. This means APT package resolution is not claimed to be bit-for-bit reproducible; the completed image is instead covered by smoke tests and Trivy before public tags are promoted. Whether Codex can create a second sandbox inside Docker still depends on the outer host kernel, user-namespace and AppArmor policy. Runtime diagnostics report this compatibility separately. The supported deployment does not enable privileged mode, `SYS_ADMIN` or an unconfined seccomp profile merely to make nested bubblewrap work.
 
 > [!WARNING]
 > Public availability does not make `edge` stable or production-ready. Breaking changes are possible, and the ttyd port must not be exposed directly to the Internet.
@@ -39,11 +39,13 @@ v0.1.0
 
 The tagged commit must belong to the history of `main`; a semantic-version tag placed on an unrelated branch is rejected. Stable publication produces versioned tags and updates the moving `stable`, `stable-amd64` and `latest` tags. Pre-release tags such as `v0.1.0-rc.1` are intentionally rejected by the stable workflow.
 
+Both publication workflows first push untagged candidates by digest, scan those exact digests and only then promote them to public moving or versioned tags. A fixable `CRITICAL` vulnerability blocks tag promotion. Critical findings without a known fix remain visible in the retained JSON reports but do not fail the gate.
+
 ## Promotion checklist
 
 Before creating a stable version tag:
 
-1. The AMD64 build and runtime smoke tests pass on `main`.
+1. The AMD64 build, runtime smoke tests and fixable-critical vulnerability gate pass on `main`.
 2. The `edge` image has been deployed on TrueNAS.
 3. Browser access, authentication and tmux reconnection have been verified.
 4. Codex device-code login persists across recreation.
