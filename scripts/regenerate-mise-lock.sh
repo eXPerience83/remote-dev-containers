@@ -45,7 +45,14 @@ for required_file in versions.env mise.toml mise.lock; do
 done
 
 scratch="$(mktemp -d)"
-trap 'rm -rf "${scratch:?}"' EXIT
+replacement=""
+cleanup() {
+  if [[ -n "$replacement" ]]; then
+    rm -f -- "$replacement"
+  fi
+  rm -rf -- "${scratch:?}"
+}
+trap cleanup EXIT
 workspace="$scratch/workspace"
 mkdir -p \
   "$workspace" \
@@ -83,6 +90,9 @@ done < <(env -0)
 )
 
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$workspace"
-install -m 0644 "$workspace/mise.lock" "$ROOT/mise.lock"
+replacement="$(mktemp "$ROOT/.mise.lock.tmp.XXXXXX")"
+install -m 0644 "$workspace/mise.lock" "$replacement"
+mv -f -- "$replacement" "$ROOT/mise.lock"
+replacement=""
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
 echo "Regenerated mise.lock with mise $MISE_VERSION from isolated inputs."
