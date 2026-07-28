@@ -45,6 +45,7 @@ require_sha256() {
 
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
+edge_workflow="$ROOT/.github/workflows/publish-edge-amd64.yml"
 
 require_frontend_pin() {
   local file="$1"
@@ -88,6 +89,14 @@ require_action_shas() {
   done < <(find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print)
 }
 
+require_edge_path_trigger() {
+  local path="$1"
+  if ! grep -Fxq "      - \"$path\"" "$edge_workflow"; then
+    echo "ERROR: edge publication must trigger when $path changes" >&2
+    exit 1
+  fi
+}
+
 base_frontend="$(require_frontend_pin "$base_dockerfile")"
 codex_frontend="$(require_frontend_pin "$codex_dockerfile")"
 if [[ "$base_frontend" != "$codex_frontend" ]]; then
@@ -99,6 +108,8 @@ if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfil
   exit 1
 fi
 require_action_shas
+require_edge_path_trigger mise.toml
+require_edge_path_trigger mise.lock
 
 if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
