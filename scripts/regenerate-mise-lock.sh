@@ -10,6 +10,10 @@ if ! command -v "$MISE_BIN" >/dev/null 2>&1; then
   echo "ERROR: mise is required to regenerate mise.lock" >&2
   exit 1
 fi
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "ERROR: GNU timeout is required to bound mise.lock regeneration" >&2
+  exit 1
+fi
 
 installed_version="$("$MISE_BIN" --version | awk '{print $1}')"
 if [[ "$installed_version" != "$MISE_VERSION" ]]; then
@@ -29,6 +33,8 @@ trap 'rm -f "$empty_global_config"' EXIT
   cd "$ROOT"
   MISE_GLOBAL_CONFIG_FILE="$empty_global_config" \
     MISE_SAFE=1 \
+    MISE_HTTP_TIMEOUT="${MISE_HTTP_TIMEOUT:-60}" \
+    timeout --signal=TERM --kill-after=30s "${MISE_LOCK_TIMEOUT:-10m}" \
     "$MISE_BIN" lock --platform linux-x64,linux-arm64
 )
 
