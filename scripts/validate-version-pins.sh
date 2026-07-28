@@ -100,6 +100,24 @@ if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfil
 fi
 require_action_shas
 
+if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
+  exit 1
+fi
+if ! grep -Fq 'COPY --chmod=0444 mise.toml mise.lock /etc/mise/' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must copy immutable mise config and lock inputs" >&2
+  exit 1
+fi
+if ! grep -Fq 'mise install --locked' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must install mise runtimes in locked mode" >&2
+  exit 1
+fi
+if grep -Fq 'mise use --global' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must not resolve mise runtimes dynamically" >&2
+  exit 1
+fi
+python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
+
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
   exit 1
@@ -191,4 +209,4 @@ printf 'Python release pin: %s\n' "$PYTHON_VERSION"
 printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
 printf 'uv release pin: %s\n' "$UV_VERSION"
-echo "Release asset SHA-256 pins are present and synchronized."
+echo "Release asset SHA-256 pins and mise runtime lock data are present and synchronized."
