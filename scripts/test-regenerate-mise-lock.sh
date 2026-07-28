@@ -70,14 +70,26 @@ copy_fixture() {
     "$destination/scripts/"
 }
 
-run_helper() {
+assert_no_temp_lock() {
+  local fixture_root="$1"
+  local leftover=""
+  leftover="$(find "$fixture_root" -maxdepth 1 -type f -name '.mise.lock.tmp.*' -print -quit)"
+  if [[ -n "$leftover" ]]; then
+    echo "ERROR: temporary lock replacement was not removed: $leftover" >&2
+    exit 1
+  fi
+}
+
+run_helper_with_path() {
   local fixture_root="$1"
   local mode="$2"
   local record="$3"
+  local path_value="$4"
   local forbidden_cache="$scratch/forbidden-cache"
   mkdir -p "$forbidden_cache"
 
   env \
+    PATH="$path_value" \
     FAKE_MISE_MODE="$mode" \
     FAKE_MISE_VERSION="$MISE_VERSION" \
     FAKE_SCRATCH_RECORD="$record" \
@@ -91,11 +103,16 @@ run_helper() {
     bash "$fixture_root/scripts/regenerate-mise-lock.sh"
 }
 
+run_helper() {
+  run_helper_with_path "$1" "$2" "$3" "$PATH"
+}
+
 success_root="$scratch/success-repo"
 success_record="$scratch/success-record"
 copy_fixture "$success_root"
 run_helper "$success_root" success "$success_record"
 grep -Fq '# fake regeneration marker' "$success_root/mise.lock"
+assert_no_temp_lock "$success_root"
 success_scratch="$(cat "$success_record")"
 [[ ! -e "$success_scratch" ]] || { echo "successful regeneration scratch was not removed" >&2; exit 1; }
 echo "OK isolated successful regeneration"
@@ -109,6 +126,7 @@ if run_helper "$invalid_root" invalid "$invalid_record"; then
 fi
 cmp -s "$ROOT/mise.lock" "$invalid_root/mise.lock" \
   || { echo "ERROR: invalid generated lock replaced the committed fixture" >&2; exit 1; }
+assert_no_temp_lock "$invalid_root"
 invalid_scratch="$(cat "$invalid_record")"
 [[ ! -e "$invalid_scratch" ]] || { echo "invalid regeneration scratch was not removed" >&2; exit 1; }
 echo "OK reject invalid generated lock without partial write"
@@ -122,9 +140,39 @@ if run_helper "$failure_root" fail "$failure_record"; then
 fi
 cmp -s "$ROOT/mise.lock" "$failure_root/mise.lock" \
   || { echo "ERROR: failed regeneration replaced the committed fixture" >&2; exit 1; }
+assert_no_temp_lock "$failure_root"
 failure_scratch="$(cat "$failure_record")"
 [[ ! -e "$failure_scratch" ]] || { echo "failed regeneration scratch was not removed" >&2; exit 1; }
 echo "OK preserve lock after failed regeneration"
+
+fake_tools="$scratch/fake-tools"
+mkdir -p "$fake_tools"
+cat > "$fake_tools/install" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+destination="${!#}"
+printf '%s\n' 'partial replacement' > "$destination"
+exit 43
+EOF
+chmod 0755 "$fake_tools/install"
+
+install_failure_root="$scratch/install-failure-repo"
+install_failure_record="$scratch/install-failure-record"
+copy_fixture "$install_failure_root"
+if run_helper_with_path \
+  "$install_failure_root" \
+  success \
+  "$install_failure_record" \
+  "$fake_tools:$PATH"; then
+  echo "ERROR: failed replacement copy was treated as success" >&2
+  exit 1
+fi
+cmp -s "$ROOT/mise.lock" "$install_failure_root/mise.lock" \
+  || { echo "ERROR: failed replacement copy changed the committed fixture" >&2; exit 1; }
+assert_no_temp_lock "$install_failure_root"
+install_failure_scratch="$(cat "$install_failure_record")"
+[[ ! -e "$install_failure_scratch" ]] || { echo "copy-failure scratch was not removed" >&2; exit 1; }
+echo "OK preserve lock after replacement copy failure"
 
 bad_http_root="$scratch/bad-http-repo"
 copy_fixture "$bad_http_root"
@@ -138,6 +186,7 @@ if env \
 fi
 cmp -s "$ROOT/mise.lock" "$bad_http_root/mise.lock" \
   || { echo "ERROR: bad HTTP timeout changed the lock" >&2; exit 1; }
+assert_no_temp_lock "$bad_http_root"
 echo "OK reject unitless HTTP timeout"
 
 bad_lock_root="$scratch/bad-lock-repo"
@@ -152,6 +201,7 @@ if env \
 fi
 cmp -s "$ROOT/mise.lock" "$bad_lock_root/mise.lock" \
   || { echo "ERROR: bad lock timeout changed the lock" >&2; exit 1; }
+assert_no_temp_lock "$bad_lock_root"
 echo "OK reject option-like lock timeout"
 
 echo "All isolated mise lock regeneration tests passed."
