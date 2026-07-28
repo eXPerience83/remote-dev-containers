@@ -115,6 +115,7 @@ Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repositor
 - `docs/security.md`
 - `docs/decisions.md`
 - `docs/releases.md`
+- `docs/runtime-locks.md`
 - `docs/roadmap.md`
 
 ## Upstream references
