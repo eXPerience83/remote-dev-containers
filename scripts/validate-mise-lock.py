@@ -13,14 +13,21 @@ from typing import Any, NoReturn
 ASSIGNMENT_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 PLATFORMS = ("linux-x64", "linux-arm64")
+EXPECTED_BACKENDS = {
+    "python": "core:python",
+    "node": "core:node",
+    "uv": "aqua:astral-sh/uv",
+}
 
 
 def fail(message: str) -> NoReturn:
+    """Exit with a consistent validation error message."""
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
 def load_env(path: Path) -> dict[str, str]:
+    """Load a simple NAME=value environment file without shell evaluation."""
     values: dict[str, str] = {}
     for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = raw_line.strip()
@@ -34,6 +41,7 @@ def load_env(path: Path) -> dict[str, str]:
 
 
 def load_toml(path: Path) -> dict[str, Any]:
+    """Load a TOML document or fail with the original parse error."""
     try:
         with path.open("rb") as handle:
             return tomllib.load(handle)
@@ -42,6 +50,7 @@ def load_toml(path: Path) -> dict[str, Any]:
 
 
 def expect_string(mapping: dict[str, Any], key: str, context: str) -> str:
+    """Return a required non-empty string from a TOML mapping."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value:
         fail(f"{context}.{key} must be a non-empty string")
@@ -49,6 +58,7 @@ def expect_string(mapping: dict[str, Any], key: str, context: str) -> str:
 
 
 def platform_info(entry: dict[str, Any], platform: str, tool: str) -> dict[str, Any]:
+    """Return one locked platform artifact mapping for a managed tool."""
     key = f"platforms.{platform}"
     value = entry.get(key)
     if not isinstance(value, dict):
@@ -57,6 +67,7 @@ def platform_info(entry: dict[str, Any], platform: str, tool: str) -> dict[str, 
 
 
 def validate_url(tool: str, version: str, platform: str, url: str) -> None:
+    """Require an artifact URL that matches the approved upstream layout."""
     arch = {"linux-x64": "x86_64", "linux-arm64": "aarch64"}[platform]
     if tool == "node":
         node_arch = "x64" if platform == "linux-x64" else "arm64"
@@ -90,18 +101,8 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> None:
     fail(f"no URL policy defined for mise tool {tool}")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--root",
-        type=Path,
-        default=Path(__file__).resolve().parents[1],
-        help="repository root (defaults to the parent of scripts/)",
-    )
-    args = parser.parse_args()
-    root = args.root.resolve()
-
-    env = load_env(root / "versions.env")
+def expected_versions_from_env(env: dict[str, str]) -> dict[str, str]:
+    """Extract required managed-runtime versions from versions.env."""
     expected_versions = {
         "python": env.get("PYTHON_VERSION", ""),
         "node": env.get("NODE_VERSION", ""),
@@ -110,8 +111,11 @@ def main() -> int:
     for tool, version in expected_versions.items():
         if not version:
             fail(f"versions.env has no version for {tool}")
+    return expected_versions
 
-    config = load_toml(root / "mise.toml")
+
+def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, str]) -> None:
+    """Validate mise settings, managed tools, and version coherence."""
     settings = config.get("settings")
     if not isinstance(settings, dict):
         fail("mise.toml must contain [settings]")
@@ -141,7 +145,65 @@ def main() -> int:
                 f"versions.env {expected_version!r}"
             )
 
-    lock = load_toml(root / "mise.lock")
+
+def validate_artifact(
+    tool: str, version: str, platform: str, artifact: dict[str, Any]
+) -> None:
+    """Validate one platform-specific checksum, URL, and provenance record."""
+    checksum = expect_string(artifact, "checksum", f"mise.lock tools.{tool}.{platform}")
+    if not SHA256_RE.fullmatch(checksum):
+        fail(
+            f"mise.lock {tool} checksum for {platform} must be an exact "
+            f"lowercase SHA-256: {checksum}"
+        )
+    url = expect_string(artifact, "url", f"mise.lock tools.{tool}.{platform}")
+    validate_url(tool, version, platform, url)
+    if tool in {"python", "uv"} and artifact.get("provenance") != "github-attestations":
+        fail(
+            f"mise.lock {tool} artifact for {platform} must require "
+            "GitHub artifact attestations"
+        )
+
+
+def validate_tool_entry(
+    tool: str,
+    expected_version: str,
+    entries: Any,
+) -> None:
+    """Validate one managed tool entry and all required platform artifacts."""
+    if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
+        fail(f"mise.lock must contain exactly one {tool} entry")
+    entry = entries[0]
+    version = expect_string(entry, "version", f"mise.lock tools.{tool}")
+    backend = expect_string(entry, "backend", f"mise.lock tools.{tool}")
+    if version != expected_version:
+        fail(
+            f"mise.lock {tool} version {version!r} does not match "
+            f"versions.env {expected_version!r}"
+        )
+    if backend != EXPECTED_BACKENDS[tool]:
+        fail(
+            f"mise.lock {tool} backend {backend!r} does not match "
+            f"{EXPECTED_BACKENDS[tool]!r}"
+        )
+
+    locked_platforms = {
+        key.removeprefix("platforms.")
+        for key, value in entry.items()
+        if key.startswith("platforms.") and isinstance(value, dict)
+    }
+    if locked_platforms != set(PLATFORMS):
+        fail(
+            f"mise.lock {tool} platforms must be exactly {sorted(PLATFORMS)}, "
+            f"got {sorted(locked_platforms)}"
+        )
+
+    for platform in PLATFORMS:
+        validate_artifact(tool, version, platform, platform_info(entry, platform, tool))
+
+
+def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str]) -> None:
+    """Validate the lockfile tool set and each locked runtime entry."""
     lock_tools = lock.get("tools")
     if not isinstance(lock_tools, dict):
         fail("mise.lock must contain tool entries")
@@ -151,57 +213,28 @@ def main() -> int:
             f"{sorted(expected_versions)}, got {sorted(lock_tools)}"
         )
 
-    expected_backends = {
-        "python": "core:python",
-        "node": "core:node",
-        "uv": "aqua:astral-sh/uv",
-    }
     for tool, expected_version in expected_versions.items():
-        entries = lock_tools.get(tool)
-        if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
-            fail(f"mise.lock must contain exactly one {tool} entry")
-        entry = entries[0]
-        version = expect_string(entry, "version", f"mise.lock tools.{tool}")
-        backend = expect_string(entry, "backend", f"mise.lock tools.{tool}")
-        if version != expected_version:
-            fail(
-                f"mise.lock {tool} version {version!r} does not match "
-                f"versions.env {expected_version!r}"
-            )
-        if backend != expected_backends[tool]:
-            fail(
-                f"mise.lock {tool} backend {backend!r} does not match "
-                f"{expected_backends[tool]!r}"
-            )
+        validate_tool_entry(tool, expected_version, lock_tools.get(tool))
 
-        locked_platforms = {
-            key.removeprefix("platforms.")
-            for key, value in entry.items()
-            if key.startswith("platforms.") and isinstance(value, dict)
-        }
-        if locked_platforms != set(PLATFORMS):
-            fail(
-                f"mise.lock {tool} platforms must be exactly {sorted(PLATFORMS)}, "
-                f"got {sorted(locked_platforms)}"
-            )
 
-        for platform in PLATFORMS:
-            artifact = platform_info(entry, platform, tool)
-            checksum = expect_string(
-                artifact, "checksum", f"mise.lock tools.{tool}.{platform}"
-            )
-            if not SHA256_RE.fullmatch(checksum):
-                fail(
-                    f"mise.lock {tool} checksum for {platform} must be an exact "
-                    f"lowercase SHA-256: {checksum}"
-                )
-            url = expect_string(artifact, "url", f"mise.lock tools.{tool}.{platform}")
-            validate_url(tool, version, platform, url)
-            if tool in {"python", "uv"} and artifact.get("provenance") != "github-attestations":
-                fail(
-                    f"mise.lock {tool} artifact for {platform} must require "
-                    "GitHub artifact attestations"
-                )
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for repository-root selection."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path(__file__).resolve().parents[1],
+        help="repository root (defaults to the parent of scripts/)",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Load repository inputs, run all lock validations, and report success."""
+    root = parse_args().root.resolve()
+    expected_versions = expected_versions_from_env(load_env(root / "versions.env"))
+    validate_mise_config(load_toml(root / "mise.toml"), expected_versions)
+    validate_lock(load_toml(root / "mise.lock"), expected_versions)
 
     print(
         "mise runtime lock is coherent for "
