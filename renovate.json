@@ -32,6 +32,13 @@
       "versioning": "ubuntu",
       "allowedVersions": "/^(?:[0-9]*[02468])\\.04$/",
       "groupName": "Ubuntu LTS base"
+    },
+    {
+      "description": "Runtime pins are updated atomically by check-upstream.yml",
+      "matchManagers": [
+        "mise"
+      ],
+      "enabled": false
     }
   ]
 }
