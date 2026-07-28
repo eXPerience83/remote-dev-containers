@@ -1,6 +1,7 @@
 [settings]
 experimental = true
 lockfile = true
+locked_verify_provenance = true
 lockfile_platforms = ["linux-x64", "linux-arm64"]
 
 [tools]
