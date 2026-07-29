@@ -23,13 +23,19 @@ The current edge image is the Codex reference implementation:
 - separate persistent paths for workspace and credentials;
 - AMD64 first.
 
+### Isolation on TrueNAS
+
+The default image does not install Bubblewrap. On the supported TrueNAS profile, the outer Docker container is the security boundary and Codex asks for explicit approval when it cannot sandbox a command. Diagnostics report the inner-sandbox state separately and never infer protection from an installed package.
+
+Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
+
 ## Accepted target architecture
 
 The next runtime architecture is documented before implementation:
 
 - one user-installed Remote Dev App or Compose stack;
 - one final Remote Dev image digest reused by every service;
-- one primary launcher URL;
+- one primary launcher or gateway URL;
 - one isolated service per enabled coding agent;
 - Codex as the built-in reference service;
 - Antigravity as the first planned optional vendor-installed service;
@@ -37,8 +43,6 @@ The next runtime architecture is documented before implementation:
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
 Docker reuses the same immutable image layers. Users will not install one image or TrueNAS App per tool, and several agents will not share one container's private state.
-
-The default launcher navigates or redirects to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
 This target is not yet implemented in the current edge image. See `docs/architecture.md`, issue #24 and implementation issue #25.
 
@@ -114,6 +118,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not publish the terminal port directly to the Internet.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
+- Do not claim an inner sandbox is active unless diagnostics positively verify it.
 - Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.
