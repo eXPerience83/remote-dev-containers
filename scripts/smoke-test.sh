@@ -154,7 +154,11 @@ printf '%s\n' "$menu_output"
 echo "Image identity is bound to embedded metadata: OK"
 
 codex --version
-bwrap --version
+if command -v bwrap >/dev/null 2>&1; then
+  echo "ERROR: Bubblewrap must not be installed in the default outer-isolation image" >&2
+  exit 1
+fi
+echo "Default image omits Bubblewrap: OK"
 gh --version | head -n 1
 git --version
 python --version
