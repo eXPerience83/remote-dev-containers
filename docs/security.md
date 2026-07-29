@@ -12,7 +12,7 @@ The supported TrueNAS security boundary is the outer Docker container. The defau
 
 `danger-full-access` describes the Codex inner sandbox only. It does not add Docker privileges, `SYS_ADMIN`, host mounts, unconfined AppArmor/seccomp profiles or a Docker socket. The container's normal isolation and narrow mounts remain the security boundary.
 
-The launcher also sets `--ask-for-approval untrusted`. Commands that Codex does not classify as trusted require approval, as validated on TrueNAS with read-only and write-command probes. Approval prompts are not a sandbox and must not be described as one: after approval, Codex can access every path and credential mounted into that service, and some built-in editing operations may not map to a shell-command prompt.
+The launcher also sets `--ask-for-approval untrusted`. A first exact TrueNAS candidate showed that read-only shell probes ran without unnecessary prompts and an untrusted write-command probe requested one-time approval. The final exact candidate must repeat this approval-flow validation before merge and stable promotion. Approval prompts are not a sandbox and must not be described as one: after approval, Codex can access every path and credential mounted into that service, and some built-in editing operations may not map to a shell-command prompt.
 
 Separate agent services must receive separate narrow mounts. The outer-container boundary protects one agent service from state that is not mounted into it; it does not protect files or credentials from a person who already controls that service's terminal.
 
@@ -29,4 +29,4 @@ Separate agent services must receive separate narrow mounts. The outer-container
 
 ## Codex permissions
 
-The default launcher fixes the supported TrueNAS policy to outer-container isolation plus `untrusted` approvals. The menu, resume action and `START_MODE=codex` all use the same launcher so they cannot silently diverge. Users can still start Codex manually from the shell with different flags, but doing so is outside the supported default and may weaken the approval behavior.
+The default launcher fixes the supported TrueNAS policy to outer-container isolation plus `untrusted` approvals. The menu, resume action and `START_MODE=codex` all use the same launcher so they cannot silently diverge. The launcher rejects caller arguments and configuration overrides that attempt to replace the fixed sandbox or approval policy. Users can still invoke the raw Codex binary manually from the shell, but doing so is outside the supported default and may weaken the approval behavior.
