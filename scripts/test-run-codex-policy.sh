@@ -102,7 +102,30 @@ assert_rejected 'yolo alias' --yolo
 assert_rejected 'full-auto shortcut' --full-auto
 assert_rejected 'short config sandbox override' -c 'sandbox_mode="read-only"'
 assert_rejected 'long config approval override' --config 'approval_policy="never"'
+assert_rejected 'spaced config approval override' --config ' approval_policy = "never" '
 assert_rejected 'inline config sandbox override' '--config=sandbox_mode="workspace-write"'
 assert_rejected 'profile config approval override' -c 'profiles.test.approval_policy="never"'
 
 echo 'Codex launcher policy overrides: rejected'
+
+rm -f "$args_file"
+PATH="$workdir/path-bin:$PATH" \
+REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+  run-codex -- --sandbox-is-prompt-text
+
+mapfile -t separator_actual < "$args_file"
+separator_expected=(
+  --sandbox
+  danger-full-access
+  --ask-for-approval
+  untrusted
+  --
+  --sandbox-is-prompt-text
+)
+
+if [[ "${separator_actual[*]}" != "${separator_expected[*]}" ]]; then
+  printf 'ERROR: run-codex did not preserve arguments after --\nActual: %q\n' "${separator_actual[@]}" >&2
+  exit 1
+fi
+
+echo 'Codex launcher option separator: preserved'
