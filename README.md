@@ -7,19 +7,40 @@ Community-maintained, browser-accessible Codex CLI development environment for D
 
 ## Goal
 
-Keep development tools, repositories and Codex on a remote Docker host so the personal computer only needs a browser.
+Keep development tools, repositories and coding agents on a remote Docker host so the personal computer only needs a browser.
 
-## Design
+## Current implementation
 
-- Shared lightweight Ubuntu 26.04 LTS base
-- Root runtime for predictable tool permissions
-- Codex CLI from an official pinned release asset
-- GitHub CLI as a core tool
-- Python 3.14, Node 24, uv and mise
-- Browser terminal through ttyd
-- Persistent sessions through tmux
-- Separate persistent volumes for workspace and credentials
-- AMD64 first
+The current edge image is the Codex reference implementation:
+
+- shared lightweight Ubuntu 26.04 LTS base;
+- root runtime for predictable tool permissions;
+- Codex CLI from an official pinned release asset;
+- GitHub CLI as a core tool;
+- Python 3.14, Node 24, uv and mise;
+- browser terminal through ttyd;
+- persistent sessions through tmux;
+- separate persistent paths for workspace and credentials;
+- AMD64 first.
+
+## Accepted target architecture
+
+The next runtime architecture is documented before implementation:
+
+- one user-installed Remote Dev App or Compose stack;
+- one final Remote Dev image digest reused by every service;
+- one primary launcher URL;
+- one isolated service per enabled coding agent;
+- Codex as the built-in reference service;
+- Antigravity as the first planned optional vendor-installed service;
+- Claude Code preserved as a future path only;
+- private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
+
+Docker reuses the same immutable image layers. Users will not install one image or TrueNAS App per tool, and several agents will not share one container's private state.
+
+The default launcher navigates or redirects to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
+
+This target is not yet implemented in the current edge image. See `docs/architecture.md`, issue #24 and implementation issue #25.
 
 ## Build locally
 
@@ -93,8 +114,9 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not publish the terminal port directly to the Internet.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
-- Anyone with terminal access can read mounted repositories and credentials.
+- Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
+- The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.
 - `edge` is experimental and may be replaced without notice.
 - Breaking configuration and persistence changes are still possible before `v0.1.0`.
 

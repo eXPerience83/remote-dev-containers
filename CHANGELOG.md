@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
 - Trivy JSON reports for all critical findings in locally built images and exact publication candidates; only findings with a known fixed version fail the gate.
 - Committed mise runtime configuration and lock data for Linux AMD64 and ARM64, plus validation and a documented regeneration helper.
+- Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
 
 ### Changed
 
@@ -47,6 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added an official `SHA256SUMS` fallback for upstream releases such as ttyd that do not expose GitHub asset digest metadata.
 - Centralized the fixable-critical Trivy gate so build, edge and stable workflows share the same enforcement logic.
 - Extended upstream automation to regenerate and review the mise lock whenever runtime versions or resolved artifacts change.
+- Updated the pinned stable releases to Codex CLI `0.146.0`, mise `2026.7.16` and uv `0.12.0`, and refreshed the locked Python 3.14.6 artifacts.
+- Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
 
 ### Security
 
@@ -64,3 +67,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags and use only the permissions required to read source and write packages.
+- The target launcher receives no agent workspaces, OAuth tokens, GitHub CLI state or SSH keys and does not receive the Docker socket.

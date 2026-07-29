@@ -2,16 +2,24 @@
 
 > Current maturity: **active development / experimental**. Public access is intended for collaborative testing and review, not as a claim of production or stable-release readiness.
 
-## Locked
+## Locked foundations
 
-- Shared lightweight base plus Codex child
+- One user-installed Remote Dev App or Compose stack
+- One final image digest reused by isolated launcher and agent services
 - Ubuntu 26.04 LTS
-- Root runtime
+- Root runtime inside each agent service
 - GitHub CLI essential
 - Python 3.14, Node 24 LTS, npm 12, uv and mise
-- ttyd + tmux web experience
+- ttyd + tmux browser-terminal experience per agent service
 - AMD64 stable first
-- Image rebuild/update workflow rather than in-container upgrades
+- Image rebuild/update workflow rather than in-container upgrades for built-in components
+
+## Current implementation
+
+- The public edge image and TrueNAS reference deployment remain Codex-specific.
+- The shared base plus Codex child image graph is the migration source, not the target architecture.
+- The neutral launcher, shared final image roles and isolated multi-service stack are tracked by issues #24 and #25.
+- Antigravity and Claude are not currently shipped or advertised as supported.
 
 ## Must validate before the first stable release
 
@@ -26,10 +34,13 @@
 - GH login, credential helper, clone/push/PR
 - TrueNAS x-portals behavior
 - Complete third-party licenses, SBOM and notices
+- Migration from the Codex-only deployment without data loss or credential sharing
+- Launcher and agent-service isolation, including synthetic canary tests
 
 ## Out of scope for v0.1
 
-- Antigravity image
+- Enabling Antigravity or Claude by default before their dedicated legal, installation and isolation validation
+- Separate per-agent images or one manually maintained TrueNAS App per agent
 - ARM64 stable support
 - Docker socket
 - Browser automation
