@@ -45,14 +45,25 @@ docker run -d \
 for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
-    docker exec "$name" bwrap --version
 
-    if docker exec "$name" bwrap --ro-bind / / /bin/true >/dev/null 2>&1; then
-      echo "Nested bubblewrap sandbox probe: OK"
-    else
-      echo "Nested bubblewrap sandbox probe: unavailable under the runner host policy (non-fatal)"
+    if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
+      echo "ERROR: Bubblewrap is present in the default outer-isolation image" >&2
+      exit 1
     fi
 
+    doctor_output="$(docker exec "$name" codex-doctor)"
+    for expected_line in \
+      'Inner sandbox: unavailable / not installed' \
+      'Isolation boundary: outer container' \
+      'Approval policy: explicit approval required when Codex cannot sandbox a command'; do
+      if ! grep -Fxq "$expected_line" <<<"$doctor_output"; then
+        echo "ERROR: diagnostics are missing: $expected_line" >&2
+        printf '%s\n' "$doctor_output" >&2
+        exit 1
+      fi
+    done
+
+    echo "Outer-isolation diagnostics: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
   fi
