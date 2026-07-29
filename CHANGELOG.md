@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated the reviewed stable toolchain to mise `2026.7.14`, Node.js `24.18.0` LTS, npm `12.0.1` and uv `0.11.32`; Python `3.14.6`, GitHub CLI `2.96.0` and ttyd `1.7.7` were already current.
 - Changed stable upstream checks from weekly to daily and made the update branch reusable.
 - Changed relevant merges to `main` to publish a new edge image automatically after required checks pass.
-- Removed Bubblewrap from the default image because it cannot provide its nested namespace sandbox on the supported TrueNAS profile and must not be mistaken for an active security boundary.
+- Removed the system Bubblewrap package and executable from the default image because they cannot provide a nested namespace sandbox on the supported TrueNAS profile and must not be mistaken for an active security boundary. Codex's own packaged fallback is not used by the supported launcher.
 - Changed Codex startup to disable the unsupported inner sandbox explicitly with `--sandbox danger-full-access` and require `untrusted` approvals instead of depending on a failed Bubblewrap fallback.
 - Changed diagnostics to report the fixed launch policy and outer-container isolation boundary explicitly.
 - Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
