@@ -21,7 +21,7 @@ A supported installation consists of:
 - one Remote Dev App or Compose stack;
 - one final Remote Dev image digest;
 - one primary browser entry point;
-- one launcher or gateway service;
+- one launcher service;
 - one isolated service for each enabled coding agent.
 
 Docker may instantiate several containers from the image, but it stores and
@@ -35,7 +35,7 @@ migration.
 
 ```text
 Remote Dev App / Compose stack
-├── launcher or gateway service
+├── launcher service
 ├── Codex service
 ├── Antigravity service (optional, when supported)
 └── Claude service (future)
@@ -53,8 +53,9 @@ The exact variable and role names are settled by issue #25.
 ## One launcher, isolated execution
 
 The launcher provides the normal user entry point and lists only available,
-supported tools. Selecting an agent routes the browser to that agent's service.
-It does not run the agent inside the launcher process.
+supported tools. Selecting an agent navigates or redirects the browser to that
+agent service's own authenticated endpoint. The launcher does not execute the
+agent or relay the agent terminal's HTTP or WebSocket traffic.
 
 The launcher must:
 
@@ -62,16 +63,20 @@ The launcher must:
 - avoid dynamic container creation;
 - contain no agent OAuth tokens, histories, workspaces or SSH keys;
 - enforce the reviewed browser authentication and origin policy;
-- route only to fixed services declared by the stack;
+- link or redirect only to fixed services declared by the stack;
 - remain usable when an optional agent service is unavailable.
 
-Agent services may remain running but idle. This keeps routing independent from
-container-management privileges. The routing implementation may use a reviewed
-reverse proxy, redirects or another fixed mechanism, but the security and state
-boundaries in this document do not change.
+Agent services may remain running but idle. This keeps navigation independent
+from container-management privileges. Optional direct agent ports may be used
+for troubleshooting during development. The documented normal workflow begins
+at the single primary launcher entry point.
 
-Optional direct agent ports may be used for troubleshooting during development.
-The documented normal workflow uses the single primary entry point.
+A future implementation may place a fixed reverse proxy in front of the agent
+services to provide one browser origin. Such a proxy is a trusted transport
+component because it can observe or alter terminal traffic. It must not mount
+agent workspaces or at-rest credentials, but it cannot be described as unable to
+inspect secrets entered into or displayed by a proxied terminal. That design
+requires an explicit threat-model review in issue #25 before adoption.
 
 ## Shared immutable image
 
@@ -82,7 +87,7 @@ The final image contains the project-owned runtime and common development tools:
 - Python, Node.js, npm, uv and mise;
 - ttyd, tmux, tini and common shell, build and search utilities;
 - neutral diagnostics, health checks and version reporting;
-- launcher or gateway runtime;
+- launcher runtime;
 - reviewed managers for optional integrations.
 
 Sharing executables through image layers does not share mutable user state.
@@ -94,8 +99,8 @@ agent version.
 ### Launcher role
 
 The launcher owns only the state required for its UI, authentication and fixed
-routing configuration. It does not mount an agent workspace or private agent
-state.
+navigation configuration. It does not mount an agent workspace or private agent
+state and, in the default design, does not carry agent terminal traffic.
 
 ### Codex role
 
@@ -158,7 +163,7 @@ service.
 | Git global configuration | Executable only | No | Yes |
 | SSH keys and configuration | Client only | No | Yes |
 | MCP or integration credentials | Manager only | No | Yes |
-| Launcher routing configuration | Runtime only | Not mounted into agents | Launcher only |
+| Launcher navigation configuration | Runtime only | Not mounted into agents | Launcher only |
 
 The supported configuration does not mount these paths wholesale:
 
@@ -200,8 +205,10 @@ reading another agent service's credentials and workspace. Container separation
 does not protect two users who share the same terminal credentials for one
 service.
 
-The launcher must not become a container-management control plane and must not
-be able to inspect agent secrets.
+The launcher UI and process must not become a container-management control plane,
+must not mount agent secrets and, in the default redirect-based design, must not
+receive agent terminal traffic. Any proxy that terminates or relays that traffic
+is separately treated as a trusted transport component.
 
 ## Versioning and updates
 
@@ -239,10 +246,12 @@ must prove that:
 
 - one stack deploys on generic Compose and TrueNAS;
 - all services reference the same image ID or digest;
-- the primary URL reaches the launcher and the selected Codex service;
+- the primary URL reaches the launcher and selecting Codex navigates or redirects
+  to the authenticated Codex endpoint;
 - launcher refresh and reconnect preserve the correct agent session;
 - synthetic agent services cannot read one another's canary files;
 - the launcher cannot read any agent canary, credential mount or workspace;
+- the default launcher does not receive agent terminal traffic;
 - invalid roles fail deterministically;
 - current Codex login, start, resume, diagnostics and persistence still work;
 - existing Codex data migrates without deletion or accidental sharing.
