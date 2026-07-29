@@ -46,6 +46,8 @@ The next runtime architecture is documented before implementation:
 
 Docker reuses the same immutable image layers. Users will not install one image or TrueNAS App per tool, and several agents will not share one container's private state.
 
+The default launcher navigates or redirects to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
+
 This target is not yet implemented in the current edge image. See `docs/architecture.md`, issue #24 and implementation issue #25.
 
 ## Build locally
@@ -151,3 +153,7 @@ Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repositor
 ## Upstream references
 
 - OpenAI Codex: https://github.com/openai/codex
+- Codex documentation: https://developers.openai.com/codex/cli
+- GitHub CLI: https://github.com/cli/cli
+- ttyd: https://github.com/tsl0922/ttyd
+- mise: https://github.com/jdx/mise
