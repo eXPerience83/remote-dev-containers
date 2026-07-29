@@ -52,6 +52,7 @@ RUN case "${TARGETARCH}" in \
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
+COPY scripts/run-codex.sh /usr/local/bin/run-codex
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
@@ -64,12 +65,16 @@ RUN chmod 0755 \
       /usr/local/bin/start-codex-web \
       /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/run-direct-session \
+      /usr/local/bin/run-codex \
       /usr/local/bin/codex-menu \
       /usr/local/bin/codex-doctor \
       /usr/local/bin/remote-dev-version \
       /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
     && chmod 0644 /usr/local/lib/remote-dev/format-short-revision.sh \
+    && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
+    && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
+    && run-codex --print-policy | grep -Fx 'Codex approval policy: untrusted' \
     && install -d -m 0755 /usr/share/remote-dev \
     && printf '%s\n' "$PROJECT_VERSION" > /usr/share/remote-dev/image-version \
     && printf '%s\n' "$SOURCE_REVISION" > /usr/share/remote-dev/source-revision \
