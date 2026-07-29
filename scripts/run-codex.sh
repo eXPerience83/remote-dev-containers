@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+readonly codex_binary=/usr/local/bin/codex
 readonly sandbox_mode=danger-full-access
 readonly approval_policy=untrusted
 
@@ -74,7 +75,7 @@ for argument in "$@"; do
   esac
 done
 
-exec /usr/local/bin/codex \
+exec "$codex_binary" \
   --sandbox "$sandbox_mode" \
   --ask-for-approval "$approval_policy" \
   "$@"
