@@ -28,11 +28,24 @@ workdir="$(mktemp -d)"
 tmux_socket="remote-dev-smoke-$$"
 direct_codex_socket="${tmux_socket}-direct-codex"
 direct_shell_socket="${tmux_socket}-direct-shell"
+pinned_codex=/usr/local/bin/codex
+pinned_codex_backup="$workdir/codex.real"
+pinned_codex_replaced=0
+
+restore_pinned_codex() {
+  if (( pinned_codex_replaced == 1 )); then
+    rm -f "$pinned_codex"
+    mv "$pinned_codex_backup" "$pinned_codex"
+    pinned_codex_replaced=0
+  fi
+}
+
 cleanup() {
   local socket=""
   for socket in "$tmux_socket" "$direct_codex_socket" "$direct_shell_socket"; do
     tmux -L "$socket" kill-server >/dev/null 2>&1 || true
   done
+  restore_pinned_codex
   rm -rf "$workdir"
 }
 trap cleanup EXIT
@@ -249,9 +262,9 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   fi
 
   direct_codex_state="$workdir/direct-codex-state"
-  fake_bin="$workdir/fake-bin"
-  mkdir -p "$direct_codex_state" "$fake_bin"
-  cat > "$fake_bin/codex" <<'FAKE_CODEX'
+  fake_codex="$workdir/fake-codex"
+  mkdir -p "$direct_codex_state"
+  cat > "$fake_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 umask 000
@@ -259,7 +272,11 @@ printf 'token\n' > "$CODEX_HOME/auth.json"
 chmod 0660 "$CODEX_HOME/auth.json"
 sleep 1
 FAKE_CODEX
-  chmod 0755 "$fake_bin/codex"
+  chmod 0755 "$fake_codex"
+
+  mv "$pinned_codex" "$pinned_codex_backup"
+  install -m 0755 "$fake_codex" "$pinned_codex"
+  pinned_codex_replaced=1
 
   REMOTE_DEV_TMUX_DETACHED=1 \
   TMUX_SOCKET_NAME="$direct_codex_socket" \
@@ -267,10 +284,10 @@ FAKE_CODEX
   START_MODE=codex \
   WORKSPACE=/workspace \
   CODEX_HOME="$direct_codex_state" \
-  PATH="$fake_bin:$PATH" \
     /usr/local/bin/attach-remote-dev-tmux
 
   wait_for_tmux_session_exit "$direct_codex_socket" direct-codex
+  restore_pinned_codex
   assert_auth_hardened "START_MODE=codex" "$direct_codex_state"
 
   direct_shell_state="$workdir/direct-shell-state"
