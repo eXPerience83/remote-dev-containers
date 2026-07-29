@@ -12,7 +12,7 @@ if [[ "${1:-}" == "--print-policy" ]]; then
   exit 0
 fi
 
-exec /usr/local/bin/codex \
+exec codex \
   --sandbox "$sandbox_mode" \
   --ask-for-approval "$approval_policy" \
   "$@"
