@@ -1,0 +1,344 @@
+name: Publish reviewed PR candidate AMD64
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pr-candidate-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/publish-candidate ') &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      short_sha: ${{ steps.pr.outputs.short_sha }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      artifact_name: ${{ steps.pr.outputs.artifact_name }}
+
+    steps:
+      - name: Resolve and authorize the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMAND_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          requested_sha="${COMMAND_BODY#'/publish-candidate '}"
+          if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: usage: /publish-candidate <full-40-character-head-sha>" >&2
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          head_repo="$(jq -r '.head.repo.full_name' <<<"$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          base_ref="$(jq -r '.base.ref' <<<"$pr_json")"
+          base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+          state="$(jq -r '.state' <<<"$pr_json")"
+
+          if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]; then
+            echo "ERROR: candidate publication is limited to branches in $GITHUB_REPOSITORY" >&2
+            exit 1
+          fi
+          if [[ "$base_ref" != main ]]; then
+            echo "ERROR: candidate pull request must target main; got $base_ref" >&2
+            exit 1
+          fi
+          if [[ "$state" != open ]]; then
+            echo "ERROR: candidate pull request must be open; got $state" >&2
+            exit 1
+          fi
+          for revision in "$head_sha" "$base_sha"; do
+            if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "ERROR: invalid pull-request revision: $revision" >&2
+              exit 1
+            fi
+          done
+          if [[ "$requested_sha" != "$head_sha" ]]; then
+            echo "ERROR: authorized SHA $requested_sha is no longer the PR head $head_sha" >&2
+            exit 1
+          fi
+
+          short_sha="${head_sha:0:12}"
+          artifact_name="candidate-images-pr-${PR_NUMBER}-${short_sha}"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the exact pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          persist-credentials: false
+
+      - name: Verify the checked-out revision
+        env:
+          EXPECTED_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
+            echo "ERROR: checked out $actual_sha instead of $EXPECTED_SHA" >&2
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Validate repository configuration
+        run: |
+          set -euo pipefail
+          test -d scripts
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' -print0)
+          bash scripts/validate-version-pins.sh
+          bash scripts/test-source-revision.sh
+          jq -e . renovate.json >/dev/null
+          for file in compose/*.yml; do
+            docker compose -f "$file" config --quiet
+            echo "OK $file"
+          done
+
+      - name: Build and smoke test the exact candidate
+        env:
+          PLATFORM: linux/amd64
+          PROJECT_VERSION: candidate-pr-${{ steps.pr.outputs.pr_number }}
+          SOURCE_REVISION: ${{ steps.pr.outputs.head_sha }}
+        run: ./scripts/build-local.sh
+
+      - name: Export candidate images
+        run: |
+          set -euo pipefail
+          docker save codex-remote-dev-base:local codex-remote-dev:local \
+            | gzip -1 > candidate-images.tar.gz
+
+      - name: Upload candidate image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.pr.outputs.artifact_name }}
+          path: candidate-images.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      archive_sha256: ${{ steps.archive.outputs.sha256 }}
+
+    steps:
+      - name: Download the candidate artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          delay=2
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "$ARTIFACT_NAME" --dir candidate; then
+              exit 0
+            fi
+            if (( attempt == 8 )); then
+              echo "ERROR: candidate artifact was not downloadable" >&2
+              exit 1
+            fi
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+
+      - name: Hash and load the candidate images
+        id: archive
+        run: |
+          set -euo pipefail
+          archive="candidate/candidate-images.tar.gz"
+          sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ ! "$sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "ERROR: invalid candidate archive SHA-256: $sha256" >&2
+            exit 1
+          fi
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          gzip -dc "$archive" | docker load
+
+      - name: Verify embedded candidate identity
+        env:
+          EXPECTED_SOURCE: ${{ needs.build.outputs.head_sha }}
+          EXPECTED_VERSION: candidate-pr-${{ needs.build.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          output="$(docker run --rm --entrypoint /usr/local/bin/remote-dev-version codex-remote-dev:local)"
+          grep -Fxq "Image version: $EXPECTED_VERSION" <<<"$output"
+          grep -Fxq "Source revision: $EXPECTED_SOURCE" <<<"$output"
+
+      - name: Checkout the trusted base revision for the vulnerability gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.base_sha }}
+          persist-credentials: false
+
+      - name: Scan base image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev-base:local
+          format: json
+          output: trivy-candidate-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Scan final image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev:local
+          format: json
+          output: trivy-candidate-final.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+
+      - name: Enforce no fixable critical vulnerabilities
+        run: |
+          set -euo pipefail
+          bash scripts/enforce-trivy-gate.sh \
+            "candidate base image:trivy-candidate-base.json" \
+            "candidate final image:trivy-candidate-final.json"
+
+      - name: Upload candidate vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: candidate-trivy-pr-${{ needs.build.outputs.pr_number }}-${{ needs.build.outputs.short_sha }}
+          path: |
+            trivy-candidate-base.json
+            trivy-candidate-final.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    needs: [build, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      packages: write
+
+    steps:
+      - name: Download the verified candidate artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          delay=2
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "$ARTIFACT_NAME" --dir candidate; then
+              exit 0
+            fi
+            if (( attempt == 8 )); then
+              echo "ERROR: verified candidate artifact was not downloadable" >&2
+              exit 1
+            fi
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+
+      - name: Match the verified archive and load the images
+        env:
+          EXPECTED_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
+        run: |
+          set -euo pipefail
+          archive="candidate/candidate-images.tar.gz"
+          actual_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "$actual_sha256" != "$EXPECTED_SHA256" ]]; then
+            echo "ERROR: candidate archive changed after verification" >&2
+            echo "Expected: $EXPECTED_SHA256" >&2
+            echo "Actual:   $actual_sha256" >&2
+            exit 1
+          fi
+          gzip -dc "$archive" | docker load
+
+      - name: Log in to GHCR
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Publish the candidate under an isolated tag
+        id: image
+        env:
+          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.build.outputs.head_sha }}
+          SHORT_SHA: ${{ needs.build.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          namespace="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${namespace}/codex-remote-dev"
+          tag="candidate-pr-${PR_NUMBER}-${SHORT_SHA}"
+          ref="${image}:${tag}"
+
+          docker tag codex-remote-dev:local "$ref"
+          docker push "$ref"
+
+          digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ERROR: could not resolve the published candidate digest: $digest" >&2
+            exit 1
+          fi
+
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "source=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the exact candidate on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          SOURCE_REVISION: ${{ steps.image.outputs.source }}
+        run: |
+          set -euo pipefail
+          immutable_ref="${IMAGE_REF%:*}@${IMAGE_DIGEST}"
+          body="$(cat <<EOF
+          Published an isolated AMD64 candidate after smoke tests, independent artifact verification and the fixable-critical vulnerability gate passed.
+
+          - Image: \`${IMAGE_REF}\`
+          - Immutable reference: \`${immutable_ref}\`
+          - Source revision: \`${SOURCE_REVISION}\`
+          - Triggering workflow run: \`${GITHUB_RUN_ID}\`
+
+          This is a temporary test candidate, not \`edge\` or a stable release. Validate the immutable digest on TrueNAS before merging the runtime change.
+          EOF
+          )"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
