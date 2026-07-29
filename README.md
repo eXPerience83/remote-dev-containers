@@ -25,7 +25,9 @@ The current edge image is the Codex reference implementation:
 
 ### Isolation on TrueNAS
 
-The default image does not install Bubblewrap. On the supported TrueNAS profile, the outer Docker container is the security boundary and Codex asks for explicit approval when it cannot sandbox a command. Diagnostics report the inner-sandbox state separately and never infer protection from an installed package.
+The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access` and uses `--ask-for-approval untrusted`. The menu, resume action and direct Codex start mode all use that same launcher.
+
+Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Untrusted shell commands require approval, but approvals are not a sandbox and do not protect files or credentials already mounted into the service.
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
@@ -118,7 +120,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not publish the terminal port directly to the Internet.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
-- Do not claim an inner sandbox is active unless diagnostics positively verify it.
+- The default Codex launcher disables the inner sandbox explicitly; the outer container is the supported isolation boundary.
+- Approval prompts are not a sandbox and do not hide mounted files or credentials from Codex.
 - Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.
@@ -148,7 +151,3 @@ Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repositor
 ## Upstream references
 
 - OpenAI Codex: https://github.com/openai/codex
-- Codex documentation: https://developers.openai.com/codex/cli
-- GitHub CLI: https://github.com/cli/cli
-- ttyd: https://github.com/tsl0922/ttyd
-- mise: https://github.com/jdx/mise
