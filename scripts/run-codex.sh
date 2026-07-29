@@ -19,8 +19,11 @@ reject_policy_override() {
 }
 
 is_policy_config_override() {
-  case "$1" in
-    sandbox_mode=*|approval_policy=*|ask_for_approval=*|sandbox=*|profiles.*.sandbox_mode=*|profiles.*.approval_policy=*)
+  local normalized="${1//[[:space:]]/}"
+  local key="${normalized%%=*}"
+
+  case "$key" in
+    sandbox_mode|approval_policy|ask_for_approval|sandbox|profiles.*.sandbox_mode|profiles.*.approval_policy)
       return 0
       ;;
     *)
@@ -31,6 +34,10 @@ is_policy_config_override() {
 
 expect_config_value=0
 for argument in "$@"; do
+  if [[ "$argument" == "--" && $expect_config_value -eq 0 ]]; then
+    break
+  fi
+
   if (( expect_config_value == 1 )); then
     if is_policy_config_override "$argument"; then
       reject_policy_override "--config $argument"
@@ -40,10 +47,13 @@ for argument in "$@"; do
   fi
 
   case "$argument" in
-    --sandbox|--sandbox=*|-s|-s=*|-s?*|\
-    --ask-for-approval|--ask-for-approval=*|--approval-policy|--approval-policy=*|-a|-a=*|-a?*|\
-    --dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-approvals-and-sandbox=*|\
-    --dangerously-auto-approve-everything|--yolo|--full-auto)
+    --sandbox|--sandbox=*|-s|-s=*|-s?*)
+      reject_policy_override "$argument"
+      ;;
+    --ask-for-approval|--ask-for-approval=*|--approval-policy|--approval-policy=*|-a|-a=*|-a?*)
+      reject_policy_override "$argument"
+      ;;
+    --dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-approvals-and-sandbox=*|--dangerously-auto-approve-everything|--yolo|--full-auto)
       reject_policy_override "$argument"
       ;;
     -c|--config)
