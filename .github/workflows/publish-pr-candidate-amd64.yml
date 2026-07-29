@@ -15,12 +15,13 @@ jobs:
   build:
     if: >-
       github.event.issue.pull_request &&
-      github.event.comment.body == '/publish-candidate' &&
+      startsWith(github.event.comment.body, '/publish-candidate ') &&
       github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
@@ -34,8 +35,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
+          COMMAND_BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
+          requested_sha="${COMMAND_BODY#'/publish-candidate '}"
+          if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: usage: /publish-candidate <full-40-character-head-sha>" >&2
+            exit 1
+          fi
+
           pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
           head_repo="$(jq -r '.head.repo.full_name' <<<"$pr_json")"
           head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
@@ -61,6 +69,10 @@ jobs:
               exit 1
             fi
           done
+          if [[ "$requested_sha" != "$head_sha" ]]; then
+            echo "ERROR: authorized SHA $requested_sha is no longer the PR head $head_sha" >&2
+            exit 1
+          fi
 
           short_sha="${head_sha:0:12}"
           artifact_name="candidate-images-pr-${PR_NUMBER}-${short_sha}"
@@ -92,6 +104,8 @@ jobs:
 
       - name: Validate repository configuration
         run: |
+          set -euo pipefail
+          test -d scripts
           while IFS= read -r -d '' script; do
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
@@ -141,16 +155,18 @@ jobs:
           ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
+          delay=2
+          for attempt in 1 2 3 4 5 6 7 8; do
             if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
               --name "$ARTIFACT_NAME" --dir candidate; then
               exit 0
             fi
-            if (( attempt == 5 )); then
+            if (( attempt == 8 )); then
               echo "ERROR: candidate artifact was not downloadable" >&2
               exit 1
             fi
-            sleep 5
+            sleep "$delay"
+            delay=$((delay * 2))
           done
 
       - name: Hash and load the candidate images
@@ -206,6 +222,7 @@ jobs:
 
       - name: Enforce no fixable critical vulnerabilities
         run: |
+          set -euo pipefail
           bash scripts/enforce-trivy-gate.sh \
             "candidate base image:trivy-candidate-base.json" \
             "candidate final image:trivy-candidate-final.json"
@@ -238,16 +255,18 @@ jobs:
           ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
+          delay=2
+          for attempt in 1 2 3 4 5 6 7 8; do
             if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
               --name "$ARTIFACT_NAME" --dir candidate; then
               exit 0
             fi
-            if (( attempt == 5 )); then
+            if (( attempt == 8 )); then
               echo "ERROR: verified candidate artifact was not downloadable" >&2
               exit 1
             fi
-            sleep 5
+            sleep "$delay"
+            delay=$((delay * 2))
           done
 
       - name: Match the verified archive and load the images
