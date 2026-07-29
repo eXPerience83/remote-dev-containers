@@ -2,27 +2,47 @@
 set -euo pipefail
 
 workdir="$(mktemp -d)"
+launcher_source=/usr/local/bin/run-codex
 pinned_codex=/usr/local/bin/codex
-backed_up=0
+test_codex="$workdir/codex"
+test_launcher="$workdir/run-codex"
 
 cleanup() {
-  if (( backed_up == 1 )); then
-    rm -f "$pinned_codex"
-    mv "$workdir/codex.real" "$pinned_codex"
-  fi
   rm -rf "$workdir"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-mv "$pinned_codex" "$workdir/codex.real"
-backed_up=1
+if [[ ! -x "$launcher_source" ]]; then
+  echo "ERROR: missing executable launcher: $launcher_source" >&2
+  exit 1
+fi
+if [[ ! -x "$pinned_codex" ]]; then
+  echo "ERROR: missing pinned Codex binary: $pinned_codex" >&2
+  exit 1
+fi
+if ! grep -Fxq 'readonly codex_binary=/usr/local/bin/codex' "$launcher_source"; then
+  echo "ERROR: run-codex does not pin /usr/local/bin/codex" >&2
+  exit 1
+fi
 
-cat > "$pinned_codex" <<'FAKE_PINNED_CODEX'
+cat > "$test_codex" <<'FAKE_PINNED_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" > "$REMOTE_DEV_CODEX_ARGS_FILE"
 FAKE_PINNED_CODEX
-chmod 0755 "$pinned_codex"
+chmod 0755 "$test_codex"
+
+sed \
+  "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$test_codex|" \
+  "$launcher_source" > "$test_launcher"
+chmod 0755 "$test_launcher"
+
+if ! grep -Fq "readonly codex_binary=$test_codex" "$test_launcher"; then
+  echo "ERROR: failed to create an isolated run-codex test launcher" >&2
+  exit 1
+fi
 
 mkdir -p "$workdir/path-bin"
 cat > "$workdir/path-bin/codex" <<'FAKE_PATH_CODEX'
@@ -35,7 +55,7 @@ chmod 0755 "$workdir/path-bin/codex"
 args_file="$workdir/args"
 PATH="$workdir/path-bin:$PATH" \
 REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-  run-codex resume --last
+  "$test_launcher" resume --last
 
 mapfile -t actual < "$args_file"
 expected=(
@@ -73,7 +93,7 @@ assert_rejected() {
   set +e
   PATH="$workdir/path-bin:$PATH" \
   REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-    run-codex "$@" >/dev/null 2>"$error_file"
+    "$test_launcher" "$@" >/dev/null 2>"$error_file"
   status=$?
   set -e
 
@@ -111,7 +131,7 @@ echo 'Codex launcher policy overrides: rejected'
 rm -f "$args_file"
 PATH="$workdir/path-bin:$PATH" \
 REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-  run-codex -- --sandbox-is-prompt-text
+  "$test_launcher" -- --sandbox-is-prompt-text
 
 mapfile -t separator_actual < "$args_file"
 separator_expected=(
