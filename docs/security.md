@@ -8,9 +8,11 @@ The container intentionally runs as root. Root is constrained to the container a
 
 ## Supported isolation boundary
 
-The supported TrueNAS security boundary is the outer Docker container. The default image does not install Bubblewrap and does not enable deprecated Landlock as a fallback. Diagnostics report an inner sandbox only after a positive runtime test; otherwise they state that it is unavailable.
+The supported TrueNAS security boundary is the outer Docker container. The default image does not install Bubblewrap and does not enable deprecated Landlock as a fallback. The supported launcher starts Codex with `--sandbox danger-full-access` so it does not attempt an unsupported nested sandbox.
 
-When Codex cannot sandbox a command, its normal approval flow remains the control before execution. The project does not add privileged mode, `SYS_ADMIN`, unconfined AppArmor/seccomp profiles, host security changes or a Docker socket to make a nested sandbox start.
+`danger-full-access` describes the Codex inner sandbox only. It does not add Docker privileges, `SYS_ADMIN`, host mounts, unconfined AppArmor/seccomp profiles or a Docker socket. The container's normal isolation and narrow mounts remain the security boundary.
+
+The launcher also sets `--ask-for-approval untrusted`. Commands that Codex does not classify as trusted require approval, as validated on TrueNAS with read-only and write-command probes. Approval prompts are not a sandbox and must not be described as one: after approval, Codex can access every path and credential mounted into that service, and some built-in editing operations may not map to a shell-command prompt.
 
 Separate agent services must receive separate narrow mounts. The outer-container boundary protects one agent service from state that is not mounted into it; it does not protect files or credentials from a person who already controls that service's terminal.
 
@@ -27,4 +29,4 @@ Separate agent services must receive separate narrow mounts. The outer-container
 
 ## Codex permissions
 
-The image does not force an unrestricted approval policy. Users choose Codex permission profiles in the official TUI. Community defaults must not silently enable a bypass or YOLO mode.
+The default launcher fixes the supported TrueNAS policy to outer-container isolation plus `untrusted` approvals. The menu, resume action and `START_MODE=codex` all use the same launcher so they cannot silently diverge. Users can still start Codex manually from the shell with different flags, but doing so is outside the supported default and may weaken the approval behavior.
