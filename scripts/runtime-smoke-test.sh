@@ -62,6 +62,7 @@ for _ in $(seq 1 30); do
       printf 'Raw Codex: %s\nLauncher: %s\n' "$codex_version" "$launcher_version" >&2
       exit 1
     fi
+    docker exec "$name" run-codex resume --help >/dev/null
 
     policy_output="$(docker exec "$name" run-codex --print-policy)"
     for expected_line in \
@@ -87,7 +88,7 @@ for _ in $(seq 1 30); do
       fi
     done
 
-    echo "Pinned Codex launcher compatibility: OK"
+    echo "Pinned Codex launcher and resume compatibility: OK"
     echo "Explicit outer-isolation policy: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
