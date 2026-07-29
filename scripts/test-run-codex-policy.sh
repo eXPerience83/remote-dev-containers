@@ -90,12 +90,13 @@ assert_rejected() {
   local status=0
 
   rm -f "$args_file" "$error_file"
-  set +e
-  PATH="$workdir/path-bin:$PATH" \
-  REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-    "$test_launcher" "$@" >/dev/null 2>"$error_file"
-  status=$?
-  set -e
+  if PATH="$workdir/path-bin:$PATH" \
+    REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+      "$test_launcher" "$@" >/dev/null 2>"$error_file"; then
+    status=0
+  else
+    status=$?
+  fi
 
   if (( status != 2 )); then
     echo "ERROR: $label returned status $status, expected 2" >&2
