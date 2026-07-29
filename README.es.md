@@ -20,6 +20,12 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 - Volúmenes separados para workspace, Codex, GitHub, Git y SSH.
 - AMD64 como única arquitectura inicial.
 
+## Aislamiento en TrueNAS
+
+La imagen predeterminada no instala Bubblewrap. En el perfil compatible con TrueNAS, el límite de seguridad soportado es el contenedor Docker exterior y Codex solicita aprobación explícita cuando no puede aislar un comando. Los diagnósticos muestran por separado el estado del sandbox interno y no deducen protección por la mera presencia de un paquete.
+
+No debilites el host ni el contenedor con modo privilegiado, `SYS_ADMIN`, perfiles de seguridad sin restricciones o el socket de Docker para intentar iniciar un sandbox anidado. Monta únicamente las rutas que necesite el servicio.
+
 ## Prueba pública de la imagen edge
 
 La imagen `edge` es una compilación experimental publicada automáticamente después de fusionar en `main` cambios relevantes para la imagen o el runtime. Puede descargarse sin credenciales:
