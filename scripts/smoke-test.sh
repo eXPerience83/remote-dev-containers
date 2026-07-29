@@ -106,6 +106,13 @@ source_revision="$(<"$metadata_dir/source-revision")"
 expected_image_version="${1:-$image_version}"
 expected_source_revision="${2:-$source_revision}"
 codex_version="$(codex --version)"
+launcher_version="$(run-codex --version)"
+
+if [[ "$launcher_version" != "$codex_version" ]]; then
+  echo "ERROR: run-codex did not execute the pinned Codex binary with its fixed policy" >&2
+  printf 'Raw Codex: %s\nLauncher: %s\n' "$codex_version" "$launcher_version" >&2
+  exit 1
+fi
 
 if [[ "$image_version" != "$expected_image_version" ]]; then
   echo "ERROR: image version metadata mismatch: expected $expected_image_version, got $image_version" >&2
@@ -155,13 +162,14 @@ fi
 printf '%s\n' "$default_output"
 printf '%s\n' "$menu_output"
 echo "Image identity is bound to embedded metadata: OK"
+printf '%s\n' "$codex_version"
+echo "Pinned Codex launcher compatibility: OK"
 
-codex --version
 if command -v bwrap >/dev/null 2>&1; then
-  echo "ERROR: Bubblewrap must not be installed in the default outer-isolation image" >&2
+  echo "ERROR: the system Bubblewrap executable must not be installed in the default outer-isolation image" >&2
   exit 1
 fi
-echo "Default image omits Bubblewrap: OK"
+echo "System Bubblewrap executable is absent: OK"
 gh --version | head -n 1
 git --version
 python --version
