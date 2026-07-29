@@ -22,7 +22,9 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 
 ## Aislamiento en TrueNAS
 
-La imagen predeterminada no instala Bubblewrap. En el perfil compatible con TrueNAS, el límite de seguridad soportado es el contenedor Docker exterior y Codex solicita aprobación explícita cuando no puede aislar un comando. Los diagnósticos muestran por separado el estado del sandbox interno y no deducen protección por la mera presencia de un paquete.
+La imagen predeterminada no instala el paquete Bubblewrap del sistema. El lanzador soportado desactiva explícitamente el sandbox interno no compatible de Codex mediante `--sandbox danger-full-access` y usa `--ask-for-approval untrusted`. El menú, la opción de reanudar y el arranque directo de Codex utilizan el mismo lanzador.
+
+En este contexto, `danger-full-access` solo describe el sandbox interno de Codex: no concede privilegios Docker ni acceso adicional al host. El límite de seguridad soportado es el contenedor exterior y sus montajes mínimos. Los comandos de shell no considerados fiables requieren aprobación, pero las aprobaciones no son un sandbox ni ocultan a Codex los archivos y credenciales ya montados en el servicio.
 
 No debilites el host ni el contenedor con modo privilegiado, `SYS_ADMIN`, perfiles de seguridad sin restricciones o el socket de Docker para intentar iniciar un sandbox anidado. Monta únicamente las rutas que necesite el servicio.
 
