@@ -8,7 +8,7 @@ The container intentionally runs as root. Root is constrained to the container a
 
 ## Supported isolation boundary
 
-The supported TrueNAS security boundary is the outer Docker container. The default image does not install the system Bubblewrap package or executable and does not enable deprecated Landlock as a fallback. Codex 0.146.0 may carry its own packaged Bubblewrap fallback, but the supported launcher starts Codex with `--sandbox danger-full-access` so that fallback is not invoked and no unsupported nested sandbox is attempted.
+The supported TrueNAS security boundary is the outer Docker container. The default image does not install the system Bubblewrap package or executable and does not enable deprecated Landlock as a fallback. The pinned Codex release may carry its own packaged Bubblewrap fallback, but the supported launcher starts Codex with `--sandbox danger-full-access` so that fallback is not invoked and no unsupported nested sandbox is attempted.
 
 `danger-full-access` describes the Codex inner sandbox only. It does not add Docker privileges, `SYS_ADMIN`, host mounts, unconfined AppArmor/seccomp profiles or a Docker socket. The container's normal isolation and narrow mounts remain the security boundary.
 
