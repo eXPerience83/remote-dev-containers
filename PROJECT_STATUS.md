@@ -20,7 +20,7 @@
 - The shared base plus Codex child image graph is the migration source, not the target architecture.
 - The neutral launcher, shared final image roles and isolated multi-service stack are tracked by issues #25 and #31.
 - Antigravity and Claude are not currently shipped or advertised as supported.
-- The default image omits Bubblewrap. The supported TrueNAS isolation boundary is the outer container plus Codex approvals; no inner sandbox is claimed without a positive runtime test.
+- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly and `untrusted` approvals, while the outer container remains the supported TrueNAS isolation boundary.
 
 ## Must validate before the first stable release
 
