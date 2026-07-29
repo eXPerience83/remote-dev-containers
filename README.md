@@ -29,7 +29,7 @@ The next runtime architecture is documented before implementation:
 
 - one user-installed Remote Dev App or Compose stack;
 - one final Remote Dev image digest reused by every service;
-- one primary launcher or gateway URL;
+- one primary launcher URL;
 - one isolated service per enabled coding agent;
 - Codex as the built-in reference service;
 - Antigravity as the first planned optional vendor-installed service;
@@ -37,6 +37,8 @@ The next runtime architecture is documented before implementation:
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
 Docker reuses the same immutable image layers. Users will not install one image or TrueNAS App per tool, and several agents will not share one container's private state.
+
+The default launcher navigates or redirects to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
 This target is not yet implemented in the current edge image. See `docs/architecture.md`, issue #24 and implementation issue #25.
 
