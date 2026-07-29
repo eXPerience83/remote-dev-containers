@@ -51,11 +51,23 @@ for _ in $(seq 1 30); do
       exit 1
     fi
 
+    policy_output="$(docker exec "$name" run-codex --print-policy)"
+    for expected_line in \
+      'Inner sandbox: disabled explicitly' \
+      'Isolation boundary: outer container' \
+      'Codex approval policy: untrusted'; do
+      if ! grep -Fxq "$expected_line" <<<"$policy_output"; then
+        echo "ERROR: Codex launch policy is missing: $expected_line" >&2
+        printf '%s\n' "$policy_output" >&2
+        exit 1
+      fi
+    done
+
     doctor_output="$(docker exec "$name" codex-doctor)"
     for expected_line in \
-      'Inner sandbox: unavailable / not installed' \
+      'Inner sandbox: disabled explicitly' \
       'Isolation boundary: outer container' \
-      'Approval policy: explicit approval required when Codex cannot sandbox a command'; do
+      'Codex approval policy: untrusted'; do
       if ! grep -Fxq "$expected_line" <<<"$doctor_output"; then
         echo "ERROR: diagnostics are missing: $expected_line" >&2
         printf '%s\n' "$doctor_output" >&2
@@ -63,7 +75,7 @@ for _ in $(seq 1 30); do
       fi
     done
 
-    echo "Outer-isolation diagnostics: OK"
+    echo "Explicit outer-isolation policy: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
   fi
