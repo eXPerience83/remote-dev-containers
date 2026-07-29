@@ -59,10 +59,10 @@ COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
-COPY scripts/test-run-codex-policy.sh /tmp/test-run-codex-policy
 COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 
-RUN chmod 0755 \
+RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
+    chmod 0755 \
       /usr/local/bin/start-codex-web \
       /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/run-direct-session \
@@ -72,10 +72,8 @@ RUN chmod 0755 \
       /usr/local/bin/remote-dev-version \
       /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
-      /tmp/test-run-codex-policy \
     && chmod 0644 /usr/local/lib/remote-dev/format-short-revision.sh \
-    && /tmp/test-run-codex-policy \
-    && rm -f /tmp/test-run-codex-policy \
+    && bash /tmp/test-run-codex-policy \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: untrusted' \
