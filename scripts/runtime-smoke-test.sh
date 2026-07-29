@@ -11,12 +11,16 @@ cleanup() {
   rm -f "$log_file"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Secure by default: startup without a password must fail unless explicitly overridden.
-set +e
-timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1
-guard_status=$?
-set -e
+guard_status=0
+if timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1; then
+  guard_status=0
+else
+  guard_status=$?
+fi
 
 if (( guard_status == 0 )); then
   echo "ERROR: container started without web authentication" >&2
@@ -47,7 +51,15 @@ for _ in $(seq 1 30); do
     docker exec "$name" pgrep -x ttyd >/dev/null
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
-      echo "ERROR: Bubblewrap is present in the default outer-isolation image" >&2
+      echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2
+      exit 1
+    fi
+
+    codex_version="$(docker exec "$name" codex --version)"
+    launcher_version="$(docker exec "$name" run-codex --version)"
+    if [[ "$launcher_version" != "$codex_version" ]]; then
+      echo "ERROR: run-codex did not execute the pinned Codex binary with its fixed policy" >&2
+      printf 'Raw Codex: %s\nLauncher: %s\n' "$codex_version" "$launcher_version" >&2
       exit 1
     fi
 
@@ -75,6 +87,7 @@ for _ in $(seq 1 30); do
       fi
     done
 
+    echo "Pinned Codex launcher compatibility: OK"
     echo "Explicit outer-isolation policy: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
