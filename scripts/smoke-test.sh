@@ -28,27 +28,17 @@ workdir="$(mktemp -d)"
 tmux_socket="remote-dev-smoke-$$"
 direct_codex_socket="${tmux_socket}-direct-codex"
 direct_shell_socket="${tmux_socket}-direct-shell"
-pinned_codex=/usr/local/bin/codex
-pinned_codex_backup="$workdir/codex.real"
-pinned_codex_replaced=0
-
-restore_pinned_codex() {
-  if (( pinned_codex_replaced == 1 )); then
-    rm -f "$pinned_codex"
-    mv "$pinned_codex_backup" "$pinned_codex"
-    pinned_codex_replaced=0
-  fi
-}
 
 cleanup() {
   local socket=""
   for socket in "$tmux_socket" "$direct_codex_socket" "$direct_shell_socket"; do
     tmux -L "$socket" kill-server >/dev/null 2>&1 || true
   done
-  restore_pinned_codex
   rm -rf "$workdir"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 assert_short_revision() {
   local input="$1"
@@ -263,6 +253,8 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
 
   direct_codex_state="$workdir/direct-codex-state"
   fake_codex="$workdir/fake-codex"
+  test_run_codex="$workdir/run-codex"
+  test_attach_tmux="$workdir/attach-remote-dev-tmux"
   mkdir -p "$direct_codex_state"
   cat > "$fake_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
@@ -274,9 +266,31 @@ sleep 1
 FAKE_CODEX
   chmod 0755 "$fake_codex"
 
-  mv "$pinned_codex" "$pinned_codex_backup"
-  install -m 0755 "$fake_codex" "$pinned_codex"
-  pinned_codex_replaced=1
+  if ! grep -Fxq 'readonly codex_binary=/usr/local/bin/codex' /usr/local/bin/run-codex; then
+    echo "ERROR: installed run-codex does not pin /usr/local/bin/codex" >&2
+    exit 1
+  fi
+  if ! grep -Fq '/usr/local/bin/run-direct-session /usr/local/bin/run-codex' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: START_MODE=codex is not routed through run-direct-session and run-codex" >&2
+    exit 1
+  fi
+
+  sed \
+    "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$fake_codex|" \
+    /usr/local/bin/run-codex > "$test_run_codex"
+  sed \
+    "s|/usr/local/bin/run-codex|$test_run_codex|" \
+    /usr/local/bin/attach-remote-dev-tmux > "$test_attach_tmux"
+  chmod 0755 "$test_run_codex" "$test_attach_tmux"
+
+  if ! grep -Fq "readonly codex_binary=$fake_codex" "$test_run_codex"; then
+    echo "ERROR: failed to create an isolated run-codex smoke launcher" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$test_run_codex" "$test_attach_tmux"; then
+    echo "ERROR: failed to route the isolated tmux smoke launcher" >&2
+    exit 1
+  fi
 
   REMOTE_DEV_TMUX_DETACHED=1 \
   TMUX_SOCKET_NAME="$direct_codex_socket" \
@@ -284,10 +298,9 @@ FAKE_CODEX
   START_MODE=codex \
   WORKSPACE=/workspace \
   CODEX_HOME="$direct_codex_state" \
-    /usr/local/bin/attach-remote-dev-tmux
+    "$test_attach_tmux"
 
   wait_for_tmux_session_exit "$direct_codex_socket" direct-codex
-  restore_pinned_codex
   assert_auth_hardened "START_MODE=codex" "$direct_codex_state"
 
   direct_shell_state="$workdir/direct-shell-state"
