@@ -16,7 +16,7 @@ case "${START_MODE:-menu}" in
     ;;
   codex)
     printf -v quoted_workspace '%q' "$workspace"
-    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session codex"
+    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session /usr/local/bin/run-codex"
     ;;
   shell)
     printf -v quoted_workspace '%q' "$workspace"
