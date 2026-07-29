@@ -22,10 +22,10 @@ jobs:
     permissions:
       contents: read
     outputs:
-      pr-number: ${{ steps.pr.outputs.number }}
-      head-sha: ${{ steps.pr.outputs.head-sha }}
-      short-sha: ${{ steps.pr.outputs.short-sha }}
-      artifact-name: ${{ steps.pr.outputs.artifact-name }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      short_sha: ${{ steps.pr.outputs.short_sha }}
+      artifact_name: ${{ steps.pr.outputs.artifact_name }}
 
     steps:
       - name: Resolve and authorize the pull request
@@ -60,20 +60,20 @@ jobs:
 
           short_sha="${head_sha:0:12}"
           artifact_name="candidate-image-pr-${PR_NUMBER}-${short_sha}"
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "head-sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "short-sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "artifact-name=$artifact_name" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the exact pull-request head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.pr.outputs.head-sha }}
+          ref: ${{ steps.pr.outputs.head_sha }}
           persist-credentials: false
 
       - name: Verify the checked-out revision
         env:
-          EXPECTED_SHA: ${{ steps.pr.outputs.head-sha }}
+          EXPECTED_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           set -euo pipefail
           actual_sha="$(git rev-parse HEAD)"
@@ -101,8 +101,8 @@ jobs:
       - name: Build and smoke test the exact candidate
         env:
           PLATFORM: linux/amd64
-          PROJECT_VERSION: candidate-pr-${{ steps.pr.outputs.number }}
-          SOURCE_REVISION: ${{ steps.pr.outputs.head-sha }}
+          PROJECT_VERSION: candidate-pr-${{ steps.pr.outputs.pr_number }}
+          SOURCE_REVISION: ${{ steps.pr.outputs.head_sha }}
         run: ./scripts/build-local.sh
 
       - name: Scan base image for critical vulnerabilities
@@ -142,7 +142,7 @@ jobs:
       - name: Upload candidate image artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ steps.pr.outputs.artifact-name }}
+          name: ${{ steps.pr.outputs.artifact_name }}
           path: |
             candidate-image.tar.gz
             candidate-image.tar.gz.sha256
@@ -153,7 +153,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: candidate-trivy-pr-${{ steps.pr.outputs.number }}-${{ steps.pr.outputs.short-sha }}
+          name: candidate-trivy-pr-${{ steps.pr.outputs.pr_number }}-${{ steps.pr.outputs.short_sha }}
           path: |
             trivy-candidate-base.json
             trivy-candidate-final.json
@@ -174,7 +174,7 @@ jobs:
       - name: Download the scanned candidate artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_NAME: ${{ needs.build.outputs.artifact-name }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
@@ -209,9 +209,9 @@ jobs:
       - name: Publish the candidate under an isolated tag
         id: image
         env:
-          PR_NUMBER: ${{ needs.build.outputs.pr-number }}
-          HEAD_SHA: ${{ needs.build.outputs.head-sha }}
-          SHORT_SHA: ${{ needs.build.outputs.short-sha }}
+          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.build.outputs.head_sha }}
+          SHORT_SHA: ${{ needs.build.outputs.short_sha }}
         run: |
           set -euo pipefail
           namespace="${GITHUB_REPOSITORY_OWNER,,}"
@@ -235,17 +235,18 @@ jobs:
       - name: Comment the exact candidate on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.build.outputs.pr-number }}
+          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
           IMAGE_REF: ${{ steps.image.outputs.ref }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           SOURCE_REVISION: ${{ steps.image.outputs.source }}
         run: |
           set -euo pipefail
+          immutable_ref="${IMAGE_REF%:*}@${IMAGE_DIGEST}"
           body="$(cat <<EOF
           Published an isolated AMD64 candidate after build, smoke tests and the fixable-critical vulnerability gate passed.
 
           - Image: \`${IMAGE_REF}\`
-          - Immutable reference: \`${IMAGE_REF%@*}@${IMAGE_DIGEST}\`
+          - Immutable reference: \`${immutable_ref}\`
           - Source revision: \`${SOURCE_REVISION}\`
           - Triggering workflow run: \`${GITHUB_RUN_ID}\`
 
