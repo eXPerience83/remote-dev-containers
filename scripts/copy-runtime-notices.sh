@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s lastpipe
 
 notice_root="${REMOTE_DEV_NOTICE_ROOT:-/usr/share/doc/remote-dev}"
 third_party_root="$notice_root/third_party"
@@ -34,15 +35,14 @@ copy_python_notices() {
   fi
 
   install -d -m 0755 "$destination_root"
-  while IFS= read -r -d '' source; do
-    relative="${source#"$python_prefix"/}"
-    install -D -m 0644 "$source" "$destination_root/$relative"
-    copied=$((copied + 1))
-  done < <(
-    find "$python_prefix" -maxdepth 7 -type f \
-      \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -name 'PYTHON.json' \) \
-      -print0
-  )
+  find "$python_prefix" -maxdepth 7 -type f \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -name 'PYTHON.json' \) \
+    -print0 |
+    while IFS= read -r -d '' source; do
+      relative="${source#"$python_prefix"/}"
+      install -D -m 0644 "$source" "$destination_root/$relative"
+      copied=$((copied + 1))
+    done
 
   if (( copied == 0 )); then
     echo "ERROR: no Python runtime license or notice files found below $python_prefix" >&2
@@ -71,15 +71,14 @@ copy_npm_notices() {
   require_file "$npm_package/LICENSE"
   install -d -m 0755 "$destination_root"
 
-  while IFS= read -r -d '' source; do
-    relative="${source#"$npm_package"/}"
-    install -D -m 0644 "$source" "$destination_root/$relative"
-    copied=$((copied + 1))
-  done < <(
-    find "$npm_package" -type f \
-      \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
-      -print0
-  )
+  find "$npm_package" -type f \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+    -print0 |
+    while IFS= read -r -d '' source; do
+      relative="${source#"$npm_package"/}"
+      install -D -m 0644 "$source" "$destination_root/$relative"
+      copied=$((copied + 1))
+    done
 
   if (( copied == 0 )); then
     echo "ERROR: no npm package or dependency license files found below $npm_package" >&2
@@ -146,10 +145,10 @@ require_file "$third_party_root/components/codex/NOTICE"
 require_file "$third_party_root/components/github-cli/LICENSE"
 require_file "$third_party_root/components/ttyd/LICENSE"
 require_file "$third_party_root/components/mise/LICENSE"
+require_file "$third_party_root/components/uv/LICENSE-APACHE-2.0"
 require_file "$third_party_root/components/uv/LICENSE-MIT"
 
 copy_file "$project_license" "$third_party_root/components/codex/LICENSE-APACHE-2.0"
-copy_file "$project_license" "$third_party_root/components/uv/LICENSE-APACHE-2.0"
 copy_python_notices
 copy_node_notices
 copy_npm_notices
