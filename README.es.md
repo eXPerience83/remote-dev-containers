@@ -28,6 +28,20 @@ En este contexto, `danger-full-access` solo describe el sandbox interno de Codex
 
 No debilites el host ni el contenedor con modo privilegiado, `SYS_ADMIN`, perfiles de seguridad sin restricciones o el socket de Docker para intentar iniciar un sandbox anidado. Monta únicamente las rutas que necesite el servicio.
 
+## Licencias y software opcional de proveedores
+
+El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv y sus dependencias conservan sus respectivas licencias y avisos originales. La imagen mantiene los archivos de copyright de los paquetes y copia las licencias incluidas en los artefactos exactos instalados.
+
+Consulta el inventario revisado en `third_party/README.md` o, desde una imagen construida:
+
+```bash
+remote-dev-notices
+remote-dev-notices --list
+remote-dev-notices --check
+```
+
+Antigravity, Claude Code y productos similares no quedan cubiertos por la licencia Apache-2.0 de este repositorio. La imagen actual no los descarga silenciosamente ni los redistribuye. Cualquier instalador opcional futuro deberá ser iniciado expresamente por el usuario, descargar desde el proveedor y respetar la política de términos, privacidad, aislamiento de credenciales y no afiliación de `third_party/optional-agents.md`.
+
 ## Prueba pública de la imagen edge
 
 La imagen `edge` es una compilación experimental publicada automáticamente después de fusionar en `main` cambios relevantes para la imagen o el runtime. Puede descargarse sin credenciales:
@@ -72,4 +86,4 @@ Codex CLI: codex-cli <versión>
 
 El desarrollo se realiza mediante pull requests. CodeRabbit se configura en `.coderabbit.yaml` para revisar Dockerfiles, scripts Bash, GitHub Actions, archivos Compose y cambios sensibles de seguridad. Durante esta fase sus comentarios son orientativos: CI y las pruebas manuales siguen siendo obligatorios.
 
-Consulta `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md` y `docs/roadmap.md` para el estado y el orden de trabajo completos.
+Consulta `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `third_party/README.md`, `third_party/optional-agents.md` y `docs/roadmap.md` para el estado y el orden de trabajo completos.
