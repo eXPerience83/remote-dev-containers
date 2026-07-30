@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
 - A single `run-codex` launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
 - Reviewed third-party inventory, preserved upstream notices, runtime license discovery and the `remote-dev-notices` inspection command.
+- Exact build-time component, digest and source-revision manifests exposed through `remote-dev-notices --versions`.
 - Conservative distribution, terms, privacy, credential-isolation and non-affiliation policy for optional vendor agents.
 
 ### Changed
@@ -53,7 +54,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Extended upstream automation to regenerate and review the mise lock whenever runtime versions or resolved artifacts change.
 - Updated the pinned stable releases to Codex CLI `0.146.0`, mise `2026.7.17`, Node.js `24.18.1`, npm `12.0.2` and uv `0.12.0`, and refreshed the locked Python 3.14.6 artifacts.
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
-- Changed OCI license metadata to point to the project Apache-2.0 license together with the image's explicit third-party notice set rather than implying that all bundled software shares one license.
+- Removed the aggregate OCI `licenses` annotation rather than misclassifying all bundled software under the project license; project Apache-2.0 metadata and the complete third-party notice path are now exposed through separate scoped annotations.
+- Pinned the final image's documentation link to its embedded source revision so stable images cannot silently point to a newer inventory.
 
 ### Security
 
