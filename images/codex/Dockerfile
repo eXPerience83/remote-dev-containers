@@ -13,9 +13,11 @@ LABEL org.opencontainers.image.title="Codex Remote Dev" \
       org.opencontainers.image.description="Community browser-hosted Codex CLI development container" \
       org.opencontainers.image.version="${PROJECT_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.licenses="Apache-2.0 AND LicenseRef-ThirdParty-Notices" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/main/third_party/README.md" \
-      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI"
+      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI" \
+      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
+      io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
 ENV HOME=/root \
     WORKSPACE=/workspace \
