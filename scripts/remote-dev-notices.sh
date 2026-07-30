@@ -34,16 +34,6 @@ require_nonempty_directory() {
   fi
 }
 
-require_python_license() {
-  local path="$1"
-  if [[ ! -d "$path" ]] || ! find "$path" -type f -size +0c \
-    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
-    -print -quit | grep -q .; then
-    echo "ERROR: Python notice directory has no non-empty license, copying or notice file: $path" >&2
-    return 1
-  fi
-}
-
 require_manifest_value() {
   local manifest="$1"
   local key="$2"
@@ -71,6 +61,7 @@ check_notices() {
     "$third_party_root/components/mise/LICENSE" \
     "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
     "$third_party_root/components/uv/LICENSE-MIT" \
+    "$third_party_root/runtime/python/licenses/LICENSE.cpython.txt" \
     "$third_party_root/runtime/node/LICENSE" \
     "$third_party_root/runtime/npm/LICENSE" \
     "$third_party_root/runtime/npm/DEPENDENCIES.txt"; do
@@ -99,12 +90,13 @@ check_notices() {
     fi
   fi
 
-  if ! require_python_license "$third_party_root/runtime/python"; then
-    failed=1
-  fi
-  if ! require_nonempty_directory "$third_party_root/runtime/npm"; then
-    failed=1
-  fi
+  for path in \
+    "$third_party_root/runtime/python" \
+    "$third_party_root/runtime/npm"; do
+    if ! require_nonempty_directory "$path"; then
+      failed=1
+    fi
+  done
 
   if (( failed != 0 )); then
     return 1
