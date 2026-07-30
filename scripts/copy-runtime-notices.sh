@@ -149,6 +149,7 @@ NODE
 
 require_file "$project_license"
 require_file "$third_party_root/components/codex/NOTICE"
+require_file "$third_party_root/components/codex/SOURCE.env"
 require_file "$third_party_root/components/github-cli/LICENSE"
 require_file "$third_party_root/components/ttyd/LICENSE"
 require_file "$third_party_root/components/mise/LICENSE"
