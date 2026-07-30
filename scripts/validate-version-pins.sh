@@ -46,6 +46,8 @@ require_sha256() {
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
 edge_workflow="$ROOT/.github/workflows/publish-edge-amd64.yml"
+upstream_workflow="$ROOT/.github/workflows/check-upstream.yml"
+refresh_sources="$ROOT/scripts/refresh-third-party-source-records.sh"
 
 require_frontend_pin() {
   local file="$1"
@@ -97,6 +99,14 @@ require_edge_path_trigger() {
   fi
 }
 
+require_upstream_tracked_file() {
+  local path="$1"
+  if ! grep -Fxq "            $path" "$upstream_workflow"; then
+    echo "ERROR: upstream maintenance must commit refreshed file: $path" >&2
+    exit 1
+  fi
+}
+
 base_frontend="$(require_frontend_pin "$base_dockerfile")"
 codex_frontend="$(require_frontend_pin "$codex_dockerfile")"
 if [[ "$base_frontend" != "$codex_frontend" ]]; then
@@ -110,6 +120,32 @@ fi
 require_action_shas
 require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
+
+if [[ ! -s "$refresh_sources" ]]; then
+  echo "ERROR: upstream notice refresh script is missing or empty: $refresh_sources" >&2
+  exit 1
+fi
+if ! grep -Fq 'bash scripts/refresh-third-party-source-records.sh' "$upstream_workflow"; then
+  echo "ERROR: upstream maintenance must refresh release-bound notice sources" >&2
+  exit 1
+fi
+if ! grep -Fq 'bash scripts/validate-third-party-inventory.sh' "$upstream_workflow"; then
+  echo "ERROR: upstream maintenance must validate the refreshed third-party inventory" >&2
+  exit 1
+fi
+for path in \
+  third_party/components/codex/NOTICE \
+  third_party/components/codex/SOURCE.env \
+  third_party/components/github-cli/LICENSE \
+  third_party/components/github-cli/SOURCE.env \
+  third_party/components/ttyd/LICENSE \
+  third_party/components/ttyd/SOURCE.env \
+  third_party/components/mise/LICENSE \
+  third_party/components/mise/SOURCE.env \
+  third_party/components/python/LICENSE \
+  third_party/components/python/SOURCE.env; do
+  require_upstream_tracked_file "$path"
+done
 
 if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
@@ -222,4 +258,4 @@ printf 'Python release pin: %s\n' "$PYTHON_VERSION"
 printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
 printf 'uv release pin: %s\n' "$UV_VERSION"
-echo "Release asset SHA-256 pins and mise runtime lock data are present and synchronized."
+echo "Release asset SHA-256 pins, reviewed notice sources and mise runtime lock data are present and synchronized."
