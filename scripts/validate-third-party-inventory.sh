@@ -6,6 +6,8 @@ inventory="$ROOT/third_party/README.md"
 optional_policy="$ROOT/third_party/optional-agents.md"
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
+codex_notice="$ROOT/third_party/components/codex/NOTICE"
+codex_source="$ROOT/third_party/components/codex/SOURCE.env"
 python_license="$ROOT/third_party/components/python/LICENSE"
 python_source="$ROOT/third_party/components/python/SOURCE.env"
 
@@ -96,6 +98,7 @@ fi
 
 for file in \
   third_party/components/codex/NOTICE \
+  third_party/components/codex/SOURCE.env \
   third_party/components/github-cli/LICENSE \
   third_party/components/ttyd/LICENSE \
   third_party/components/mise/LICENSE \
@@ -105,6 +108,35 @@ for file in \
   third_party/components/uv/LICENSE-MIT; do
   require_file "$ROOT/$file"
 done
+
+codex_release_tag="$(sed -n 's/^ARG CODEX_RELEASE_TAG=//p' "$codex_dockerfile")"
+if [[ -z "$codex_release_tag" || "$codex_release_tag" == *$'\n'* ]]; then
+  echo "ERROR: images/codex/Dockerfile must define exactly one CODEX_RELEASE_TAG default" >&2
+  exit 1
+fi
+
+recorded_codex_tag="$(read_record_value "$codex_source" CODEX_RELEASE_TAG)"
+recorded_codex_url="$(read_record_value "$codex_source" CODEX_NOTICE_URL)"
+recorded_codex_blob="$(read_record_value "$codex_source" CODEX_NOTICE_GIT_BLOB_SHA1)"
+expected_codex_url="https://raw.githubusercontent.com/openai/codex/${codex_release_tag}/NOTICE"
+actual_codex_blob="$(git hash-object "$codex_notice")"
+
+if [[ "$recorded_codex_tag" != "$codex_release_tag" ]]; then
+  echo "ERROR: Codex NOTICE release $recorded_codex_tag does not match Dockerfile release $codex_release_tag" >&2
+  exit 1
+fi
+if [[ "$recorded_codex_url" != "$expected_codex_url" ]]; then
+  echo "ERROR: Codex NOTICE URL must match the selected release: $expected_codex_url" >&2
+  exit 1
+fi
+if [[ ! "$recorded_codex_blob" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "ERROR: CODEX_NOTICE_GIT_BLOB_SHA1 must be an exact lowercase Git blob SHA-1" >&2
+  exit 1
+fi
+if [[ "$actual_codex_blob" != "$recorded_codex_blob" ]]; then
+  echo "ERROR: third_party/components/codex/NOTICE does not match its reviewed source record" >&2
+  exit 1
+fi
 
 python_version="$(locked_tool_version python)"
 docker_python_version="$(sed -n 's/^ARG PYTHON_VERSION=//p' "$base_dockerfile")"
@@ -140,6 +172,8 @@ if [[ "$actual_python_blob" != "$recorded_python_blob" ]]; then
   exit 1
 fi
 
+require_text "$inventory" "selected Codex \`${codex_release_tag}\` release"
+require_text "$inventory" '`components/codex/SOURCE.env`'
 require_text "$inventory" "matching CPython \`v${python_version}\` tag"
 require_text "$inventory" '`components/python/SOURCE.env`'
 
@@ -222,9 +256,11 @@ require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
 require_text "$base_dockerfile" 'print-locked-runtime-artifacts.py'
 require_text "$base_dockerfile" 'build argument disagrees with mise.lock'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
+require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/codex/SOURCE.env'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/LICENSE'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'LICENSE.cpython.txt'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'components/codex/SOURCE.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/python/LICENSE.cpython.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
