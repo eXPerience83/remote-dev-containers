@@ -22,6 +22,8 @@ The canonical image path is:
 
 Ubuntu package copyright files remain available under `/usr/share/doc/<package>/copyright`. Generated release SBOMs supplement this human-maintained inventory; they do not replace required license or NOTICE files.
 
+The OCI `org.opencontainers.image.licenses=Apache-2.0` annotation identifies the license of Remote Dev project code. The companion `license-scope` and `third-party-notices` annotations make explicit that independently distributed components retain the terms listed here; the OCI project-license field does not relicense the image contents.
+
 ## Bundled component inventory
 
 Versions are resolved from `versions.env`, `mise.toml` and the exact URLs/checksums in `mise.lock`. Architecture-specific release assets use the same license entry.
@@ -36,7 +38,7 @@ Versions are resolved from `versions.env`, `mise.toml` and the exact URLs/checks
 | mise | `MISE_VERSION`; official release binary from `github.com/jdx/mise` | <https://github.com/jdx/mise> | MIT; exact upstream copyright and license text preserved. | `components/mise/LICENSE` |
 | Python runtime | `PYTHON_VERSION`; exact `astral-sh/python-build-standalone` install-only archive pinned in `mise.lock` | <https://github.com/astral-sh/python-build-standalone> and <https://github.com/python/cpython> | The artifact contains CPython and bundled dependencies under multiple permissive licenses. The producer documents license metadata and license files inside each distribution. Those files are copied from the installed artifact into the runtime notice directory. The build-system repository itself is MPL-2.0; that does not relicense CPython or its bundled dependencies. | `runtime/python/` |
 | Node.js runtime | `NODE_VERSION`; official Node.js archive pinned in `mise.lock` | <https://github.com/nodejs/node> | MIT for Node.js plus the third-party terms embedded in Node's upstream `LICENSE`. The complete upstream file is copied from the installed runtime. | `runtime/node/LICENSE` |
-| npm CLI | `NPM_VERSION`; npm package installed verbatim from the npm registry with lifecycle scripts disabled | <https://github.com/npm/cli> | Artistic-2.0 for the npm application, plus dependency-specific terms. The installed `LICENSE` and `DEPENDENCIES.md` are copied when present. | `runtime/npm/` |
+| npm CLI | `NPM_VERSION`; npm package installed verbatim from the npm registry with lifecycle scripts disabled | <https://github.com/npm/cli> | Artistic-2.0 for the npm application, plus dependency-specific terms. The build copies every license/notice file included in the exact installed package and generates `DEPENDENCIES.txt` from its installed `package.json` metadata. | `runtime/npm/` |
 | uv | `UV_VERSION`; official release archive pinned in `mise.lock` | <https://github.com/astral-sh/uv> | Dual-licensed Apache-2.0 OR MIT. Both upstream license choices are preserved. | `components/uv/` |
 | Remote Dev scripts and configuration | repository revision embedded in the image | <https://github.com/eXPerience83/remote-dev-containers> | Apache-2.0 project license. | `/usr/share/doc/remote-dev/LICENSE` |
 
