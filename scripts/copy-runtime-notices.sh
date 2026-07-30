@@ -27,8 +27,6 @@ copy_python_notices() {
   local source=""
   local relative=""
   local copied=0
-  local cpython_license=""
-  local cpython_license_count=0
 
   python_prefix="$(python -c 'import sys; print(sys.base_prefix)')"
   if [[ ! -d "$python_prefix" ]]; then
@@ -36,21 +34,12 @@ copy_python_notices() {
     exit 1
   fi
 
-  # python-build-standalone names CPython's own license
-  # LICENSE.cpython.txt. Require exactly that identity instead of accepting a
-  # bundled dependency's generic LICENSE, while preserving its installed path.
-  find "$python_prefix" -maxdepth 7 -type f -name 'LICENSE.cpython.txt' -print0 |
-    while IFS= read -r -d '' source; do
-      cpython_license="$source"
-      cpython_license_count=$((cpython_license_count + 1))
-    done
-  if (( cpython_license_count != 1 )); then
-    echo "ERROR: expected exactly one CPython LICENSE.cpython.txt below $python_prefix, found $cpython_license_count" >&2
-    exit 1
-  fi
-  require_file "$cpython_license"
+  # The locked install_only_stripped archive omits CPython's primary license.
+  # Preserve the exact LICENSE from the matching CPython tag separately, then
+  # supplement it with every license/notice file that the installed artifact
+  # still provides for its bundled runtime and dependencies.
+  copy_file "$third_party_root/components/python/LICENSE" "$destination_root/LICENSE.cpython.txt"
 
-  install -d -m 0755 "$destination_root"
   find "$python_prefix" -maxdepth 7 -type f \
     \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -name 'PYTHON.json' \) \
     -print0 |
@@ -61,7 +50,7 @@ copy_python_notices() {
     done
 
   if (( copied == 0 )); then
-    echo "ERROR: no Python runtime license or notice files found below $python_prefix" >&2
+    echo "ERROR: no supplemental Python runtime license or notice files found below $python_prefix" >&2
     exit 1
   fi
 }
@@ -161,6 +150,7 @@ require_file "$third_party_root/components/codex/NOTICE"
 require_file "$third_party_root/components/github-cli/LICENSE"
 require_file "$third_party_root/components/ttyd/LICENSE"
 require_file "$third_party_root/components/mise/LICENSE"
+require_file "$third_party_root/components/python/LICENSE"
 require_file "$third_party_root/components/uv/LICENSE-APACHE-2.0"
 require_file "$third_party_root/components/uv/LICENSE-MIT"
 
