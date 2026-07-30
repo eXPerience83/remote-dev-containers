@@ -8,6 +8,7 @@ ARG UBUNTU_VERSION
 ARG UBUNTU_DIGEST
 ARG TARGETARCH
 ARG BASE_VERSION=0.1.0-dev
+ARG SOURCE_REVISION=local-untracked
 ARG GH_VERSION=2.96.0
 ARG GH_AMD64_SHA256=83d5c2ccad5498f58bf6368acb1ab32588cf43ab3a4b1c301bf36328b1c8bd60
 ARG GH_ARM64_SHA256=06f86ec7103d41993b76cd78072f43595c34aaa56506d971d9860e67140bf909
@@ -25,9 +26,10 @@ ARG UV_VERSION=0.12.0
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}" \
-      org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/main/third_party/README.md" \
+      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md" \
+      io.github.experience83.remote-dev.project-license="Apache-2.0" \
       io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
       io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
@@ -174,7 +176,27 @@ COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
-RUN chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
+RUN printf '%s\n' \
+      "SOURCE_REVISION=${SOURCE_REVISION}" \
+      "TARGETARCH=${TARGETARCH}" \
+      "BASE_VERSION=${BASE_VERSION}" \
+      "UBUNTU_VERSION=${UBUNTU_VERSION}" \
+      "UBUNTU_DIGEST=${UBUNTU_DIGEST}" \
+      "GH_VERSION=${GH_VERSION}" \
+      "GH_AMD64_SHA256=${GH_AMD64_SHA256}" \
+      "GH_ARM64_SHA256=${GH_ARM64_SHA256}" \
+      "TTYD_VERSION=${TTYD_VERSION}" \
+      "TTYD_AMD64_SHA256=${TTYD_AMD64_SHA256}" \
+      "TTYD_ARM64_SHA256=${TTYD_ARM64_SHA256}" \
+      "MISE_VERSION=${MISE_VERSION}" \
+      "MISE_AMD64_SHA256=${MISE_AMD64_SHA256}" \
+      "MISE_ARM64_SHA256=${MISE_ARM64_SHA256}" \
+      "PYTHON_VERSION=${PYTHON_VERSION}" \
+      "NODE_VERSION=${NODE_VERSION}" \
+      "NPM_VERSION=${NPM_VERSION}" \
+      "UV_VERSION=${UV_VERSION}" \
+      > /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
+    && chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
     && copy-runtime-notices \
     && remote-dev-notices --check
 
