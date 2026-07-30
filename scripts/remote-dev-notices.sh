@@ -70,6 +70,7 @@ check_notices() {
     "$third_party_root/components/ttyd/LICENSE" \
     "$third_party_root/components/mise/LICENSE" \
     "$third_party_root/components/python/LICENSE" \
+    "$third_party_root/components/python/SOURCE.env" \
     "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
     "$third_party_root/components/uv/LICENSE-MIT" \
     "$third_party_root/runtime/python/LICENSE.cpython.txt" \
