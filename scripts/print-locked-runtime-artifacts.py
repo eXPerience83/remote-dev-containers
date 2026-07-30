@@ -17,10 +17,12 @@ TOOLS = ("python", "node", "uv")
 
 
 def fail(message: str) -> NoReturn:
+    """Exit with a consistent validation error."""
     raise SystemExit(f"ERROR: {message}")
 
 
 def main() -> None:
+    """Read the lockfile and print the selected runtime artifact fields."""
     if len(sys.argv) != 3:
         fail("usage: print-locked-runtime-artifacts.py <mise.lock> <amd64|arm64>")
 
