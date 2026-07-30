@@ -98,6 +98,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
+# Validate the human inventory and optional-agent policy against the exact build
+# context before downloading or installing the independently distributed tools.
+RUN --mount=type=bind,source=.,target=/src,ro \
+    bash /src/scripts/validate-third-party-inventory.sh
+
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH}" in \
       amd64) gh_arch=amd64; expected_sha="$GH_AMD64_SHA256" ;; \
