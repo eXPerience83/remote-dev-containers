@@ -25,6 +25,20 @@ APT package resolution follows the current security revisions available from the
 > [!WARNING]
 > Public availability does not make `edge` stable or production-ready. Breaking changes are possible, and the ttyd port must not be exposed directly to the Internet.
 
+## Licensing and notice boundary
+
+Remote Dev project code is Apache-2.0, while bundled tools and runtime artifacts retain their respective upstream licenses and notices. The reviewed inventory is stored in `third_party/README.md`, copied into the image and exposed through:
+
+```bash
+remote-dev-notices
+remote-dev-notices --list
+remote-dev-notices --check
+```
+
+Ubuntu package copyright files remain under `/usr/share/doc/<package>/copyright`. The image build also copies license files from the exact installed Python, Node.js and npm artifacts. Publication SBOMs supplement these notices; they do not replace upstream license or NOTICE obligations.
+
+Software installed later at the user's request is outside the immutable image and its build-time SBOM. Antigravity, Claude Code and similar vendor products are not covered by the project Apache-2.0 license. The image must not redistribute them unless authoritative vendor terms explicitly permit it, and any future installer must follow `third_party/optional-agents.md`.
+
 ## Stable
 
 Stable publication is triggered only by an exact semantic version tag:
@@ -53,9 +67,10 @@ Before creating a stable version tag:
 4. Codex device-code login persists across recreation.
 5. GitHub CLI login, clone, push and pull-request creation have been verified.
 6. The fixed Codex launch policy has been tested on the target TrueNAS host: no Bubblewrap warning, trusted read-only commands run normally, untrusted write commands request approval, and diagnostics report the outer-container boundary.
-7. The changelog has a dated release section.
-8. Third-party licenses and notices are complete.
-9. The repository contains no credentials, personal paths or private infrastructure details.
+7. `remote-dev-notices --check` succeeds in the exact candidate image and the inventory covers all direct downloads and locked runtimes.
+8. The changelog has a dated release section.
+9. Third-party licenses, NOTICE files and optional-agent distribution disclosures are complete.
+10. The repository contains no credentials, personal paths or private infrastructure details.
 
 ## Rollback
 
