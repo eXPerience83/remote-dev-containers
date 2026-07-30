@@ -2,11 +2,9 @@
 
 Remote Dev project code is licensed under Apache-2.0. That project license does not replace, extend or relicense software supplied by Ubuntu, OpenAI, GitHub, Google, Astral or other upstream projects.
 
-This shared directory records what the published base and final Codex images distribute, where each component comes from and how its original license or notice is preserved. Rows marked final-image-only do not claim that the component is present in `remote-dev-base`. It is an attribution and maintenance record, not legal advice.
+This file is generated from `third_party/inventory.json` and the current build recipes. Edit the machine-readable inventory, then run `python3 scripts/legal-inventory.py render`. It is an attribution and maintenance record, not legal advice.
 
 ## Inspecting notices
-
-In the repository, start with this file and `third_party/optional-agents.md`.
 
 In a built image, run:
 
@@ -17,63 +15,80 @@ remote-dev-notices --list
 remote-dev-notices --check
 ```
 
-The canonical image path is:
+The canonical image path is `/usr/share/doc/remote-dev/third_party`.
 
-```text
-/usr/share/doc/remote-dev/third_party
-```
+`BUILD-VERSIONS.env` records exact build values and locked runtime artifact URLs/checksums. `sources.lock.json` binds every repository-preserved upstream legal document to its exact version, URL and Git blob identity. Ubuntu package copyright files remain under `/usr/share/doc/<package>/copyright`. Generated SPDX SBOMs are reconciled against this inventory in CI; they supplement rather than replace required notices.
 
-`BUILD-VERSIONS.env` records the exact base, runtime and direct-download values used to build the image. For Python, Node.js and uv it includes the version, architecture-specific URL and SHA-256 selected from `mise.lock`. A final Codex image also contains `CODEX-BUILD.env` with its exact source revision, image version and Codex release asset pins. These files are generated from build inputs rather than duplicated manually in this inventory.
-
-Ubuntu package copyright files remain available under `/usr/share/doc/<package>/copyright`. Generated release SBOMs supplement this human-maintained inventory; they do not replace required license or NOTICE files.
-
-Because the image aggregates software under many licenses, it deliberately does not set the OCI-standard `org.opencontainers.image.licenses` field to a project-only value. Project-owned code is identified separately by `io.github.experience83.remote-dev.project-license=Apache-2.0`, while the notice-path and license-scope annotations direct users to the complete bundled inventory. The final image's documentation URL is pinned to its embedded source revision.
+Because the image aggregates software under many licenses, it deliberately does not set `org.opencontainers.image.licenses` to a project-only value. Project-owned code is identified separately by `io.github.experience83.remote-dev.project-license=Apache-2.0`.
 
 ## Bundled component inventory
 
-Versions are resolved from `versions.env`, `mise.toml` and the exact versions, URLs and checksums in `mise.lock`. Architecture-specific release assets use the same license entry. The exact values embedded in a particular image are shown by `remote-dev-notices --versions`.
+| Component | Exact version source | Distribution and upstream | License / notice treatment | Image notice location | SBOM treatment |
+|---|---|---|---|---|---|
+| Ubuntu base | `UBUNTU_VERSION` = `26.04` | Pinned OCI base image (base and final images); https://hub.docker.com/_/ubuntu | Multiple upstream licenses. The pinned base digest and package database identify the exact Ubuntu content. Ubuntu is named descriptively; no Canonical affiliation or endorsement is claimed. | `/usr/share/doc/<package>/copyright` | required |
+| APT-installed tools and libraries | Parsed from the apt-get install block | Packages installed from Ubuntu archives (base and final images); Ubuntu archives and each package's upstream project | Multiple upstream licenses. Package-provided copyright and license files are retained. The direct package list is generated below from the Dockerfile. Package and project names are used only to identify shipped software. | `/usr/share/doc/<package>/copyright` | covered-by-ecosystem |
+| OpenAI Codex CLI | `CODEX_RELEASE_TAG` = `rust-v0.146.0` | Official pinned musl release archive (final image only); https://github.com/openai/codex | Apache-2.0. The upstream NOTICE from the exact selected release is preserved verbatim. The Apache-2.0 license text is available through the project license copy and is not used to relicense Codex. OpenAI and Codex are used descriptively; the image states that it is community maintained and not affiliated with OpenAI. | `components/codex/NOTICE`<br>`components/codex/LICENSE-APACHE-2.0` | not-guaranteed: A standalone Rust binary may not be represented as a package by every SBOM generator; direct-download discovery and build manifests remain authoritative. |
+| GitHub CLI | `GH_VERSION` = `2.96.0` | Official pinned release archive (base and final images); https://github.com/cli/cli | MIT. The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked. GitHub and GitHub CLI are used descriptively; no GitHub affiliation or endorsement is claimed. | `components/github-cli/LICENSE` | not-guaranteed: The installed standalone Go binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately. |
+| ttyd | `TTYD_VERSION` = `1.7.7` | Official pinned release binary (base and final images); https://github.com/tsl0922/ttyd | MIT. The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked. The project name is used only to identify the shipped executable. | `components/ttyd/LICENSE` | not-guaranteed: The installed standalone binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately. |
+| mise | `MISE_VERSION` = `2026.7.17` | Official pinned release binary (base and final images); https://github.com/jdx/mise | MIT. The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked. The project name is used only to identify the shipped executable. | `components/mise/LICENSE` | not-guaranteed: The installed standalone binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately. |
+| Python runtime | `mise.lock` tool `python` = `3.14.6` | Exact astral-sh/python-build-standalone install_only_stripped archive selected by mise.lock (base and final images); https://github.com/astral-sh/python-build-standalone and https://github.com/python/cpython | Python-2.0 plus bundled dependency licenses. The stripped archive omits CPython's primary license, so the exact matching CPython LICENSE is source-locked and copied alongside every license or notice still present in the installed artifact. Python is used descriptively; no Python Software Foundation endorsement is claimed. | `components/python/LICENSE`<br>`runtime/python/` | covered-by-ecosystem |
+| Node.js runtime | `mise.lock` tool `node` = `24.18.1` | Exact official Node.js archive selected by mise.lock (base and final images); https://github.com/nodejs/node | MIT plus third-party terms embedded in Node.js LICENSE. The complete LICENSE is copied from the exact installed runtime artifact. Node.js is used descriptively; no OpenJS Foundation endorsement is claimed. | `runtime/node/LICENSE` | not-guaranteed: Runtime package detection varies by SBOM generator; the exact mise artifact URL/checksum and copied runtime LICENSE are validated in the image. |
+| npm CLI and bundled dependencies | `NPM_VERSION` = `12.0.2` | Exact npm registry package installed globally with lifecycle scripts disabled (base and final images); https://github.com/npm/cli and the npm registry | Artistic-2.0 plus dependency-specific licenses. Every LICENSE, COPYING and NOTICE file in the exact installed npm package tree is copied; dependency metadata is generated from installed package.json files. npm is used descriptively; no npm or GitHub endorsement is claimed. | `runtime/npm/`<br>`runtime/npm/DEPENDENCIES.txt` | covered-by-ecosystem |
+| uv | `mise.lock` tool `uv` = `0.12.0` | Exact official release archive selected by mise.lock (base and final images); https://github.com/astral-sh/uv | Apache-2.0 OR MIT. Both exact upstream license choices from the matching release tag are preserved verbatim and version-locked. The project name is used only to identify the shipped executable. | `components/uv/LICENSE-APACHE-2.0`<br>`components/uv/LICENSE-MIT` | not-guaranteed: The standalone Rust binary may not be emitted as a package; the exact mise artifact and both source-locked licenses are validated separately. |
+| Remote Dev scripts and configuration | repository/build revision (`0.1.0-dev`) | Project-owned repository content copied into the image (project files); https://github.com/eXPerience83/remote-dev-containers | Apache-2.0. The repository root LICENSE is copied into the image. This project license applies only to project-owned content. Documentation expressly disclaims affiliation with OpenAI, Google, Anthropic and other vendors. | `/usr/share/doc/remote-dev/LICENSE` | not-applicable: Project scripts are image content rather than a separately versioned third-party package. |
 
-| Component | Version source and distributed artifact | Upstream source | License / notice treatment | Image notice location |
-|---|---|---|---|---|
-| Ubuntu base | `UBUNTU_VERSION` and `UBUNTU_DIGEST` | `docker.io/library/ubuntu` | Ubuntu and installed APT packages use multiple licenses. Package-provided copyright files are retained under `/usr/share/doc`; exact packages are also represented in the SBOM. | `/usr/share/doc/<package>/copyright` |
-| APT-installed tools and libraries | `images/base/Dockerfile` | Ubuntu archives and the individual upstream projects | Multiple licenses. The image does not delete package copyright files. | `/usr/share/doc/<package>/copyright` |
-| OpenAI Codex CLI (**final Codex image only**) | `CODEX_RELEASE_TAG`; official musl release archive from `github.com/openai/codex` | <https://github.com/openai/codex> | Apache-2.0. The upstream NOTICE from the release selected by `CODEX_RELEASE_TAG` is preserved verbatim. Its release tag, exact source URL and Git content identity are recorded in `components/codex/SOURCE.env` and validated against the selected build release and preserved file. The Apache-2.0 text is the same text as the repository root `LICENSE` and is copied into the component notice directory in the final image. The `remote-dev-base` image does not install Codex. | `components/codex/NOTICE`, `components/codex/SOURCE.env` and `components/codex/LICENSE-APACHE-2.0` |
-| GitHub CLI | `GH_VERSION`; official release archive from `github.com/cli/cli` | <https://github.com/cli/cli> | MIT. The exact upstream license from the selected release is preserved, with its version, URL and Git content identity in `components/github-cli/SOURCE.env`. | `components/github-cli/LICENSE` and `components/github-cli/SOURCE.env` |
-| ttyd | `TTYD_VERSION`; official release binary from `github.com/tsl0922/ttyd` | <https://github.com/tsl0922/ttyd> | MIT. The exact upstream license from the selected release is preserved, with its version, URL and Git content identity in `components/ttyd/SOURCE.env`. | `components/ttyd/LICENSE` and `components/ttyd/SOURCE.env` |
-| mise | `MISE_VERSION`; official release binary from `github.com/jdx/mise` | <https://github.com/jdx/mise> | MIT. The exact upstream license from the selected release is preserved, with its version, URL and Git content identity in `components/mise/SOURCE.env`. | `components/mise/LICENSE` and `components/mise/SOURCE.env` |
-| Python runtime | `PYTHON_VERSION`; exact `astral-sh/python-build-standalone` `install_only_stripped` archive pinned in `mise.lock` | <https://github.com/astral-sh/python-build-standalone> and <https://github.com/python/cpython> | The stripped runtime archive omits CPython's primary license. The exact `LICENSE` from the CPython tag matching `PYTHON_VERSION` is therefore preserved at `components/python/LICENSE` and copied into `runtime/python/LICENSE.cpython.txt`. Its reviewed version, source URL and Git content identity are recorded in `components/python/SOURCE.env` and validated against `mise.lock`, the effective build version and the preserved file. License, NOTICE and metadata files that remain in the installed standalone artifact are copied alongside it for bundled dependencies. The build-system repository itself is MPL-2.0; that does not relicense CPython or its bundled dependencies. | `components/python/LICENSE`, `components/python/SOURCE.env` and `runtime/python/` |
-| Node.js runtime | `NODE_VERSION`; exact official Node.js archive pinned in `mise.lock` | <https://github.com/nodejs/node> | MIT for Node.js plus the third-party terms embedded in Node's upstream `LICENSE`. The complete upstream file is copied from the installed runtime. | `runtime/node/LICENSE` |
-| npm CLI | `NPM_VERSION`; npm package installed verbatim from the npm registry with lifecycle scripts disabled | <https://github.com/npm/cli> | Artistic-2.0 for the npm application, plus dependency-specific terms. The build copies every license/notice file included in the exact installed package and generates `DEPENDENCIES.txt` from its installed `package.json` metadata, including legacy `licenses` arrays. | `runtime/npm/` |
-| uv | `UV_VERSION`; exact official release archive pinned in `mise.lock` | <https://github.com/astral-sh/uv> | Dual-licensed Apache-2.0 OR MIT. Both upstream license choices are preserved. | `components/uv/` |
-| Remote Dev scripts and configuration | repository revision embedded in the final image | <https://github.com/eXPerience83/remote-dev-containers> | Apache-2.0 project license. | `/usr/share/doc/remote-dev/LICENSE` |
+## Direct APT package set
+
+The following package names are parsed directly from the `apt-get install --no-install-recommends` block. Adding or removing a package changes this generated list and is validated against the image SPDX SBOM:
+
+```text
+bash
+build-essential
+ca-certificates
+curl
+fd-find
+fzf
+git
+git-lfs
+gzip
+jq
+less
+libbz2-dev
+libffi-dev
+liblzma-dev
+libreadline-dev
+libsqlite3-dev
+libssl-dev
+make
+nano
+openssh-client
+patch
+pkg-config
+procps
+ripgrep
+rsync
+shellcheck
+sqlite3
+tar
+tini
+tmux
+tzdata
+unzip
+wget
+xz-utils
+zip
+zlib1g-dev
+```
 
 ## Components not redistributed by the image
 
-Antigravity CLI, Claude Code and other proprietary or separately governed agents are not covered by the project Apache-2.0 license merely because Remote Dev can integrate with them. The binding policy and reviewed vendor links are in `optional-agents.md`.
+Antigravity CLI, Claude Code and other separately governed agents are not covered by the project Apache-2.0 license merely because Remote Dev can integrate with them. The binding policy and reviewed vendor links are in `optional-agents.md`.
 
-In particular:
+## Maintenance behavior
 
-- no optional proprietary agent may be downloaded silently during image build, first start or launcher startup;
-- no vendor binary may be copied into GHCR unless redistribution rights are explicitly confirmed and recorded;
-- installation must be initiated by the user and download directly from the vendor-controlled source;
-- OAuth credentials, API tokens and account identifiers remain private to the agent service and are never copied into project diagnostics or another service;
-- product names are used descriptively and do not imply affiliation, sponsorship or endorsement.
-
-## Maintenance checklist
-
-Every dependency or version update must preserve the following:
-
-1. `versions.env` direct-download components and `mise.lock` runtime artifacts remain represented in this inventory.
-2. The upstream project, exact version source, license identifier and required NOTICE or attribution are reviewed.
-3. Any changed upstream license or NOTICE file and its reviewed source record are updated, copied verbatim and reviewed in the same pull request.
-4. APT package copyright files are not removed from the image.
-5. Runtime-provided license files are still discovered and copied by the image build.
-6. `remote-dev-notices --check` succeeds and `remote-dev-notices --versions` reports the exact values used for that image.
-7. The SBOM and the human inventory are compared for obvious omissions.
-8. New vendor-hosted or proprietary tools are classified as bundled, user-installed optional software, external service, or unsupported future work.
-9. Documentation does not claim that upstream products or hosted services are licensed under this repository's Apache-2.0 license.
-10. Trademark and non-affiliation wording remains accurate.
-
-## Reviewed source records
-
-The selected-release NOTICE or license files for Codex, GitHub CLI, ttyd, mise and CPython are paired with `SOURCE.env` records under their component directories. Each record contains the selected version, exact upstream URL and committed Git blob identity, and CI compares all three with the Docker or runtime pin and preserved file. The upstream-update workflow refreshes these records and files together, so a version-only update cannot pass validation. The remaining runtime-provided licenses are copied from the exact installed, checksum-verified artifacts and checked inside the built image.
+- Version automation refreshes repository-preserved legal documents from exact upstream tags and updates `sources.lock.json` in the same pull request.
+- Changed license or NOTICE text is never silently accepted: it appears as a normal reviewed diff.
+- A new version/checksum input, direct-download URL, mise runtime, global npm package or SBOM package ecosystem fails validation until it has an inventory owner.
+- Runtime-provided Python, Node.js and npm notices are copied from the exact installed artifacts during image construction.
+- A new APT package is discovered automatically, rendered in this file and required to appear in the generated SPDX SBOM.
+- Optional proprietary integrations remain user-initiated and vendor-sourced; they require a separate terms, privacy, ownership and uninstall review before support is claimed.
