@@ -40,6 +40,7 @@ for file in \
   third_party/components/github-cli/LICENSE \
   third_party/components/ttyd/LICENSE \
   third_party/components/mise/LICENSE \
+  third_party/components/uv/LICENSE-APACHE-2.0 \
   third_party/components/uv/LICENSE-MIT; do
   require_file "$ROOT/$file"
 done
