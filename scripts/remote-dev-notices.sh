@@ -6,14 +6,15 @@ third_party_root="$notice_root/third_party"
 
 usage() {
   cat <<'EOF'
-Usage: remote-dev-notices [--check|--list|--path|--help]
+Usage: remote-dev-notices [--check|--list|--path|--versions|--help]
 
 Without arguments, print the third-party inventory.
 
-  --check  verify that required project, component and runtime notices exist
-  --list   list all notice files below the canonical notice directory
-  --path   print the canonical notice directory
-  --help   show this help
+  --check     verify that required project, component and runtime notices exist
+  --list      list all notice files below the canonical notice directory
+  --path      print the canonical notice directory
+  --versions  print the exact component versions and digests embedded at build time
+  --help      show this help
 EOF
 }
 
@@ -41,6 +42,7 @@ check_notices() {
     "$notice_root/LICENSE" \
     "$third_party_root/README.md" \
     "$third_party_root/optional-agents.md" \
+    "$third_party_root/BUILD-VERSIONS.env" \
     "$third_party_root/components/codex/LICENSE-APACHE-2.0" \
     "$third_party_root/components/codex/NOTICE" \
     "$third_party_root/components/github-cli/LICENSE" \
@@ -55,6 +57,12 @@ check_notices() {
       failed=1
     fi
   done
+
+  if command -v codex >/dev/null 2>&1; then
+    if ! require_file "$third_party_root/CODEX-BUILD.env"; then
+      failed=1
+    fi
+  fi
 
   for path in \
     "$third_party_root/runtime/python" \
@@ -71,6 +79,14 @@ check_notices() {
   printf 'Third-party notices: OK (%s)\n' "$third_party_root"
 }
 
+print_versions() {
+  require_file "$third_party_root/BUILD-VERSIONS.env"
+  cat "$third_party_root/BUILD-VERSIONS.env"
+  if [[ -s "$third_party_root/CODEX-BUILD.env" ]]; then
+    cat "$third_party_root/CODEX-BUILD.env"
+  fi
+}
+
 case "${1:-}" in
   "")
     cat "$third_party_root/README.md"
@@ -83,6 +99,9 @@ case "${1:-}" in
     ;;
   --path)
     printf '%s\n' "$notice_root"
+    ;;
+  --versions)
+    print_versions
     ;;
   --help|-h)
     usage
