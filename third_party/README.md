@@ -12,6 +12,9 @@ In a built image, run:
 
 ```text
 remote-dev-notices
+remote-dev-notices --versions
+remote-dev-notices --list
+remote-dev-notices --check
 ```
 
 The canonical image path is:
@@ -20,13 +23,15 @@ The canonical image path is:
 /usr/share/doc/remote-dev/third_party
 ```
 
+`BUILD-VERSIONS.env` records the exact base, runtime, direct-download and checksum values used to build the image. A final Codex image also contains `CODEX-BUILD.env` with its exact source revision, image version and Codex release asset pins. These files are generated from build arguments rather than duplicated manually in this inventory.
+
 Ubuntu package copyright files remain available under `/usr/share/doc/<package>/copyright`. Generated release SBOMs supplement this human-maintained inventory; they do not replace required license or NOTICE files.
 
-The OCI `org.opencontainers.image.licenses=Apache-2.0` annotation identifies the license of Remote Dev project code. The companion `license-scope` and `third-party-notices` annotations make explicit that independently distributed components retain the terms listed here; the OCI project-license field does not relicense the image contents.
+Because the image aggregates software under many licenses, it deliberately does not set the OCI-standard `org.opencontainers.image.licenses` field to a project-only value. Project-owned code is identified separately by `io.github.experience83.remote-dev.project-license=Apache-2.0`, while the notice-path and license-scope annotations direct users to the complete bundled inventory. The final image's documentation URL is pinned to its embedded source revision.
 
 ## Bundled component inventory
 
-Versions are resolved from `versions.env`, `mise.toml` and the exact URLs/checksums in `mise.lock`. Architecture-specific release assets use the same license entry.
+Versions are resolved from `versions.env`, `mise.toml` and the exact URLs/checksums in `mise.lock`. Architecture-specific release assets use the same license entry. The exact values embedded in a particular image are shown by `remote-dev-notices --versions`.
 
 | Component | Version source and distributed artifact | Upstream source | License / notice treatment | Image notice location |
 |---|---|---|---|---|
@@ -38,9 +43,9 @@ Versions are resolved from `versions.env`, `mise.toml` and the exact URLs/checks
 | mise | `MISE_VERSION`; official release binary from `github.com/jdx/mise` | <https://github.com/jdx/mise> | MIT; exact upstream copyright and license text preserved. | `components/mise/LICENSE` |
 | Python runtime | `PYTHON_VERSION`; exact `astral-sh/python-build-standalone` install-only archive pinned in `mise.lock` | <https://github.com/astral-sh/python-build-standalone> and <https://github.com/python/cpython> | The artifact contains CPython and bundled dependencies under multiple permissive licenses. The producer documents license metadata and license files inside each distribution. Those files are copied from the installed artifact into the runtime notice directory. The build-system repository itself is MPL-2.0; that does not relicense CPython or its bundled dependencies. | `runtime/python/` |
 | Node.js runtime | `NODE_VERSION`; official Node.js archive pinned in `mise.lock` | <https://github.com/nodejs/node> | MIT for Node.js plus the third-party terms embedded in Node's upstream `LICENSE`. The complete upstream file is copied from the installed runtime. | `runtime/node/LICENSE` |
-| npm CLI | `NPM_VERSION`; npm package installed verbatim from the npm registry with lifecycle scripts disabled | <https://github.com/npm/cli> | Artistic-2.0 for the npm application, plus dependency-specific terms. The build copies every license/notice file included in the exact installed package and generates `DEPENDENCIES.txt` from its installed `package.json` metadata. | `runtime/npm/` |
+| npm CLI | `NPM_VERSION`; npm package installed verbatim from the npm registry with lifecycle scripts disabled | <https://github.com/npm/cli> | Artistic-2.0 for the npm application, plus dependency-specific terms. The build copies every license/notice file included in the exact installed package and generates `DEPENDENCIES.txt` from its installed `package.json` metadata, including legacy `licenses` arrays. | `runtime/npm/` |
 | uv | `UV_VERSION`; official release archive pinned in `mise.lock` | <https://github.com/astral-sh/uv> | Dual-licensed Apache-2.0 OR MIT. Both upstream license choices are preserved. | `components/uv/` |
-| Remote Dev scripts and configuration | repository revision embedded in the image | <https://github.com/eXPerience83/remote-dev-containers> | Apache-2.0 project license. | `/usr/share/doc/remote-dev/LICENSE` |
+| Remote Dev scripts and configuration | repository revision embedded in the final image | <https://github.com/eXPerience83/remote-dev-containers> | Apache-2.0 project license. | `/usr/share/doc/remote-dev/LICENSE` |
 
 ## Components not redistributed by the image
 
@@ -63,7 +68,7 @@ Every dependency or version update must preserve the following:
 3. Any changed upstream license or NOTICE file is copied verbatim and reviewed in the same pull request.
 4. APT package copyright files are not removed from the image.
 5. Runtime-provided license files are still discovered and copied by the image build.
-6. `remote-dev-notices --check` succeeds in the built image.
+6. `remote-dev-notices --check` succeeds and `remote-dev-notices --versions` reports the exact values used for that image.
 7. The SBOM and the human inventory are compared for obvious omissions.
 8. New vendor-hosted or proprietary tools are classified as bundled, user-installed optional software, external service, or unsupported future work.
 9. Documentation does not claim that upstream products or hosted services are licensed under this repository's Apache-2.0 license.
