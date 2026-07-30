@@ -153,6 +153,7 @@ require_file "$third_party_root/components/github-cli/LICENSE"
 require_file "$third_party_root/components/ttyd/LICENSE"
 require_file "$third_party_root/components/mise/LICENSE"
 require_file "$third_party_root/components/python/LICENSE"
+require_file "$third_party_root/components/python/SOURCE.env"
 require_file "$third_party_root/components/uv/LICENSE-APACHE-2.0"
 require_file "$third_party_root/components/uv/LICENSE-MIT"
 
