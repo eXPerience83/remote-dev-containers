@@ -6,6 +6,8 @@ inventory="$ROOT/third_party/README.md"
 optional_policy="$ROOT/third_party/optional-agents.md"
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
+python_license="$ROOT/third_party/components/python/LICENSE"
+python_source="$ROOT/third_party/components/python/SOURCE.env"
 
 require_file() {
   local path="$1"
@@ -22,6 +24,62 @@ require_text() {
     echo "ERROR: ${path#"$ROOT"/} must contain: $text" >&2
     exit 1
   fi
+}
+
+read_record_value() {
+  local path="$1"
+  local key="$2"
+  local value=""
+
+  if ! value="$(
+    awk -F= -v key="$key" '
+      $1 == key {
+        count += 1
+        sub(/^[^=]*=/, "")
+        value = $0
+      }
+      END {
+        if (count != 1 || value == "") exit 1
+        print value
+      }
+    ' "$path"
+  )"; then
+    echo "ERROR: ${path#"$ROOT"/} must contain exactly one non-empty $key value" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
+locked_tool_version() {
+  local tool="$1"
+  local section="[[tools.${tool}]]"
+  local version=""
+
+  if ! version="$(
+    awk -v section="$section" '
+      /^\[\[tools\.[^]]+\]\]$/ {
+        in_section = ($0 == section)
+        if (in_section) section_count += 1
+        next
+      }
+      in_section && /^version = "[^"]+"$/ {
+        version_count += 1
+        value = $0
+        sub(/^version = "/, "", value)
+        sub(/"$/, "", value)
+      }
+      END {
+        if (section_count != 1 || version_count != 1 || value == "") exit 1
+        print value
+      }
+    ' "$ROOT/mise.lock"
+  )"; then
+    echo "ERROR: mise.lock must contain exactly one versioned $tool entry" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$version"
 }
 
 require_file "$inventory"
@@ -42,17 +100,48 @@ for file in \
   third_party/components/ttyd/LICENSE \
   third_party/components/mise/LICENSE \
   third_party/components/python/LICENSE \
+  third_party/components/python/SOURCE.env \
   third_party/components/uv/LICENSE-APACHE-2.0 \
   third_party/components/uv/LICENSE-MIT; do
   require_file "$ROOT/$file"
 done
 
-python_version="$(sed -n 's/^ARG PYTHON_VERSION=//p' "$base_dockerfile")"
-if [[ -z "$python_version" || "$python_version" == *$'\n'* ]]; then
+python_version="$(locked_tool_version python)"
+docker_python_version="$(sed -n 's/^ARG PYTHON_VERSION=//p' "$base_dockerfile")"
+if [[ -z "$docker_python_version" || "$docker_python_version" == *$'\n'* ]]; then
   echo "ERROR: images/base/Dockerfile must define exactly one PYTHON_VERSION default" >&2
   exit 1
 fi
+if [[ "$docker_python_version" != "$python_version" ]]; then
+  echo "ERROR: images/base/Dockerfile PYTHON_VERSION does not match mise.lock: $docker_python_version != $python_version" >&2
+  exit 1
+fi
+
+recorded_python_version="$(read_record_value "$python_source" CPYTHON_VERSION)"
+recorded_python_url="$(read_record_value "$python_source" CPYTHON_LICENSE_URL)"
+recorded_python_blob="$(read_record_value "$python_source" CPYTHON_LICENSE_GIT_BLOB_SHA1)"
+expected_python_url="https://raw.githubusercontent.com/python/cpython/v${python_version}/LICENSE"
+actual_python_blob="$(git hash-object "$python_license")"
+
+if [[ "$recorded_python_version" != "$python_version" ]]; then
+  echo "ERROR: CPython license version $recorded_python_version does not match mise.lock Python $python_version" >&2
+  exit 1
+fi
+if [[ "$recorded_python_url" != "$expected_python_url" ]]; then
+  echo "ERROR: CPython license URL must match the locked Python tag: $expected_python_url" >&2
+  exit 1
+fi
+if [[ ! "$recorded_python_blob" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "ERROR: CPYTHON_LICENSE_GIT_BLOB_SHA1 must be an exact lowercase Git blob SHA-1" >&2
+  exit 1
+fi
+if [[ "$actual_python_blob" != "$recorded_python_blob" ]]; then
+  echo "ERROR: third_party/components/python/LICENSE does not match its reviewed source record" >&2
+  exit 1
+fi
+
 require_text "$inventory" "matching CPython \`v${python_version}\` tag"
+require_text "$inventory" '`components/python/SOURCE.env`'
 
 for variable in \
   UBUNTU_VERSION \
@@ -131,19 +220,25 @@ require_text "$base_dockerfile" 'github.com/cli/cli/releases/download'
 require_text "$base_dockerfile" 'github.com/tsl0922/ttyd/releases/download'
 require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
 require_text "$base_dockerfile" 'print-locked-runtime-artifacts.py'
+require_text "$base_dockerfile" 'build argument disagrees with mise.lock'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/LICENSE'
+require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'LICENSE.cpython.txt'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/python/LICENSE.cpython.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'BUILD-VERSIONS.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'CODEX-BUILD.env'
 
 for key in \
+  PYTHON_VERSION \
   PYTHON_ARTIFACT_URL \
   PYTHON_ARTIFACT_CHECKSUM \
+  NODE_VERSION \
   NODE_ARTIFACT_URL \
   NODE_ARTIFACT_CHECKSUM \
+  UV_VERSION \
   UV_ARTIFACT_URL \
   UV_ARTIFACT_CHECKSUM; do
   require_text "$ROOT/scripts/remote-dev-notices.sh" "$key"
