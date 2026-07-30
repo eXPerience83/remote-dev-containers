@@ -26,6 +26,7 @@ require_text() {
 
 require_file "$inventory"
 require_file "$optional_policy"
+require_file "$ROOT/scripts/print-locked-runtime-artifacts.py"
 
 # Full repository validation also checks workflow triggers and synchronized
 # defaults. Docker deliberately excludes .github from its build context, so the
@@ -121,10 +122,21 @@ require_text "$codex_dockerfile" 'github.com/openai/codex/releases/download'
 require_text "$base_dockerfile" 'github.com/cli/cli/releases/download'
 require_text "$base_dockerfile" 'github.com/tsl0922/ttyd/releases/download'
 require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
+require_text "$base_dockerfile" 'print-locked-runtime-artifacts.py'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'BUILD-VERSIONS.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'CODEX-BUILD.env'
+
+for key in \
+  PYTHON_ARTIFACT_URL \
+  PYTHON_ARTIFACT_CHECKSUM \
+  NODE_ARTIFACT_URL \
+  NODE_ARTIFACT_CHECKSUM \
+  UV_ARTIFACT_URL \
+  UV_ARTIFACT_CHECKSUM; do
+  require_text "$ROOT/scripts/remote-dev-notices.sh" "$key"
+done
 
 for dockerfile in "$base_dockerfile" "$codex_dockerfile"; do
   require_text "$dockerfile" 'io.github.experience83.remote-dev.project-license="Apache-2.0"'
