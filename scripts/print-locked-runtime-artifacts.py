@@ -47,7 +47,11 @@ def main() -> None:
         if not isinstance(entries, list) or len(entries) != 1:
             fail(f"{lock_path} must contain exactly one locked {tool_name} entry")
 
-        artifact = entries[0].get(platform_key)
+        entry = entries[0]
+        if not isinstance(entry, dict):
+            fail(f"{lock_path} locked {tool_name} entry must be a table")
+
+        artifact = entry.get(platform_key)
         if not isinstance(artifact, dict):
             fail(f"{lock_path} has no {platform_key} artifact for {tool_name}")
 
