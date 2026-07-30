@@ -66,6 +66,7 @@ check_notices() {
     "$manifest" \
     "$third_party_root/components/codex/LICENSE-APACHE-2.0" \
     "$third_party_root/components/codex/NOTICE" \
+    "$third_party_root/components/codex/SOURCE.env" \
     "$third_party_root/components/github-cli/LICENSE" \
     "$third_party_root/components/ttyd/LICENSE" \
     "$third_party_root/components/mise/LICENSE" \
