@@ -53,11 +53,53 @@ require_manifest_value() {
   fi
 }
 
+read_env_value() {
+  local path="$1"
+  local key="$2"
+  local value=""
+
+  if ! value="$(
+    awk -F= -v key="$key" '
+      $1 == key {
+        count += 1
+        sub(/^[^=]*=/, "")
+        value = $0
+      }
+      END {
+        if (count != 1 || value == "") exit 1
+        print value
+      }
+    ' "$path"
+  )"; then
+    echo "ERROR: $path must contain exactly one non-empty $key value" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
+require_matching_version() {
+  local manifest="$1"
+  local manifest_key="$2"
+  local source_record="$3"
+  local source_key="$4"
+  local source_value=""
+
+  if ! source_value="$(read_env_value "$source_record" "$source_key")"; then
+    return 1
+  fi
+  if ! grep -Fqx -- "${manifest_key}=${source_value}" "$manifest"; then
+    echo "ERROR: $manifest $manifest_key does not match $source_record $source_key=$source_value" >&2
+    return 1
+  fi
+}
+
 check_notices() {
   local failed=0
   local path=""
   local key=""
   local manifest="$third_party_root/BUILD-VERSIONS.env"
+  local codex_manifest="$third_party_root/CODEX-BUILD.env"
 
   for path in \
     "$notice_root/LICENSE" \
@@ -68,8 +110,11 @@ check_notices() {
     "$third_party_root/components/codex/NOTICE" \
     "$third_party_root/components/codex/SOURCE.env" \
     "$third_party_root/components/github-cli/LICENSE" \
+    "$third_party_root/components/github-cli/SOURCE.env" \
     "$third_party_root/components/ttyd/LICENSE" \
+    "$third_party_root/components/ttyd/SOURCE.env" \
     "$third_party_root/components/mise/LICENSE" \
+    "$third_party_root/components/mise/SOURCE.env" \
     "$third_party_root/components/python/LICENSE" \
     "$third_party_root/components/python/SOURCE.env" \
     "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
@@ -98,10 +143,30 @@ check_notices() {
         failed=1
       fi
     done
+
+    if ! require_matching_version "$manifest" GH_VERSION \
+      "$third_party_root/components/github-cli/SOURCE.env" GH_VERSION; then
+      failed=1
+    fi
+    if ! require_matching_version "$manifest" TTYD_VERSION \
+      "$third_party_root/components/ttyd/SOURCE.env" TTYD_VERSION; then
+      failed=1
+    fi
+    if ! require_matching_version "$manifest" MISE_VERSION \
+      "$third_party_root/components/mise/SOURCE.env" MISE_VERSION; then
+      failed=1
+    fi
+    if ! require_matching_version "$manifest" PYTHON_VERSION \
+      "$third_party_root/components/python/SOURCE.env" CPYTHON_VERSION; then
+      failed=1
+    fi
   fi
 
   if command -v codex >/dev/null 2>&1; then
-    if ! require_file "$third_party_root/CODEX-BUILD.env"; then
+    if ! require_file "$codex_manifest"; then
+      failed=1
+    elif ! require_matching_version "$codex_manifest" CODEX_RELEASE_TAG \
+      "$third_party_root/components/codex/SOURCE.env" CODEX_RELEASE_TAG; then
       failed=1
     fi
   fi
