@@ -25,26 +25,35 @@ Status: **planned optional integration; not bundled and not currently supported 
 
 Authoritative sources reviewed:
 
-- official product documentation: <https://antigravity.google/docs/cli-overview>
-- official installation documentation: <https://antigravity.google/docs/cli-install>
+- official CLI overview: <https://antigravity.google/docs/cli-overview>
+- official installation and authentication documentation: <https://antigravity.google/docs/cli-install>
 - vendor installer endpoint for macOS/Linux: <https://antigravity.google/cli/install.sh>
 - official product terms: <https://antigravity.google/terms>
 - Google privacy policy: <https://policies.google.com/privacy>
 - official public repository: <https://github.com/google-antigravity/antigravity-cli>
 
-Current observations relevant to future implementation:
+Current vendor-documented installation and state behavior:
 
-- the official Linux/macOS method executes a vendor-hosted installer and places `agy` in the user's local binary directory;
-- remote/SSH authentication is documented as a browser authorization URL flow;
-- the official documentation warns that coding agents can execute commands and expose data, and states that separate Google terms and data-use choices apply;
+- the official Linux/macOS command executes the Google-hosted installer and installs `agy` at `~/.local/bin/agy`;
+- the documented installer flags are `--skip-aliases` and `--skip-path`; a future wrapper should use both so it does not rewrite persistent shell profiles or remove aliases outside the integration's owned state;
+- CLI settings are documented under `~/.gemini/antigravity-cli/settings.json`;
+- local authentication may use the operating system keyring, while remote/SSH sessions use a browser authorization URL and one-time code flow;
+- `/logout` is documented as the supported way to purge saved authentication profiles from the upstream client;
+- the Antigravity terms state that interaction and related usage data are collected while the service runs and may be used to improve Google and Alphabet products, with a settings choice affecting that use;
+- the terms place responsibility on the user for agent actions, connected data and production supervision, and prohibit third-party software from using Antigravity OAuth as an unofficial service client.
+
+Distribution decision:
+
 - the official public repository did not expose a root `LICENSE` file at the review date;
-- therefore Remote Dev must not copy the Antigravity binary into the immutable image or describe it as open source or Apache-2.0;
+- the product is governed by separate Google terms and privacy disclosures;
+- a public installer endpoint is not evidence of redistribution permission;
+- therefore Remote Dev must not copy the Antigravity binary into the immutable image, publish it in GHCR or describe it as open source or Apache-2.0;
 - the future wrapper in #27 must download directly from Google only after explicit confirmation and must persist the installed executable and account state only in the isolated Antigravity service described by #28;
-- the exact installer behavior, supported noninteractive flags, embedded notices, checksums/signatures, state paths and opt-out controls must be inspected again immediately before implementation.
+- before implementing #27, inspect the current installer and installed package in a disposable environment to record exact owned paths, embedded notices, checksums/signatures, update/uninstall behavior and any changed flags or telemetry controls.
 
 Required user-facing notice before installation:
 
-> Antigravity CLI is a Google product obtained directly from Google and is not distributed, licensed or endorsed by Remote Dev. Separate Google terms and privacy policies apply. The agent may read project files, contact external services and request permission to execute commands.
+> Antigravity CLI is a Google product obtained directly from Google and is not distributed, licensed or endorsed by Remote Dev. Separate Google terms and privacy policies apply. The agent may read project files, contact external services and request permission to execute commands. Google documents collection and use of service interactions; review the current settings and terms before continuing.
 
 ## Claude Code
 
