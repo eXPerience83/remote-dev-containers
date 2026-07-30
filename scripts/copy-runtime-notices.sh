@@ -27,6 +27,8 @@ copy_python_notices() {
   local source=""
   local relative=""
   local copied=0
+  local cpython_license=""
+  local cpython_license_count=0
 
   python_prefix="$(python -c 'import sys; print(sys.base_prefix)')"
   if [[ ! -d "$python_prefix" ]]; then
@@ -34,9 +36,19 @@ copy_python_notices() {
     exit 1
   fi
 
-  # python-build-standalone identifies CPython's own license with this path in
-  # PYTHON.json, and mise preserves it when installing the locked archive.
-  require_file "$python_prefix/licenses/LICENSE.cpython.txt"
+  # python-build-standalone names CPython's own license
+  # LICENSE.cpython.txt. Require exactly that identity instead of accepting a
+  # bundled dependency's generic LICENSE, while preserving its installed path.
+  find "$python_prefix" -maxdepth 7 -type f -name 'LICENSE.cpython.txt' -print0 |
+    while IFS= read -r -d '' source; do
+      cpython_license="$source"
+      cpython_license_count=$((cpython_license_count + 1))
+    done
+  if (( cpython_license_count != 1 )); then
+    echo "ERROR: expected exactly one CPython LICENSE.cpython.txt below $python_prefix, found $cpython_license_count" >&2
+    exit 1
+  fi
+  require_file "$cpython_license"
 
   install -d -m 0755 "$destination_root"
   find "$python_prefix" -maxdepth 7 -type f \
