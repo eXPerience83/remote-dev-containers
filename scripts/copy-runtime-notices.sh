@@ -26,7 +26,7 @@ copy_python_notices() {
   local destination_root="$third_party_root/runtime/python"
   local source=""
   local relative=""
-  local copied=0
+  local license_copied=0
 
   python_prefix="$(python -c 'import sys; print(sys.base_prefix)')"
   if [[ ! -d "$python_prefix" ]]; then
@@ -41,11 +41,13 @@ copy_python_notices() {
     while IFS= read -r -d '' source; do
       relative="${source#"$python_prefix"/}"
       install -D -m 0644 "$source" "$destination_root/$relative"
-      copied=$((copied + 1))
+      if [[ "${source##*/}" != "PYTHON.json" ]]; then
+        license_copied=$((license_copied + 1))
+      fi
     done
 
-  if (( copied == 0 )); then
-    echo "ERROR: no Python runtime license or notice files found below $python_prefix" >&2
+  if (( license_copied == 0 )); then
+    echo "ERROR: no Python runtime license, copying or notice file found below $python_prefix" >&2
     exit 1
   fi
 }
