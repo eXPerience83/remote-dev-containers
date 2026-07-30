@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 inventory="$ROOT/third_party/README.md"
 optional_policy="$ROOT/third_party/optional-agents.md"
+base_dockerfile="$ROOT/images/base/Dockerfile"
+codex_dockerfile="$ROOT/images/codex/Dockerfile"
 
 require_file() {
   local path="$1"
@@ -73,14 +75,27 @@ require_text "$optional_policy" 'not bundled, installed, advertised or supported
 require_text "$optional_policy" 'https://antigravity.google/terms'
 require_text "$optional_policy" 'https://policies.google.com/privacy'
 
-require_text "$ROOT/images/base/Dockerfile" 'apt-get install -y --no-install-recommends'
-require_text "$ROOT/images/codex/Dockerfile" 'github.com/openai/codex/releases/download'
-require_text "$ROOT/images/base/Dockerfile" 'github.com/cli/cli/releases/download'
-require_text "$ROOT/images/base/Dockerfile" 'github.com/tsl0922/ttyd/releases/download'
-require_text "$ROOT/images/base/Dockerfile" 'github.com/jdx/mise/releases/download'
+require_text "$base_dockerfile" 'apt-get install -y --no-install-recommends'
+require_text "$codex_dockerfile" 'github.com/openai/codex/releases/download'
+require_text "$base_dockerfile" 'github.com/cli/cli/releases/download'
+require_text "$base_dockerfile" 'github.com/tsl0922/ttyd/releases/download'
+require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
+require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.md'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.md'
+
+for dockerfile in "$base_dockerfile" "$codex_dockerfile"; do
+  require_text "$dockerfile" 'org.opencontainers.image.licenses="Apache-2.0"'
+  require_text "$dockerfile" 'io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms"'
+  require_text "$dockerfile" 'io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"'
+done
 
 if grep -Fqi 'placeholder' "$inventory"; then
   echo "ERROR: third_party/README.md must be a reviewed inventory, not a placeholder" >&2
+  exit 1
+fi
+
+if grep -FRq 'LicenseRef-ThirdParty-Notices' "$base_dockerfile" "$codex_dockerfile"; then
+  echo "ERROR: OCI license metadata must use an SPDX project license and a separate notice-scope annotation" >&2
   exit 1
 fi
 
