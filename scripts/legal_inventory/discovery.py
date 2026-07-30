@@ -11,8 +11,6 @@ URL_RE = re.compile(r"https://[^\s\"'<>]+")
 
 PACKAGE_SPEC_RE = re.compile(r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}")
 
-NETWORK_FETCH_RE = re.compile(r"\b(?:curl|wget)\b|\bgit\s+clone\b")
-
 SENSITIVE_INSTALL_PATTERNS = (
     re.compile(r"\b(?:pip|pip3)\s+install\b"),
     re.compile(r"\bpython(?:3)?\s+-m\s+pip\s+install\b"),
@@ -84,11 +82,28 @@ def docker_instructions(path: Path) -> list[str]:
         instructions.append(" ".join(part for part in current if part))
     return instructions
 
+def instruction_runs_network_fetch(instruction: str) -> bool:
+    """Return whether a RUN instruction executes curl, wget or git clone."""
+    if not instruction.startswith("RUN "):
+        return False
+    for segment in re.split(r"\s*(?:&&|;|\|\|)\s*", instruction[4:]):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError as exc:
+            raise InventoryError(f"cannot parse Docker RUN instruction: {segment}") from exc
+        while tokens and (tokens[0].startswith("--mount=") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0])):
+            tokens.pop(0)
+        if not tokens:
+            continue
+        if tokens[0] in {"curl", "wget"} or tokens[:2] == ["git", "clone"]:
+            return True
+    return False
+
 def docker_download_urls(path: Path) -> list[str]:
     """Discover literal network sources used by Docker build instructions."""
     urls: list[str] = []
     for instruction in docker_instructions(path):
-        is_network_run = instruction.startswith("RUN ") and NETWORK_FETCH_RE.search(instruction)
+        is_network_run = instruction_runs_network_fetch(instruction)
         is_remote_add = instruction.startswith("ADD ") and URL_RE.search(instruction)
         if not is_network_run and not is_remote_add:
             continue
