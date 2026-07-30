@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Committed mise runtime configuration and lock data for Linux AMD64 and ARM64, plus validation and a documented regeneration helper.
 - Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
 - A single `run-codex` launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
+- Reviewed third-party inventory, preserved upstream notices, runtime license discovery and the `remote-dev-notices` inspection command.
+- Conservative distribution, terms, privacy, credential-isolation and non-affiliation policy for optional vendor agents.
 
 ### Changed
 
@@ -49,8 +51,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added an official `SHA256SUMS` fallback for upstream releases such as ttyd that do not expose GitHub asset digest metadata.
 - Centralized the fixable-critical Trivy gate so build, edge and stable workflows share the same enforcement logic.
 - Extended upstream automation to regenerate and review the mise lock whenever runtime versions or resolved artifacts change.
-- Updated the pinned stable releases to Codex CLI `0.146.0`, mise `2026.7.16` and uv `0.12.0`, and refreshed the locked Python 3.14.6 artifacts.
+- Updated the pinned stable releases to Codex CLI `0.146.0`, mise `2026.7.17`, Node.js `24.18.1`, npm `12.0.2` and uv `0.12.0`, and refreshed the locked Python 3.14.6 artifacts.
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
+- Changed OCI license metadata to point to the project Apache-2.0 license together with the image's explicit third-party notice set rather than implying that all bundled software shares one license.
 
 ### Security
 
