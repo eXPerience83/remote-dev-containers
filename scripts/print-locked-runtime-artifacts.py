@@ -51,6 +51,10 @@ def main() -> None:
         if not isinstance(entry, dict):
             fail(f"{lock_path} locked {tool_name} entry must be a table")
 
+        version = entry.get("version")
+        if not isinstance(version, str) or not version:
+            fail(f"{lock_path} locked {tool_name} entry has no version")
+
         artifact = entry.get(platform_key)
         if not isinstance(artifact, dict):
             fail(f"{lock_path} has no {platform_key} artifact for {tool_name}")
@@ -63,6 +67,7 @@ def main() -> None:
             fail(f"{tool_name} {platform_key} artifact has no SHA-256 checksum")
 
         prefix = tool_name.upper()
+        print(f"{prefix}_VERSION={version}")
         print(f"{prefix}_ARTIFACT_URL={url}")
         print(f"{prefix}_ARTIFACT_CHECKSUM={checksum}")
 
