@@ -62,11 +62,82 @@ copy_npm_notices() {
   local npm_root=""
   local npm_package=""
   local destination_root="$third_party_root/runtime/npm"
+  local source=""
+  local relative=""
+  local copied=0
 
   npm_root="$(npm root --global)"
   npm_package="$npm_root/npm"
-  copy_file "$npm_package/LICENSE" "$destination_root/LICENSE"
-  copy_file "$npm_package/DEPENDENCIES.md" "$destination_root/DEPENDENCIES.md"
+  require_file "$npm_package/LICENSE"
+  install -d -m 0755 "$destination_root"
+
+  while IFS= read -r -d '' source; do
+    relative="${source#"$npm_package"/}"
+    install -D -m 0644 "$source" "$destination_root/$relative"
+    copied=$((copied + 1))
+  done < <(
+    find "$npm_package" -type f \
+      \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+      -print0
+  )
+
+  if (( copied == 0 )); then
+    echo "ERROR: no npm package or dependency license files found below $npm_package" >&2
+    exit 1
+  fi
+
+  node - "$npm_package" "$destination_root/DEPENDENCIES.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+
+const root = process.argv[2];
+const output = process.argv[3];
+const packages = new Map();
+
+function clean(value) {
+  return String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+}
+
+function licenseText(value) {
+  if (typeof value === 'string') return clean(value);
+  if (Array.isArray(value)) return clean(value.map(licenseText).filter(Boolean).join(' OR '));
+  if (value && typeof value === 'object') return clean(value.type || JSON.stringify(value));
+  return 'NOASSERTION';
+}
+
+function visit(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === '.bin') continue;
+    const candidate = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      visit(candidate);
+      continue;
+    }
+    if (entry.name !== 'package.json') continue;
+
+    const metadata = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+    if (!metadata.name || !metadata.version) continue;
+    const row = [clean(metadata.name), clean(metadata.version), licenseText(metadata.license)].join('\t');
+    packages.set(row, row);
+  }
+}
+
+visit(root);
+if (packages.size === 0) {
+  throw new Error(`no npm package metadata found below ${root}`);
+}
+
+const rows = [...packages.values()].sort((left, right) => left.localeCompare(right));
+const content = [
+  '# Generated from package.json files in the exact installed npm package.',
+  '# name\tversion\tdeclared-license',
+  ...rows,
+  '',
+].join('\n');
+fs.writeFileSync(output, content, { encoding: 'utf8', mode: 0o644 });
+NODE
+
+  require_file "$destination_root/DEPENDENCIES.txt"
 }
 
 require_file "$project_license"
