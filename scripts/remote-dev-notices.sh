@@ -50,7 +50,7 @@ check_notices() {
     "$third_party_root/components/uv/LICENSE-MIT" \
     "$third_party_root/runtime/node/LICENSE" \
     "$third_party_root/runtime/npm/LICENSE" \
-    "$third_party_root/runtime/npm/DEPENDENCIES.md"; do
+    "$third_party_root/runtime/npm/DEPENDENCIES.txt"; do
     if ! require_file "$path"; then
       failed=1
     fi
