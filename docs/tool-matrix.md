@@ -15,10 +15,11 @@ These executables and project-owned runtime components are shared through read-o
 | Git | git, git-lfs, openssh-client, GitHub CLI executable |
 | Search/files | ripgrep, fd, jq, rsync, zip/unzip, tar/gzip, patch |
 | Build | build-essential, make, pkg-config and common native libraries |
-| Python | Python 3.14, uv |
-| JavaScript | Node 24, npm |
+| Python | Python 3.14 from the exact `astral-sh/python-build-standalone` artifact pinned in `mise.lock`, plus uv |
+| JavaScript | Node 24 from the exact official Node.js artifact pinned in `mise.lock`, plus npm 12 |
 | Tool manager | mise |
 | Checks | shellcheck |
+| Notices | `remote-dev-notices`, the reviewed third-party inventory and runtime-provided license files |
 | User entry point | launcher or gateway runtime after issue #25 is implemented |
 | Built-in agent | Codex CLI reference integration |
 | Optional integrations | reviewed installer/manager code only; proprietary binaries are not implied |
@@ -26,6 +27,20 @@ These executables and project-owned runtime components are shared through read-o
 The system Bubblewrap package and executable are deliberately not installed in the default image. The pinned Codex release may carry its own packaged fallback, but the supported launcher disables the unsupported inner sandbox explicitly, uses `untrusted` approvals and relies on the outer container plus narrow mounts as the TrueNAS isolation boundary.
 
 A shared executable does not imply shared configuration or credentials.
+
+## Licensing and distribution boundary
+
+Remote Dev project code is Apache-2.0. Bundled upstream components retain their own licenses and notices; the complete human-maintained inventory is in `third_party/README.md`, and the built image exposes it with:
+
+```bash
+remote-dev-notices
+remote-dev-notices --list
+remote-dev-notices --check
+```
+
+Ubuntu package notices remain under `/usr/share/doc/<package>/copyright`. Python, Node.js and npm license files are copied from the exact installed runtime artifacts during image construction. The generated SBOM supplements this inventory but does not replace required copyright, license or NOTICE files.
+
+Antigravity, Claude Code and similar optional proprietary agents are not covered by the project license and are not redistributed by default. Their binding install, terms, privacy, credential and non-affiliation policy is recorded in `third_party/optional-agents.md`.
 
 ## Service-private state
 
@@ -50,7 +65,7 @@ The supported deployment does not mount `/root`, `/home`, `/opt`, `/usr/local` o
 
 | Agent | Distribution in final image | Supported state |
 |---|---|---|
-| Codex CLI | Built from an official pinned release asset | Current reference implementation |
+| Codex CLI | Built from an official pinned release asset with Apache-2.0 and upstream NOTICE preserved | Current reference implementation |
 | Antigravity | Not redistributed by default; explicit vendor-sourced installation is planned | Not yet supported |
 | Claude Code | Not installed or advertised | Future research path only |
 | OpenCode | Independent project based on its official image | Outside this stack |
