@@ -44,6 +44,7 @@ common_args=(
   --build-arg "UBUNTU_VERSION=$UBUNTU_VERSION"
   --build-arg "UBUNTU_DIGEST=$UBUNTU_DIGEST"
   --build-arg "BASE_VERSION=$BASE_VERSION"
+  --build-arg "SOURCE_REVISION=$SOURCE_REVISION"
   --build-arg "GH_VERSION=$GH_VERSION"
   --build-arg "GH_AMD64_SHA256=$GH_AMD64_SHA256"
   --build-arg "GH_ARM64_SHA256=$GH_ARM64_SHA256"
