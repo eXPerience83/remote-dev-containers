@@ -6,10 +6,6 @@ inventory="$ROOT/third_party/README.md"
 optional_policy="$ROOT/third_party/optional-agents.md"
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
-codex_notice="$ROOT/third_party/components/codex/NOTICE"
-codex_source="$ROOT/third_party/components/codex/SOURCE.env"
-python_license="$ROOT/third_party/components/python/LICENSE"
-python_source="$ROOT/third_party/components/python/SOURCE.env"
 
 require_file() {
   local path="$1"
@@ -53,6 +49,30 @@ read_record_value() {
   printf '%s\n' "$value"
 }
 
+docker_arg_default() {
+  local path="$1"
+  local key="$2"
+  local value=""
+
+  if ! value="$(
+    awk -v prefix="ARG ${key}=" '
+      index($0, prefix) == 1 {
+        count += 1
+        value = substr($0, length(prefix) + 1)
+      }
+      END {
+        if (count != 1 || value == "") exit 1
+        print value
+      }
+    ' "$path"
+  )"; then
+    echo "ERROR: ${path#"$ROOT"/} must define exactly one non-empty ARG $key default" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
 locked_tool_version() {
   local tool="$1"
   local section="[[tools.${tool}]]"
@@ -84,14 +104,51 @@ locked_tool_version() {
   printf '%s\n' "$version"
 }
 
+verify_source_record() {
+  local label="$1"
+  local source_record="$2"
+  local version_key="$3"
+  local expected_version="$4"
+  local url_key="$5"
+  local expected_url="$6"
+  local blob_key="$7"
+  local preserved_file="$8"
+  local recorded_version=""
+  local recorded_url=""
+  local recorded_blob=""
+  local actual_blob=""
+
+  recorded_version="$(read_record_value "$source_record" "$version_key")"
+  recorded_url="$(read_record_value "$source_record" "$url_key")"
+  recorded_blob="$(read_record_value "$source_record" "$blob_key")"
+  actual_blob="$(git hash-object "$preserved_file")"
+
+  if [[ "$recorded_version" != "$expected_version" ]]; then
+    echo "ERROR: $label source version $recorded_version does not match selected version $expected_version" >&2
+    exit 1
+  fi
+  if [[ "$recorded_url" != "$expected_url" ]]; then
+    echo "ERROR: $label source URL must match the selected release: $expected_url" >&2
+    exit 1
+  fi
+  if [[ ! "$recorded_blob" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: $blob_key must be an exact lowercase Git blob SHA-1" >&2
+    exit 1
+  fi
+  if [[ "$actual_blob" != "$recorded_blob" ]]; then
+    echo "ERROR: ${preserved_file#"$ROOT"/} does not match its reviewed source record" >&2
+    exit 1
+  fi
+}
+
 require_file "$inventory"
 require_file "$optional_policy"
 require_file "$ROOT/scripts/print-locked-runtime-artifacts.py"
 
 # Full repository validation also checks workflow triggers and synchronized
 # defaults. Docker deliberately excludes .github from its build context, so the
-# image-context pass validates only the files and effective-value manifests that
-# can actually be embedded in the image.
+# image-context pass validates only files and effective build values available
+# inside that context.
 if [[ -d "$ROOT/.github/workflows" ]]; then
   bash "$ROOT/scripts/validate-version-pins.sh"
 fi
@@ -100,8 +157,11 @@ for file in \
   third_party/components/codex/NOTICE \
   third_party/components/codex/SOURCE.env \
   third_party/components/github-cli/LICENSE \
+  third_party/components/github-cli/SOURCE.env \
   third_party/components/ttyd/LICENSE \
+  third_party/components/ttyd/SOURCE.env \
   third_party/components/mise/LICENSE \
+  third_party/components/mise/SOURCE.env \
   third_party/components/python/LICENSE \
   third_party/components/python/SOURCE.env \
   third_party/components/uv/LICENSE-APACHE-2.0 \
@@ -109,73 +169,67 @@ for file in \
   require_file "$ROOT/$file"
 done
 
-codex_release_tag="$(sed -n 's/^ARG CODEX_RELEASE_TAG=//p' "$codex_dockerfile")"
-if [[ -z "$codex_release_tag" || "$codex_release_tag" == *$'\n'* ]]; then
-  echo "ERROR: images/codex/Dockerfile must define exactly one CODEX_RELEASE_TAG default" >&2
-  exit 1
-fi
+codex_release_tag="$(docker_arg_default "$codex_dockerfile" CODEX_RELEASE_TAG)"
+verify_source_record \
+  'Codex NOTICE' \
+  "$ROOT/third_party/components/codex/SOURCE.env" \
+  CODEX_RELEASE_TAG "$codex_release_tag" \
+  CODEX_NOTICE_URL "https://raw.githubusercontent.com/openai/codex/${codex_release_tag}/NOTICE" \
+  CODEX_NOTICE_GIT_BLOB_SHA1 "$ROOT/third_party/components/codex/NOTICE"
 
-recorded_codex_tag="$(read_record_value "$codex_source" CODEX_RELEASE_TAG)"
-recorded_codex_url="$(read_record_value "$codex_source" CODEX_NOTICE_URL)"
-recorded_codex_blob="$(read_record_value "$codex_source" CODEX_NOTICE_GIT_BLOB_SHA1)"
-expected_codex_url="https://raw.githubusercontent.com/openai/codex/${codex_release_tag}/NOTICE"
-actual_codex_blob="$(git hash-object "$codex_notice")"
+gh_default="$(docker_arg_default "$base_dockerfile" GH_VERSION)"
+gh_version="${REMOTE_DEV_GH_VERSION:-$gh_default}"
+verify_source_record \
+  'GitHub CLI license' \
+  "$ROOT/third_party/components/github-cli/SOURCE.env" \
+  GH_VERSION "$gh_version" \
+  GH_LICENSE_URL "https://raw.githubusercontent.com/cli/cli/v${gh_version}/LICENSE" \
+  GH_LICENSE_GIT_BLOB_SHA1 "$ROOT/third_party/components/github-cli/LICENSE"
 
-if [[ "$recorded_codex_tag" != "$codex_release_tag" ]]; then
-  echo "ERROR: Codex NOTICE release $recorded_codex_tag does not match Dockerfile release $codex_release_tag" >&2
-  exit 1
-fi
-if [[ "$recorded_codex_url" != "$expected_codex_url" ]]; then
-  echo "ERROR: Codex NOTICE URL must match the selected release: $expected_codex_url" >&2
-  exit 1
-fi
-if [[ ! "$recorded_codex_blob" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "ERROR: CODEX_NOTICE_GIT_BLOB_SHA1 must be an exact lowercase Git blob SHA-1" >&2
-  exit 1
-fi
-if [[ "$actual_codex_blob" != "$recorded_codex_blob" ]]; then
-  echo "ERROR: third_party/components/codex/NOTICE does not match its reviewed source record" >&2
-  exit 1
-fi
+ttyd_default="$(docker_arg_default "$base_dockerfile" TTYD_VERSION)"
+ttyd_version="${REMOTE_DEV_TTYD_VERSION:-$ttyd_default}"
+verify_source_record \
+  'ttyd license' \
+  "$ROOT/third_party/components/ttyd/SOURCE.env" \
+  TTYD_VERSION "$ttyd_version" \
+  TTYD_LICENSE_URL "https://raw.githubusercontent.com/tsl0922/ttyd/${ttyd_version}/LICENSE" \
+  TTYD_LICENSE_GIT_BLOB_SHA1 "$ROOT/third_party/components/ttyd/LICENSE"
 
-python_version="$(locked_tool_version python)"
-docker_python_version="$(sed -n 's/^ARG PYTHON_VERSION=//p' "$base_dockerfile")"
-if [[ -z "$docker_python_version" || "$docker_python_version" == *$'\n'* ]]; then
-  echo "ERROR: images/base/Dockerfile must define exactly one PYTHON_VERSION default" >&2
-  exit 1
-fi
-if [[ "$docker_python_version" != "$python_version" ]]; then
-  echo "ERROR: images/base/Dockerfile PYTHON_VERSION does not match mise.lock: $docker_python_version != $python_version" >&2
-  exit 1
-fi
+mise_default="$(docker_arg_default "$base_dockerfile" MISE_VERSION)"
+mise_version="${REMOTE_DEV_MISE_VERSION:-$mise_default}"
+verify_source_record \
+  'mise license' \
+  "$ROOT/third_party/components/mise/SOURCE.env" \
+  MISE_VERSION "$mise_version" \
+  MISE_LICENSE_URL "https://raw.githubusercontent.com/jdx/mise/v${mise_version}/LICENSE" \
+  MISE_LICENSE_GIT_BLOB_SHA1 "$ROOT/third_party/components/mise/LICENSE"
 
-recorded_python_version="$(read_record_value "$python_source" CPYTHON_VERSION)"
-recorded_python_url="$(read_record_value "$python_source" CPYTHON_LICENSE_URL)"
-recorded_python_blob="$(read_record_value "$python_source" CPYTHON_LICENSE_GIT_BLOB_SHA1)"
-expected_python_url="https://raw.githubusercontent.com/python/cpython/v${python_version}/LICENSE"
-actual_python_blob="$(git hash-object "$python_license")"
+python_locked_version="$(locked_tool_version python)"
+python_default="$(docker_arg_default "$base_dockerfile" PYTHON_VERSION)"
+python_version="${REMOTE_DEV_PYTHON_VERSION:-$python_default}"
+if [[ "$python_default" != "$python_locked_version" ]]; then
+  echo "ERROR: images/base/Dockerfile PYTHON_VERSION does not match mise.lock: $python_default != $python_locked_version" >&2
+  exit 1
+fi
+if [[ "$python_version" != "$python_locked_version" ]]; then
+  echo "ERROR: selected PYTHON_VERSION does not match mise.lock: $python_version != $python_locked_version" >&2
+  exit 1
+fi
+verify_source_record \
+  'CPython license' \
+  "$ROOT/third_party/components/python/SOURCE.env" \
+  CPYTHON_VERSION "$python_version" \
+  CPYTHON_LICENSE_URL "https://raw.githubusercontent.com/python/cpython/v${python_version}/LICENSE" \
+  CPYTHON_LICENSE_GIT_BLOB_SHA1 "$ROOT/third_party/components/python/LICENSE"
 
-if [[ "$recorded_python_version" != "$python_version" ]]; then
-  echo "ERROR: CPython license version $recorded_python_version does not match mise.lock Python $python_version" >&2
-  exit 1
-fi
-if [[ "$recorded_python_url" != "$expected_python_url" ]]; then
-  echo "ERROR: CPython license URL must match the locked Python tag: $expected_python_url" >&2
-  exit 1
-fi
-if [[ ! "$recorded_python_blob" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "ERROR: CPYTHON_LICENSE_GIT_BLOB_SHA1 must be an exact lowercase Git blob SHA-1" >&2
-  exit 1
-fi
-if [[ "$actual_python_blob" != "$recorded_python_blob" ]]; then
-  echo "ERROR: third_party/components/python/LICENSE does not match its reviewed source record" >&2
-  exit 1
-fi
-
-require_text "$inventory" "selected Codex \`${codex_release_tag}\` release"
-require_text "$inventory" '`components/codex/SOURCE.env`'
-require_text "$inventory" "matching CPython \`v${python_version}\` tag"
-require_text "$inventory" '`components/python/SOURCE.env`'
+for source_record in \
+  components/codex/SOURCE.env \
+  components/github-cli/SOURCE.env \
+  components/ttyd/SOURCE.env \
+  components/mise/SOURCE.env \
+  components/python/SOURCE.env; do
+  require_text "$inventory" "\`$source_record\`"
+done
 
 for variable in \
   UBUNTU_VERSION \
@@ -256,12 +310,17 @@ require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
 require_text "$base_dockerfile" 'print-locked-runtime-artifacts.py'
 require_text "$base_dockerfile" 'build argument disagrees with mise.lock'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
-require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/codex/SOURCE.env'
+for source_record in \
+  components/codex/SOURCE.env \
+  components/github-cli/SOURCE.env \
+  components/ttyd/SOURCE.env \
+  components/mise/SOURCE.env \
+  components/python/SOURCE.env; do
+  require_text "$ROOT/scripts/copy-runtime-notices.sh" "$source_record"
+  require_text "$ROOT/scripts/remote-dev-notices.sh" "$source_record"
+done
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/LICENSE'
-require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'LICENSE.cpython.txt'
-require_text "$ROOT/scripts/remote-dev-notices.sh" 'components/codex/SOURCE.env'
-require_text "$ROOT/scripts/remote-dev-notices.sh" 'components/python/SOURCE.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/python/LICENSE.cpython.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'BUILD-VERSIONS.env'
