@@ -99,9 +99,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
-# Validate the human inventory and optional-agent policy against the exact build
-# context before downloading or installing the independently distributed tools.
-RUN --mount=type=bind,source=.,target=/src,ro \
+# Validate the human inventory and optional-agent policy against only the files
+# it reads, so unrelated repository changes do not invalidate later tool layers.
+RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
+    --mount=type=bind,source=third_party,target=/src/third_party,ro \
+    --mount=type=bind,source=mise.lock,target=/src/mise.lock,ro \
+    --mount=type=bind,source=images,target=/src/images,ro \
     bash /src/scripts/validate-third-party-inventory.sh
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
