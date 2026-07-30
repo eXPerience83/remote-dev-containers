@@ -261,7 +261,8 @@ jobs:
           chmod 0755 "$mise_bin"
           MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
 
-          bash scripts/validate-version-pins.sh
+          bash scripts/refresh-third-party-source-records.sh
+          bash scripts/validate-third-party-inventory.sh
 
           tracked_files=(
             versions.env
@@ -269,18 +270,28 @@ jobs:
             mise.lock
             images/base/Dockerfile
             images/codex/Dockerfile
+            third_party/components/codex/NOTICE
+            third_party/components/codex/SOURCE.env
+            third_party/components/github-cli/LICENSE
+            third_party/components/github-cli/SOURCE.env
+            third_party/components/ttyd/LICENSE
+            third_party/components/ttyd/SOURCE.env
+            third_party/components/mise/LICENSE
+            third_party/components/mise/SOURCE.env
+            third_party/components/python/LICENSE
+            third_party/components/python/SOURCE.env
           )
           if git diff --quiet -- "${tracked_files[@]}"; then
-            echo "No upstream release, digest or runtime artifact changes."
+            echo "No upstream release, digest, runtime artifact or reviewed notice changes."
             if [[ -n "$existing_pr" ]]; then
               gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases, digests and locked runtime artifacts."
+                --comment "Closing because main already contains the latest tracked releases, digests, runtime artifacts and reviewed notice sources."
             fi
             exit 0
           fi
 
           git add "${tracked_files[@]}"
-          git commit -m "chore: update upstream versions, digests, and runtime lock"
+          git commit -m "chore: update upstream versions, artifacts, and notices"
 
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
              [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
@@ -298,7 +309,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release, digest and mise runtime-lock update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifact URLs, SHA-256 values and provenance with the verified pinned mise binary. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release, digest, mise runtime-lock and reviewed notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifact URLs, SHA-256 values and provenance with the verified pinned mise binary, and refreshes release-bound NOTICE/license files and source records. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
