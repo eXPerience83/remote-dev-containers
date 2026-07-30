@@ -178,7 +178,17 @@ COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
 RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
-    printf '%s\n' \
+    locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
+    && for expected in \
+      "PYTHON_VERSION=${PYTHON_VERSION}" \
+      "NODE_VERSION=${NODE_VERSION}" \
+      "UV_VERSION=${UV_VERSION}"; do \
+        if ! grep -Fqx -- "$expected" <<< "$locked_runtime_manifest"; then \
+          echo "ERROR: build argument disagrees with mise.lock: $expected" >&2; \
+          exit 1; \
+        fi; \
+      done \
+    && printf '%s\n' \
       "TARGETARCH=${TARGETARCH}" \
       "BASE_VERSION=${BASE_VERSION}" \
       "UBUNTU_VERSION=${UBUNTU_VERSION}" \
@@ -192,12 +202,9 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
       "MISE_VERSION=${MISE_VERSION}" \
       "MISE_AMD64_SHA256=${MISE_AMD64_SHA256}" \
       "MISE_ARM64_SHA256=${MISE_ARM64_SHA256}" \
-      "PYTHON_VERSION=${PYTHON_VERSION}" \
-      "NODE_VERSION=${NODE_VERSION}" \
       "NPM_VERSION=${NPM_VERSION}" \
-      "UV_VERSION=${UV_VERSION}" \
       > /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
-    && python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}" \
+    && printf '%s\n' "$locked_runtime_manifest" \
       >> /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
     && chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
     && copy-runtime-notices \
