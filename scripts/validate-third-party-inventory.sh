@@ -47,6 +47,13 @@ for file in \
   require_file "$ROOT/$file"
 done
 
+python_version="$(sed -n 's/^ARG PYTHON_VERSION=//p' "$base_dockerfile")"
+if [[ -z "$python_version" || "$python_version" == *$'\n'* ]]; then
+  echo "ERROR: images/base/Dockerfile must define exactly one PYTHON_VERSION default" >&2
+  exit 1
+fi
+require_text "$inventory" "matching CPython \`v${python_version}\` tag"
+
 for variable in \
   UBUNTU_VERSION \
   UBUNTU_DIGEST \
