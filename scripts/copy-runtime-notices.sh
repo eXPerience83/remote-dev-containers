@@ -5,6 +5,8 @@ shopt -s lastpipe
 notice_root="${REMOTE_DEV_NOTICE_ROOT:-/usr/share/doc/remote-dev}"
 third_party_root="$notice_root/third_party"
 project_license="${REMOTE_DEV_PROJECT_LICENSE:-$notice_root/LICENSE}"
+inventory="$third_party_root/inventory.json"
+source_lock="$third_party_root/sources.lock.json"
 
 require_file() {
   local path="$1"
@@ -35,9 +37,8 @@ copy_python_notices() {
   fi
 
   # The locked install_only_stripped archive omits CPython's primary license.
-  # Preserve the exact LICENSE from the matching CPython tag separately, then
-  # supplement it with every license/notice file that the installed artifact
-  # still provides for its bundled runtime and dependencies.
+  # Preserve the exact source-locked LICENSE from the matching CPython tag,
+  # then supplement it with every license/notice retained by the artifact.
   copy_file "$third_party_root/components/python/LICENSE" "$destination_root/LICENSE.cpython.txt"
 
   find "$python_prefix" -maxdepth 7 -type f \
@@ -148,19 +149,17 @@ NODE
 }
 
 require_file "$project_license"
-require_file "$third_party_root/components/codex/NOTICE"
-require_file "$third_party_root/components/codex/SOURCE.env"
-require_file "$third_party_root/components/github-cli/LICENSE"
-require_file "$third_party_root/components/github-cli/SOURCE.env"
-require_file "$third_party_root/components/ttyd/LICENSE"
-require_file "$third_party_root/components/ttyd/SOURCE.env"
-require_file "$third_party_root/components/mise/LICENSE"
-require_file "$third_party_root/components/mise/SOURCE.env"
-require_file "$third_party_root/components/python/LICENSE"
-require_file "$third_party_root/components/python/SOURCE.env"
-require_file "$third_party_root/components/uv/LICENSE-APACHE-2.0"
-require_file "$third_party_root/components/uv/LICENSE-MIT"
+require_file "$inventory"
+require_file "$source_lock"
 
+# Every repository-preserved upstream document in the source lock must already
+# be present before runtime-derived notices are collected.
+while IFS= read -r repository_path; do
+  require_file "$notice_root/$repository_path"
+done < <(jq -er '.documents[].path' "$source_lock")
+
+# Codex uses the standard Apache-2.0 license text. Keep a component-local copy
+# for discoverability without implying that the project license relicenses it.
 copy_file "$project_license" "$third_party_root/components/codex/LICENSE-APACHE-2.0"
 copy_python_notices
 copy_node_notices
