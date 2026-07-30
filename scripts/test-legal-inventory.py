@@ -45,6 +45,28 @@ LABEL docs=\"https://github.com/example/docs\"
             )
             self.assertEqual(legal_inventory.global_npm_specs(dockerfile), [("npm", "NPM_VERSION")])
 
+    def test_fixed_global_npm_package_fails_closed(self) -> None:
+        """Verify global npm additions cannot bypass version inventory."""
+        with tempfile.TemporaryDirectory() as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(
+                "RUN npm install --global some-tool@1.2.3\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported global npm package spec"):
+                legal_inventory.global_npm_specs(dockerfile)
+
+    def test_dynamic_network_fetch_fails_closed(self) -> None:
+        """Verify a variable-only download source cannot evade ownership."""
+        with tempfile.TemporaryDirectory() as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(
+                'RUN curl --fail "$TOOL_URL" -o /usr/local/bin/tool\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "literal HTTPS source"):
+                legal_inventory.docker_download_urls(dockerfile)
+
     def test_unclaimed_version_input_fails_closed(self) -> None:
         """Verify unclaimed version input fails closed."""
         inventory = {
