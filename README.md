@@ -31,6 +31,20 @@ Here, `danger-full-access` describes only the Codex inner sandbox. It does not g
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
+## Licenses and optional vendor software
+
+Remote Dev project code is Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv and their dependencies retain their respective upstream licenses and notices. The image preserves package-provided copyright files and copies the license files supplied by the exact installed runtime artifacts.
+
+Inspect the reviewed inventory in `third_party/README.md`, or from a built image:
+
+```bash
+remote-dev-notices
+remote-dev-notices --list
+remote-dev-notices --check
+```
+
+Antigravity, Claude Code and similar vendor products are not covered by this repository's Apache-2.0 license. They are not silently downloaded or redistributed by the current image. Any future optional installer must be initiated explicitly by the user, download directly from the vendor and follow the terms, privacy, credential-isolation and non-affiliation policy in `third_party/optional-agents.md`.
+
 ## Accepted target architecture
 
 The next runtime architecture is documented before implementation:
@@ -127,6 +141,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.
+- Optional vendor agents are not bundled or covered by the project Apache-2.0 license.
 - `edge` is experimental and may be replaced without notice.
 - Breaking configuration and persistence changes are still possible before `v0.1.0`.
 
@@ -142,6 +157,8 @@ Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repositor
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 - `PROJECT_STATUS.md`
+- `third_party/README.md`
+- `third_party/optional-agents.md`
 - `docs/architecture.md`
 - `docs/tool-matrix.md`
 - `docs/security.md`
