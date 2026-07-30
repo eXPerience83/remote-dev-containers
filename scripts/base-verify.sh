@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(bash git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck)
+required=(bash git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck remote-dev-notices)
 missing=0
 for cmd in "${required[@]}"; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -40,3 +40,4 @@ uv --version
 gh --version | head -n 1
 ttyd --version
 mise --version
+remote-dev-notices --check
