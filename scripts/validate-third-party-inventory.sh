@@ -41,6 +41,7 @@ for file in \
   third_party/components/github-cli/LICENSE \
   third_party/components/ttyd/LICENSE \
   third_party/components/mise/LICENSE \
+  third_party/components/python/LICENSE \
   third_party/components/uv/LICENSE-APACHE-2.0 \
   third_party/components/uv/LICENSE-MIT; do
   require_file "$ROOT/$file"
@@ -124,9 +125,9 @@ require_text "$base_dockerfile" 'github.com/tsl0922/ttyd/releases/download'
 require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
 require_text "$base_dockerfile" 'print-locked-runtime-artifacts.py'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
-require_text "$ROOT/scripts/copy-runtime-notices.sh" 'LICENSE.cpython.txt'
-require_text "$ROOT/scripts/remote-dev-notices.sh" 'require_unique_named_file'
-require_text "$ROOT/scripts/remote-dev-notices.sh" 'LICENSE.cpython.txt'
+require_text "$ROOT/scripts/copy-runtime-notices.sh" 'components/python/LICENSE'
+require_text "$ROOT/scripts/copy-runtime-notices.sh" 'runtime/python/LICENSE.cpython.txt'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/python/LICENSE.cpython.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'BUILD-VERSIONS.env'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'CODEX-BUILD.env'
