@@ -73,10 +73,13 @@ check_notices() {
 
   if [[ -s "$manifest" ]]; then
     for key in \
+      PYTHON_VERSION \
       PYTHON_ARTIFACT_URL \
       PYTHON_ARTIFACT_CHECKSUM \
+      NODE_VERSION \
       NODE_ARTIFACT_URL \
       NODE_ARTIFACT_CHECKSUM \
+      UV_VERSION \
       UV_ARTIFACT_URL \
       UV_ARTIFACT_CHECKSUM; do
       if ! require_manifest_value "$manifest" "$key"; then
