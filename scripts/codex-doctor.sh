@@ -24,7 +24,7 @@ GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_HEADER
 
 echo
-for cmd in codex bwrap gh git python node npm uv mise ttyd tmux ssh rg fd remote-dev-version; do
+for cmd in codex run-codex gh git python node npm uv mise ttyd tmux ssh rg fd remote-dev-version; do
   check_cmd "$cmd"
 done
 
@@ -36,21 +36,25 @@ else
   remote-dev-version 2>/dev/null || true
   status=1
 fi
-bwrap --version 2>/dev/null || true
 gh --version 2>/dev/null | head -n 1 || true
 python --version 2>/dev/null || true
 node --version 2>/dev/null || true
 uv --version 2>/dev/null || true
 
 echo
-printf 'Nested bubblewrap sandbox: '
-if bwrap --ro-bind / / /bin/true >/dev/null 2>&1; then
-  echo OK
+if policy_output="$(run-codex --print-policy 2>/dev/null)"; then
+  printf '%s\n' "$policy_output"
 else
-  echo 'UNAVAILABLE (host namespace or AppArmor policy)'
-  echo 'INFO: bubblewrap is installed, but the outer container host controls whether nested user namespaces are permitted.'
-  echo 'INFO: do not add privileged mode, SYS_ADMIN or an unconfined seccomp profile just to silence this diagnostic.'
+  echo 'Codex launch policy: unavailable'
+  status=1
 fi
+if command -v bwrap >/dev/null 2>&1; then
+  echo 'WARNING: system Bubblewrap is unexpectedly installed; the supported launcher still disables the inner sandbox.'
+  status=1
+fi
+echo 'INFO: danger-full-access disables only the unsupported inner sandbox; the outer container remains the supported isolation boundary.'
+echo 'INFO: untrusted commands require approval, but approvals are not a substitute for narrow mounts and container hardening.'
+echo 'INFO: do not add privileged mode, SYS_ADMIN or unconfined security profiles to enable a nested sandbox.'
 
 printf 'Codex auth: '
 if codex login status >/dev/null 2>&1; then

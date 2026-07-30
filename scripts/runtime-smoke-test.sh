@@ -11,12 +11,16 @@ cleanup() {
   rm -f "$log_file"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Secure by default: startup without a password must fail unless explicitly overridden.
-set +e
-timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1
-guard_status=$?
-set -e
+guard_status=0
+if timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1; then
+  guard_status=0
+else
+  guard_status=$?
+fi
 
 if (( guard_status == 0 )); then
   echo "ERROR: container started without web authentication" >&2
@@ -45,14 +49,47 @@ docker run -d \
 for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
-    docker exec "$name" bwrap --version
 
-    if docker exec "$name" bwrap --ro-bind / / /bin/true >/dev/null 2>&1; then
-      echo "Nested bubblewrap sandbox probe: OK"
-    else
-      echo "Nested bubblewrap sandbox probe: unavailable under the runner host policy (non-fatal)"
+    if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
+      echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2
+      exit 1
     fi
 
+    codex_version="$(docker exec "$name" codex --version)"
+    launcher_version="$(docker exec "$name" run-codex --version)"
+    if [[ "$launcher_version" != "$codex_version" ]]; then
+      echo "ERROR: run-codex did not execute the pinned Codex binary with its fixed policy" >&2
+      printf 'Raw Codex: %s\nLauncher: %s\n' "$codex_version" "$launcher_version" >&2
+      exit 1
+    fi
+    docker exec "$name" run-codex resume --help >/dev/null
+
+    policy_output="$(docker exec "$name" run-codex --print-policy)"
+    for expected_line in \
+      'Inner sandbox: disabled explicitly' \
+      'Isolation boundary: outer container' \
+      'Codex approval policy: untrusted'; do
+      if ! grep -Fxq "$expected_line" <<<"$policy_output"; then
+        echo "ERROR: Codex launch policy is missing: $expected_line" >&2
+        printf '%s\n' "$policy_output" >&2
+        exit 1
+      fi
+    done
+
+    doctor_output="$(docker exec "$name" codex-doctor)"
+    for expected_line in \
+      'Inner sandbox: disabled explicitly' \
+      'Isolation boundary: outer container' \
+      'Codex approval policy: untrusted'; do
+      if ! grep -Fxq "$expected_line" <<<"$doctor_output"; then
+        echo "ERROR: diagnostics are missing: $expected_line" >&2
+        printf '%s\n' "$doctor_output" >&2
+        exit 1
+      fi
+    done
+
+    echo "Pinned Codex launcher and resume compatibility: OK"
+    echo "Explicit outer-isolation policy: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
   fi

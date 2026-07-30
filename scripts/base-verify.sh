@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(bash bwrap git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck)
+required=(bash git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck)
 missing=0
 for cmd in "${required[@]}"; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -11,6 +11,11 @@ for cmd in "${required[@]}"; do
 done
 
 if (( missing != 0 )); then
+  exit 1
+fi
+
+if command -v bwrap >/dev/null 2>&1; then
+  echo "ERROR: the system Bubblewrap executable must not be installed in the default outer-isolation image" >&2
   exit 1
 fi
 
@@ -28,7 +33,6 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
   exit 1
 fi
 
-bwrap --version
 python --version
 node --version
 npm --version

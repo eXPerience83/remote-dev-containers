@@ -172,8 +172,8 @@ if [[ ! "$UV_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-if grep -Eq '^ARG BUBBLEWRAP_VERSION=' "$base_dockerfile" || grep -Eq '^[[:space:]]*bubblewrap=' "$base_dockerfile"; then
-  echo "ERROR: bubblewrap must follow Ubuntu repository security updates unless APT snapshots are introduced" >&2
+if grep -Fiq 'bubblewrap' "$base_dockerfile"; then
+  echo "ERROR: default base Dockerfile must not install or reference Bubblewrap" >&2
   exit 1
 fi
 

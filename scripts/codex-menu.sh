@@ -83,10 +83,10 @@ MENU
   read -r -p "> " choice
   case "$choice" in
     1)
-      if run_interactive_and_harden "Codex" codex; then :; fi
+      if run_interactive_and_harden "Codex" /usr/local/bin/run-codex; then :; fi
       ;;
     2)
-      if run_interactive_and_harden "Codex resume" codex resume; then :; fi
+      if run_interactive_and_harden "Codex resume" /usr/local/bin/run-codex resume; then :; fi
       ;;
     3)
       if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi

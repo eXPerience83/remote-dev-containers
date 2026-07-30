@@ -20,6 +20,14 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 - Volúmenes separados para workspace, Codex, GitHub, Git y SSH.
 - AMD64 como única arquitectura inicial.
 
+## Aislamiento en TrueNAS
+
+La imagen predeterminada no instala el paquete Bubblewrap del sistema. El lanzador soportado desactiva explícitamente el sandbox interno no compatible de Codex mediante `--sandbox danger-full-access` y usa `--ask-for-approval untrusted`. El menú, la opción de reanudar y el arranque directo de Codex utilizan el mismo lanzador.
+
+En este contexto, `danger-full-access` solo describe el sandbox interno de Codex: no concede privilegios Docker ni acceso adicional al host. El límite de seguridad soportado es el contenedor exterior y sus montajes mínimos. Los comandos de shell no considerados fiables requieren aprobación, pero las aprobaciones no son un sandbox ni ocultan a Codex los archivos y credenciales ya montados en el servicio.
+
+No debilites el host ni el contenedor con modo privilegiado, `SYS_ADMIN`, perfiles de seguridad sin restricciones o el socket de Docker para intentar iniciar un sandbox anidado. Monta únicamente las rutas que necesite el servicio.
+
 ## Prueba pública de la imagen edge
 
 La imagen `edge` es una compilación experimental publicada automáticamente después de fusionar en `main` cambios relevantes para la imagen o el runtime. Puede descargarse sin credenciales:

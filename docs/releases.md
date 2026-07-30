@@ -18,7 +18,9 @@ The workflow refuses to publish from a branch other than `main`.
 
 Stable upstream releases are checked daily. The updater tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines. It updates versions and architecture-specific hashes together and opens or refreshes a pull request; it never changes public image tags directly. Ubuntu LTS tag and digest updates remain managed by Renovate. Once an update PR passes the required build, runtime checks, vulnerability gate and review and is merged, the edge publication workflow builds and publishes the updated image.
 
-The image includes Ubuntu's `bubblewrap` package. It deliberately follows the current security revision available from the selected Ubuntu repositories rather than pinning an exact APT revision that may disappear after being superseded. This means APT package resolution is not claimed to be bit-for-bit reproducible; the completed image is instead covered by smoke tests and Trivy before public tags are promoted. Whether Codex can create a second sandbox inside Docker still depends on the outer host kernel, user-namespace and AppArmor policy. Runtime diagnostics report this compatibility separately. The supported deployment does not enable privileged mode, `SYS_ADMIN` or an unconfined seccomp profile merely to make nested bubblewrap work.
+The default image does not install the system Bubblewrap package. On the supported TrueNAS profile, the launcher starts Codex with `--sandbox danger-full-access --ask-for-approval untrusted`: the unsupported inner sandbox is disabled explicitly, and the outer container is the security boundary. Approval prompts are a control for untrusted shell commands, not a sandbox or a substitute for narrow mounts. The supported deployment does not enable privileged mode, `SYS_ADMIN`, unconfined security profiles or host changes merely to create a nested sandbox.
+
+APT package resolution follows the current security revisions available from the selected Ubuntu repositories rather than pinning exact revisions that may disappear after being superseded. APT resolution is therefore not claimed to be bit-for-bit reproducible; completed images are covered by smoke tests and Trivy before public tags are promoted.
 
 > [!WARNING]
 > Public availability does not make `edge` stable or production-ready. Breaking changes are possible, and the ttyd port must not be exposed directly to the Internet.
@@ -50,7 +52,7 @@ Before creating a stable version tag:
 3. Browser access, authentication and tmux reconnection have been verified.
 4. Codex device-code login persists across recreation.
 5. GitHub CLI login, clone, push and pull-request creation have been verified.
-6. Codex sandbox and approval behavior have been tested on the target TrueNAS host, including the nested bubblewrap compatibility result.
+6. The fixed Codex launch policy has been tested on the target TrueNAS host: no Bubblewrap warning, trusted read-only commands run normally, untrusted write commands request approval, and diagnostics report the outer-container boundary.
 7. The changelog has a dated release section.
 8. Third-party licenses and notices are complete.
 9. The repository contains no credentials, personal paths or private infrastructure details.

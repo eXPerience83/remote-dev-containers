@@ -4,6 +4,7 @@ set -euo pipefail
 session="${TMUX_SESSION:-codex}"
 window_name=remote-dev
 workspace="${WORKSPACE:-/workspace}"
+readonly run_codex_binary=/usr/local/bin/run-codex
 
 if [[ -z "$session" ]]; then
   echo "ERROR: TMUX_SESSION must not be empty" >&2
@@ -16,7 +17,8 @@ case "${START_MODE:-menu}" in
     ;;
   codex)
     printf -v quoted_workspace '%q' "$workspace"
-    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session codex"
+    printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
+    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
     ;;
   shell)
     printf -v quoted_workspace '%q' "$workspace"

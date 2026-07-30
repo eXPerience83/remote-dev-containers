@@ -51,15 +51,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # APT repositories are moving inputs even when the Ubuntu image digest is pinned.
-# Install Ubuntu's current bubblewrap security revision instead of an exact package
-# version that may disappear after it is superseded; final images are smoke-tested
-# and scanned before public tags are promoted.
+# Final images follow current Ubuntu security revisions, then pass smoke tests and
+# vulnerability scans before public tags are promoted.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
-        bubblewrap \
         build-essential \
         ca-certificates \
         curl \

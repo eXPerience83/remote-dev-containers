@@ -28,6 +28,7 @@ workdir="$(mktemp -d)"
 tmux_socket="remote-dev-smoke-$$"
 direct_codex_socket="${tmux_socket}-direct-codex"
 direct_shell_socket="${tmux_socket}-direct-shell"
+
 cleanup() {
   local socket=""
   for socket in "$tmux_socket" "$direct_codex_socket" "$direct_shell_socket"; do
@@ -36,6 +37,8 @@ cleanup() {
   rm -rf "$workdir"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 assert_short_revision() {
   local input="$1"
@@ -84,6 +87,14 @@ assert_auth_hardened() {
   fi
 }
 
+escape_sed_replacement() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//&/\\&}"
+  value="${value//|/\\|}"
+  printf '%s' "$value"
+}
+
 sample_revision=0123456789abcdef0123456789abcdef01234567
 assert_short_revision "$sample_revision" 0123456789ab
 assert_short_revision "${sample_revision}-dirty" 0123456789ab-dirty
@@ -102,7 +113,14 @@ image_version="$(<"$metadata_dir/image-version")"
 source_revision="$(<"$metadata_dir/source-revision")"
 expected_image_version="${1:-$image_version}"
 expected_source_revision="${2:-$source_revision}"
-codex_version="$(codex --version)"
+codex_version="$(/usr/local/bin/codex --version)"
+launcher_version="$(/usr/local/bin/run-codex --version)"
+
+if [[ "$launcher_version" != "$codex_version" ]]; then
+  echo "ERROR: run-codex did not execute the pinned Codex binary with its fixed policy" >&2
+  printf 'Raw Codex: %s\nLauncher: %s\n' "$codex_version" "$launcher_version" >&2
+  exit 1
+fi
 
 if [[ "$image_version" != "$expected_image_version" ]]; then
   echo "ERROR: image version metadata mismatch: expected $expected_image_version, got $image_version" >&2
@@ -152,9 +170,14 @@ fi
 printf '%s\n' "$default_output"
 printf '%s\n' "$menu_output"
 echo "Image identity is bound to embedded metadata: OK"
+printf '%s\n' "$codex_version"
+echo "Pinned Codex launcher compatibility: OK"
 
-codex --version
-bwrap --version
+if command -v bwrap >/dev/null 2>&1; then
+  echo "ERROR: the system Bubblewrap executable must not be installed in the default outer-isolation image" >&2
+  exit 1
+fi
+echo "System Bubblewrap executable is absent: OK"
 gh --version | head -n 1
 git --version
 python --version
@@ -245,9 +268,11 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   fi
 
   direct_codex_state="$workdir/direct-codex-state"
-  fake_bin="$workdir/fake-bin"
-  mkdir -p "$direct_codex_state" "$fake_bin"
-  cat > "$fake_bin/codex" <<'FAKE_CODEX'
+  fake_codex="$workdir/fake codex&pipe|back\\slash"
+  test_run_codex="$workdir/run codex&pipe|back\\slash"
+  test_attach_tmux="$workdir/attach remote-dev tmux"
+  mkdir -p "$direct_codex_state"
+  cat > "$fake_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 umask 000
@@ -255,7 +280,42 @@ printf 'token\n' > "$CODEX_HOME/auth.json"
 chmod 0660 "$CODEX_HOME/auth.json"
 sleep 1
 FAKE_CODEX
-  chmod 0755 "$fake_bin/codex"
+  chmod 0755 "$fake_codex"
+
+  if ! grep -Fxq 'readonly codex_binary=/usr/local/bin/codex' /usr/local/bin/run-codex; then
+    echo "ERROR: installed run-codex does not pin /usr/local/bin/codex" >&2
+    exit 1
+  fi
+  if ! grep -Fxq 'readonly run_codex_binary=/usr/local/bin/run-codex' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: installed tmux launcher does not pin /usr/local/bin/run-codex" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'printf -v quoted_run_codex_binary' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: START_MODE=codex does not shell-quote the pinned run-codex path" >&2
+    exit 1
+  fi
+
+  printf -v fake_codex_quoted '%q' "$fake_codex"
+  printf -v test_run_codex_quoted '%q' "$test_run_codex"
+  fake_codex_replacement="$(escape_sed_replacement "$fake_codex_quoted")"
+  test_run_codex_replacement="$(escape_sed_replacement "$test_run_codex_quoted")"
+
+  sed \
+    "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$fake_codex_replacement|" \
+    /usr/local/bin/run-codex > "$test_run_codex"
+  sed \
+    "s|^readonly run_codex_binary=/usr/local/bin/run-codex$|readonly run_codex_binary=$test_run_codex_replacement|" \
+    /usr/local/bin/attach-remote-dev-tmux > "$test_attach_tmux"
+  chmod 0755 "$test_run_codex" "$test_attach_tmux"
+
+  if ! grep -Fxq "readonly codex_binary=$fake_codex_quoted" "$test_run_codex"; then
+    echo "ERROR: failed to create an isolated run-codex smoke launcher" >&2
+    exit 1
+  fi
+  if ! grep -Fxq "readonly run_codex_binary=$test_run_codex_quoted" "$test_attach_tmux"; then
+    echo "ERROR: failed to route the isolated tmux smoke launcher" >&2
+    exit 1
+  fi
 
   REMOTE_DEV_TMUX_DETACHED=1 \
   TMUX_SOCKET_NAME="$direct_codex_socket" \
@@ -263,8 +323,7 @@ FAKE_CODEX
   START_MODE=codex \
   WORKSPACE=/workspace \
   CODEX_HOME="$direct_codex_state" \
-  PATH="$fake_bin:$PATH" \
-    /usr/local/bin/attach-remote-dev-tmux
+    "$test_attach_tmux"
 
   wait_for_tmux_session_exit "$direct_codex_socket" direct-codex
   assert_auth_hardened "START_MODE=codex" "$direct_codex_state"

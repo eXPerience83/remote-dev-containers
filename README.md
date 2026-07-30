@@ -23,13 +23,21 @@ The current edge image is the Codex reference implementation:
 - separate persistent paths for workspace and credentials;
 - AMD64 first.
 
+### Isolation on TrueNAS
+
+The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access` and uses `--ask-for-approval untrusted`. The menu, resume action and direct Codex start mode all use that same launcher.
+
+Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Untrusted shell commands require approval, but approvals are not a sandbox and do not protect files or credentials already mounted into the service.
+
+Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
+
 ## Accepted target architecture
 
 The next runtime architecture is documented before implementation:
 
 - one user-installed Remote Dev App or Compose stack;
 - one final Remote Dev image digest reused by every service;
-- one primary launcher URL;
+- one primary launcher or gateway URL;
 - one isolated service per enabled coding agent;
 - Codex as the built-in reference service;
 - Antigravity as the first planned optional vendor-installed service;
@@ -114,6 +122,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not publish the terminal port directly to the Internet.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
+- The default Codex launcher disables the inner sandbox explicitly; the outer container is the supported isolation boundary.
+- Approval prompts are not a sandbox and do not hide mounted files or credentials from Codex.
 - Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.

@@ -23,6 +23,8 @@ These executables and project-owned runtime components are shared through read-o
 | Built-in agent | Codex CLI reference integration |
 | Optional integrations | reviewed installer/manager code only; proprietary binaries are not implied |
 
+The system Bubblewrap package and executable are deliberately not installed in the default image. The pinned Codex release may carry its own packaged fallback, but the supported launcher disables the unsupported inner sandbox explicitly, uses `untrusted` approvals and relies on the outer container plus narrow mounts as the TrueNAS isolation boundary.
+
 A shared executable does not imply shared configuration or credentials.
 
 ## Service-private state
