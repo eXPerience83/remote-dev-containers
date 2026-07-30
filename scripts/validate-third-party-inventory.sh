@@ -26,7 +26,14 @@ require_text() {
 
 require_file "$inventory"
 require_file "$optional_policy"
-bash "$ROOT/scripts/validate-version-pins.sh"
+
+# Full repository validation also checks workflow triggers and synchronized
+# defaults. Docker deliberately excludes .github from its build context, so the
+# image-context pass validates only the files and effective-value manifests that
+# can actually be embedded in the image.
+if [[ -d "$ROOT/.github/workflows" ]]; then
+  bash "$ROOT/scripts/validate-version-pins.sh"
+fi
 
 for file in \
   third_party/components/codex/NOTICE \
