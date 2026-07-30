@@ -66,10 +66,7 @@ copy_npm_notices() {
   npm_root="$(npm root --global)"
   npm_package="$npm_root/npm"
   copy_file "$npm_package/LICENSE" "$destination_root/LICENSE"
-
-  if [[ -s "$npm_package/DEPENDENCIES.md" ]]; then
-    install -D -m 0644 "$npm_package/DEPENDENCIES.md" "$destination_root/DEPENDENCIES.md"
-  fi
+  copy_file "$npm_package/DEPENDENCIES.md" "$destination_root/DEPENDENCIES.md"
 }
 
 require_file "$project_license"
