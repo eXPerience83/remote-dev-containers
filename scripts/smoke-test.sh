@@ -286,8 +286,12 @@ FAKE_CODEX
     echo "ERROR: installed run-codex does not pin /usr/local/bin/codex" >&2
     exit 1
   fi
-  if ! grep -Fq '/usr/local/bin/run-direct-session /usr/local/bin/run-codex' /usr/local/bin/attach-remote-dev-tmux; then
-    echo "ERROR: START_MODE=codex is not routed through run-direct-session and run-codex" >&2
+  if ! grep -Fxq 'readonly run_codex_binary=/usr/local/bin/run-codex' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: installed tmux launcher does not pin /usr/local/bin/run-codex" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'printf -v quoted_run_codex_binary' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: START_MODE=codex does not shell-quote the pinned run-codex path" >&2
     exit 1
   fi
 
@@ -300,7 +304,7 @@ FAKE_CODEX
     "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$fake_codex_replacement|" \
     /usr/local/bin/run-codex > "$test_run_codex"
   sed \
-    "s|/usr/local/bin/run-codex|$test_run_codex_replacement|" \
+    "s|^readonly run_codex_binary=/usr/local/bin/run-codex$|readonly run_codex_binary=$test_run_codex_replacement|" \
     /usr/local/bin/attach-remote-dev-tmux > "$test_attach_tmux"
   chmod 0755 "$test_run_codex" "$test_attach_tmux"
 
@@ -308,7 +312,7 @@ FAKE_CODEX
     echo "ERROR: failed to create an isolated run-codex smoke launcher" >&2
     exit 1
   fi
-  if ! grep -Fq "$test_run_codex_quoted" "$test_attach_tmux"; then
+  if ! grep -Fxq "readonly run_codex_binary=$test_run_codex_quoted" "$test_attach_tmux"; then
     echo "ERROR: failed to route the isolated tmux smoke launcher" >&2
     exit 1
   fi
