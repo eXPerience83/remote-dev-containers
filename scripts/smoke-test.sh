@@ -113,8 +113,8 @@ image_version="$(<"$metadata_dir/image-version")"
 source_revision="$(<"$metadata_dir/source-revision")"
 expected_image_version="${1:-$image_version}"
 expected_source_revision="${2:-$source_revision}"
-codex_version="$(codex --version)"
-launcher_version="$(run-codex --version)"
+codex_version="$(/usr/local/bin/codex --version)"
+launcher_version="$(/usr/local/bin/run-codex --version)"
 
 if [[ "$launcher_version" != "$codex_version" ]]; then
   echo "ERROR: run-codex did not execute the pinned Codex binary with its fixed policy" >&2
