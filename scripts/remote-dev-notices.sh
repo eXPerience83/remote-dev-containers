@@ -34,6 +34,16 @@ require_nonempty_directory() {
   fi
 }
 
+require_python_runtime_license() {
+  local path="$1"
+  if [[ ! -d "$path" ]] || ! find "$path" -type f \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+    ! -name 'LICENSE.cpython.txt' -size +0c -print -quit | grep -q .; then
+    echo "ERROR: required supplemental Python runtime license or notice is missing below: $path" >&2
+    return 1
+  fi
+}
+
 require_manifest_value() {
   local manifest="$1"
   local key="$2"
@@ -101,6 +111,10 @@ check_notices() {
       failed=1
     fi
   done
+
+  if ! require_python_runtime_license "$third_party_root/runtime/python"; then
+    failed=1
+  fi
 
   if (( failed != 0 )); then
     return 1
