@@ -104,7 +104,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
     --mount=type=bind,source=third_party,target=/src/third_party,ro \
     --mount=type=bind,source=mise.lock,target=/src/mise.lock,ro \
-    --mount=type=bind,source=images,target=/src/images,ro \
+    --mount=type=bind,source=images/base/Dockerfile,target=/src/images/base/Dockerfile,ro \
+    --mount=type=bind,source=images/codex/Dockerfile,target=/src/images/codex/Dockerfile,ro \
     bash /src/scripts/validate-third-party-inventory.sh
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
