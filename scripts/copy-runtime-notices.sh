@@ -117,7 +117,8 @@ function visit(directory) {
 
     const metadata = JSON.parse(fs.readFileSync(candidate, 'utf8'));
     if (!metadata.name || !metadata.version) continue;
-    const row = [clean(metadata.name), clean(metadata.version), licenseText(metadata.license)].join('\t');
+    const declaredLicense = metadata.license ?? metadata.licenses;
+    const row = [clean(metadata.name), clean(metadata.version), licenseText(declaredLicense)].join('\t');
     packages.set(row, row);
   }
 }
