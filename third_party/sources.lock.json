@@ -1,0 +1,54 @@
+{
+  "documents": [
+    {
+      "component": "codex-cli",
+      "git_blob_sha1": "c137c5d1f244e80195f3647d3c31d2a9f06c9a8a",
+      "path": "third_party/components/codex/NOTICE",
+      "url": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/NOTICE",
+      "version": "rust-v0.146.0"
+    },
+    {
+      "component": "github-cli",
+      "git_blob_sha1": "b6a58a9572cbd7e4550f8205a9c4fd199cd442f2",
+      "path": "third_party/components/github-cli/LICENSE",
+      "url": "https://raw.githubusercontent.com/cli/cli/v2.96.0/LICENSE",
+      "version": "2.96.0"
+    },
+    {
+      "component": "mise",
+      "git_blob_sha1": "5333824e7fed856d37c22a975e3b323b8bbdf1f7",
+      "path": "third_party/components/mise/LICENSE",
+      "url": "https://raw.githubusercontent.com/jdx/mise/v2026.7.17/LICENSE",
+      "version": "2026.7.17"
+    },
+    {
+      "component": "python-runtime",
+      "git_blob_sha1": "20cf39097c68baa17cc566b64e76d34ebf034044",
+      "path": "third_party/components/python/LICENSE",
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.14.6/LICENSE",
+      "version": "3.14.6"
+    },
+    {
+      "component": "ttyd",
+      "git_blob_sha1": "ff33579934c9e8dbec412f0153d602e733427f5a",
+      "path": "third_party/components/ttyd/LICENSE",
+      "url": "https://raw.githubusercontent.com/tsl0922/ttyd/1.7.7/LICENSE",
+      "version": "1.7.7"
+    },
+    {
+      "component": "uv",
+      "git_blob_sha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "path": "third_party/components/uv/LICENSE-APACHE-2.0",
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.0/LICENSE-APACHE",
+      "version": "0.12.0"
+    },
+    {
+      "component": "uv",
+      "git_blob_sha1": "014835144877ea9c926d027ece3e1a26290cf481",
+      "path": "third_party/components/uv/LICENSE-MIT",
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.0/LICENSE-MIT",
+      "version": "0.12.0"
+    }
+  ],
+  "schema_version": 1
+}
