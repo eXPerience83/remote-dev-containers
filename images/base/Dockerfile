@@ -101,11 +101,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Validate the human inventory and optional-agent policy against only the files
 # it reads, so unrelated repository changes do not invalidate later tool layers.
+# Pass the effective build arguments explicitly so overrides cannot install a
+# release whose preserved license record belongs to a different version.
 RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
     --mount=type=bind,source=third_party,target=/src/third_party,ro \
     --mount=type=bind,source=mise.lock,target=/src/mise.lock,ro \
     --mount=type=bind,source=images/base/Dockerfile,target=/src/images/base/Dockerfile,ro \
     --mount=type=bind,source=images/codex/Dockerfile,target=/src/images/codex/Dockerfile,ro \
+    REMOTE_DEV_GH_VERSION="${GH_VERSION}" \
+    REMOTE_DEV_TTYD_VERSION="${TTYD_VERSION}" \
+    REMOTE_DEV_MISE_VERSION="${MISE_VERSION}" \
+    REMOTE_DEV_PYTHON_VERSION="${PYTHON_VERSION}" \
     bash /src/scripts/validate-third-party-inventory.sh
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
