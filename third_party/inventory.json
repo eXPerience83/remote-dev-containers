@@ -1,0 +1,367 @@
+{
+  "components": [
+    {
+      "distribution": "Pinned OCI base image",
+      "id": "ubuntu-base",
+      "image_scope": "both",
+      "inputs": [
+        "UBUNTU_VERSION",
+        "UBUNTU_DIGEST"
+      ],
+      "license_expression": "Multiple upstream licenses",
+      "name": "Ubuntu base",
+      "notice_locations": [
+        "/usr/share/doc/<package>/copyright"
+      ],
+      "notice_treatment": "The pinned base digest and package database identify the exact Ubuntu content.",
+      "sbom": {
+        "status": "required"
+      },
+      "trademark_policy": "Ubuntu is named descriptively; no Canonical affiliation or endorsement is claimed.",
+      "upstream": "https://hub.docker.com/_/ubuntu",
+      "version_source": {
+        "key": "UBUNTU_VERSION",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Packages installed from Ubuntu archives",
+      "id": "ubuntu-apt",
+      "image_scope": "both",
+      "inputs": [],
+      "license_expression": "Multiple upstream licenses",
+      "name": "APT-installed tools and libraries",
+      "notice_locations": [
+        "/usr/share/doc/<package>/copyright"
+      ],
+      "notice_treatment": "Package-provided copyright and license files are retained. The direct package list is generated below from the Dockerfile.",
+      "sbom": {
+        "status": "covered-by-ecosystem"
+      },
+      "trademark_policy": "Package and project names are used only to identify shipped software.",
+      "upstream": "Ubuntu archives and each package's upstream project",
+      "version_source": {
+        "description": "Parsed from the apt-get install block",
+        "kind": "discovered"
+      }
+    },
+    {
+      "distribution": "Official pinned musl release archive",
+      "download_url_markers": [
+        "https://github.com/openai/codex/releases/download/"
+      ],
+      "id": "codex-cli",
+      "image_scope": "final",
+      "inputs": [
+        "CODEX_RELEASE_TAG",
+        "CODEX_AMD64_SHA256",
+        "CODEX_ARM64_SHA256"
+      ],
+      "license_expression": "Apache-2.0",
+      "name": "OpenAI Codex CLI",
+      "notice_locations": [
+        "components/codex/NOTICE",
+        "components/codex/LICENSE-APACHE-2.0"
+      ],
+      "notice_treatment": "The upstream NOTICE from the exact selected release is preserved verbatim. The Apache-2.0 license text is available through the project license copy and is not used to relicense Codex.",
+      "sbom": {
+        "reason": "A standalone Rust binary may not be represented as a package by every SBOM generator; direct-download discovery and build manifests remain authoritative.",
+        "status": "not-guaranteed"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/codex/NOTICE",
+          "url_template": "https://raw.githubusercontent.com/openai/codex/{version}/NOTICE"
+        }
+      ],
+      "trademark_policy": "OpenAI and Codex are used descriptively; the image states that it is community maintained and not affiliated with OpenAI.",
+      "upstream": "https://github.com/openai/codex",
+      "version_source": {
+        "key": "CODEX_RELEASE_TAG",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Official pinned release archive",
+      "download_url_markers": [
+        "https://github.com/cli/cli/releases/download/"
+      ],
+      "id": "github-cli",
+      "image_scope": "both",
+      "inputs": [
+        "GH_VERSION",
+        "GH_AMD64_SHA256",
+        "GH_ARM64_SHA256"
+      ],
+      "license_expression": "MIT",
+      "name": "GitHub CLI",
+      "notice_locations": [
+        "components/github-cli/LICENSE"
+      ],
+      "notice_treatment": "The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked.",
+      "sbom": {
+        "reason": "The installed standalone Go binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately.",
+        "status": "not-guaranteed"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/github-cli/LICENSE",
+          "url_template": "https://raw.githubusercontent.com/cli/cli/v{version}/LICENSE"
+        }
+      ],
+      "trademark_policy": "GitHub and GitHub CLI are used descriptively; no GitHub affiliation or endorsement is claimed.",
+      "upstream": "https://github.com/cli/cli",
+      "version_source": {
+        "key": "GH_VERSION",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Official pinned release binary",
+      "download_url_markers": [
+        "https://github.com/tsl0922/ttyd/releases/download/"
+      ],
+      "id": "ttyd",
+      "image_scope": "both",
+      "inputs": [
+        "TTYD_VERSION",
+        "TTYD_AMD64_SHA256",
+        "TTYD_ARM64_SHA256"
+      ],
+      "license_expression": "MIT",
+      "name": "ttyd",
+      "notice_locations": [
+        "components/ttyd/LICENSE"
+      ],
+      "notice_treatment": "The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked.",
+      "sbom": {
+        "reason": "The installed standalone binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately.",
+        "status": "not-guaranteed"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/ttyd/LICENSE",
+          "url_template": "https://raw.githubusercontent.com/tsl0922/ttyd/{version}/LICENSE"
+        }
+      ],
+      "trademark_policy": "The project name is used only to identify the shipped executable.",
+      "upstream": "https://github.com/tsl0922/ttyd",
+      "version_source": {
+        "key": "TTYD_VERSION",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Official pinned release binary",
+      "download_url_markers": [
+        "https://github.com/jdx/mise/releases/download/"
+      ],
+      "id": "mise",
+      "image_scope": "both",
+      "inputs": [
+        "MISE_VERSION",
+        "MISE_AMD64_SHA256",
+        "MISE_ARM64_SHA256"
+      ],
+      "license_expression": "MIT",
+      "name": "mise",
+      "notice_locations": [
+        "components/mise/LICENSE"
+      ],
+      "notice_treatment": "The exact upstream LICENSE from the matching release tag is preserved verbatim and version-locked.",
+      "sbom": {
+        "reason": "The installed standalone binary may not be emitted as a package; its direct-download pin and source-locked license are validated separately.",
+        "status": "not-guaranteed"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/mise/LICENSE",
+          "url_template": "https://raw.githubusercontent.com/jdx/mise/v{version}/LICENSE"
+        }
+      ],
+      "trademark_policy": "The project name is used only to identify the shipped executable.",
+      "upstream": "https://github.com/jdx/mise",
+      "version_source": {
+        "key": "MISE_VERSION",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Exact astral-sh/python-build-standalone install_only_stripped archive selected by mise.lock",
+      "id": "python-runtime",
+      "image_scope": "both",
+      "inputs": [
+        "PYTHON_VERSION"
+      ],
+      "license_expression": "Python-2.0 plus bundled dependency licenses",
+      "name": "Python runtime",
+      "notice_locations": [
+        "components/python/LICENSE",
+        "runtime/python/"
+      ],
+      "notice_treatment": "The stripped archive omits CPython's primary license, so the exact matching CPython LICENSE is source-locked and copied alongside every license or notice still present in the installed artifact.",
+      "sbom": {
+        "status": "covered-by-ecosystem"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/python/LICENSE",
+          "url_template": "https://raw.githubusercontent.com/python/cpython/v{version}/LICENSE"
+        }
+      ],
+      "trademark_policy": "Python is used descriptively; no Python Software Foundation endorsement is claimed.",
+      "upstream": "https://github.com/astral-sh/python-build-standalone and https://github.com/python/cpython",
+      "version_source": {
+        "kind": "mise",
+        "mirror_env_key": "PYTHON_VERSION",
+        "tool": "python"
+      }
+    },
+    {
+      "distribution": "Exact official Node.js archive selected by mise.lock",
+      "id": "node-runtime",
+      "image_scope": "both",
+      "inputs": [
+        "NODE_VERSION"
+      ],
+      "license_expression": "MIT plus third-party terms embedded in Node.js LICENSE",
+      "name": "Node.js runtime",
+      "notice_locations": [
+        "runtime/node/LICENSE"
+      ],
+      "notice_treatment": "The complete LICENSE is copied from the exact installed runtime artifact.",
+      "sbom": {
+        "reason": "Runtime package detection varies by SBOM generator; the exact mise artifact URL/checksum and copied runtime LICENSE are validated in the image.",
+        "status": "not-guaranteed"
+      },
+      "trademark_policy": "Node.js is used descriptively; no OpenJS Foundation endorsement is claimed.",
+      "upstream": "https://github.com/nodejs/node",
+      "version_source": {
+        "kind": "mise",
+        "mirror_env_key": "NODE_VERSION",
+        "tool": "node"
+      }
+    },
+    {
+      "distribution": "Exact npm registry package installed globally with lifecycle scripts disabled",
+      "id": "npm-cli",
+      "image_scope": "both",
+      "inputs": [
+        "NPM_VERSION"
+      ],
+      "license_expression": "Artistic-2.0 plus dependency-specific licenses",
+      "name": "npm CLI and bundled dependencies",
+      "notice_locations": [
+        "runtime/npm/",
+        "runtime/npm/DEPENDENCIES.txt"
+      ],
+      "notice_treatment": "Every LICENSE, COPYING and NOTICE file in the exact installed npm package tree is copied; dependency metadata is generated from installed package.json files.",
+      "npm_global": {
+        "package": "npm",
+        "version_key": "NPM_VERSION"
+      },
+      "sbom": {
+        "status": "covered-by-ecosystem"
+      },
+      "trademark_policy": "npm is used descriptively; no npm or GitHub endorsement is claimed.",
+      "upstream": "https://github.com/npm/cli and the npm registry",
+      "version_source": {
+        "key": "NPM_VERSION",
+        "kind": "env"
+      }
+    },
+    {
+      "distribution": "Exact official release archive selected by mise.lock",
+      "id": "uv",
+      "image_scope": "both",
+      "inputs": [
+        "UV_VERSION"
+      ],
+      "license_expression": "Apache-2.0 OR MIT",
+      "name": "uv",
+      "notice_locations": [
+        "components/uv/LICENSE-APACHE-2.0",
+        "components/uv/LICENSE-MIT"
+      ],
+      "notice_treatment": "Both exact upstream license choices from the matching release tag are preserved verbatim and version-locked.",
+      "sbom": {
+        "reason": "The standalone Rust binary may not be emitted as a package; the exact mise artifact and both source-locked licenses are validated separately.",
+        "status": "not-guaranteed"
+      },
+      "source_documents": [
+        {
+          "path": "third_party/components/uv/LICENSE-APACHE-2.0",
+          "url_template": "https://raw.githubusercontent.com/astral-sh/uv/{version}/LICENSE-APACHE"
+        },
+        {
+          "path": "third_party/components/uv/LICENSE-MIT",
+          "url_template": "https://raw.githubusercontent.com/astral-sh/uv/{version}/LICENSE-MIT"
+        }
+      ],
+      "trademark_policy": "The project name is used only to identify the shipped executable.",
+      "upstream": "https://github.com/astral-sh/uv",
+      "version_source": {
+        "kind": "mise",
+        "mirror_env_key": "UV_VERSION",
+        "tool": "uv"
+      }
+    },
+    {
+      "distribution": "Project-owned repository content copied into the image",
+      "id": "remote-dev-project",
+      "image_scope": "project",
+      "inputs": [
+        "BASE_VERSION"
+      ],
+      "license_expression": "Apache-2.0",
+      "name": "Remote Dev scripts and configuration",
+      "notice_locations": [
+        "/usr/share/doc/remote-dev/LICENSE"
+      ],
+      "notice_treatment": "The repository root LICENSE is copied into the image. This project license applies only to project-owned content.",
+      "sbom": {
+        "reason": "Project scripts are image content rather than a separately versioned third-party package.",
+        "status": "not-applicable"
+      },
+      "trademark_policy": "Documentation expressly disclaims affiliation with OpenAI, Google, Anthropic and other vendors.",
+      "upstream": "https://github.com/eXPerience83/remote-dev-containers",
+      "version_source": {
+        "key": "BASE_VERSION",
+        "kind": "project"
+      }
+    }
+  ],
+  "docker_arg_aliases": {
+    "PROJECT_VERSION": "BASE_VERSION"
+  },
+  "sbom_coverage": [
+    {
+      "owner": "Ubuntu APT package umbrella",
+      "purl_types": [
+        "deb",
+        "oci"
+      ]
+    },
+    {
+      "owner": "npm CLI dependency tree",
+      "purl_types": [
+        "npm"
+      ]
+    },
+    {
+      "owner": "Python runtime dependency tree",
+      "purl_types": [
+        "pypi"
+      ]
+    },
+    {
+      "owner": "Direct-download and compiled runtime binaries",
+      "purl_types": [
+        "generic",
+        "golang",
+        "cargo"
+      ]
+    }
+  ],
+  "schema_version": 1
+}
