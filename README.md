@@ -43,7 +43,7 @@ remote-dev-notices --list
 remote-dev-notices --check
 ```
 
-Antigravity, Claude Code and similar vendor products are not covered by this repository's Apache-2.0 license. They are not silently downloaded or redistributed by the current image. Any future optional installer must be initiated explicitly by the user, download directly from the vendor and follow the terms, privacy, credential-isolation and non-affiliation policy in `third_party/optional-agents.md`.
+Antigravity, Claude Code and similar vendor products are not covered by this repository's Apache-2.0 license. They are not downloaded or redistributed by the current image. Any future optional installer must be initiated explicitly by the user, download directly from the vendor and follow the terms, privacy, credential-isolation and non-affiliation policy in `third_party/optional-agents.md`.
 
 ## Accepted target architecture
 
