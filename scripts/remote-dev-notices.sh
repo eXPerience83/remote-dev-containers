@@ -34,15 +34,36 @@ require_nonempty_directory() {
   fi
 }
 
+require_python_license() {
+  local path="$1"
+  if [[ ! -d "$path" ]] || ! find "$path" -type f -size +0c \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+    -print -quit | grep -q .; then
+    echo "ERROR: Python notice directory has no non-empty license, copying or notice file: $path" >&2
+    return 1
+  fi
+}
+
+require_manifest_value() {
+  local manifest="$1"
+  local key="$2"
+  if ! grep -Eq "^${key}=.+$" "$manifest"; then
+    echo "ERROR: build manifest is missing a non-empty $key value: $manifest" >&2
+    return 1
+  fi
+}
+
 check_notices() {
   local failed=0
   local path=""
+  local key=""
+  local manifest="$third_party_root/BUILD-VERSIONS.env"
 
   for path in \
     "$notice_root/LICENSE" \
     "$third_party_root/README.md" \
     "$third_party_root/optional-agents.md" \
-    "$third_party_root/BUILD-VERSIONS.env" \
+    "$manifest" \
     "$third_party_root/components/codex/LICENSE-APACHE-2.0" \
     "$third_party_root/components/codex/NOTICE" \
     "$third_party_root/components/github-cli/LICENSE" \
@@ -58,19 +79,32 @@ check_notices() {
     fi
   done
 
+  if [[ -s "$manifest" ]]; then
+    for key in \
+      PYTHON_ARTIFACT_URL \
+      PYTHON_ARTIFACT_CHECKSUM \
+      NODE_ARTIFACT_URL \
+      NODE_ARTIFACT_CHECKSUM \
+      UV_ARTIFACT_URL \
+      UV_ARTIFACT_CHECKSUM; do
+      if ! require_manifest_value "$manifest" "$key"; then
+        failed=1
+      fi
+    done
+  fi
+
   if command -v codex >/dev/null 2>&1; then
     if ! require_file "$third_party_root/CODEX-BUILD.env"; then
       failed=1
     fi
   fi
 
-  for path in \
-    "$third_party_root/runtime/python" \
-    "$third_party_root/runtime/npm"; do
-    if ! require_nonempty_directory "$path"; then
-      failed=1
-    fi
-  done
+  if ! require_python_license "$third_party_root/runtime/python"; then
+    failed=1
+  fi
+  if ! require_nonempty_directory "$third_party_root/runtime/npm"; then
+    failed=1
+  fi
 
   if (( failed != 0 )); then
     return 1
