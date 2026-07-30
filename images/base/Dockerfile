@@ -176,7 +176,8 @@ COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
-RUN printf '%s\n' \
+RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
+    printf '%s\n' \
       "TARGETARCH=${TARGETARCH}" \
       "BASE_VERSION=${BASE_VERSION}" \
       "UBUNTU_VERSION=${UBUNTU_VERSION}" \
@@ -195,6 +196,8 @@ RUN printf '%s\n' \
       "NPM_VERSION=${NPM_VERSION}" \
       "UV_VERSION=${UV_VERSION}" \
       > /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
+    && python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}" \
+      >> /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
     && chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
     && copy-runtime-notices \
     && remote-dev-notices --check
