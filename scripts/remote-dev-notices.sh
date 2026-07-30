@@ -49,7 +49,8 @@ check_notices() {
     "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
     "$third_party_root/components/uv/LICENSE-MIT" \
     "$third_party_root/runtime/node/LICENSE" \
-    "$third_party_root/runtime/npm/LICENSE"; do
+    "$third_party_root/runtime/npm/LICENSE" \
+    "$third_party_root/runtime/npm/DEPENDENCIES.md"; do
     if ! require_file "$path"; then
       failed=1
     fi
