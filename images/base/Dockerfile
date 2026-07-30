@@ -164,7 +164,7 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
 # Keep project and bundled-component terms inspectable in both the repository and
 # the built image. Runtime archives contribute their own license files here.
 COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
-COPY --chmod=0444 third_party/ /usr/share/doc/remote-dev/third_party/
+COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
 RUN chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
