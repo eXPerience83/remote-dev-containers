@@ -87,6 +87,14 @@ assert_auth_hardened() {
   fi
 }
 
+escape_sed_replacement() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//&/\\&}"
+  value="${value//|/\\|}"
+  printf '%s' "$value"
+}
+
 sample_revision=0123456789abcdef0123456789abcdef01234567
 assert_short_revision "$sample_revision" 0123456789ab
 assert_short_revision "${sample_revision}-dirty" 0123456789ab-dirty
@@ -260,9 +268,9 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   fi
 
   direct_codex_state="$workdir/direct-codex-state"
-  fake_codex="$workdir/fake-codex"
-  test_run_codex="$workdir/run-codex"
-  test_attach_tmux="$workdir/attach-remote-dev-tmux"
+  fake_codex="$workdir/fake codex&pipe|back\\slash"
+  test_run_codex="$workdir/run codex&pipe|back\\slash"
+  test_attach_tmux="$workdir/attach remote-dev tmux"
   mkdir -p "$direct_codex_state"
   cat > "$fake_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
@@ -283,19 +291,24 @@ FAKE_CODEX
     exit 1
   fi
 
+  printf -v fake_codex_quoted '%q' "$fake_codex"
+  printf -v test_run_codex_quoted '%q' "$test_run_codex"
+  fake_codex_replacement="$(escape_sed_replacement "$fake_codex_quoted")"
+  test_run_codex_replacement="$(escape_sed_replacement "$test_run_codex_quoted")"
+
   sed \
-    "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$fake_codex|" \
+    "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$fake_codex_replacement|" \
     /usr/local/bin/run-codex > "$test_run_codex"
   sed \
-    "s|/usr/local/bin/run-codex|$test_run_codex|" \
+    "s|/usr/local/bin/run-codex|$test_run_codex_replacement|" \
     /usr/local/bin/attach-remote-dev-tmux > "$test_attach_tmux"
   chmod 0755 "$test_run_codex" "$test_attach_tmux"
 
-  if ! grep -Fq "readonly codex_binary=$fake_codex" "$test_run_codex"; then
+  if ! grep -Fxq "readonly codex_binary=$fake_codex_quoted" "$test_run_codex"; then
     echo "ERROR: failed to create an isolated run-codex smoke launcher" >&2
     exit 1
   fi
-  if ! grep -Fq "$test_run_codex" "$test_attach_tmux"; then
+  if ! grep -Fq "$test_run_codex_quoted" "$test_attach_tmux"; then
     echo "ERROR: failed to route the isolated tmux smoke launcher" >&2
     exit 1
   fi
