@@ -26,6 +26,7 @@ require_text() {
 
 require_file "$inventory"
 require_file "$optional_policy"
+bash "$ROOT/scripts/validate-version-pins.sh"
 
 for file in \
   third_party/components/codex/NOTICE \
@@ -48,6 +49,35 @@ for variable in \
   NPM_VERSION \
   UV_VERSION; do
   require_text "$inventory" "\`$variable\`"
+done
+
+for variable in \
+  BASE_VERSION \
+  UBUNTU_VERSION \
+  UBUNTU_DIGEST \
+  GH_VERSION \
+  GH_AMD64_SHA256 \
+  GH_ARM64_SHA256 \
+  TTYD_VERSION \
+  TTYD_AMD64_SHA256 \
+  TTYD_ARM64_SHA256 \
+  MISE_VERSION \
+  MISE_AMD64_SHA256 \
+  MISE_ARM64_SHA256 \
+  PYTHON_VERSION \
+  NODE_VERSION \
+  NPM_VERSION \
+  UV_VERSION; do
+  require_text "$base_dockerfile" "\"$variable=\${$variable}\""
+done
+
+for variable in \
+  SOURCE_REVISION \
+  PROJECT_VERSION \
+  CODEX_RELEASE_TAG \
+  CODEX_AMD64_SHA256 \
+  CODEX_ARM64_SHA256; do
+  require_text "$codex_dockerfile" "\"$variable=\${$variable}\""
 done
 
 for component in \
@@ -85,20 +115,24 @@ require_text "$base_dockerfile" 'github.com/tsl0922/ttyd/releases/download'
 require_text "$base_dockerfile" 'github.com/jdx/mise/releases/download'
 require_text "$ROOT/scripts/copy-runtime-notices.sh" 'DEPENDENCIES.txt'
 require_text "$ROOT/scripts/remote-dev-notices.sh" 'runtime/npm/DEPENDENCIES.txt'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'BUILD-VERSIONS.env'
+require_text "$ROOT/scripts/remote-dev-notices.sh" 'CODEX-BUILD.env'
 
 for dockerfile in "$base_dockerfile" "$codex_dockerfile"; do
-  require_text "$dockerfile" 'org.opencontainers.image.licenses="Apache-2.0"'
+  require_text "$dockerfile" 'io.github.experience83.remote-dev.project-license="Apache-2.0"'
   require_text "$dockerfile" 'io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms"'
   require_text "$dockerfile" 'io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"'
 done
+
+require_text "$codex_dockerfile" 'org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md"'
 
 if grep -Fqi 'placeholder' "$inventory"; then
   echo "ERROR: third_party/README.md must be a reviewed inventory, not a placeholder" >&2
   exit 1
 fi
 
-if grep -FRq 'LicenseRef-ThirdParty-Notices' "$base_dockerfile" "$codex_dockerfile"; then
-  echo "ERROR: OCI license metadata must use an SPDX project license and a separate notice-scope annotation" >&2
+if grep -Fq 'org.opencontainers.image.licenses=' "$base_dockerfile" "$codex_dockerfile"; then
+  echo "ERROR: aggregate images must not advertise a project-only OCI licenses value" >&2
   exit 1
 fi
 
