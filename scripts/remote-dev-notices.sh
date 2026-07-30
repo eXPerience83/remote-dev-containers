@@ -34,23 +34,6 @@ require_nonempty_directory() {
   fi
 }
 
-require_unique_named_file() {
-  local path="$1"
-  local filename="$2"
-  local count=""
-
-  if ! count="$(find "$path" -type f -name "$filename" -size +0c -printf '.' | wc -c)"; then
-    echo "ERROR: failed to inspect $path for $filename" >&2
-    return 1
-  fi
-  count="${count//[[:space:]]/}"
-
-  if [[ ! "$count" =~ ^[0-9]+$ ]] || (( count != 1 )); then
-    echo "ERROR: expected exactly one non-empty $filename below $path, found ${count:-invalid}" >&2
-    return 1
-  fi
-}
-
 require_manifest_value() {
   local manifest="$1"
   local key="$2"
@@ -76,8 +59,10 @@ check_notices() {
     "$third_party_root/components/github-cli/LICENSE" \
     "$third_party_root/components/ttyd/LICENSE" \
     "$third_party_root/components/mise/LICENSE" \
+    "$third_party_root/components/python/LICENSE" \
     "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
     "$third_party_root/components/uv/LICENSE-MIT" \
+    "$third_party_root/runtime/python/LICENSE.cpython.txt" \
     "$third_party_root/runtime/node/LICENSE" \
     "$third_party_root/runtime/npm/LICENSE" \
     "$third_party_root/runtime/npm/DEPENDENCIES.txt"; do
@@ -85,10 +70,6 @@ check_notices() {
       failed=1
     fi
   done
-
-  if ! require_unique_named_file "$third_party_root/runtime/python" 'LICENSE.cpython.txt'; then
-    failed=1
-  fi
 
   if [[ -s "$manifest" ]]; then
     for key in \
