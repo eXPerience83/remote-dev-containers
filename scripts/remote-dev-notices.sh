@@ -3,18 +3,21 @@ set -euo pipefail
 
 notice_root="${REMOTE_DEV_NOTICE_ROOT:-/usr/share/doc/remote-dev}"
 third_party_root="$notice_root/third_party"
+inventory="$third_party_root/inventory.json"
+source_lock="$third_party_root/sources.lock.json"
 
 usage() {
   cat <<'EOF'
-Usage: remote-dev-notices [--check|--list|--path|--versions|--help]
+Usage: remote-dev-notices [--check|--list|--path|--versions|--inventory-json|--help]
 
-Without arguments, print the third-party inventory.
+Without arguments, print the generated third-party inventory.
 
-  --check     verify that required project, component and runtime notices exist
-  --list      list all notice files below the canonical notice directory
-  --path      print the canonical notice directory
-  --versions  print the exact component versions and digests embedded at build time
-  --help      show this help
+  --check           verify required project, component and runtime notices
+  --list            list every notice file below the canonical directory
+  --path            print the canonical notice directory
+  --versions        print exact component versions and digests embedded at build time
+  --inventory-json  print the machine-readable inventory and reviewed source lock
+  --help            show this help
 EOF
 }
 
@@ -45,52 +48,35 @@ require_python_runtime_license() {
 }
 
 require_manifest_value() {
-  local manifest="$1"
-  local key="$2"
-  if ! grep -Eq "^${key}=.+$" "$manifest"; then
-    echo "ERROR: build manifest is missing a non-empty $key value: $manifest" >&2
-    return 1
-  fi
+  local key="$1"
+  shift
+  local manifest=""
+  for manifest in "$@"; do
+    if [[ -s "$manifest" ]] && grep -Eq "^${key}=.+$" "$manifest"; then
+      return 0
+    fi
+  done
+  echo "ERROR: build manifests are missing a non-empty $key value" >&2
+  return 1
 }
 
-read_env_value() {
-  local path="$1"
-  local key="$2"
-  local value=""
+check_inventory_location() {
+  local location="$1"
+  local path=""
 
-  if ! value="$(
-    awk -F= -v key="$key" '
-      $1 == key {
-        count += 1
-        sub(/^[^=]*=/, "")
-        value = $0
-      }
-      END {
-        if (count != 1 || value == "") exit 1
-        print value
-      }
-    ' "$path"
-  )"; then
-    echo "ERROR: $path must contain exactly one non-empty $key value" >&2
-    return 1
+  # This is a documented package-family path rather than a single file.
+  if [[ "$location" == *'<package>'* ]]; then
+    return 0
   fi
-
-  printf '%s\n' "$value"
-}
-
-require_matching_version() {
-  local manifest="$1"
-  local manifest_key="$2"
-  local source_record="$3"
-  local source_key="$4"
-  local source_value=""
-
-  if ! source_value="$(read_env_value "$source_record" "$source_key")"; then
-    return 1
+  if [[ "$location" == /* ]]; then
+    path="$location"
+  else
+    path="$third_party_root/$location"
   fi
-  if ! grep -Fqx -- "${manifest_key}=${source_value}" "$manifest"; then
-    echo "ERROR: $manifest $manifest_key does not match $source_record $source_key=$source_value" >&2
-    return 1
+  if [[ "$location" == */ ]]; then
+    require_nonempty_directory "$path"
+  else
+    require_file "$path"
   fi
 }
 
@@ -98,77 +84,62 @@ check_notices() {
   local failed=0
   local path=""
   local key=""
+  local location=""
   local manifest="$third_party_root/BUILD-VERSIONS.env"
   local codex_manifest="$third_party_root/CODEX-BUILD.env"
+  local has_codex=0
+  local scope_filter='select(.image_scope == "base" or .image_scope == "both" or .image_scope == "project")'
+
+  if command -v codex >/dev/null 2>&1; then
+    has_codex=1
+    scope_filter='select(.image_scope != "optional")'
+  fi
 
   for path in \
     "$notice_root/LICENSE" \
     "$third_party_root/README.md" \
     "$third_party_root/optional-agents.md" \
-    "$manifest" \
-    "$third_party_root/components/codex/LICENSE-APACHE-2.0" \
-    "$third_party_root/components/codex/NOTICE" \
-    "$third_party_root/components/codex/SOURCE.env" \
-    "$third_party_root/components/github-cli/LICENSE" \
-    "$third_party_root/components/github-cli/SOURCE.env" \
-    "$third_party_root/components/ttyd/LICENSE" \
-    "$third_party_root/components/ttyd/SOURCE.env" \
-    "$third_party_root/components/mise/LICENSE" \
-    "$third_party_root/components/mise/SOURCE.env" \
-    "$third_party_root/components/python/LICENSE" \
-    "$third_party_root/components/python/SOURCE.env" \
-    "$third_party_root/components/uv/LICENSE-APACHE-2.0" \
-    "$third_party_root/components/uv/LICENSE-MIT" \
-    "$third_party_root/runtime/python/LICENSE.cpython.txt" \
-    "$third_party_root/runtime/node/LICENSE" \
-    "$third_party_root/runtime/npm/LICENSE" \
-    "$third_party_root/runtime/npm/DEPENDENCIES.txt"; do
+    "$inventory" \
+    "$source_lock" \
+    "$manifest"; do
     if ! require_file "$path"; then
       failed=1
     fi
   done
 
-  if [[ -s "$manifest" ]]; then
-    for key in \
-      PYTHON_VERSION \
-      PYTHON_ARTIFACT_URL \
-      PYTHON_ARTIFACT_CHECKSUM \
-      NODE_VERSION \
-      NODE_ARTIFACT_URL \
-      NODE_ARTIFACT_CHECKSUM \
-      UV_VERSION \
-      UV_ARTIFACT_URL \
-      UV_ARTIFACT_CHECKSUM; do
-      if ! require_manifest_value "$manifest" "$key"; then
-        failed=1
-      fi
-    done
-
-    if ! require_matching_version "$manifest" GH_VERSION \
-      "$third_party_root/components/github-cli/SOURCE.env" GH_VERSION; then
-      failed=1
-    fi
-    if ! require_matching_version "$manifest" TTYD_VERSION \
-      "$third_party_root/components/ttyd/SOURCE.env" TTYD_VERSION; then
-      failed=1
-    fi
-    if ! require_matching_version "$manifest" MISE_VERSION \
-      "$third_party_root/components/mise/SOURCE.env" MISE_VERSION; then
-      failed=1
-    fi
-    if ! require_matching_version "$manifest" PYTHON_VERSION \
-      "$third_party_root/components/python/SOURCE.env" CPYTHON_VERSION; then
-      failed=1
-    fi
+  if [[ -s "$inventory" ]] && ! jq -e '.schema_version == 1 and (.components | type == "array" and length > 0)' "$inventory" >/dev/null; then
+    echo "ERROR: invalid machine-readable inventory: $inventory" >&2
+    failed=1
+  fi
+  if [[ -s "$source_lock" ]] && ! jq -e '.schema_version == 1 and (.documents | type == "array" and length > 0)' "$source_lock" >/dev/null; then
+    echo "ERROR: invalid reviewed source lock: $source_lock" >&2
+    failed=1
   fi
 
-  if command -v codex >/dev/null 2>&1; then
-    if ! require_file "$codex_manifest"; then
-      failed=1
-    elif ! require_matching_version "$codex_manifest" CODEX_RELEASE_TAG \
-      "$third_party_root/components/codex/SOURCE.env" CODEX_RELEASE_TAG; then
-      failed=1
-    fi
+  if [[ -s "$source_lock" ]]; then
+    while IFS= read -r path; do
+      if ! require_file "$notice_root/$path"; then
+        failed=1
+      fi
+    done < <(jq -er '.documents[].path' "$source_lock")
+  fi
+
+  if [[ -s "$inventory" ]]; then
+    while IFS= read -r location; do
+      if ! check_inventory_location "$location"; then
+        failed=1
+      fi
+    done < <(jq -er ".components[] | $scope_filter | .notice_locations[]" "$inventory")
+
+    while IFS= read -r key; do
+      if ! require_manifest_value "$key" "$manifest" "$codex_manifest"; then
+        failed=1
+      fi
+    done < <(jq -er ".components[] | $scope_filter | .inputs[]" "$inventory" | LC_ALL=C sort -u)
+  fi
+
+  if (( has_codex == 1 )) && ! require_file "$codex_manifest"; then
+    failed=1
   fi
 
   for path in \
@@ -178,7 +149,6 @@ check_notices() {
       failed=1
     fi
   done
-
   if ! require_python_runtime_license "$third_party_root/runtime/python"; then
     failed=1
   fi
@@ -198,6 +168,15 @@ print_versions() {
   fi
 }
 
+print_inventory_json() {
+  require_file "$inventory"
+  require_file "$source_lock"
+  jq -n \
+    --slurpfile inventory "$inventory" \
+    --slurpfile sources "$source_lock" \
+    '{inventory: $inventory[0], reviewed_sources: $sources[0]}'
+}
+
 case "${1:-}" in
   "")
     cat "$third_party_root/README.md"
@@ -213,6 +192,9 @@ case "${1:-}" in
     ;;
   --versions)
     print_versions
+    ;;
+  --inventory-json)
+    print_inventory_json
     ;;
   --help|-h)
     usage
