@@ -45,6 +45,16 @@ LABEL docs=\"https://github.com/example/docs\"
             )
             self.assertEqual(legal_inventory.global_npm_specs(dockerfile), [("npm", "NPM_VERSION")])
 
+    def test_apt_package_names_are_not_network_commands(self) -> None:
+        """Verify APT package names curl and wget do not trigger fetch detection."""
+        with tempfile.TemporaryDirectory() as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(
+                "RUN apt-get install -y --no-install-recommends curl wget && git lfs install --system\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(legal_inventory.docker_download_urls(dockerfile), [])
+
     def test_fixed_global_npm_package_fails_closed(self) -> None:
         """Verify global npm additions cannot bypass version inventory."""
         with tempfile.TemporaryDirectory() as temporary:
