@@ -37,15 +37,16 @@ require_nonempty_directory() {
 require_unique_named_file() {
   local path="$1"
   local filename="$2"
-  local found=""
-  local count=0
+  local count=""
 
-  while IFS= read -r -d '' found; do
-    count=$((count + 1))
-  done < <(find "$path" -type f -name "$filename" -size +0c -print0)
+  if ! count="$(find "$path" -type f -name "$filename" -size +0c -printf '.' | wc -c)"; then
+    echo "ERROR: failed to inspect $path for $filename" >&2
+    return 1
+  fi
+  count="${count//[[:space:]]/}"
 
-  if (( count != 1 )); then
-    echo "ERROR: expected exactly one non-empty $filename below $path, found $count" >&2
+  if [[ ! "$count" =~ ^[0-9]+$ ]] || (( count != 1 )); then
+    echo "ERROR: expected exactly one non-empty $filename below $path, found ${count:-invalid}" >&2
     return 1
   fi
 }
