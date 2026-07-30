@@ -26,8 +26,10 @@ LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}" \
-      org.opencontainers.image.licenses="Apache-2.0 AND LicenseRef-ThirdParty-Notices" \
-      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/main/third_party/README.md"
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/main/third_party/README.md" \
+      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
+      io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
