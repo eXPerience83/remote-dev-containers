@@ -26,7 +26,8 @@ LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0 AND LicenseRef-ThirdParty-Notices" \
+      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/main/third_party/README.md"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
@@ -159,6 +160,16 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
     && test "$(npm --version)" = "$NPM_VERSION" \
     && uv --version \
     && rm -rf "${MISE_CACHE_DIR:?}"/*
+
+# Keep project and bundled-component terms inspectable in both the repository and
+# the built image. Runtime archives contribute their own license files here.
+COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
+COPY --chmod=0444 third_party/ /usr/share/doc/remote-dev/third_party/
+COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
+COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
+RUN chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
+    && copy-runtime-notices \
+    && remote-dev-notices --check
 
 COPY config/tmux.conf /etc/tmux.conf
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify
