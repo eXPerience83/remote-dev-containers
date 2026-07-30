@@ -40,7 +40,7 @@ remote-dev-notices --list
 remote-dev-notices --check
 ```
 
-Antigravity, Claude Code y productos similares no quedan cubiertos por la licencia Apache-2.0 de este repositorio. La imagen actual no los descarga silenciosamente ni los redistribuye. Cualquier instalador opcional futuro deberá ser iniciado expresamente por el usuario, descargar desde el proveedor y respetar la política de términos, privacidad, aislamiento de credenciales y no afiliación de `third_party/optional-agents.md`.
+Antigravity, Claude Code y productos similares no quedan cubiertos por la licencia Apache-2.0 de este repositorio. La imagen actual no los descarga ni redistribuye. Cualquier instalador opcional futuro deberá ser iniciado expresamente por el usuario, descargar desde el proveedor y respetar la política de términos, privacidad, aislamiento de credenciales y no afiliación de `third_party/optional-agents.md`.
 
 ## Prueba pública de la imagen edge
 
