@@ -1,6 +1,7 @@
 """Discovery of package installations and direct-download ownership."""
 from __future__ import annotations
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 from .io import InventoryError
@@ -9,6 +10,8 @@ from .inventory import inventory_components
 URL_RE = re.compile(r"https://[^\s\"'<>]+")
 
 PACKAGE_SPEC_RE = re.compile(r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}")
+
+NETWORK_FETCH_RE = re.compile(r"\b(?:curl|wget)\b|\bgit\s+clone\b")
 
 SENSITIVE_INSTALL_PATTERNS = (
     re.compile(r"\b(?:pip|pip3)\s+install\b"),
@@ -82,18 +85,48 @@ def docker_instructions(path: Path) -> list[str]:
     return instructions
 
 def docker_download_urls(path: Path) -> list[str]:
-    """Discover network URLs used by Docker RUN download commands."""
+    """Discover literal network sources used by Docker build instructions."""
     urls: list[str] = []
     for instruction in docker_instructions(path):
-        if not instruction.startswith("RUN ") or not re.search(r"\b(?:curl|wget)\b", instruction):
+        is_network_run = instruction.startswith("RUN ") and NETWORK_FETCH_RE.search(instruction)
+        is_remote_add = instruction.startswith("ADD ") and URL_RE.search(instruction)
+        if not is_network_run and not is_remote_add:
             continue
-        urls.extend(match.group(0).rstrip("),.;") for match in URL_RE.finditer(instruction))
+        discovered = [match.group(0).rstrip("),.;") for match in URL_RE.finditer(instruction)]
+        if is_network_run and not discovered:
+            raise InventoryError(
+                f"network-fetch instruction must contain a literal HTTPS source in {path}: {instruction}"
+            )
+        urls.extend(discovered)
     return sorted(set(urls))
 
 def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
-    """Discover globally installed npm package/version-key pairs."""
-    text = dockerfile.read_text(encoding="utf-8")
-    return sorted(set((match.group("name"), match.group("key")) for match in PACKAGE_SPEC_RE.finditer(text)))
+    """Discover every globally installed npm package/version-key pair."""
+    result: set[tuple[str, str]] = set()
+    for instruction in docker_instructions(dockerfile):
+        if not instruction.startswith("RUN "):
+            continue
+        for segment in re.split(r"\s*(?:&&|;)\s*", instruction[4:]):
+            try:
+                tokens = shlex.split(segment)
+            except ValueError as exc:
+                raise InventoryError(f"cannot parse npm install instruction in {dockerfile}: {segment}") from exc
+            if len(tokens) < 3 or tokens[0] != "npm" or tokens[1] not in {"install", "i"}:
+                continue
+            if "--global" not in tokens and "-g" not in tokens:
+                continue
+            package_tokens = [token for token in tokens[2:] if not token.startswith("-")]
+            if not package_tokens:
+                raise InventoryError(f"global npm install has no package spec in {dockerfile}: {segment}")
+            for token in package_tokens:
+                match = PACKAGE_SPEC_RE.fullmatch(token)
+                if not match:
+                    raise InventoryError(
+                        f"unsupported global npm package spec {token!r} in {dockerfile}; "
+                        "pin it through versions.env as package@${VERSION_KEY}"
+                    )
+                result.add((match.group("name"), match.group("key")))
+    return sorted(result)
 
 def discovered_installer_instructions(dockerfile: Path) -> list[str]:
     """Find installer commands that need an explicit inventory marker."""
