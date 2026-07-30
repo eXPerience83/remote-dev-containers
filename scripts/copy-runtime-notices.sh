@@ -26,13 +26,17 @@ copy_python_notices() {
   local destination_root="$third_party_root/runtime/python"
   local source=""
   local relative=""
-  local license_copied=0
+  local copied=0
 
   python_prefix="$(python -c 'import sys; print(sys.base_prefix)')"
   if [[ ! -d "$python_prefix" ]]; then
     echo "ERROR: Python base prefix does not exist: $python_prefix" >&2
     exit 1
   fi
+
+  # python-build-standalone identifies CPython's own license with this path in
+  # PYTHON.json, and mise preserves it when installing the locked archive.
+  require_file "$python_prefix/licenses/LICENSE.cpython.txt"
 
   install -d -m 0755 "$destination_root"
   find "$python_prefix" -maxdepth 7 -type f \
@@ -41,13 +45,11 @@ copy_python_notices() {
     while IFS= read -r -d '' source; do
       relative="${source#"$python_prefix"/}"
       install -D -m 0644 "$source" "$destination_root/$relative"
-      if [[ "${source##*/}" != "PYTHON.json" ]]; then
-        license_copied=$((license_copied + 1))
-      fi
+      copied=$((copied + 1))
     done
 
-  if (( license_copied == 0 )); then
-    echo "ERROR: no Python runtime license, copying or notice file found below $python_prefix" >&2
+  if (( copied == 0 )); then
+    echo "ERROR: no Python runtime license or notice files found below $python_prefix" >&2
     exit 1
   fi
 }
