@@ -55,7 +55,7 @@ def _is_installer(tokens: list[str], path: Path) -> bool:
         return False
     executable = executable_name(tokens[0])
     text = " ".join(tokens)
-    if any(token in {"--help", "-h", "--version", "-v", "help", "version"} for token in tokens[1:]):
+    if any(token in {"--help", "-h", "--version", "-V", "help", "version"} for token in tokens[1:]):
         return False
 
     if executable in {"pip", "pip3"}:

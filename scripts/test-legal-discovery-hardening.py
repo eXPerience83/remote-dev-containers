@@ -489,6 +489,16 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "curl"):
                     legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
 
+    def test_verbose_installs_and_custom_shell_fail_closed(self) -> None:
+        for command in ("pip install requests -v", "python3 -m pip install requests -v", "cargo install ripgrep -v"):
+            with self.subTest(command=command):
+                self.assertTrue(self.dockerfile_result(f"RUN {command}\n", discovered_installer_instructions))
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported SHELL"):
+            self.dockerfile_result(
+                'SHELL ["python3", "-c"]\nRUN import urllib.request\n',
+                legal_inventory.docker_download_urls,
+            )
+
     def test_python_build_helper_import_aliases_fail_closed(self) -> None:
         helpers = (
             "import urllib.request as net\nnet.urlopen('https://vendor.example/tool')\n",

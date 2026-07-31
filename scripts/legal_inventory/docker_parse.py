@@ -48,6 +48,17 @@ def docker_instructions(path: Path) -> list[str]:
         if line.endswith("\\"):
             continue
         instruction = " ".join(filter(None, current))
+        shell_payload = instruction_payload(instruction, "SHELL")
+        if shell_payload is not None:
+            try:
+                selected_shell = json.loads(shell_payload)
+            except json.JSONDecodeError as exc:
+                raise InventoryError(f"cannot parse SHELL instruction in {path}: {shell_payload}") from exc
+            if selected_shell != ["/bin/bash", "-o", "pipefail", "-c"]:
+                raise InventoryError(
+                    f"unsupported SHELL instruction in {path}; legal discovery only supports "
+                    '["/bin/bash", "-o", "pipefail", "-c"]'
+                )
         if instruction_payload(instruction, "ONBUILD") is not None:
             raise InventoryError(
                 f"ONBUILD is unsupported by legal discovery in {path}; "
