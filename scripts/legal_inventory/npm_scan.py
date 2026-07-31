@@ -15,142 +15,51 @@ PACKAGE_SPEC_RE = re.compile(
 # lib/utils/cmd-list.js. npm resolves camelCase, exact commands/aliases and then
 # unambiguous prefixes across this complete namespace.
 NPM_COMMANDS = {
-    "access",
-    "adduser",
-    "audit",
-    "bugs",
-    "cache",
-    "ci",
-    "completion",
-    "config",
-    "dedupe",
-    "deprecate",
-    "diff",
-    "dist-tag",
-    "docs",
-    "doctor",
-    "edit",
-    "exec",
-    "explain",
-    "explore",
-    "find-dupes",
-    "fund",
-    "get",
-    "help",
-    "help-search",
-    "init",
-    "install",
-    "install-ci-test",
-    "install-test",
-    "link",
-    "ll",
-    "login",
-    "logout",
-    "ls",
-    "org",
-    "outdated",
-    "owner",
-    "pack",
-    "ping",
-    "pkg",
-    "prefix",
-    "profile",
-    "prune",
-    "publish",
-    "query",
-    "rebuild",
-    "repo",
-    "restart",
-    "root",
-    "run",
-    "sbom",
-    "search",
-    "set",
-    "shrinkwrap",
-    "star",
-    "stars",
-    "start",
-    "stop",
-    "team",
-    "test",
-    "token",
-    "trust",
-    "undeprecate",
-    "uninstall",
-    "unpublish",
-    "unstar",
-    "update",
-    "version",
-    "view",
-    "whoami",
+    "access", "adduser", "audit", "bugs", "cache", "ci", "completion", "config",
+    "dedupe", "deprecate", "diff", "dist-tag", "docs", "doctor", "edit", "exec",
+    "explain", "explore", "find-dupes", "fund", "get", "help", "help-search", "init",
+    "install", "install-ci-test", "install-test", "link", "ll", "login", "logout", "ls",
+    "org", "outdated", "owner", "pack", "ping", "pkg", "prefix", "profile", "prune",
+    "publish", "query", "rebuild", "repo", "restart", "root", "run", "sbom", "search",
+    "set", "shrinkwrap", "star", "stars", "start", "stop", "team", "test", "token",
+    "trust", "undeprecate", "uninstall", "unpublish", "unstar", "update", "version",
+    "view", "whoami",
 }
 NPM_ALIASES = {
-    "author": "owner",
-    "home": "docs",
-    "issues": "bugs",
-    "info": "view",
-    "show": "view",
-    "find": "search",
-    "add": "install",
-    "unlink": "uninstall",
-    "remove": "uninstall",
-    "rm": "uninstall",
-    "r": "uninstall",
-    "un": "uninstall",
-    "rb": "rebuild",
-    "list": "ls",
-    "ln": "link",
-    "create": "init",
-    "i": "install",
-    "it": "install-test",
-    "cit": "install-ci-test",
-    "up": "update",
-    "c": "config",
-    "s": "search",
-    "se": "search",
-    "tst": "test",
-    "t": "test",
-    "ddp": "dedupe",
-    "v": "view",
-    "run-script": "run",
-    "clean-install": "ci",
-    "clean-install-test": "install-ci-test",
-    "x": "exec",
-    "why": "explain",
-    "la": "ll",
-    "verison": "version",
-    "ic": "ci",
-    "innit": "init",
-    "in": "install",
-    "ins": "install",
-    "inst": "install",
-    "insta": "install",
-    "instal": "install",
-    "isnt": "install",
-    "isnta": "install",
-    "isntal": "install",
-    "isntall": "install",
-    "install-clean": "ci",
-    "isntall-clean": "ci",
-    "hlep": "help",
-    "dist-tags": "dist-tag",
-    "upgrade": "update",
-    "udpate": "update",
-    "rum": "run",
-    "sit": "install-ci-test",
-    "urn": "run",
-    "ogr": "org",
-    "add-user": "adduser",
+    "author": "owner", "home": "docs", "issues": "bugs", "info": "view", "show": "view",
+    "find": "search", "add": "install", "unlink": "uninstall", "remove": "uninstall",
+    "rm": "uninstall", "r": "uninstall", "un": "uninstall", "rb": "rebuild",
+    "list": "ls", "ln": "link", "create": "init", "i": "install", "it": "install-test",
+    "cit": "install-ci-test", "up": "update", "c": "config", "s": "search", "se": "search",
+    "tst": "test", "t": "test", "ddp": "dedupe", "v": "view", "run-script": "run",
+    "clean-install": "ci", "clean-install-test": "install-ci-test", "x": "exec",
+    "why": "explain", "la": "ll", "verison": "version", "ic": "ci", "innit": "init",
+    "in": "install", "ins": "install", "inst": "install", "insta": "install",
+    "instal": "install", "isnt": "install", "isnta": "install", "isntal": "install",
+    "isntall": "install", "install-clean": "ci", "isntall-clean": "ci", "hlep": "help",
+    "dist-tags": "dist-tag", "upgrade": "update", "udpate": "update", "rum": "run",
+    "sit": "install-ci-test", "urn": "run", "ogr": "org", "add-user": "adduser",
 }
 NPM_INSTALL_COMMANDS = {"install", "ci", "install-test", "install-ci-test"}
+NPM_TERMINAL_OPTIONS = {"--help", "-h", "--version", "-v", "--versions"}
+NPM_BOOLEAN_OPTIONS = {
+    "--audit", "--dry-run", "--force", "--foreground-scripts", "--fund",
+    "--ignore-scripts", "--json", "--silent", "--verbose", "--yes", "-y",
+}
 NPM_VALUE_OPTIONS = {
-    "--cache",
-    "--prefix",
-    "--registry",
-    "--userconfig",
-    "--workspace",
-    "-w",
-    "--location",
+    "--auth-type", "--cache", "--cert", "--color", "--depth", "--description",
+    "--editor", "--engine-strict", "--fetch-retries", "--fetch-retry-factor",
+    "--fetch-retry-maxtimeout", "--fetch-retry-mintimeout", "--fetch-timeout",
+    "--https-proxy", "--init-author-email", "--init-author-name", "--init-author-url",
+    "--init-license", "--init-module", "--init-version", "--install-strategy",
+    "--legacy-peer-deps", "--link-workspace-packages", "--loglevel", "--logs-dir",
+    "--maxsockets", "--node-options", "--omit", "--otp", "--package-lock",
+    "--package-lock-only", "--parseable", "--prefer-offline", "--prefer-online",
+    "--prefix", "--proxy", "--registry", "--save", "--save-bundle", "--save-dev",
+    "--save-exact", "--save-optional", "--save-peer", "--save-prefix", "--scope",
+    "--script-shell", "--searchlimit", "--searchopts", "--searchstaleness",
+    "--shell", "--strict-peer-deps", "--tag", "--timing", "--tmp", "--umask",
+    "--unicode", "--user-agent", "--userconfig", "--workspace", "-w", "--location",
 }
 
 
@@ -177,13 +86,35 @@ def _resolve_npm_command(command: str) -> str | None:
         return normalized
     if normalized in NPM_ALIASES:
         return _resolve_alias(normalized)
-
-    candidates = sorted(
-        name for name in NPM_COMMANDS | set(NPM_ALIASES) if name.startswith(normalized)
-    )
+    candidates = sorted(name for name in NPM_COMMANDS | set(NPM_ALIASES) if name.startswith(normalized))
     if len(candidates) != 1:
         return None
     return _resolve_alias(candidates[0])
+
+
+def _consume_precommand_option(tokens: list[str], index: int, path: Path) -> tuple[int, bool, bool]:
+    """Consume one option before the npm command, or fail closed if ambiguous."""
+    token = tokens[index]
+    if token in NPM_TERMINAL_OPTIONS:
+        return index + 1, False, True
+    if token in {"-g", "--global", "--location=global"}:
+        return index + 1, True, False
+    if token.startswith("--location="):
+        return index + 1, token.split("=", 1)[1] == "global", False
+    if token in NPM_VALUE_OPTIONS:
+        if index + 1 >= len(tokens):
+            raise InventoryError(f"npm option {token} has no value in {path}")
+        return index + 2, token == "--location" and tokens[index + 1] == "global", False
+    if token in NPM_BOOLEAN_OPTIONS or token.startswith("--no-"):
+        return index + 1, False, False
+    if token.startswith("--") and "=" in token:
+        return index + 1, False, False
+    if token.startswith("-"):
+        raise InventoryError(
+            f"unsupported npm option before command in {path}: {token}; "
+            "classify whether it consumes a value before relying on legal discovery"
+        )
+    return index, False, False
 
 
 def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
@@ -208,29 +139,16 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
         token = tokens[index]
         if token == "--":
             index += 1
-            if index < len(tokens) and subcommand_index is None:
+            if index < len(tokens):
                 subcommand_index = index
             break
-        if token in {"-g", "--global", "--location=global"}:
-            global_mode = True
-            index += 1
-            continue
-        if token.startswith("--location="):
-            global_mode = token.split("=", 1)[1] == "global"
-            index += 1
-            continue
-        if token in NPM_VALUE_OPTIONS:
-            if index + 1 >= len(tokens):
-                raise InventoryError(f"npm option {token} has no value in {path}")
-            if token == "--location":
-                global_mode = tokens[index + 1] == "global"
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        subcommand_index = index
-        break
+        if not token.startswith("-"):
+            subcommand_index = index
+            break
+        index, option_global, terminal_query = _consume_precommand_option(tokens, index, path)
+        global_mode = global_mode or option_global
+        if terminal_query:
+            return None
 
     if subcommand_index is None:
         return None
