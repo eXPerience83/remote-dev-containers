@@ -429,6 +429,38 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
         with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported pip subcommand"):
             self.dockerfile_result("RUN pip mystery tool\n", discovered_installer_instructions)
 
+    def test_python_module_build_helper_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/helper.py").write_text("pass\n", encoding="utf-8")
+            (root / "images/base/Dockerfile").write_text(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "RUN --mount=type=bind,source=scripts,target=/src/scripts,ro "
+                "PYTHONPATH=/src/scripts python3 -m helper\n",
+                encoding="utf-8",
+            )
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "Python -m build helpers"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_python_heredoc_in_shell_helper_is_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/helper.sh").write_text(
+                "python3 - <<'PY'\nimport urllib.request\nurllib.request.urlopen('https://vendor.example/tool')\nPY\n",
+                encoding="utf-8",
+            )
+            (root / "images/base/Dockerfile").write_text("FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\nCOPY scripts/helper.sh /helper.sh\nRUN sh /helper.sh\n", encoding="utf-8")
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "Python heredoc.*urlopen"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
     def test_python_build_helper_import_aliases_fail_closed(self) -> None:
         helpers = (
             "import urllib.request as net\nnet.urlopen('https://vendor.example/tool')\n",

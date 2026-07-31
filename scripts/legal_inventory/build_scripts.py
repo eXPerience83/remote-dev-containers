@@ -87,6 +87,16 @@ def _invoked_scripts(root: Path, dockerfile: Path) -> set[Path]:
             elif executable in {"bash", "sh", "dash", "python", "python3"}:
                 index = 1
                 while index < len(tokens) and tokens[index].startswith("-"):
+                    has_module, attached_module = short_option_value(tokens[index], "m")
+                    if executable in {"python", "python3"} and has_module:
+                        module = attached_module if attached_module is not None else (
+                            tokens[index + 1] if index + 1 < len(tokens) else ""
+                        )
+                        if module != "pip":
+                            raise InventoryError(
+                                f"Python -m build helpers are unsupported in {dockerfile}; "
+                                "invoke a deterministic context-backed script path instead"
+                            )
                     if short_option_value(tokens[index], "c")[0] or short_option_value(tokens[index], "m")[0]:
                         break
                     index += 1
@@ -252,6 +262,36 @@ def _python_acquisition_reason(text: str, *, allow_test_processes: bool = False)
     return None
 
 
+def _heredoc_acquisition_reason(text: str) -> str | None:
+    """Inspect interpreter heredoc bodies rather than treating them as shell text."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.search(r"\b(python3?|node|bash|sh|dash)\b[^#\n]*<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)", line)
+        if match is None:
+            continue
+        interpreter, delimiter = match.groups()
+        body: list[str] = []
+        for candidate in lines[index + 1 :]:
+            if candidate.strip() == delimiter:
+                break
+            body.append(candidate)
+        else:
+            return "unterminated interpreter heredoc"
+        source = "\n".join(body)
+        if interpreter.startswith("python"):
+            reason = _python_acquisition_reason(source)
+            if reason is not None:
+                return f"Python heredoc {reason}"
+        elif interpreter == "node" and NODE_NETWORK_RE.search(source):
+            return "Node.js heredoc network acquisition"
+        else:
+            for tokens in _command_segments(source):
+                reason = _acquisition_reason(tokens)
+                if reason is not None:
+                    return f"shell heredoc {reason}"
+    return None
+
+
 def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
     """Reject acquisition from context scripts reached by managed Docker builds."""
     pending: list[Path] = []
@@ -266,6 +306,12 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
             continue
         checked.add(script)
         text = script.read_text(encoding="utf-8")
+        heredoc_reason = None if script.name.startswith("test-") else _heredoc_acquisition_reason(text)
+        if heredoc_reason is not None:
+            raise InventoryError(
+                f"build helper {script.relative_to(root)} performs {heredoc_reason}; "
+                "declare acquisition directly in the Dockerfile so legal inventory ownership can be verified"
+            )
         if script.suffix == ".py":
             reason = _python_acquisition_reason(text, allow_test_processes=script.name.startswith("test-"))
             if reason is not None:
