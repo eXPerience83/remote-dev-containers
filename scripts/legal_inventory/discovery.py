@@ -166,6 +166,19 @@ def _strip_command_prefix(tokens: list[str]) -> list[str]:
     return result
 
 
+def _shell_command_option_index(tokens: list[str]) -> int | None:
+    """Locate the shell -c option, including clusters such as -lc or -exc."""
+    for index, token in enumerate(tokens[1:], start=1):
+        if token == "-c" or (
+            token.startswith("-")
+            and not token.startswith("--")
+            and len(token) > 2
+            and token.endswith("c")
+        ):
+            return index
+    return None
+
+
 def _expanded_commands(command: str) -> list[list[str]]:
     """Return commands after wrappers, recursively expanding sh/bash -c."""
     expanded: list[list[str]] = []
@@ -174,11 +187,11 @@ def _expanded_commands(command: str) -> list[list[str]]:
         if not tokens:
             continue
         executable = Path(tokens[0]).name
-        if executable in {"bash", "sh", "dash"} and "-c" in tokens:
-            index = tokens.index("-c")
-            if index + 1 >= len(tokens):
+        command_index = _shell_command_option_index(tokens) if executable in {"bash", "sh", "dash"} else None
+        if command_index is not None:
+            if command_index + 1 >= len(tokens):
                 raise InventoryError(f"shell -c command has no program text: {command}")
-            expanded.extend(_expanded_commands(tokens[index + 1]))
+            expanded.extend(_expanded_commands(tokens[command_index + 1]))
             continue
         expanded.append(tokens)
     return expanded
@@ -223,6 +236,14 @@ def docker_download_urls(path: Path) -> list[str]:
     return sorted(set(urls))
 
 
+def _npm_subcommand_index(tokens: list[str]) -> int | None:
+    """Find npm's first non-option token after the executable."""
+    for index, token in enumerate(tokens[1:], start=1):
+        if not token.startswith("-"):
+            return index
+    return None
+
+
 def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
     """Discover every globally installed npm package/version-key pair."""
     result: set[tuple[str, str]] = set()
@@ -231,11 +252,14 @@ def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
             continue
         for raw_tokens in _expanded_commands(instruction[4:]):
             tokens = _strip_command_prefix(raw_tokens)
-            if len(tokens) < 3 or Path(tokens[0]).name != "npm" or tokens[1] not in NPM_INSTALL_ALIASES:
+            if len(tokens) < 3 or Path(tokens[0]).name != "npm":
+                continue
+            subcommand_index = _npm_subcommand_index(tokens)
+            if subcommand_index is None or tokens[subcommand_index] not in NPM_INSTALL_ALIASES:
                 continue
             if "--global" not in tokens and "-g" not in tokens:
                 continue
-            package_tokens = [token for token in tokens[2:] if not token.startswith("-")]
+            package_tokens = [token for token in tokens[subcommand_index + 1 :] if not token.startswith("-")]
             if not package_tokens:
                 raise InventoryError(f"global npm install has no package spec in {dockerfile}: {' '.join(tokens)}")
             for token in package_tokens:
