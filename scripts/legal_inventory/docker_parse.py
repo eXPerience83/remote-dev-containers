@@ -84,8 +84,32 @@ def strip_command_prefix(tokens: list[str]) -> list[str]:
     return result
 
 
+def _reject_legacy_substitutions(command: str) -> None:
+    """Reject backtick substitution, whose escaping rules are intentionally not emulated."""
+    index = 0
+    quote: str | None = None
+    while index < len(command):
+        character = command[index]
+        if character == "\\" and quote != "'":
+            index += 2
+            continue
+        if character in {"'", '"'}:
+            if quote is None:
+                quote = character
+            elif quote == character:
+                quote = None
+            index += 1
+            continue
+        if character == "`" and quote != "'":
+            raise InventoryError(
+                "legacy backtick command substitutions are unsupported by legal discovery; use $(...)"
+            )
+        index += 1
+
+
 def _command_substitutions(command: str) -> list[str]:
     """Extract balanced shell command substitutions, including nested ones."""
+    _reject_legacy_substitutions(command)
     substitutions: list[str] = []
     index = 0
     quote: str | None = None
