@@ -72,7 +72,9 @@ def _is_installer(tokens: list[str], path: Path) -> bool:
         if module_index + 1 >= len(tokens) or tokens[module_index + 1] != "pip":
             return False
         index = _skip_options(tokens, module_index + 2, PIP_VALUE_OPTIONS, path, "pip")
-        return index < len(tokens) and tokens[index] == "install"
+        if index < len(tokens) and tokens[index] in {"install", "download"}:
+            return True
+        raise InventoryError(f"unsupported python -m pip subcommand for legal discovery in {path}: {text}")
 
     if executable == "uv":
         index = _skip_options(tokens, 1, set(), path, "uv")

@@ -29,7 +29,7 @@ def _copy_mapping(root: Path, instructions: list[str]) -> dict[str, Path]:
         if len(tokens) != 2:
             continue
         source = root / tokens[0]
-        if source.is_file() and source.suffix in {".sh", ".py"}:
+        if source.is_file() and (source.parent.name == "scripts" or source.suffix in {".sh", ".py"}):
             mapping[tokens[1]] = source
     return mapping
 
@@ -160,7 +160,7 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
         return executable
     if executable == "busybox" and len(tokens) > 1 and tokens[1] == "wget":
         return "busybox wget"
-    if executable == "git" and any(command in tokens[1:] for command in {"clone", "fetch"}):
+    if executable == "git" and any(command in tokens[1:] for command in {"clone", "fetch", "pull"}):
         return "git acquisition"
     if executable in {"apt", "apt-get"} and "install" in tokens[1:]:
         return f"{executable} install"
@@ -331,6 +331,14 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
                         if referenced.is_file():
                             pending.append(referenced)
             continue
+        for substitution in re.findall(r"\$\(([^()]*)\)", text, re.DOTALL):
+            for tokens in _command_segments(substitution):
+                reason = _acquisition_reason(tokens)
+                if reason is not None:
+                    raise InventoryError(
+                        f"build helper {script.relative_to(root)} performs command substitution {reason}; "
+                        "declare acquisition directly in the Dockerfile so legal inventory ownership can be verified"
+                    )
         for tokens in _command_segments(text):
             reason = _acquisition_reason(tokens)
             if reason is not None:

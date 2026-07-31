@@ -461,6 +461,34 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             with self.assertRaisesRegex(legal_inventory.InventoryError, "Python heredoc.*urlopen"):
                 legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
 
+    def test_latest_acquisition_forms_fail_closed(self) -> None:
+        self.assertEqual(
+            self.dockerfile_result("RUN git pull https://vendor.example/repo main\n", legal_inventory.docker_download_urls),
+            ["https://vendor.example/repo"],
+        )
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "Node.js inline"):
+            self.dockerfile_result("RUN node -p \"fetch('https://vendor.example/tool')\"\n", legal_inventory.docker_download_urls)
+        self.assertTrue(self.dockerfile_result("RUN python3 -m pip download tool\n", discovered_installer_instructions))
+
+    def test_extensionless_and_substitution_helpers_are_scanned(self) -> None:
+        for name, content in (
+            ("fetch", "curl https://vendor.example/tool -o /tmp/tool\n"),
+            ("helper.sh", 'payload="$(curl https://vendor.example/tool)"\n'),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images/base").mkdir(parents=True)
+                (root / "images/codex").mkdir(parents=True)
+                (root / "scripts").mkdir()
+                (root / f"scripts/{name}").write_text(content, encoding="utf-8")
+                (root / "images/base/Dockerfile").write_text(
+                    f"FROM ubuntu:${{UBUNTU_VERSION}}@${{UBUNTU_DIGEST}}\nCOPY scripts/{name} /usr/local/bin/{name}\nRUN /usr/local/bin/{name}\n",
+                    encoding="utf-8",
+                )
+                (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "curl"):
+                    legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
     def test_python_build_helper_import_aliases_fail_closed(self) -> None:
         helpers = (
             "import urllib.request as net\nnet.urlopen('https://vendor.example/tool')\n",

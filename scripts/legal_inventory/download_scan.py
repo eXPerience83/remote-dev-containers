@@ -91,7 +91,7 @@ def _network_command(tokens: list[str], path: Path) -> bool:
     if executable in {"aria2c", "curl", "http", "httpie", "rsync", "scp", "wget"}:
         return True
     return executable == "git" and (
-        _git_subcommand(tokens, path) in {"clone", "fetch"}
+        _git_subcommand(tokens, path) in {"clone", "fetch", "pull"}
         or ("lfs" in tokens[1:] and any(x in tokens[1:] for x in {"fetch", "pull"}))
     )
 
@@ -108,7 +108,7 @@ def _interpreter_network_fetch(tokens: list[str]) -> str | None:
             code = attached if attached is not None else (tokens[index + 1] if present and index + 1 < len(tokens) else "")
             if present and re.search(r"(?:urllib(?:\.request)?|requests|http\.client|urlopen|https?://)", code, re.I):
                 return "Python inline network acquisition"
-    if executable == "node" and any(option in tokens for option in {"-e", "--eval"}) and re.search(
+    if executable == "node" and any(option in tokens for option in {"-e", "--eval", "-p", "--print"}) and re.search(
         r"(?:\bfetch\s*\(|require\(['\"]https?['\"]\)|https?://)", text, re.I
     ):
         return "Node.js inline network acquisition"
@@ -131,11 +131,11 @@ def _contains_hidden_fetch(tokens: list[str], path: Path) -> bool:
         if executable_name(token) != "git":
             continue
         try:
-            if _git_subcommand(tokens[index:], path) in {"clone", "fetch"}:
+            if _git_subcommand(tokens[index:], path) in {"clone", "fetch", "pull"}:
                 return True
         except InventoryError:
             return True
-    return bool(GIT_RE.search(text) and re.search(r"(?:^|\s)(?:clone|fetch)(?=\s|$)", text))
+    return bool(GIT_RE.search(text) and re.search(r"(?:^|\s)(?:clone|fetch|pull)(?=\s|$)", text))
 
 
 def docker_download_urls(path: Path) -> list[str]:
