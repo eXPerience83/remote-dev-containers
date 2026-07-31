@@ -12,6 +12,7 @@ PACKAGE_SPEC_RE = re.compile(
 )
 NPM_INSTALL_ALIASES = {
     "add",
+    "ci",
     "i",
     "in",
     "ins",
@@ -46,8 +47,8 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
             if executable_name(token) != "npm":
                 continue
             nested = _npm_layout(tokens[index:], path)
-            if nested is not None and nested[1]:
-                raise InventoryError(f"unsupported compound shell around a global npm install in {path}: {text}")
+            if nested is not None:
+                raise InventoryError(f"unsupported compound shell around an npm install in {path}: {text}")
         return None
 
     subcommand_index: int | None = None
@@ -115,7 +116,10 @@ def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
                 continue
             subcommand_index, global_mode = layout
             if not global_mode:
-                continue
+                raise InventoryError(
+                    f"local npm installs are unsupported by legal discovery in {dockerfile}: {' '.join(tokens)}; "
+                    "use an explicitly inventoried global package or preserve the complete local dependency notices"
+                )
 
             package_tokens: list[str] = []
             index = subcommand_index + 1
