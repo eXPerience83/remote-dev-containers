@@ -180,8 +180,8 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
             return "python -m pip install"
         if code is not None and PYTHON_NETWORK_RE.search(code):
             return "Python inline network acquisition"
-    if executable == "node" and any(option in tokens for option in {"-e", "--eval"}):
-        option = "-e" if "-e" in tokens else "--eval"
+    if executable == "node" and any(option in tokens for option in {"-e", "--eval", "-p", "--print"}):
+        option = next(option for option in {"-e", "--eval", "-p", "--print"} if option in tokens)
         code = tokens[tokens.index(option) + 1] if tokens.index(option) + 1 < len(tokens) else ""
         if NODE_NETWORK_RE.search(code):
             return "Node.js inline network acquisition"
@@ -227,12 +227,15 @@ def _python_acquisition_reason(text: str, *, allow_test_processes: bool = False)
         "subprocess.run",
     }
     import_aliases: dict[str, str] = {}
+    imports_requests = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for imported in node.names:
+                imports_requests = imports_requests or imported.name == "requests"
                 local_name = imported.asname or imported.name.split(".")[0]
                 import_aliases[local_name] = imported.name if imported.asname else local_name
         elif isinstance(node, ast.ImportFrom) and node.module:
+            imports_requests = imports_requests or node.module == "requests"
             for imported in node.names:
                 if imported.name == "*":
                     raise InventoryError("wildcard imports are unsupported in Python build helpers")
@@ -257,6 +260,8 @@ def _python_acquisition_reason(text: str, *, allow_test_processes: bool = False)
         name = call_name(node.func)
         if name in network_calls:
             return name
+        if imports_requests and isinstance(node.func, ast.Attribute) and node.func.attr in {"get", "post", "put", "request"}:
+            return f"requests client method {node.func.attr}"
         if not allow_test_processes and (name in process_calls or name.startswith(("os.exec", "os.spawn"))):
             return f"process-spawning API {name}"
     return None

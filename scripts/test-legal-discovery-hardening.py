@@ -499,6 +499,29 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 legal_inventory.docker_download_urls,
             )
 
+    def test_apt_node_helper_and_requests_session_fail_closed(self) -> None:
+        for command in ("apt-get download bash", "apt-get source bash"):
+            with self.subTest(command=command), self.assertRaisesRegex(legal_inventory.InventoryError, "APT retrieval"):
+                self.dockerfile_result(f"RUN {command}\n", legal_inventory.docker_download_urls)
+        for helper, expected in (
+            ('node -p \'fetch("https://vendor.example/tool")\'\n', "Node.js inline"),
+            ("import requests\ns = requests.Session()\ns.get('https://vendor.example/tool')\n", "requests client method"),
+        ):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images/base").mkdir(parents=True)
+                (root / "images/codex").mkdir(parents=True)
+                (root / "scripts").mkdir()
+                suffix = ".py" if expected.startswith("requests") else ".sh"
+                (root / f"scripts/helper{suffix}").write_text(helper, encoding="utf-8")
+                (root / "images/base/Dockerfile").write_text(
+                    f"FROM ubuntu:${{UBUNTU_VERSION}}@${{UBUNTU_DIGEST}}\nCOPY scripts/helper{suffix} /helper{suffix}\nRUN {'python3' if suffix == '.py' else 'sh'} /helper{suffix}\n",
+                    encoding="utf-8",
+                )
+                (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                with self.assertRaisesRegex(legal_inventory.InventoryError, expected):
+                    legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
     def test_python_build_helper_import_aliases_fail_closed(self) -> None:
         helpers = (
             "import urllib.request as net\nnet.urlopen('https://vendor.example/tool')\n",

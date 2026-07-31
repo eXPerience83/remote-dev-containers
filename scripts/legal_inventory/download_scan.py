@@ -155,6 +155,10 @@ def docker_download_urls(path: Path) -> list[str]:
                 raise InventoryError(f"remote ADD source must be a literal HTTPS URL in {path}: {add_payload}")
             urls.update(found)
         for tokens in run_commands(instruction, path):
+            if tokens and executable_name(tokens[0]) in {"apt", "apt-get"} and any(
+                command in tokens[1:] for command in {"download", "source"}
+            ):
+                raise InventoryError(f"APT retrieval outside install is unsupported by legal discovery in {path}: {' '.join(tokens)}")
             if apt_packages_from_command(tokens, path) is not None:
                 continue
             text = " ".join(tokens)
