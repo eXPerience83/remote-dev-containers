@@ -91,7 +91,8 @@ def _network_command(tokens: list[str], path: Path) -> bool:
     if executable in {"aria2c", "curl", "http", "httpie", "rsync", "scp", "wget"}:
         return True
     return executable == "git" and (
-        _git_subcommand(tokens, path) == "clone" or ("lfs" in tokens[1:] and any(x in tokens[1:] for x in {"fetch", "pull"}))
+        _git_subcommand(tokens, path) in {"clone", "fetch"}
+        or ("lfs" in tokens[1:] and any(x in tokens[1:] for x in {"fetch", "pull"}))
     )
 
 
@@ -126,11 +127,11 @@ def _contains_hidden_fetch(tokens: list[str], path: Path) -> bool:
         if executable_name(token) != "git":
             continue
         try:
-            if _git_subcommand(tokens[index:], path) == "clone":
+            if _git_subcommand(tokens[index:], path) in {"clone", "fetch"}:
                 return True
         except InventoryError:
             return True
-    return bool(GIT_RE.search(text) and re.search(r"(?:^|\s)clone(?=\s|$)", text))
+    return bool(GIT_RE.search(text) and re.search(r"(?:^|\s)(?:clone|fetch)(?=\s|$)", text))
 
 
 def docker_download_urls(path: Path) -> list[str]:

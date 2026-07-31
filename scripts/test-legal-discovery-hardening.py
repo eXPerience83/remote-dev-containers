@@ -411,6 +411,53 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*urlopen"):
                     legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
 
+    def test_python_build_helper_process_launches_fail_closed(self) -> None:
+        helper = "import subprocess\nsubprocess.run(['curl', 'https://vendor.example/tool'])\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/helper.py").write_text(helper, encoding="utf-8")
+            (root / "images/base/Dockerfile").write_text(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "COPY scripts/helper.py /helper.py\nRUN python3 /helper.py\n",
+                encoding="utf-8",
+            )
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "process-spawning API"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_copied_helpers_invoked_by_helpers_are_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/a.sh").write_text("/usr/local/bin/b.sh\n", encoding="utf-8")
+            (root / "scripts/b.sh").write_text(
+                "curl https://vendor.example/tool -o /tmp/tool\n", encoding="utf-8"
+            )
+            (root / "images/base/Dockerfile").write_text(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "COPY scripts/a.sh /usr/local/bin/a.sh\n"
+                "COPY scripts/b.sh /usr/local/bin/b.sh\n"
+                "RUN /usr/local/bin/a.sh\n",
+                encoding="utf-8",
+            )
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*curl"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_git_fetch_is_a_network_acquisition(self) -> None:
+        self.assertEqual(
+            self.dockerfile_result(
+                "RUN git -C /tmp/repo fetch https://vendor.example/repo main\n",
+                legal_inventory.docker_download_urls,
+            ),
+            ["https://vendor.example/repo"],
+        )
+
     def test_additional_fetch_and_installer_forms_fail_closed(self) -> None:
         attributable_fetches = (
             "rsync https://vendor.example/tool /tmp/tool",

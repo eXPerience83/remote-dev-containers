@@ -191,7 +191,7 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
     return None
 
 
-def _python_acquisition_reason(text: str) -> str | None:
+def _python_acquisition_reason(text: str, *, allow_test_processes: bool = False) -> str | None:
     """Detect executed Python network APIs without matching inert fixture strings."""
     try:
         tree = ast.parse(text)
@@ -208,6 +208,15 @@ def _python_acquisition_reason(text: str) -> str | None:
         "requests.request",
         "http.client.HTTPConnection",
         "http.client.HTTPSConnection",
+    }
+    process_calls = {
+        "os.popen",
+        "os.system",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "subprocess.Popen",
+        "subprocess.run",
     }
     import_aliases: dict[str, str] = {}
     for node in ast.walk(tree):
@@ -235,16 +244,23 @@ def _python_acquisition_reason(text: str) -> str | None:
         return name
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and call_name(node.func) in network_calls:
-            return call_name(node.func)
+        if not isinstance(node, ast.Call):
+            continue
+        name = call_name(node.func)
+        if name in network_calls:
+            return name
+        if not allow_test_processes and (name in process_calls or name.startswith(("os.exec", "os.spawn"))):
+            return f"process-spawning API {name}"
     return None
 
 
 def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
     """Reject acquisition from context scripts reached by managed Docker builds."""
     pending: list[Path] = []
+    copied_helpers: dict[str, Path] = {}
     for dockerfile in dockerfiles:
         pending.extend(_invoked_scripts(root, dockerfile))
+        copied_helpers.update(_copy_mapping(root, docker_instructions(dockerfile)))
     checked: set[Path] = set()
     while pending:
         script = pending.pop()
@@ -253,7 +269,7 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
         checked.add(script)
         text = script.read_text(encoding="utf-8")
         if script.suffix == ".py":
-            reason = _python_acquisition_reason(text)
+            reason = _python_acquisition_reason(text, allow_test_processes=script.name.startswith("test-"))
             if reason is not None:
                 raise InventoryError(
                     f"build helper {script.relative_to(root)} performs {reason}; "
@@ -267,6 +283,11 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
                     f"build helper {script.relative_to(root)} performs {reason}; "
                     "declare acquisition directly in the Dockerfile so legal inventory ownership can be verified"
                 )
+            executable = executable_name(tokens[0])
+            candidate = tokens[1] if executable in {"source", ".", "bash", "sh", "dash"} and len(tokens) > 1 else tokens[0]
+            referenced = _resolve_script(candidate, root, copied_helpers)
+            if referenced is not None:
+                pending.append(referenced)
         for match in SCRIPT_REFERENCE_RE.finditer(text):
             referenced = root / match.group(1)
             if referenced.is_file():
