@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from .apt_scan import apt_packages_from_command
-from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, run_commands
+from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, instruction_payload, run_commands
 from .io import InventoryError
 
 URL_RE = re.compile(r"https://[^\s\"'<>]+")
@@ -71,8 +71,9 @@ def docker_download_urls(path: Path) -> list[str]:
     """Return literal HTTPS sources or reject unparsed fetch forms."""
     urls: set[str] = set()
     for instruction in docker_instructions(path):
-        if instruction.startswith("ADD "):
-            urls.update(match.group(0).rstrip("),.;") for match in URL_RE.finditer(instruction))
+        add_payload = instruction_payload(instruction, "ADD")
+        if add_payload is not None:
+            urls.update(match.group(0).rstrip("),.;") for match in URL_RE.finditer(add_payload))
         for tokens in run_commands(instruction, path):
             if apt_packages_from_command(tokens, path) is not None:
                 continue
