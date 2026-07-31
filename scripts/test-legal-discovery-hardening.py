@@ -120,10 +120,19 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             "RUN npm installTest lodash@4.17.21\n",
             "RUN npm install-t lodash@4.17.21\n",
             "RUN npm installCiTest\n",
+            "RUN npm --loglevel warn install lodash@4.17.21\n",
+            "RUN npm --loglevel=warn install lodash@4.17.21\n",
         ):
             with self.subTest(instruction=instruction):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "local npm installs"):
                     self.dockerfile_result(instruction, legal_inventory.global_npm_specs)
+
+    def test_ambiguous_npm_precommand_options_fail_closed(self) -> None:
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported npm option"):
+            self.dockerfile_result(
+                "RUN npm -L warn install lodash@4.17.21\n",
+                legal_inventory.global_npm_specs,
+            )
 
     def test_non_install_npm_commands_are_ignored(self) -> None:
         for instruction in (
