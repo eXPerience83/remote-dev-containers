@@ -11,8 +11,8 @@ PACKAGE_SPEC_RE = re.compile(
     r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}"
 )
 NPM_INSTALL_ALIASES = {
+    # npm install
     "add",
-    "ci",
     "i",
     "in",
     "ins",
@@ -24,6 +24,20 @@ NPM_INSTALL_ALIASES = {
     "isnta",
     "isntal",
     "isntall",
+    # npm ci
+    "ci",
+    "clean-install",
+    "ic",
+    "install-clean",
+    "isntall-clean",
+    # npm install-test
+    "install-test",
+    "it",
+    # npm install-ci-test
+    "cit",
+    "clean-install-test",
+    "install-ci-test",
+    "sit",
 }
 NPM_VALUE_OPTIONS = {
     "--cache",
