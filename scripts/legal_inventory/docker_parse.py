@@ -40,7 +40,7 @@ def docker_instructions(path: Path) -> list[str]:
 
 def executable_name(token: str) -> str:
     """Normalize punctuation around a potential executable token."""
-    return Path(token.strip("!(){}[]")).name
+    return Path(token.strip("!(){}[]$")).name
 
 
 def strip_command_prefix(tokens: list[str]) -> list[str]:
