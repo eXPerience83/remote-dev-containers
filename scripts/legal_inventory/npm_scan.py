@@ -10,35 +10,139 @@ from .io import InventoryError
 PACKAGE_SPEC_RE = re.compile(
     r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}"
 )
-NPM_INSTALL_ALIASES = {
-    # npm install
-    "add",
-    "i",
-    "in",
-    "ins",
-    "inst",
-    "insta",
-    "instal",
-    "install",
-    "isnt",
-    "isnta",
-    "isntal",
-    "isntall",
-    # npm ci
+
+# Keep this command namespace aligned with npm CLI 11.12.1's
+# lib/utils/cmd-list.js. npm resolves camelCase, exact commands/aliases and then
+# unambiguous prefixes across this complete namespace.
+NPM_COMMANDS = {
+    "access",
+    "adduser",
+    "audit",
+    "bugs",
+    "cache",
     "ci",
-    "clean-install",
-    "ic",
-    "install-clean",
-    "isntall-clean",
-    # npm install-test
-    "install-test",
-    "it",
-    # npm install-ci-test
-    "cit",
-    "clean-install-test",
+    "completion",
+    "config",
+    "dedupe",
+    "deprecate",
+    "diff",
+    "dist-tag",
+    "docs",
+    "doctor",
+    "edit",
+    "exec",
+    "explain",
+    "explore",
+    "find-dupes",
+    "fund",
+    "get",
+    "help",
+    "help-search",
+    "init",
+    "install",
     "install-ci-test",
-    "sit",
+    "install-test",
+    "link",
+    "ll",
+    "login",
+    "logout",
+    "ls",
+    "org",
+    "outdated",
+    "owner",
+    "pack",
+    "ping",
+    "pkg",
+    "prefix",
+    "profile",
+    "prune",
+    "publish",
+    "query",
+    "rebuild",
+    "repo",
+    "restart",
+    "root",
+    "run",
+    "sbom",
+    "search",
+    "set",
+    "shrinkwrap",
+    "star",
+    "stars",
+    "start",
+    "stop",
+    "team",
+    "test",
+    "token",
+    "trust",
+    "undeprecate",
+    "uninstall",
+    "unpublish",
+    "unstar",
+    "update",
+    "version",
+    "view",
+    "whoami",
 }
+NPM_ALIASES = {
+    "author": "owner",
+    "home": "docs",
+    "issues": "bugs",
+    "info": "view",
+    "show": "view",
+    "find": "search",
+    "add": "install",
+    "unlink": "uninstall",
+    "remove": "uninstall",
+    "rm": "uninstall",
+    "r": "uninstall",
+    "un": "uninstall",
+    "rb": "rebuild",
+    "list": "ls",
+    "ln": "link",
+    "create": "init",
+    "i": "install",
+    "it": "install-test",
+    "cit": "install-ci-test",
+    "up": "update",
+    "c": "config",
+    "s": "search",
+    "se": "search",
+    "tst": "test",
+    "t": "test",
+    "ddp": "dedupe",
+    "v": "view",
+    "run-script": "run",
+    "clean-install": "ci",
+    "clean-install-test": "install-ci-test",
+    "x": "exec",
+    "why": "explain",
+    "la": "ll",
+    "verison": "version",
+    "ic": "ci",
+    "innit": "init",
+    "in": "install",
+    "ins": "install",
+    "inst": "install",
+    "insta": "install",
+    "instal": "install",
+    "isnt": "install",
+    "isnta": "install",
+    "isntal": "install",
+    "isntall": "install",
+    "install-clean": "ci",
+    "isntall-clean": "ci",
+    "hlep": "help",
+    "dist-tags": "dist-tag",
+    "upgrade": "update",
+    "udpate": "update",
+    "rum": "run",
+    "sit": "install-ci-test",
+    "urn": "run",
+    "ogr": "org",
+    "add-user": "adduser",
+}
+NPM_INSTALL_COMMANDS = {"install", "ci", "install-test", "install-ci-test"}
 NPM_VALUE_OPTIONS = {
     "--cache",
     "--prefix",
@@ -48,6 +152,38 @@ NPM_VALUE_OPTIONS = {
     "-w",
     "--location",
 }
+
+
+def _normalize_npm_command(command: str) -> str:
+    """Apply npm's camelCase-to-kebab-case command normalization."""
+    return re.sub(r"([A-Z])", lambda match: "-" + match.group(1).lower(), command)
+
+
+def _resolve_alias(command: str) -> str:
+    """Resolve npm alias chains to their canonical command."""
+    seen: set[str] = set()
+    while command in NPM_ALIASES:
+        if command in seen:
+            raise InventoryError(f"npm command alias cycle detected at {command}")
+        seen.add(command)
+        command = NPM_ALIASES[command]
+    return command
+
+
+def _resolve_npm_command(command: str) -> str | None:
+    """Mirror npm's exact/alias/unambiguous-prefix command dereferencing."""
+    normalized = _normalize_npm_command(command)
+    if normalized in NPM_COMMANDS:
+        return normalized
+    if normalized in NPM_ALIASES:
+        return _resolve_alias(normalized)
+
+    candidates = sorted(
+        name for name in NPM_COMMANDS | set(NPM_ALIASES) if name.startswith(normalized)
+    )
+    if len(candidates) != 1:
+        return None
+    return _resolve_alias(candidates[0])
 
 
 def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
@@ -96,7 +232,10 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
         subcommand_index = index
         break
 
-    if subcommand_index is None or tokens[subcommand_index] not in NPM_INSTALL_ALIASES:
+    if subcommand_index is None:
+        return None
+    resolved_command = _resolve_npm_command(tokens[subcommand_index])
+    if resolved_command not in NPM_INSTALL_COMMANDS:
         return None
 
     index = subcommand_index + 1
