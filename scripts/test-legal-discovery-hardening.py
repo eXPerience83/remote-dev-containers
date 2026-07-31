@@ -57,6 +57,13 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             [],
         )
 
+    def test_legacy_backtick_substitutions_fail_closed(self) -> None:
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "backtick"):
+            self.dockerfile_result(
+                "RUN result=`curl https://vendor.example/legacy`\n",
+                legal_inventory.docker_download_urls,
+            )
+
     def test_docker_instruction_keywords_are_case_insensitive(self) -> None:
         self.assertEqual(
             self.dockerfile_result(
@@ -97,6 +104,15 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                     self.dockerfile_result(instruction, legal_inventory.global_npm_specs),
                     [("tool", "TOOL_VERSION")],
                 )
+
+    def test_local_npm_installs_fail_closed(self) -> None:
+        for instruction in (
+            "RUN npm install lodash@4.17.21\n",
+            "RUN npm ci\n",
+        ):
+            with self.subTest(instruction=instruction):
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "local npm installs"):
+                    self.dockerfile_result(instruction, legal_inventory.global_npm_specs)
 
     def test_run_heredocs_fail_closed(self) -> None:
         with self.assertRaisesRegex(legal_inventory.InventoryError, "heredocs are unsupported"):
@@ -180,13 +196,14 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("differs from reviewed legal sources", result.stderr)
 
-    def test_image_notice_check_rejects_tampering_and_missing_copyright(self) -> None:
+    def test_image_notice_check_rejects_tampering_lock_drift_and_missing_copyright(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             notice_root = root / "notice"
             third_party = notice_root / "third_party"
             system_docs = root / "system-docs"
             component_license = third_party / "components/tool/LICENSE"
+            component_notice = third_party / "components/tool/NOTICE"
             component_license.parent.mkdir(parents=True)
             (third_party / "runtime/python").mkdir(parents=True)
             (third_party / "runtime/npm").mkdir(parents=True)
@@ -195,35 +212,63 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             (third_party / "README.md").write_text("inventory\n", encoding="utf-8")
             (third_party / "optional-agents.md").write_text("policy\n", encoding="utf-8")
             component_license.write_text("license\n", encoding="utf-8")
+            component_notice.write_text("notice\n", encoding="utf-8")
             (third_party / "runtime/python/NOTICE.dep").write_text("dependency\n", encoding="utf-8")
             (third_party / "runtime/npm/LICENSE").write_text("npm\n", encoding="utf-8")
             copyright_path = system_docs / "bash/copyright"
             copyright_path.write_text("bash\n", encoding="utf-8")
             packages = root / "packages.txt"
             packages.write_text("bash\n", encoding="utf-8")
-            data = component_license.read_bytes()
-            blob = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+
+            def blob(path: Path) -> str:
+                data = path.read_bytes()
+                return hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+
             inventory = {
                 "schema_version": 1,
                 "components": [{
                     "id": "tool",
                     "image_scope": "both",
                     "inputs": ["TOOL_VERSION"],
-                    "notice_locations": ["components/tool/LICENSE", "/usr/share/doc/<package>/copyright"],
+                    "notice_locations": [
+                        "components/tool/LICENSE",
+                        "components/tool/NOTICE",
+                        "/usr/share/doc/<package>/copyright",
+                    ],
+                    "source_documents": [
+                        {
+                            "path": "third_party/components/tool/LICENSE",
+                            "url_template": "https://vendor.example/{version}/LICENSE",
+                        },
+                        {
+                            "path": "third_party/components/tool/NOTICE",
+                            "url_template": "https://vendor.example/{version}/NOTICE",
+                        },
+                    ],
                     "version_source": {"kind": "env", "key": "TOOL_VERSION"},
                 }],
             }
             source_lock = {
                 "schema_version": 1,
-                "documents": [{
-                    "component": "tool",
-                    "path": "third_party/components/tool/LICENSE",
-                    "git_blob_sha1": blob,
-                    "version": "1.0",
-                }],
+                "documents": [
+                    {
+                        "component": "tool",
+                        "path": "third_party/components/tool/LICENSE",
+                        "git_blob_sha1": blob(component_license),
+                        "version": "1.0",
+                    },
+                    {
+                        "component": "tool",
+                        "path": "third_party/components/tool/NOTICE",
+                        "git_blob_sha1": blob(component_notice),
+                        "version": "1.0",
+                    },
+                ],
             }
-            (third_party / "inventory.json").write_text(json.dumps(inventory), encoding="utf-8")
-            (third_party / "sources.lock.json").write_text(json.dumps(source_lock), encoding="utf-8")
+            inventory_path = third_party / "inventory.json"
+            source_lock_path = third_party / "sources.lock.json"
+            inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+            source_lock_path.write_text(json.dumps(source_lock), encoding="utf-8")
             (third_party / "BUILD-VERSIONS.env").write_text("TOOL_VERSION=1.0\n", encoding="utf-8")
             environment = os.environ | {
                 "REMOTE_DEV_NOTICE_ROOT": str(notice_root),
@@ -232,6 +277,7 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             }
             command = ["bash", str(SCRIPTS / "remote-dev-notices.sh"), "--check"]
             self.assertEqual(subprocess.run(command, env=environment, check=False).returncode, 0)
+
             component_license.write_text("tampered\n", encoding="utf-8")
             self.assertNotEqual(
                 subprocess.run(
@@ -243,6 +289,20 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 0,
             )
             component_license.write_text("license\n", encoding="utf-8")
+
+            truncated_lock = {"schema_version": 1, "documents": source_lock["documents"][:1]}
+            source_lock_path.write_text(json.dumps(truncated_lock), encoding="utf-8")
+            self.assertNotEqual(
+                subprocess.run(
+                    command,
+                    env=environment,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ).returncode,
+                0,
+            )
+            source_lock_path.write_text(json.dumps(source_lock), encoding="utf-8")
+
             copyright_path.unlink()
             self.assertNotEqual(
                 subprocess.run(
