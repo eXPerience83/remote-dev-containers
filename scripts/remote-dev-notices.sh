@@ -146,6 +146,7 @@ check_notices() {
   local key=""
   local location=""
   local component=""
+  local component_scope=""
   local locked_version=""
   local effective_version=""
   local source_records=""
@@ -205,6 +206,16 @@ check_notices() {
     if capture_required_jq source_versions "reviewed source component versions" \
       '.documents | group_by(.component)[] | . as $records | ($records | map(.version) | unique) as $versions | if ($versions | length) == 1 then [$records[0].component, $versions[0]] | @tsv else error("component has multiple reviewed versions") end' "$source_lock"; then
       while IFS=$'\t' read -r component locked_version; do
+        if ! component_scope="$(jq -er --arg component "$component" \
+          '.components[] | select(.id == $component) | .image_scope' "$inventory")"; then
+          echo "ERROR: source-locked component has no image scope: $component" >&2
+          failed=1
+          continue
+        fi
+        if [[ "$component_scope" == "optional" ]] || \
+          { (( has_codex == 0 )) && [[ "$component_scope" == "final" ]]; }; then
+          continue
+        fi
         if ! key="$(jq -er --arg component "$component" \
           '.components[] | select(.id == $component) | (.version_source.key // .version_source.mirror_env_key)' "$inventory")"; then
           echo "ERROR: source-locked component has no build-manifest version key: $component" >&2
