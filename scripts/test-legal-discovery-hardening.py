@@ -98,6 +98,7 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             'RUN npm install --location=global "tool@${TOOL_VERSION}"\n',
             'RUN npm --location global add "tool@${TOOL_VERSION}"\n',
             'RUN npm --global install "tool@${TOOL_VERSION}"\n',
+            'RUN npm installT --location=global "tool@${TOOL_VERSION}"\n',
         ):
             with self.subTest(instruction=instruction):
                 self.assertEqual(
@@ -116,10 +117,25 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             "RUN npm cit\n",
             "RUN npm clean-install-test\n",
             "RUN npm sit\n",
+            "RUN npm installTest lodash@4.17.21\n",
+            "RUN npm install-t lodash@4.17.21\n",
+            "RUN npm installCiTest\n",
         ):
             with self.subTest(instruction=instruction):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "local npm installs"):
                     self.dockerfile_result(instruction, legal_inventory.global_npm_specs)
+
+    def test_non_install_npm_commands_are_ignored(self) -> None:
+        for instruction in (
+            "RUN npm --version\n",
+            "RUN npm c get registry\n",
+            "RUN npm test\n",
+        ):
+            with self.subTest(instruction=instruction):
+                self.assertEqual(
+                    self.dockerfile_result(instruction, legal_inventory.global_npm_specs),
+                    [],
+                )
 
     def test_run_heredocs_fail_closed(self) -> None:
         with self.assertRaisesRegex(legal_inventory.InventoryError, "heredocs are unsupported"):
