@@ -14,15 +14,11 @@ import legal_inventory  # noqa: E402
 
 class LegalInventoryTests(unittest.TestCase):
     """Exercise fail-closed inventory discovery and reconciliation behavior."""
+
     def test_git_blob_sha_matches_git_object_format(self) -> None:
-        """Verify git blob sha matches git object format."""
-        self.assertEqual(
-            legal_inventory.git_blob_sha1(b"hello\n"),
-            "ce013625030ba8dba906f756967f9e9ca394464a",
-        )
+        self.assertEqual(legal_inventory.git_blob_sha1(b"hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a")
 
     def test_discovers_apt_downloads_and_global_npm(self) -> None:
-        """Verify discovers apt downloads and global npm."""
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
             dockerfile.write_text(
@@ -45,8 +41,30 @@ LABEL docs=\"https://github.com/example/docs\"
             )
             self.assertEqual(legal_inventory.global_npm_specs(dockerfile), [("npm", "NPM_VERSION")])
 
+    def test_pipeline_and_shell_wrapper_downloads_are_discovered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(
+                """RUN printf x | curl https://vendor.example/pipe -o /tmp/pipe
+RUN bash -c 'wget https://vendor.example/wrapped -O /tmp/wrapped'
+""",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                legal_inventory.docker_download_urls(dockerfile),
+                ["https://vendor.example/pipe", "https://vendor.example/wrapped"],
+            )
+
+    def test_npm_install_aliases_are_discovered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(
+                'RUN env CI=1 npm add --global "some-tool@${TOOL_VERSION}"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(legal_inventory.global_npm_specs(dockerfile), [("some-tool", "TOOL_VERSION")])
+
     def test_apt_package_names_are_not_network_commands(self) -> None:
-        """Verify APT package names curl and wget do not trigger fetch detection."""
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
             dockerfile.write_text(
@@ -56,29 +74,68 @@ LABEL docs=\"https://github.com/example/docs\"
             self.assertEqual(legal_inventory.docker_download_urls(dockerfile), [])
 
     def test_fixed_global_npm_package_fails_closed(self) -> None:
-        """Verify global npm additions cannot bypass version inventory."""
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
-            dockerfile.write_text(
-                "RUN npm install --global some-tool@1.2.3\n",
-                encoding="utf-8",
-            )
+            dockerfile.write_text("RUN npm install --global some-tool@1.2.3\n", encoding="utf-8")
             with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported global npm package spec"):
                 legal_inventory.global_npm_specs(dockerfile)
 
     def test_dynamic_network_fetch_fails_closed(self) -> None:
-        """Verify a variable-only download source cannot evade ownership."""
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
-            dockerfile.write_text(
-                'RUN curl --fail "$TOOL_URL" -o /usr/local/bin/tool\n',
-                encoding="utf-8",
-            )
+            dockerfile.write_text('RUN curl --fail "$TOOL_URL" -o /usr/local/bin/tool\n', encoding="utf-8")
             with self.assertRaisesRegex(legal_inventory.InventoryError, "literal HTTPS source"):
                 legal_inventory.docker_download_urls(dockerfile)
 
+    def test_direct_download_component_requires_source_document(self) -> None:
+        inventory = {
+            "schema_version": 1,
+            "components": [
+                {
+                    "id": "tool",
+                    "name": "Tool",
+                    "distribution": "download",
+                    "image_scope": "both",
+                    "version_source": {"kind": "env", "key": "TOOL_VERSION"},
+                    "inputs": ["TOOL_VERSION"],
+                    "upstream": "https://example.com/tool",
+                    "license_expression": "MIT",
+                    "notice_treatment": "license required",
+                    "notice_locations": ["components/tool/LICENSE"],
+                    "trademark_policy": "descriptive use",
+                    "download_url_markers": ["https://example.com/releases/"],
+                    "sbom": {"status": "not-guaranteed", "reason": "binary"},
+                }
+            ],
+        }
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "no source-locked legal document"):
+            legal_inventory.validate_schema(inventory)
+
+    def test_source_document_requires_https_and_exposed_location(self) -> None:
+        component = {
+            "id": "tool",
+            "name": "Tool",
+            "distribution": "download",
+            "image_scope": "both",
+            "version_source": {"kind": "env", "key": "TOOL_VERSION"},
+            "inputs": ["TOOL_VERSION"],
+            "upstream": "https://example.com/tool",
+            "license_expression": "MIT",
+            "notice_treatment": "license required",
+            "notice_locations": ["components/tool/LICENSE"],
+            "trademark_policy": "descriptive use",
+            "sbom": {"status": "not-guaranteed", "reason": "binary"},
+            "source_documents": [
+                {
+                    "path": "third_party/components/tool/NOTICE",
+                    "url_template": "http://example.com/{version}/NOTICE",
+                }
+            ],
+        }
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "must use HTTPS"):
+            legal_inventory.validate_schema({"schema_version": 1, "components": [component]})
+
     def test_unclaimed_version_input_fails_closed(self) -> None:
-        """Verify unclaimed version input fails closed."""
         inventory = {
             "schema_version": 1,
             "components": [
@@ -109,39 +166,6 @@ LABEL docs=\"https://github.com/example/docs\"
                 legal_inventory.validate_inputs(root, inventory, env, {})
 
     def test_unclaimed_direct_download_fails_closed(self) -> None:
-        """Verify unclaimed direct download fails closed."""
-        inventory = {
-            "schema_version": 1,
-            "components": [
-                {
-                    "id": "project",
-                    "name": "Project",
-                    "distribution": "project",
-                    "image_scope": "project",
-                    "version_source": {"kind": "project"},
-                    "inputs": [],
-                    "upstream": "example",
-                    "license_expression": "Apache-2.0",
-                    "notice_treatment": "text",
-                    "notice_locations": ["/LICENSE"],
-                    "trademark_policy": "text",
-                    "sbom": {"status": "not-applicable", "reason": "project"}
-                }
-            ]
-        }
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / "images/base").mkdir(parents=True)
-            (root / "images/codex").mkdir(parents=True)
-            (root / "images/base/Dockerfile").write_text(
-                'RUN curl "https://vendor.example/tool.tar.gz" -o tool.tar.gz\n', encoding="utf-8"
-            )
-            (root / "images/codex/Dockerfile").write_text("", encoding="utf-8")
-            with self.assertRaisesRegex(legal_inventory.InventoryError, "exactly one component"):
-                legal_inventory.validate_discovery(root, inventory)
-
-    def test_unclaimed_installer_command_fails_closed(self) -> None:
-        """Verify new package-manager installation paths require an owner."""
         inventory = {
             "schema_version": 1,
             "components": [
@@ -166,14 +190,42 @@ LABEL docs=\"https://github.com/example/docs\"
             (root / "images/base").mkdir(parents=True)
             (root / "images/codex").mkdir(parents=True)
             (root / "images/base/Dockerfile").write_text(
-                "RUN python3 -m pip install new-tool==1.0\n", encoding="utf-8"
+                'RUN curl "https://vendor.example/tool.tar.gz" -o tool.tar.gz\n', encoding="utf-8"
             )
+            (root / "images/codex/Dockerfile").write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "exactly one component"):
+                legal_inventory.validate_discovery(root, inventory)
+
+    def test_unclaimed_installer_command_fails_closed(self) -> None:
+        inventory = {
+            "schema_version": 1,
+            "components": [
+                {
+                    "id": "project",
+                    "name": "Project",
+                    "distribution": "project",
+                    "image_scope": "project",
+                    "version_source": {"kind": "project"},
+                    "inputs": [],
+                    "upstream": "example",
+                    "license_expression": "Apache-2.0",
+                    "notice_treatment": "text",
+                    "notice_locations": ["/LICENSE"],
+                    "trademark_policy": "text",
+                    "sbom": {"status": "not-applicable", "reason": "project"},
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "images/base/Dockerfile").write_text("RUN python3 -m pip install new-tool==1.0\n", encoding="utf-8")
             (root / "images/codex/Dockerfile").write_text("", encoding="utf-8")
             with self.assertRaisesRegex(legal_inventory.InventoryError, "installer command"):
                 legal_inventory.validate_discovery(root, inventory)
 
     def test_invalid_apt_token_fails_closed(self) -> None:
-        """Verify dynamic or pinned APT syntax cannot disappear from inventory."""
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
             dockerfile.write_text(
@@ -184,7 +236,6 @@ LABEL docs=\"https://github.com/example/docs\"
                 legal_inventory.parse_apt_packages(dockerfile)
 
     def test_unknown_sbom_ecosystem_fails_closed(self) -> None:
-        """Verify unknown sbom ecosystem fails closed."""
         inventory = {
             "schema_version": 1,
             "components": [
@@ -200,7 +251,7 @@ LABEL docs=\"https://github.com/example/docs\"
                     "notice_treatment": "text",
                     "notice_locations": ["/usr/share/doc/<package>/copyright"],
                     "trademark_policy": "text",
-                    "sbom": {"status": "covered-by-ecosystem"}
+                    "sbom": {"status": "covered-by-ecosystem"},
                 }
             ],
             "sbom_coverage": [{"owner": "apt packages", "purl_types": ["deb"]}],
@@ -220,14 +271,8 @@ LABEL docs=\"https://github.com/example/docs\"
                 json.dumps(
                     {
                         "packages": [
-                            {
-                                "name": "bash",
-                                "externalRefs": [{"referenceLocator": "pkg:deb/ubuntu/bash@1"}],
-                            },
-                            {
-                                "name": "mystery",
-                                "externalRefs": [{"referenceLocator": "pkg:gem/mystery@1"}],
-                            },
+                            {"name": "bash", "externalRefs": [{"referenceLocator": "pkg:deb/ubuntu/bash@1"}]},
+                            {"name": "mystery", "externalRefs": [{"referenceLocator": "pkg:gem/mystery@1"}]},
                         ]
                     }
                 ),
@@ -235,6 +280,30 @@ LABEL docs=\"https://github.com/example/docs\"
             )
             with self.assertRaisesRegex(legal_inventory.InventoryError, "unclassified package ecosystems: gem"):
                 legal_inventory.reconcile_sboms(root, inventory, [f"base={sbom}", f"final={sbom}"])
+
+    def test_final_sbom_must_include_base_package_identities(self) -> None:
+        inventory = {
+            "schema_version": 1,
+            "components": [],
+            "sbom_coverage": [{"owner": "packages", "purl_types": ["deb", "npm"]}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/base/Dockerfile").write_text(
+                "RUN apt-get install -y --no-install-recommends \\\n        bash \\\n    && true\n", encoding="utf-8"
+            )
+            base = root / "base.json"
+            final = root / "final.json"
+            base.write_text(json.dumps({"packages": [
+                {"externalRefs": [{"referenceLocator": "pkg:deb/ubuntu/bash@1"}]},
+                {"externalRefs": [{"referenceLocator": "pkg:npm/tool@1"}]},
+            ]}), encoding="utf-8")
+            final.write_text(json.dumps({"packages": [
+                {"externalRefs": [{"referenceLocator": "pkg:deb/ubuntu/bash@1"}]},
+            ]}), encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "final SBOM is missing"):
+                legal_inventory.reconcile_sboms(root, inventory, [f"base={base}", f"final={final}"])
 
 
 if __name__ == "__main__":
