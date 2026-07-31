@@ -60,6 +60,20 @@ require_manifest_value() {
   return 1
 }
 
+capture_required_jq() {
+  local output_name="$1"
+  local description="$2"
+  local filter="$3"
+  local file="$4"
+  local output=""
+
+  if ! output="$(jq -er "$filter" "$file")" || [[ -z "$output" ]]; then
+    echo "ERROR: $description query failed or returned no values: $file" >&2
+    return 1
+  fi
+  printf -v "$output_name" '%s' "$output"
+}
+
 check_inventory_location() {
   local location="$1"
   local path=""
@@ -85,6 +99,9 @@ check_notices() {
   local path=""
   local key=""
   local location=""
+  local source_paths=""
+  local notice_locations=""
+  local input_keys=""
   local manifest="$third_party_root/BUILD-VERSIONS.env"
   local codex_manifest="$third_party_root/CODEX-BUILD.env"
   local has_codex=0
@@ -117,25 +134,40 @@ check_notices() {
   fi
 
   if [[ -s "$source_lock" ]]; then
-    while IFS= read -r path; do
-      if ! require_file "$notice_root/$path"; then
-        failed=1
-      fi
-    done < <(jq -er '.documents[].path' "$source_lock")
+    if capture_required_jq source_paths "reviewed source paths" \
+      '.documents | select(type == "array" and length > 0) | .[].path' "$source_lock"; then
+      while IFS= read -r path; do
+        if ! require_file "$notice_root/$path"; then
+          failed=1
+        fi
+      done <<< "$source_paths"
+    else
+      failed=1
+    fi
   fi
 
   if [[ -s "$inventory" ]]; then
-    while IFS= read -r location; do
-      if ! check_inventory_location "$location"; then
-        failed=1
-      fi
-    done < <(jq -er ".components[] | $scope_filter | .notice_locations[]" "$inventory")
+    if capture_required_jq notice_locations "inventory notice locations" \
+      ".components[] | $scope_filter | .notice_locations[]" "$inventory"; then
+      while IFS= read -r location; do
+        if ! check_inventory_location "$location"; then
+          failed=1
+        fi
+      done <<< "$notice_locations"
+    else
+      failed=1
+    fi
 
-    while IFS= read -r key; do
-      if ! require_manifest_value "$key" "$manifest" "$codex_manifest"; then
-        failed=1
-      fi
-    done < <(jq -er ".components[] | $scope_filter | .inputs[]" "$inventory" | LC_ALL=C sort -u)
+    if capture_required_jq input_keys "inventory build inputs" \
+      ".components[] | $scope_filter | .inputs[]" "$inventory"; then
+      while IFS= read -r key; do
+        if ! require_manifest_value "$key" "$manifest" "$codex_manifest"; then
+          failed=1
+        fi
+      done < <(printf '%s\n' "$input_keys" | LC_ALL=C sort -u)
+    else
+      failed=1
+    fi
   fi
 
   if (( has_codex == 1 )) && ! require_file "$codex_manifest"; then
