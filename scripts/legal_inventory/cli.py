@@ -1,13 +1,22 @@
 """Command-line orchestration for legal inventory maintenance."""
 from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
-from .documents import refresh_sources, render_readme, validate_optional_policy, validate_rendered_readme, validate_sources
+
 from .discovery import validate_discovery
+from .documents import (
+    refresh_sources,
+    render_readme,
+    validate_optional_policy,
+    validate_rendered_readme,
+    validate_sources,
+)
 from .inventory import validate_inputs, validate_schema
 from .io import InventoryError, load_json, read_env, read_mise_lock
 from .sbom import reconcile_sboms
+
 
 def validate(root: Path) -> None:
     """Run the complete repository legal-inventory validation."""
@@ -22,10 +31,11 @@ def validate(root: Path) -> None:
     validate_optional_policy(root)
     print("Third-party legal inventory: OK")
 
+
 def main(argv: list[str] | None = None) -> int:
     """Dispatch inventory validation, rendering, refresh and SBOM reconciliation."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent.parent)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("validate")
     subparsers.add_parser("render")
