@@ -153,14 +153,18 @@ require_file "$inventory"
 require_file "$source_lock"
 
 # Every repository-preserved upstream document in the source lock must already
-# be present before runtime-derived notices are collected.
+# be present before runtime-derived notices are collected. Capture jq output
+# first so malformed lock data cannot turn into a successful zero-iteration loop.
+repository_paths=""
+if ! repository_paths="$(jq -er '.documents | select(type == "array" and length > 0) | .[].path' "$source_lock")" \
+  || [[ -z "$repository_paths" ]]; then
+  echo "ERROR: reviewed source lock has no valid document paths: $source_lock" >&2
+  exit 1
+fi
 while IFS= read -r repository_path; do
   require_file "$notice_root/$repository_path"
-done < <(jq -er '.documents[].path' "$source_lock")
+done <<< "$repository_paths"
 
-# Codex uses the standard Apache-2.0 license text. Keep a component-local copy
-# for discoverability without implying that the project license relicenses it.
-copy_file "$project_license" "$third_party_root/components/codex/LICENSE-APACHE-2.0"
 copy_python_notices
 copy_node_notices
 copy_npm_notices
