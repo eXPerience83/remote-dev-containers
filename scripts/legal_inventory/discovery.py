@@ -1,16 +1,32 @@
 """Discovery of package installations and direct-download ownership."""
 from __future__ import annotations
+
 import re
 import shlex
 from pathlib import Path
 from typing import Any
-from .io import InventoryError
+
 from .inventory import inventory_components
+from .io import InventoryError
 
 URL_RE = re.compile(r"https://[^\s\"'<>]+")
-
-PACKAGE_SPEC_RE = re.compile(r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}")
-
+PACKAGE_SPEC_RE = re.compile(
+    r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}"
+)
+NPM_INSTALL_ALIASES = {
+    "add",
+    "i",
+    "in",
+    "ins",
+    "inst",
+    "insta",
+    "instal",
+    "install",
+    "isnt",
+    "isnta",
+    "isntal",
+    "isntall",
+}
 SENSITIVE_INSTALL_PATTERNS = (
     re.compile(r"\b(?:pip|pip3)\s+install\b"),
     re.compile(r"\bpython(?:3)?\s+-m\s+pip\s+install\b"),
@@ -20,6 +36,9 @@ SENSITIVE_INSTALL_PATTERNS = (
     re.compile(r"\bgem\s+install\b"),
     re.compile(r"\bcomposer\s+global\s+require\b"),
 )
+SHELL_CONTROL_RE = re.compile(r"^[;&|]+$")
+ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
+
 
 def parse_apt_packages(dockerfile: Path) -> list[str]:
     """Extract the exact direct APT package set from the base Dockerfile."""
@@ -65,6 +84,7 @@ def parse_apt_packages(dockerfile: Path) -> list[str]:
         raise InventoryError(f"no APT packages discovered in {dockerfile}")
     return normalized
 
+
 def docker_instructions(path: Path) -> list[str]:
     """Join Dockerfile continuation lines into logical instructions."""
     instructions: list[str] = []
@@ -82,38 +102,126 @@ def docker_instructions(path: Path) -> list[str]:
         instructions.append(" ".join(part for part in current if part))
     return instructions
 
+
+def _shell_commands(command: str) -> list[list[str]]:
+    """Split a shell fragment into executed commands, including pipeline stages."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError as exc:
+        raise InventoryError(f"cannot parse shell instruction: {command}") from exc
+
+    commands: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if SHELL_CONTROL_RE.fullmatch(token):
+            if current:
+                commands.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        commands.append(current)
+    return commands
+
+
+def _strip_command_prefix(tokens: list[str]) -> list[str]:
+    """Remove assignments and common execution wrappers from one command."""
+    result = list(tokens)
+    while result and (result[0].startswith("--mount=") or ASSIGNMENT_RE.fullmatch(result[0])):
+        result.pop(0)
+
+    changed = True
+    while result and changed:
+        changed = False
+        executable = Path(result[0]).name
+        if executable in {"command", "exec"}:
+            result.pop(0)
+            while result and result[0].startswith("-"):
+                result.pop(0)
+            changed = True
+            continue
+        if executable == "env":
+            result.pop(0)
+            while result:
+                token = result[0]
+                if ASSIGNMENT_RE.fullmatch(token):
+                    result.pop(0)
+                    continue
+                if token in {"-i", "--ignore-environment", "-0", "--null"}:
+                    result.pop(0)
+                    continue
+                if token in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
+                    result.pop(0)
+                    if result:
+                        result.pop(0)
+                    continue
+                if token.startswith(("--unset=", "--chdir=", "--split-string=")):
+                    result.pop(0)
+                    continue
+                break
+            changed = True
+    return result
+
+
+def _expanded_commands(command: str) -> list[list[str]]:
+    """Return commands after wrappers, recursively expanding sh/bash -c."""
+    expanded: list[list[str]] = []
+    for raw_tokens in _shell_commands(command):
+        tokens = _strip_command_prefix(raw_tokens)
+        if not tokens:
+            continue
+        executable = Path(tokens[0]).name
+        if executable in {"bash", "sh", "dash"} and "-c" in tokens:
+            index = tokens.index("-c")
+            if index + 1 >= len(tokens):
+                raise InventoryError(f"shell -c command has no program text: {command}")
+            expanded.extend(_expanded_commands(tokens[index + 1]))
+            continue
+        expanded.append(tokens)
+    return expanded
+
+
+def _network_command(tokens: list[str]) -> bool:
+    """Return whether tokens invoke a supported downloader."""
+    if not tokens:
+        return False
+    executable = Path(tokens[0]).name
+    return executable in {"curl", "wget"} or (
+        executable == "git" and len(tokens) > 1 and tokens[1] == "clone"
+    )
+
+
 def instruction_runs_network_fetch(instruction: str) -> bool:
     """Return whether a RUN instruction executes curl, wget or git clone."""
     if not instruction.startswith("RUN "):
         return False
-    for segment in re.split(r"\s*(?:&&|;|\|\|)\s*", instruction[4:]):
-        try:
-            tokens = shlex.split(segment)
-        except ValueError as exc:
-            raise InventoryError(f"cannot parse Docker RUN instruction: {segment}") from exc
-        while tokens and (tokens[0].startswith("--mount=") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0])):
-            tokens.pop(0)
-        if not tokens:
-            continue
-        if tokens[0] in {"curl", "wget"} or tokens[:2] == ["git", "clone"]:
-            return True
-    return False
+    return any(_network_command(tokens) for tokens in _expanded_commands(instruction[4:]))
+
 
 def docker_download_urls(path: Path) -> list[str]:
     """Discover literal network sources used by Docker build instructions."""
     urls: list[str] = []
     for instruction in docker_instructions(path):
-        is_network_run = instruction_runs_network_fetch(instruction)
-        is_remote_add = instruction.startswith("ADD ") and URL_RE.search(instruction)
-        if not is_network_run and not is_remote_add:
+        if instruction.startswith("ADD ") and URL_RE.search(instruction):
+            urls.extend(match.group(0).rstrip("),.;") for match in URL_RE.finditer(instruction))
             continue
-        discovered = [match.group(0).rstrip("),.;") for match in URL_RE.finditer(instruction)]
-        if is_network_run and not discovered:
-            raise InventoryError(
-                f"network-fetch instruction must contain a literal HTTPS source in {path}: {instruction}"
-            )
-        urls.extend(discovered)
+        if not instruction.startswith("RUN "):
+            continue
+        for tokens in _expanded_commands(instruction[4:]):
+            if not _network_command(tokens):
+                continue
+            command_text = " ".join(tokens)
+            discovered = [match.group(0).rstrip("),.;") for match in URL_RE.finditer(command_text)]
+            if not discovered:
+                raise InventoryError(
+                    f"network-fetch command must contain a literal HTTPS source in {path}: {command_text}"
+                )
+            urls.extend(discovered)
     return sorted(set(urls))
+
 
 def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
     """Discover every globally installed npm package/version-key pair."""
@@ -121,18 +229,15 @@ def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
     for instruction in docker_instructions(dockerfile):
         if not instruction.startswith("RUN "):
             continue
-        for segment in re.split(r"\s*(?:&&|;)\s*", instruction[4:]):
-            try:
-                tokens = shlex.split(segment)
-            except ValueError as exc:
-                raise InventoryError(f"cannot parse npm install instruction in {dockerfile}: {segment}") from exc
-            if len(tokens) < 3 or tokens[0] != "npm" or tokens[1] not in {"install", "i"}:
+        for raw_tokens in _expanded_commands(instruction[4:]):
+            tokens = _strip_command_prefix(raw_tokens)
+            if len(tokens) < 3 or Path(tokens[0]).name != "npm" or tokens[1] not in NPM_INSTALL_ALIASES:
                 continue
             if "--global" not in tokens and "-g" not in tokens:
                 continue
             package_tokens = [token for token in tokens[2:] if not token.startswith("-")]
             if not package_tokens:
-                raise InventoryError(f"global npm install has no package spec in {dockerfile}: {segment}")
+                raise InventoryError(f"global npm install has no package spec in {dockerfile}: {' '.join(tokens)}")
             for token in package_tokens:
                 match = PACKAGE_SPEC_RE.fullmatch(token)
                 if not match:
@@ -143,6 +248,7 @@ def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
                 result.add((match.group("name"), match.group("key")))
     return sorted(result)
 
+
 def discovered_installer_instructions(dockerfile: Path) -> list[str]:
     """Find installer commands that need an explicit inventory marker."""
     result: list[str] = []
@@ -152,6 +258,7 @@ def discovered_installer_instructions(dockerfile: Path) -> list[str]:
         if any(pattern.search(instruction) for pattern in SENSITIVE_INSTALL_PATTERNS):
             result.append(instruction)
     return sorted(set(result))
+
 
 def validate_discovery(root: Path, inventory: dict[str, Any]) -> None:
     """Require inventory ownership for discovered downloads and installers."""
