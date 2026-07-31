@@ -98,6 +98,11 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             'RUN npm install --location=global "tool@${TOOL_VERSION}"\n',
             'RUN npm --location global add "tool@${TOOL_VERSION}"\n',
             'RUN npm --global install "tool@${TOOL_VERSION}"\n',
+            'RUN npm --global true install "tool@${TOOL_VERSION}"\n',
+            'RUN npm --global=true install "tool@${TOOL_VERSION}"\n',
+            'RUN npm --audit false --global true install "tool@${TOOL_VERSION}"\n',
+            'RUN npm install --global true "tool@${TOOL_VERSION}"\n',
+            'RUN npm --global false --global true install "tool@${TOOL_VERSION}"\n',
             'RUN npm installT --location=global "tool@${TOOL_VERSION}"\n',
         ):
             with self.subTest(instruction=instruction):
@@ -122,6 +127,13 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             "RUN npm installCiTest\n",
             "RUN npm --loglevel warn install lodash@4.17.21\n",
             "RUN npm --loglevel=warn install lodash@4.17.21\n",
+            "RUN npm --audit false install lodash@4.17.21\n",
+            "RUN npm --audit=false install lodash@4.17.21\n",
+            "RUN npm --global false install lodash@4.17.21\n",
+            "RUN npm --global=false install lodash@4.17.21\n",
+            "RUN npm --global true --global false install lodash@4.17.21\n",
+            "RUN npm install --audit false lodash@4.17.21\n",
+            "RUN npm install --global false lodash@4.17.21\n",
         ):
             with self.subTest(instruction=instruction):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "local npm installs"):
@@ -131,6 +143,13 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
         with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported npm option"):
             self.dockerfile_result(
                 "RUN npm -L warn install lodash@4.17.21\n",
+                legal_inventory.global_npm_specs,
+            )
+
+    def test_invalid_attached_npm_boolean_fails_closed(self) -> None:
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "invalid Boolean value"):
+            self.dockerfile_result(
+                "RUN npm --global=maybe install lodash@4.17.21\n",
                 legal_inventory.global_npm_specs,
             )
 
