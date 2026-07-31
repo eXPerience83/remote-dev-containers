@@ -6,7 +6,7 @@ import re
 import shlex
 from pathlib import Path
 
-from .docker_parse import docker_instructions, executable_name, instruction_payload, run_commands
+from .docker_parse import docker_instructions, executable_name, instruction_payload, run_commands, short_option_value
 from .io import InventoryError
 
 SCRIPT_REFERENCE_RE = re.compile(r"(?:\$ROOT/|\$\{ROOT\}/)?(scripts/[A-Za-z0-9_./-]+(?:\.sh|\.py))")
@@ -87,7 +87,7 @@ def _invoked_scripts(root: Path, dockerfile: Path) -> set[Path]:
             elif executable in {"bash", "sh", "dash", "python", "python3"}:
                 index = 1
                 while index < len(tokens) and tokens[index].startswith("-"):
-                    if tokens[index] in {"-c", "-m"}:
+                    if short_option_value(tokens[index], "c")[0] or short_option_value(tokens[index], "m")[0]:
                         break
                     index += 1
                 if index < len(tokens) and tokens[index] not in {"-c", "-m"}:
@@ -150,8 +150,8 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
         return executable
     if executable == "busybox" and len(tokens) > 1 and tokens[1] == "wget":
         return "busybox wget"
-    if executable == "git" and "clone" in tokens[1:]:
-        return "git clone"
+    if executable == "git" and any(command in tokens[1:] for command in {"clone", "fetch"}):
+        return "git acquisition"
     if executable in {"apt", "apt-get"} and "install" in tokens[1:]:
         return f"{executable} install"
     if executable in {"pip", "pip3"} and "install" in tokens[1:]:
@@ -160,14 +160,12 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
         module: str | None = None
         code: str | None = None
         for index, token in enumerate(tokens[1:], 1):
-            if token == "-m" or (token.startswith("-") and not token.startswith("--") and token.endswith("m")):
-                module = tokens[index + 1] if index + 1 < len(tokens) else None
-            elif token.startswith("-m") and len(token) > 2:
-                module = token[2:]
-            if token == "-c" or (token.startswith("-") and not token.startswith("--") and token.endswith("c")):
-                code = tokens[index + 1] if index + 1 < len(tokens) else ""
-            elif token.startswith("-c") and len(token) > 2:
-                code = token[2:]
+            has_module, attached_module = short_option_value(token, "m")
+            has_code, attached_code = short_option_value(token, "c")
+            if has_module:
+                module = attached_module if attached_module is not None else (tokens[index + 1] if index + 1 < len(tokens) else None)
+            if has_code:
+                code = attached_code if attached_code is not None else (tokens[index + 1] if index + 1 < len(tokens) else "")
         if module == "pip" and "install" in tokens:
             return "python -m pip install"
         if code is not None and PYTHON_NETWORK_RE.search(code):
@@ -275,6 +273,17 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
                     f"build helper {script.relative_to(root)} performs {reason}; "
                     "declare acquisition directly in the Dockerfile so legal inventory ownership can be verified"
                 )
+            tree = ast.parse(text)
+            for node in ast.walk(tree):
+                names = [item.name for item in node.names] if isinstance(node, ast.Import) else []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module]
+                for name in names:
+                    relative = Path(*name.split(".")).with_suffix(".py")
+                    for base in (script.parent, root / "scripts"):
+                        referenced = base / relative
+                        if referenced.is_file():
+                            pending.append(referenced)
             continue
         for tokens in _command_segments(text):
             reason = _acquisition_reason(tokens)
@@ -284,7 +293,7 @@ def validate_build_scripts(root: Path, dockerfiles: list[Path]) -> None:
                     "declare acquisition directly in the Dockerfile so legal inventory ownership can be verified"
                 )
             executable = executable_name(tokens[0])
-            candidate = tokens[1] if executable in {"source", ".", "bash", "sh", "dash"} and len(tokens) > 1 else tokens[0]
+            candidate = tokens[1] if executable in {"source", ".", "bash", "sh", "dash", "python", "python3"} and len(tokens) > 1 else tokens[0]
             referenced = _resolve_script(candidate, root, copied_helpers)
             if referenced is not None:
                 pending.append(referenced)

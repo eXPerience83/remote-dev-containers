@@ -6,7 +6,7 @@ import shlex
 from pathlib import Path
 
 from .apt_scan import apt_packages_from_command
-from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, instruction_payload, run_commands
+from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, instruction_payload, run_commands, short_option_value
 from .io import InventoryError
 
 URL_RE = re.compile(r"https://[^\s\"'<>]+")
@@ -102,20 +102,24 @@ def _interpreter_network_fetch(tokens: list[str]) -> str | None:
         return None
     executable = executable_name(tokens[0])
     text = " ".join(tokens)
-    if executable.startswith("python") and "-c" in tokens and re.search(
-        r"(?:urllib(?:\.request)?|requests|http\.client|urlopen|https?://)", text, re.I
-    ):
-        return "Python inline network acquisition"
+    if executable.startswith("python"):
+        for index, token in enumerate(tokens[1:], 1):
+            present, attached = short_option_value(token, "c")
+            code = attached if attached is not None else (tokens[index + 1] if present and index + 1 < len(tokens) else "")
+            if present and re.search(r"(?:urllib(?:\.request)?|requests|http\.client|urlopen|https?://)", code, re.I):
+                return "Python inline network acquisition"
     if executable == "node" and any(option in tokens for option in {"-e", "--eval"}) and re.search(
         r"(?:\bfetch\s*\(|require\(['\"]https?['\"]\)|https?://)", text, re.I
     ):
         return "Node.js inline network acquisition"
     if executable == "busybox" and len(tokens) > 1 and tokens[1] == "wget":
         return "busybox wget"
-    if executable in {"perl", "ruby", "php"} and "-e" in tokens and re.search(
-        r"(?:https?://|LWP|Net::HTTP|open-uri|file_get_contents|curl_exec)", text, re.I
-    ):
-        return f"{executable} inline network acquisition"
+    if executable in {"perl", "ruby", "php"}:
+        letter = "r" if executable == "php" else "e"
+        if any(short_option_value(token, letter)[0] for token in tokens[1:]) and re.search(
+            r"(?:https?://|LWP|Net::HTTP|open-uri|file_get_contents|curl_exec)", text, re.I
+        ):
+            return f"{executable} inline network acquisition"
     return None
 
 
@@ -146,7 +150,10 @@ def docker_download_urls(path: Path) -> list[str]:
                 raise InventoryError(
                     f"variable-based ADD sources are unsupported by legal discovery in {path}: {add_payload}"
                 )
-            urls.update(match.group(0).rstrip("),.;") for match in URL_RE.finditer(add_payload))
+            found = [match.group(0).rstrip("),.;") for match in URL_RE.finditer(add_payload)]
+            if not found and re.search(r"(?:https?://|ssh://|git@)", add_payload, re.I):
+                raise InventoryError(f"remote ADD source must be a literal HTTPS URL in {path}: {add_payload}")
+            urls.update(found)
         for tokens in run_commands(instruction, path):
             if apt_packages_from_command(tokens, path) is not None:
                 continue

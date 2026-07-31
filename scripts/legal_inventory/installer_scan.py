@@ -55,10 +55,14 @@ def _is_installer(tokens: list[str], path: Path) -> bool:
         return False
     executable = executable_name(tokens[0])
     text = " ".join(tokens)
+    if any(token in {"--help", "-h", "--version", "-v", "help", "version"} for token in tokens[1:]):
+        return False
 
     if executable in {"pip", "pip3"}:
         index = _skip_options(tokens, 1, PIP_VALUE_OPTIONS, path, "pip")
-        return index < len(tokens) and tokens[index] == "install"
+        if index < len(tokens) and tokens[index] in {"install", "download"}:
+            return True
+        raise InventoryError(f"unsupported pip subcommand for legal discovery in {path}: {text}")
 
     if executable in {"python", "python3"}:
         try:
@@ -75,31 +79,42 @@ def _is_installer(tokens: list[str], path: Path) -> bool:
         if index < len(tokens) and tokens[index] in {"add", "sync"}:
             return True
         if index >= len(tokens) or tokens[index] not in {"pip", "tool"}:
-            return False
+            raise InventoryError(f"unsupported uv subcommand for legal discovery in {path}: {text}")
         index = _skip_options(tokens, index + 1, set(), path, "uv")
-        return index < len(tokens) and tokens[index] == "install"
+        if index < len(tokens) and tokens[index] == "install":
+            return True
+        raise InventoryError(f"unsupported uv subcommand for legal discovery in {path}: {text}")
 
     if executable in {"cargo", "gem"}:
         index = _skip_options(tokens, 1, set(), path, executable)
-        return index < len(tokens) and tokens[index] == "install"
+        allowed = {"install"} if executable == "cargo" else {"install", "fetch"}
+        if index < len(tokens) and tokens[index] in allowed:
+            return True
+        raise InventoryError(f"unsupported {executable} subcommand for legal discovery in {path}: {text}")
 
     if executable == "go":
         index = _skip_options(tokens, 1, set(), path, "go")
-        return index < len(tokens) and tokens[index] in {"get", "install"}
+        if index < len(tokens) and (tokens[index] in {"get", "install"} or tokens[index:index + 2] == ["mod", "download"]):
+            return True
+        raise InventoryError(f"unsupported go subcommand for legal discovery in {path}: {text}")
 
     if executable in {"pipx", "poetry", "pnpm", "yarn", "bun", "apk", "dnf", "yum"}:
         index = _skip_options(tokens, 1, set(), path, executable)
         commands = {
             "pipx": {"install"},
-            "poetry": {"add", "install", "sync"},
-            "pnpm": {"add", "install"},
+            "poetry": {"add", "install", "sync", "lock", "update"},
+            "pnpm": {"add", "i", "install"},
             "yarn": {"add", "install"},
-            "bun": {"add", "install"},
-            "apk": {"add"},
-            "dnf": {"install"},
-            "yum": {"install"},
+            "bun": {"add", "i", "install"},
+            "apk": {"add", "fetch"},
+            "dnf": {"groupinstall", "install", "localinstall", "reinstall"},
+            "yum": {"groupinstall", "install", "localinstall", "reinstall"},
         }
-        return index < len(tokens) and tokens[index] in commands[executable]
+        if index >= len(tokens) and executable in {"yarn", "pnpm", "bun"}:
+            return True
+        if index < len(tokens) and tokens[index] in commands[executable]:
+            return True
+        raise InventoryError(f"unsupported {executable} subcommand for legal discovery in {path}: {text}")
 
     if executable == "dotnet":
         index = _skip_options(tokens, 1, set(), path, "dotnet")

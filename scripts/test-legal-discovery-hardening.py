@@ -370,9 +370,9 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
 
     def test_bundled_python_options_fail_closed(self) -> None:
-        for command in (
-            "python3 -uc \"import urllib.request; urllib.request.urlopen('https://vendor.example/tool')\"",
-            "python3 -mpip install tool",
+        for command, expected in (
+            ("python3 \"-ucimport urllib.request;urllib.request.urlopen('https://vendor.example/tool')\"", "Python inline network acquisition"),
+            ("python3 -umpip install tool", r"python -m pip install"),
         ):
             with self.subTest(command=command):
                 with tempfile.TemporaryDirectory() as temporary:
@@ -387,8 +387,47 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                         encoding="utf-8",
                     )
                     (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
-                    with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper"):
+                    with self.assertRaisesRegex(legal_inventory.InventoryError, expected):
                         legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_remote_add_non_https_fails_closed(self) -> None:
+        for source in ("http://vendor.example/tool", "git@vendor.example:repo.git", "ssh://vendor.example/repo"):
+            with self.subTest(source=source), self.assertRaisesRegex(legal_inventory.InventoryError, "remote ADD"):
+                self.dockerfile_result(f"ADD {source} /tool\n", legal_inventory.docker_download_urls)
+
+    def test_python_local_imports_are_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/a.py").write_text("import b\n", encoding="utf-8")
+            (root / "scripts/b.py").write_text("import urllib.request\nurllib.request.urlopen('https://vendor.example/tool')\n", encoding="utf-8")
+            (root / "images/base/Dockerfile").write_text("FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\nCOPY scripts/a.py /a.py\nRUN python3 /a.py\n", encoding="utf-8")
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*urlopen"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_shell_helper_invoked_python_helper_is_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/a.sh").write_text("python3 /fetch.py\n", encoding="utf-8")
+            (root / "scripts/fetch.py").write_text("import urllib.request\nurllib.request.urlopen('https://vendor.example/tool')\n", encoding="utf-8")
+            (root / "images/base/Dockerfile").write_text("FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\nCOPY scripts/a.sh /a.sh\nCOPY scripts/fetch.py /fetch.py\nRUN sh /a.sh\n", encoding="utf-8")
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*urlopen"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_known_package_manager_forms_fail_closed(self) -> None:
+        forms = ("pip download tool", "gem fetch tool", "go mod download", "apk fetch tool", "dnf reinstall tool", "yum localinstall tool", "pnpm i", "bun i", "yarn")
+        for command in forms:
+            with self.subTest(command=command):
+                self.assertTrue(self.dockerfile_result(f"RUN {command}\n", discovered_installer_instructions))
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "unsupported pip subcommand"):
+            self.dockerfile_result("RUN pip mystery tool\n", discovered_installer_instructions)
 
     def test_python_build_helper_import_aliases_fail_closed(self) -> None:
         helpers = (
@@ -476,7 +515,7 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             "git lfs pull",
             "perl -e \"use LWP; get('https://vendor.example/tool')\"",
             "ruby -e \"require 'open-uri'; URI.open('https://vendor.example/tool')\"",
-            "php -e \"file_get_contents('https://vendor.example/tool')\"",
+            "php -r \"file_get_contents('https://vendor.example/tool')\"",
         )
         for command in rejected_fetches:
             with self.subTest(command=command):

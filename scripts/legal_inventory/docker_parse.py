@@ -15,6 +15,16 @@ COMMAND_PREFIX = r"(?:^|[\s!({=])(?:\$\()?(?:(?:/[A-Za-z0-9_.-]+)*/)?"
 SHELLS = {"bash", "sh", "dash"}
 
 
+def short_option_value(token: str, letter: str) -> tuple[bool, str | None]:
+    """Return whether a short-option cluster contains a value-taking letter."""
+    if not token.startswith("-") or token.startswith("--"):
+        return False, None
+    position = token.find(letter, 1)
+    if position < 0:
+        return False, None
+    return True, token[position + 1 :] or None
+
+
 def instruction_payload(instruction: str, keyword: str) -> str | None:
     """Return an instruction payload using Docker's case-insensitive keywords."""
     match = re.match(r"^([A-Za-z]+)(?:\s+|$)(.*)$", instruction, flags=re.DOTALL)
