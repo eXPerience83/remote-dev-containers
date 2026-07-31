@@ -46,7 +46,7 @@ LABEL docs=\"https://github.com/example/docs\"
             dockerfile = Path(temporary) / "Dockerfile"
             dockerfile.write_text(
                 """RUN printf x | curl https://vendor.example/pipe -o /tmp/pipe
-RUN bash -c 'wget https://vendor.example/wrapped -O /tmp/wrapped'
+RUN bash -lc 'wget https://vendor.example/wrapped -O /tmp/wrapped'
 """,
                 encoding="utf-8",
             )
@@ -59,7 +59,7 @@ RUN bash -c 'wget https://vendor.example/wrapped -O /tmp/wrapped'
         with tempfile.TemporaryDirectory() as temporary:
             dockerfile = Path(temporary) / "Dockerfile"
             dockerfile.write_text(
-                'RUN env CI=1 npm add --global "some-tool@${TOOL_VERSION}"\n',
+                'RUN env CI=1 npm --global install "some-tool@${TOOL_VERSION}"\n',
                 encoding="utf-8",
             )
             self.assertEqual(legal_inventory.global_npm_specs(dockerfile), [("some-tool", "TOOL_VERSION")])
