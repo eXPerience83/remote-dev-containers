@@ -109,6 +109,13 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
         for instruction in (
             "RUN npm install lodash@4.17.21\n",
             "RUN npm ci\n",
+            "RUN npm clean-install\n",
+            "RUN npm install-test lodash@4.17.21\n",
+            "RUN npm it lodash@4.17.21\n",
+            "RUN npm install-ci-test\n",
+            "RUN npm cit\n",
+            "RUN npm clean-install-test\n",
+            "RUN npm sit\n",
         ):
             with self.subTest(instruction=instruction):
                 with self.assertRaisesRegex(legal_inventory.InventoryError, "local npm installs"):
