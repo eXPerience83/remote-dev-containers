@@ -270,7 +270,11 @@ jobs:
             mise.lock
             images/base/Dockerfile
             images/codex/Dockerfile
+            third_party/inventory.json
+            third_party/sources.lock.json
+            third_party/README.md
             third_party/components/codex/NOTICE
+            third_party/components/codex/LICENSE
             third_party/components/codex/SOURCE.env
             third_party/components/github-cli/LICENSE
             third_party/components/github-cli/SOURCE.env
@@ -280,6 +284,9 @@ jobs:
             third_party/components/mise/SOURCE.env
             third_party/components/python/LICENSE
             third_party/components/python/SOURCE.env
+            third_party/components/uv/LICENSE-APACHE-2.0
+            third_party/components/uv/LICENSE-MIT
+            third_party/components/uv/SOURCE.env
           )
           if git diff --quiet -- "${tracked_files[@]}"; then
             echo "No upstream release, digest, runtime artifact or reviewed notice changes."
