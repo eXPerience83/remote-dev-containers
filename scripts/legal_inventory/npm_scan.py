@@ -46,20 +46,14 @@ NPM_BOOLEAN_OPTIONS = {
     "--audit", "--dry-run", "--force", "--foreground-scripts", "--fund",
     "--ignore-scripts", "--json", "--silent", "--verbose", "--yes", "-y",
 }
+# Only options that unambiguously consume the following token belong here.
+# Unknown pre-command options are rejected instead of guessing and potentially
+# treating their value as the npm command.
 NPM_VALUE_OPTIONS = {
-    "--auth-type", "--cache", "--cert", "--color", "--depth", "--description",
-    "--editor", "--engine-strict", "--fetch-retries", "--fetch-retry-factor",
-    "--fetch-retry-maxtimeout", "--fetch-retry-mintimeout", "--fetch-timeout",
-    "--https-proxy", "--init-author-email", "--init-author-name", "--init-author-url",
-    "--init-license", "--init-module", "--init-version", "--install-strategy",
-    "--legacy-peer-deps", "--link-workspace-packages", "--loglevel", "--logs-dir",
-    "--maxsockets", "--node-options", "--omit", "--otp", "--package-lock",
-    "--package-lock-only", "--parseable", "--prefer-offline", "--prefer-online",
-    "--prefix", "--proxy", "--registry", "--save", "--save-bundle", "--save-dev",
-    "--save-exact", "--save-optional", "--save-peer", "--save-prefix", "--scope",
-    "--script-shell", "--searchlimit", "--searchopts", "--searchstaleness",
-    "--shell", "--strict-peer-deps", "--tag", "--timing", "--tmp", "--umask",
-    "--unicode", "--user-agent", "--userconfig", "--workspace", "-w", "--location",
+    "--auth-type", "--cache", "--https-proxy", "--install-strategy", "--location",
+    "--loglevel", "--logs-dir", "--node-options", "--omit", "--otp", "--prefix",
+    "--proxy", "--registry", "--save-prefix", "--scope", "--script-shell", "--tag",
+    "--user-agent", "--userconfig", "--workspace", "-w",
 }
 
 
