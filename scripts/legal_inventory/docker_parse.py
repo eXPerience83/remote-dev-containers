@@ -12,6 +12,7 @@ ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 CONTROL_RE = re.compile(r"^[;&|]+$")
 HEREDOC_RE = re.compile(r"(?:^|\s)<<-?\s*['\"]?[A-Za-z_][A-Za-z0-9_]*")
 COMMAND_PREFIX = r"(?:^|[\s!({=])(?:\$\()?(?:(?:/[A-Za-z0-9_.-]+)*/)?"
+SHELLS = {"bash", "sh", "dash"}
 
 
 def docker_instructions(path: Path) -> list[str]:
@@ -63,8 +64,9 @@ def strip_command_prefix(tokens: list[str]) -> list[str]:
                 result.pop(0)
             elif token in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
                 result.pop(0)
-                if result:
-                    result.pop(0)
+                if not result:
+                    raise InventoryError(f"env option {token} has no value")
+                result.pop(0)
             elif token.startswith(("--unset=", "--chdir=", "--split-string=")):
                 result.pop(0)
             else:
@@ -94,28 +96,32 @@ def _shell_commands(command: str) -> list[list[str]]:
     return commands
 
 
+def _shell_command_option_index(tokens: list[str]) -> int | None:
+    for index, token in enumerate(tokens[1:], 1):
+        if token == "-c" or (
+            token.startswith("-") and not token.startswith("--") and len(token) > 2 and token.endswith("c")
+        ):
+            return index
+    return None
+
+
+def _expanded_tokens(tokens: list[str], context: str) -> list[list[str]]:
+    tokens = strip_command_prefix(tokens)
+    if not tokens:
+        return []
+    if executable_name(tokens[0]) in SHELLS:
+        option_index = _shell_command_option_index(tokens)
+        if option_index is not None:
+            if option_index + 1 >= len(tokens):
+                raise InventoryError(f"shell -c command has no program text: {context}")
+            return _expanded_commands(tokens[option_index + 1])
+    return [tokens]
+
+
 def _expanded_commands(command: str) -> list[list[str]]:
     result: list[list[str]] = []
     for raw in _shell_commands(command):
-        tokens = strip_command_prefix(raw)
-        if not tokens:
-            continue
-        if executable_name(tokens[0]) in {"bash", "sh", "dash"}:
-            option_index = next(
-                (
-                    index
-                    for index, token in enumerate(tokens[1:], 1)
-                    if token == "-c"
-                    or (token.startswith("-") and not token.startswith("--") and token.endswith("c"))
-                ),
-                None,
-            )
-            if option_index is not None:
-                if option_index + 1 >= len(tokens):
-                    raise InventoryError(f"shell -c command has no program text: {command}")
-                result.extend(_expanded_commands(tokens[option_index + 1]))
-                continue
-        result.append(tokens)
+        result.extend(_expanded_tokens(raw, command))
     return result
 
 
@@ -137,4 +143,4 @@ def run_commands(instruction: str, path: Path) -> list[list[str]]:
         raise InventoryError(f"invalid JSON-form RUN in {path}: {payload}") from exc
     if not isinstance(value, list) or not value or not all(isinstance(token, str) for token in value):
         raise InventoryError(f"JSON-form RUN must be a non-empty string array in {path}")
-    return [value]
+    return _expanded_tokens(value, payload)
