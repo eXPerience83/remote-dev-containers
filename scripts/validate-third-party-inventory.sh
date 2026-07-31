@@ -106,6 +106,8 @@ if [[ "$(printf '%s\n' "${locked_tools[@]}")" != "$(printf '%s\n' "${claimed_too
   exit 1
 fi
 
+# The backticks are literal Markdown, not shell command substitution.
+# shellcheck disable=SC2016
 grep -Fq 'generated from `third_party/inventory.json`' "$ROOT/third_party/README.md" \
   || { echo "ERROR: third_party/README.md is not the generated inventory" >&2; exit 1; }
 

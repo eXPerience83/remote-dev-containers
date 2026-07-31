@@ -322,6 +322,7 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             source_lock_path.write_text(json.dumps(source_lock), encoding="utf-8")
             (third_party / "BUILD-VERSIONS.env").write_text("TOOL_VERSION=1.0\n", encoding="utf-8")
             environment = os.environ | {
+                "PATH": "/usr/bin:/bin",
                 "REMOTE_DEV_NOTICE_ROOT": str(notice_root),
                 "REMOTE_DEV_SYSTEM_DOC_ROOT": str(system_docs),
                 "REMOTE_DEV_INSTALLED_PACKAGES_FILE": str(packages),
