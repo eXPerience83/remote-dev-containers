@@ -1,14 +1,17 @@
 """Source-locked legal document refresh, validation and human rendering."""
 from __future__ import annotations
+
 import re
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+
 from .discovery import parse_apt_packages
 from .inventory import expected_source_documents, inventory_components, resolve_component_version
 from .io import SCHEMA_VERSION, InventoryError, git_blob_sha1, load_json, write_json
+
 
 def validate_sources(
     root: Path,
@@ -62,6 +65,23 @@ def validate_sources(
         if actual_blob != expected_blob:
             raise InventoryError(f"source document differs from reviewed lock: {path}")
 
+
+def _version_text(component: dict[str, Any], version: str) -> str:
+    source = component["version_source"]
+    if source["kind"] == "env":
+        return f"`{source['key']}` = `{version}`"
+    if source["kind"] == "mise":
+        return f"`mise.lock` tool `{source['tool']}` = `{version}`"
+    if source["kind"] == "discovered":
+        return source.get("description", version)
+    if source["kind"] == "project" and version.endswith("-dev"):
+        return (
+            f"experimental, non-stable edge build (`{version}`); stable release identifiers "
+            "are defined in `docs/releases.md`"
+        )
+    return f"repository/build revision (`{version}`)"
+
+
 def render_readme(root: Path, inventory: dict[str, Any], env: dict[str, str], mise: dict[str, dict[str, Any]]) -> str:
     """Render the human inventory from machine data and build recipes."""
     components = inventory_components(inventory)
@@ -104,18 +124,10 @@ def render_readme(root: Path, inventory: dict[str, Any], env: dict[str, str], mi
     }
     for component in components:
         version = resolve_component_version(component, env, mise)
-        source = component["version_source"]
-        if source["kind"] == "env":
-            version_text = f"`{source['key']}` = `{version}`"
-        elif source["kind"] == "mise":
-            version_text = f"`mise.lock` tool `{source['tool']}` = `{version}`"
-        elif source["kind"] == "discovered":
-            version_text = source.get("description", version)
-        else:
-            version_text = f"repository/build revision (`{version}`)"
+        version_text = _version_text(component, version)
         upstream = component["upstream"]
         distribution = f"{component['distribution']} ({scope_suffix[component['image_scope']]}); {upstream}"
-        locations = "<br>".join(f"`{value}`" if not value.startswith("/") else f"`{value}`" for value in component["notice_locations"])
+        locations = "<br>".join(f"`{value}`" for value in component["notice_locations"])
         sbom = component["sbom"]
         sbom_text = sbom["status"]
         if sbom.get("reason"):
@@ -149,7 +161,7 @@ def render_readme(root: Path, inventory: dict[str, Any], env: dict[str, str], mi
             "",
             "- Version automation refreshes repository-preserved legal documents from exact upstream tags and updates `sources.lock.json` in the same pull request.",
             "- Changed license or NOTICE text is never silently accepted: it appears as a normal reviewed diff.",
-            "- A new version/checksum input, direct-download URL, mise runtime, global npm package or SBOM package ecosystem fails validation until it has an inventory owner.",
+            "- A new version/checksum input, direct-download URL, installer command, mise runtime, global npm package or SBOM package ecosystem fails validation until it has an inventory owner.",
             "- Runtime-provided Python, Node.js and npm notices are copied from the exact installed artifacts during image construction.",
             "- A new APT package is discovered automatically, rendered in this file and required to appear in the generated SPDX SBOM.",
             "- Optional proprietary integrations remain user-initiated and vendor-sourced; they require a separate terms, privacy, ownership and uninstall review before support is claimed.",
@@ -157,6 +169,7 @@ def render_readme(root: Path, inventory: dict[str, Any], env: dict[str, str], mi
         ]
     )
     return "\n".join(lines)
+
 
 def validate_rendered_readme(root: Path, inventory: dict[str, Any], env: dict[str, str], mise: dict[str, dict[str, Any]]) -> None:
     """Fail when the committed human inventory is stale."""
@@ -168,6 +181,7 @@ def validate_rendered_readme(root: Path, inventory: dict[str, Any], env: dict[st
         raise InventoryError(f"generated inventory is missing: {path}") from exc
     if actual != expected:
         raise InventoryError("third_party/README.md is stale; run: python3 scripts/legal-inventory.py render")
+
 
 def validate_optional_policy(root: Path) -> None:
     """Check mandatory conservative optional-agent policy statements."""
@@ -187,6 +201,7 @@ def validate_optional_policy(root: Path) -> None:
     if missing:
         raise InventoryError(f"optional-agent policy is missing required text: {missing}")
 
+
 def refresh_sources(
     root: Path,
     inventory: dict[str, Any],
@@ -199,6 +214,8 @@ def refresh_sources(
     opener = urllib.request.build_opener()
     opener.addheaders = [("User-Agent", "remote-dev-containers-legal-inventory/1")]
     for document in documents:
+        if not document.url.startswith("https://"):
+            raise InventoryError(f"source document URL must use HTTPS: {document.url}")
         data: bytes | None = None
         last_error: Exception | None = None
         for attempt in range(4):
