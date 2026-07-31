@@ -15,6 +15,14 @@ COMMAND_PREFIX = r"(?:^|[\s!({=])(?:\$\()?(?:(?:/[A-Za-z0-9_.-]+)*/)?"
 SHELLS = {"bash", "sh", "dash"}
 
 
+def instruction_payload(instruction: str, keyword: str) -> str | None:
+    """Return an instruction payload using Docker's case-insensitive keywords."""
+    match = re.match(r"^([A-Za-z]+)(?:\s+|$)(.*)$", instruction, flags=re.DOTALL)
+    if match is None or match.group(1).upper() != keyword.upper():
+        return None
+    return match.group(2).strip()
+
+
 def docker_instructions(path: Path) -> list[str]:
     """Join continuation lines and reject RUN heredocs we cannot inspect."""
     instructions: list[str] = []
@@ -23,13 +31,15 @@ def docker_instructions(path: Path) -> list[str]:
         line = raw.strip()
         if not current and (not line or line.startswith("#")):
             continue
-        if not current and line.startswith("RUN ") and HEREDOC_RE.search(line):
+        run_payload = instruction_payload(line, "RUN") if not current else None
+        if run_payload is not None and HEREDOC_RE.search(run_payload):
             raise InventoryError(f"RUN heredocs are unsupported by legal discovery in {path}")
         current.append(line.rstrip("\\").strip())
         if line.endswith("\\"):
             continue
         instruction = " ".join(filter(None, current))
-        if instruction.startswith("RUN ") and HEREDOC_RE.search(instruction):
+        run_payload = instruction_payload(instruction, "RUN")
+        if run_payload is not None and HEREDOC_RE.search(run_payload):
             raise InventoryError(f"RUN heredocs are unsupported by legal discovery in {path}")
         instructions.append(instruction)
         current = []
@@ -72,6 +82,62 @@ def strip_command_prefix(tokens: list[str]) -> list[str]:
             else:
                 break
     return result
+
+
+def _command_substitutions(command: str) -> list[str]:
+    """Extract balanced shell command substitutions, including nested ones."""
+    substitutions: list[str] = []
+    index = 0
+    quote: str | None = None
+    while index < len(command):
+        character = command[index]
+        if character == "\\" and quote != "'":
+            index += 2
+            continue
+        if character in {"'", '"'}:
+            if quote is None:
+                quote = character
+            elif quote == character:
+                quote = None
+            index += 1
+            continue
+        if quote == "'" or not command.startswith("$(", index) or command.startswith("$((", index):
+            index += 1
+            continue
+
+        start = index + 2
+        cursor = start
+        depth = 1
+        nested_quote: str | None = None
+        while cursor < len(command):
+            nested_character = command[cursor]
+            if nested_character == "\\" and nested_quote != "'":
+                cursor += 2
+                continue
+            if nested_character in {"'", '"'}:
+                if nested_quote is None:
+                    nested_quote = nested_character
+                elif nested_quote == nested_character:
+                    nested_quote = None
+                cursor += 1
+                continue
+            if nested_quote is None:
+                if command.startswith("$(", cursor):
+                    depth += 1
+                    cursor += 2
+                    continue
+                if nested_character == "(":
+                    depth += 1
+                elif nested_character == ")":
+                    depth -= 1
+                    if depth == 0:
+                        substitutions.append(command[start:cursor])
+                        index = cursor + 1
+                        break
+            cursor += 1
+        else:
+            raise InventoryError(f"unbalanced command substitution in shell instruction: {command}")
+    return substitutions
 
 
 def _shell_commands(command: str) -> list[list[str]]:
@@ -120,6 +186,8 @@ def _expanded_tokens(tokens: list[str], context: str) -> list[list[str]]:
 
 def _expanded_commands(command: str) -> list[list[str]]:
     result: list[list[str]] = []
+    for substitution in _command_substitutions(command):
+        result.extend(_expanded_commands(substitution))
     for raw in _shell_commands(command):
         result.extend(_expanded_tokens(raw, command))
     return result
@@ -127,9 +195,9 @@ def _expanded_commands(command: str) -> list[list[str]]:
 
 def run_commands(instruction: str, path: Path) -> list[list[str]]:
     """Return argv lists from shell-form or JSON exec-form RUN."""
-    if not instruction.startswith("RUN "):
+    payload = instruction_payload(instruction, "RUN")
+    if payload is None:
         return []
-    payload = instruction[4:].strip()
     while payload.startswith("--"):
         _, separator, payload = payload.partition(" ")
         if not separator:
@@ -143,4 +211,8 @@ def run_commands(instruction: str, path: Path) -> list[list[str]]:
         raise InventoryError(f"invalid JSON-form RUN in {path}: {payload}") from exc
     if not isinstance(value, list) or not value or not all(isinstance(token, str) for token in value):
         raise InventoryError(f"JSON-form RUN must be a non-empty string array in {path}")
-    return _expanded_tokens(value, payload)
+    result: list[list[str]] = []
+    for substitution in _command_substitutions(" ".join(value)):
+        result.extend(_expanded_commands(substitution))
+    result.extend(_expanded_tokens(value, payload))
+    return result
