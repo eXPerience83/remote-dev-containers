@@ -134,7 +134,11 @@ if ! grep -Fq 'bash scripts/validate-third-party-inventory.sh' "$upstream_workfl
   exit 1
 fi
 for path in \
+  third_party/inventory.json \
+  third_party/sources.lock.json \
+  third_party/README.md \
   third_party/components/codex/NOTICE \
+  third_party/components/codex/LICENSE \
   third_party/components/codex/SOURCE.env \
   third_party/components/github-cli/LICENSE \
   third_party/components/github-cli/SOURCE.env \
@@ -143,7 +147,10 @@ for path in \
   third_party/components/mise/LICENSE \
   third_party/components/mise/SOURCE.env \
   third_party/components/python/LICENSE \
-  third_party/components/python/SOURCE.env; do
+  third_party/components/python/SOURCE.env \
+  third_party/components/uv/LICENSE-APACHE-2.0 \
+  third_party/components/uv/LICENSE-MIT \
+  third_party/components/uv/SOURCE.env; do
   require_upstream_tracked_file "$path"
 done
 
