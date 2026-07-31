@@ -13,18 +13,20 @@ require_file() {
   fi
 }
 
-# CI and normal repository validation use the complete Python implementation.
+run_python_validation() {
+  local python_bin="$1"
+  "$python_bin" "$ROOT/scripts/test-legal-discovery-hardening.py"
+  exec "$python_bin" "$ROOT/scripts/legal-inventory.py" --root "$ROOT" validate
+}
+
 if [[ -f "$ROOT/versions.env" ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    exec python3 "$ROOT/scripts/legal-inventory.py" --root "$ROOT" validate
+    run_python_validation python3
   elif command -v python >/dev/null 2>&1; then
-    exec python "$ROOT/scripts/legal-inventory.py" --root "$ROOT" validate
+    run_python_validation python
   fi
 fi
 
-# The base Dockerfile runs this check before the mise Python runtime exists and
-# deliberately mounts only legal/build inputs. Keep a fail-closed jq/git
-# preflight here; the complete renderer/discovery/SBOM tests still run in CI.
 require_file "$inventory"
 require_file "$source_lock"
 require_file "$ROOT/third_party/README.md"
@@ -35,6 +37,11 @@ command -v git >/dev/null 2>&1 || { echo "ERROR: git is required for legal sourc
 jq -e '.schema_version == 1 and (.components | type == "array" and length > 0)' "$inventory" >/dev/null
 jq -e '.schema_version == 1 and (.documents | type == "array" and length > 0)' "$source_lock" >/dev/null
 
+source_records=""
+if ! source_records="$(jq -er '.documents | select(type == "array" and length > 0) | .[] | [.path, .git_blob_sha1] | @tsv' "$source_lock")" || [[ -z "$source_records" ]]; then
+  echo "ERROR: reviewed legal source records are missing or invalid" >&2
+  exit 1
+fi
 while IFS=$'\t' read -r path expected_blob; do
   require_file "$ROOT/$path"
   actual_blob="$(git hash-object "$ROOT/$path")"
@@ -42,7 +49,30 @@ while IFS=$'\t' read -r path expected_blob; do
     echo "ERROR: source-locked legal document differs from reviewed content: $path" >&2
     exit 1
   fi
-done < <(jq -er '.documents[] | [.path, .git_blob_sha1] | @tsv' "$source_lock")
+done <<< "$source_records"
+
+require_locked_component_version() {
+  local env_name="$1"
+  local component="$2"
+  local effective="${!env_name:-}"
+  local locked=""
+  [[ -n "$effective" ]] || return 0
+  if ! locked="$(jq -er --arg component "$component" \
+    '[.documents[] | select(.component == $component) | .version] | unique | if length == 1 then .[0] else error("missing or conflicting reviewed versions") end' \
+    "$source_lock")"; then
+    echo "ERROR: unable to resolve one reviewed version for $component" >&2
+    exit 1
+  fi
+  if [[ "$effective" != "$locked" ]]; then
+    echo "ERROR: effective $component version $effective differs from reviewed legal sources $locked" >&2
+    exit 1
+  fi
+}
+
+require_locked_component_version REMOTE_DEV_GH_VERSION github-cli
+require_locked_component_version REMOTE_DEV_TTYD_VERSION ttyd
+require_locked_component_version REMOTE_DEV_MISE_VERSION mise
+require_locked_component_version REMOTE_DEV_PYTHON_VERSION python-runtime
 
 mapfile -t claimed_inputs < <(jq -er '[.components[].inputs[]] | unique[]' "$inventory")
 mapfile -t aliases < <(jq -er '.docker_arg_aliases // {} | keys[]' "$inventory")
@@ -53,7 +83,6 @@ for dockerfile in "$ROOT/images/base/Dockerfile" "$ROOT/images/codex/Dockerfile"
       exit 1
     fi
   done < <(sed -nE 's/^[[:space:]]*ARG ([A-Z][A-Z0-9_]*(VERSION|RELEASE_TAG|DIGEST|SHA256))=.*/\1/p' "$dockerfile")
-
 done
 
 mapfile -t claimed_markers < <(jq -er '.components[].download_url_markers[]?' "$inventory")
