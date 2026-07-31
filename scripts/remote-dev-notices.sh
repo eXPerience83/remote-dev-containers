@@ -149,6 +149,8 @@ check_notices() {
   local component_scope=""
   local locked_version=""
   local effective_version=""
+  local expected_source_set=""
+  local actual_source_set=""
   local source_records=""
   local source_versions=""
   local notice_locations=""
@@ -182,6 +184,25 @@ check_notices() {
   if [[ -s "$source_lock" ]] && ! jq -e '.schema_version == 1 and (.documents | type == "array" and length > 0)' "$source_lock" >/dev/null; then
     echo "ERROR: invalid reviewed source lock: $source_lock" >&2
     failed=1
+  fi
+
+  if [[ -s "$inventory" && -s "$source_lock" ]]; then
+    if capture_required_jq expected_source_set "inventory source-document set" \
+      '[.components[] | .id as $component | .source_documents[]? | [$component, .path] | @tsv] | sort | .[]' \
+      "$inventory" && \
+      capture_required_jq actual_source_set "reviewed source-lock set" \
+      '[.documents[] | [.component, .path] | @tsv] | sort | .[]' \
+      "$source_lock"; then
+      if [[ "$expected_source_set" != "$actual_source_set" ]]; then
+        echo "ERROR: reviewed source lock does not exactly match inventory source documents" >&2
+        diff -u \
+          <(printf '%s\n' "$expected_source_set") \
+          <(printf '%s\n' "$actual_source_set") >&2 || true
+        failed=1
+      fi
+    else
+      failed=1
+    fi
   fi
 
   if [[ -s "$source_lock" ]]; then
