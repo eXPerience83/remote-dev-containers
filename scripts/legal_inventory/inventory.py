@@ -1,9 +1,12 @@
 """Machine-readable component schema and version-source reconciliation."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
 from typing import Any
+
 from .io import SCHEMA_VERSION, InventoryError, SourceDocument, VERSION_KEY_RE, read_docker_args
+
 
 def inventory_components(inventory: dict[str, Any]) -> list[dict[str, Any]]:
     """Return validated, uniquely identified component objects."""
@@ -21,6 +24,7 @@ def inventory_components(inventory: dict[str, Any]) -> list[dict[str, Any]]:
             raise InventoryError(f"duplicate component id: {component_id}")
         seen.add(component_id)
     return components
+
 
 def resolve_component_version(component: dict[str, Any], env: dict[str, str], mise: dict[str, dict[str, Any]]) -> str:
     """Resolve a component version from its declared source."""
@@ -50,6 +54,26 @@ def resolve_component_version(component: dict[str, Any], env: dict[str, str], mi
         return "discovered from build recipe"
     raise InventoryError(f"{component['id']} has unsupported version_source kind {kind!r}")
 
+
+def _validate_source_document(component: dict[str, Any], document: Any) -> tuple[str, str]:
+    if not isinstance(document, dict):
+        raise InventoryError(f"{component['id']} source document must be an object")
+    path = document.get("path")
+    template = document.get("url_template")
+    if not isinstance(path, str) or not path.startswith("third_party/components/"):
+        raise InventoryError(f"{component['id']} has invalid source document path {path!r}")
+    if not isinstance(template, str) or not template.startswith("https://") or "{version}" not in template:
+        raise InventoryError(
+            f"{component['id']} source URL must use HTTPS and contain {{version}}: {template!r}"
+        )
+    relative_path = path.removeprefix("third_party/")
+    if relative_path not in component["notice_locations"]:
+        raise InventoryError(
+            f"{component['id']} source document is not exposed through notice_locations: {relative_path}"
+        )
+    return path, template
+
+
 def expected_source_documents(
     inventory: dict[str, Any], env: dict[str, str], mise: dict[str, dict[str, Any]]
 ) -> list[SourceDocument]:
@@ -61,16 +85,10 @@ def expected_source_documents(
         if not isinstance(documents, list):
             raise InventoryError(f"{component['id']} source_documents must be an array")
         for document in documents:
-            if not isinstance(document, dict):
-                raise InventoryError(f"{component['id']} source document must be an object")
-            path = document.get("path")
-            template = document.get("url_template")
-            if not isinstance(path, str) or not path.startswith("third_party/components/"):
-                raise InventoryError(f"{component['id']} has invalid source document path {path!r}")
-            if not isinstance(template, str) or "{version}" not in template:
-                raise InventoryError(f"{component['id']} source URL must contain {{version}}")
+            path, template = _validate_source_document(component, document)
             result.append(SourceDocument(component["id"], path, template.format(version=version), version))
     return result
+
 
 def validate_schema(inventory: dict[str, Any]) -> None:
     """Validate required inventory fields and closed enumerations."""
@@ -91,6 +109,7 @@ def validate_schema(inventory: dict[str, Any]) -> None:
         "trademark_policy",
         "sbom",
     }
+    source_paths: dict[str, str] = {}
     for component in components:
         missing = sorted(required_fields - component.keys())
         if missing:
@@ -100,6 +119,8 @@ def validate_schema(inventory: dict[str, Any]) -> None:
         locations = component["notice_locations"]
         if not isinstance(locations, list) or not locations or not all(isinstance(x, str) and x for x in locations):
             raise InventoryError(f"{component['id']} notice_locations must be a non-empty string array")
+        if len(locations) != len(set(locations)):
+            raise InventoryError(f"{component['id']} notice_locations contains duplicates")
         sbom = component["sbom"]
         if not isinstance(sbom, dict) or sbom.get("status") not in {
             "required",
@@ -111,14 +132,34 @@ def validate_schema(inventory: dict[str, Any]) -> None:
         if sbom.get("status") in {"not-guaranteed", "not-applicable"} and not sbom.get("reason"):
             raise InventoryError(f"{component['id']} must explain why SBOM detection is not required")
 
-def validate_inputs(
-    root: Path,
-    inventory: dict[str, Any],
-    env: dict[str, str],
-    mise: dict[str, dict[str, Any]],
-) -> None:
-    """Reconcile version manifests, Docker ARGs and mise lock entries."""
-    components = inventory_components(inventory)
+        documents = component.get("source_documents", [])
+        if not isinstance(documents, list):
+            raise InventoryError(f"{component['id']} source_documents must be an array")
+        for document in documents:
+            path, _ = _validate_source_document(component, document)
+            if path in source_paths:
+                raise InventoryError(
+                    f"source document path {path} is claimed by both {source_paths[path]} and {component['id']}"
+                )
+            source_paths[path] = component["id"]
+
+        download_markers = component.get("download_url_markers", [])
+        if download_markers and not documents:
+            raise InventoryError(
+                f"{component['id']} is directly downloaded but has no source-locked legal document"
+            )
+        source = component["version_source"]
+        if isinstance(source, dict) and source.get("kind") == "mise" and not documents:
+            runtime_locations = [location for location in locations if location.startswith("runtime/")]
+            if not runtime_locations:
+                raise InventoryError(
+                    f"{component['id']} is a mise runtime without source-locked or runtime-provided notices"
+                )
+
+
+def _validate_version_claims(
+    components: list[dict[str, Any]], env: dict[str, str]
+) -> dict[str, str]:
     claims: dict[str, str] = {}
     for component in components:
         inputs = component.get("inputs", [])
@@ -138,7 +179,10 @@ def validate_inputs(
         raise InventoryError(f"versions.env inputs are not inventoried: {', '.join(missing)}")
     if stale:
         raise InventoryError(f"inventory claims missing versions.env inputs: {', '.join(stale)}")
+    return claims
 
+
+def _validate_docker_args(root: Path, inventory: dict[str, Any], env: dict[str, str], claims: dict[str, str]) -> None:
     dockerfiles = [root / "images/base/Dockerfile", root / "images/codex/Dockerfile"]
     docker_args: dict[str, str] = {}
     for dockerfile in dockerfiles:
@@ -165,6 +209,10 @@ def validate_inputs(
     if invalid_alias_targets:
         raise InventoryError(f"docker_arg_aliases targets unclaimed inputs: {', '.join(invalid_alias_targets)}")
 
+
+def _validate_mise_claims(
+    components: list[dict[str, Any]], env: dict[str, str], mise: dict[str, dict[str, Any]]
+) -> None:
     mise_claims: dict[str, str] = {}
     for component in components:
         source = component.get("version_source")
@@ -189,3 +237,16 @@ def validate_inputs(
                 version = resolve_component_version(component, env, mise)
                 if env.get(key) != version:
                     raise InventoryError(f"{component['id']} {key} disagrees with mise.lock: {env.get(key)} != {version}")
+
+
+def validate_inputs(
+    root: Path,
+    inventory: dict[str, Any],
+    env: dict[str, str],
+    mise: dict[str, dict[str, Any]],
+) -> None:
+    """Reconcile version manifests, Docker ARGs and mise lock entries."""
+    components = inventory_components(inventory)
+    claims = _validate_version_claims(components, env)
+    _validate_docker_args(root, inventory, env, claims)
+    _validate_mise_claims(components, env, mise)
