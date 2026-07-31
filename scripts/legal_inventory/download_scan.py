@@ -93,6 +93,25 @@ def _network_command(tokens: list[str], path: Path) -> bool:
     return executable == "git" and _git_subcommand(tokens, path) == "clone"
 
 
+def _interpreter_network_fetch(tokens: list[str]) -> str | None:
+    """Identify inline interpreter fetches that cannot be attributed safely."""
+    if not tokens:
+        return None
+    executable = executable_name(tokens[0])
+    text = " ".join(tokens)
+    if executable.startswith("python") and "-c" in tokens and re.search(
+        r"(?:urllib(?:\.request)?|requests|http\.client|urlopen|https?://)", text, re.I
+    ):
+        return "Python inline network acquisition"
+    if executable == "node" and any(option in tokens for option in {"-e", "--eval"}) and re.search(
+        r"(?:\bfetch\s*\(|require\(['\"]https?['\"]\)|https?://)", text, re.I
+    ):
+        return "Node.js inline network acquisition"
+    if executable == "busybox" and len(tokens) > 1 and tokens[1] == "wget":
+        return "busybox wget"
+    return None
+
+
 def _contains_hidden_fetch(tokens: list[str], path: Path) -> bool:
     text = " ".join(tokens)
     if NETWORK_RE.search(text):
@@ -125,6 +144,9 @@ def docker_download_urls(path: Path) -> list[str]:
             if apt_packages_from_command(tokens, path) is not None:
                 continue
             text = " ".join(tokens)
+            interpreter_fetch = _interpreter_network_fetch(tokens)
+            if interpreter_fetch is not None:
+                raise InventoryError(f"{interpreter_fetch} is unsupported by legal discovery in {path}: {text}")
             direct = _network_command(tokens, path)
             if _contains_hidden_fetch(tokens, path) and not direct:
                 raise InventoryError(f"unsupported compound shell around a network fetch in {path}: {text}")

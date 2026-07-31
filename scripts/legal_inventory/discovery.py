@@ -5,37 +5,43 @@ from pathlib import Path
 from typing import Any
 
 from .apt_scan import parse_apt_packages
+from .build_scripts import validate_build_scripts
 from .download_scan import docker_download_urls, instruction_runs_network_fetch
 from .installer_scan import discovered_installer_instructions
 from .inventory import inventory_components
 from .io import InventoryError
 from .npm_scan import global_npm_specs
+from .url_match import download_marker_matches, validate_download_marker
 
 
 def validate_discovery(root: Path, inventory: dict[str, Any]) -> None:
     """Require inventory ownership for discovered downloads and installers."""
     components = inventory_components(inventory)
+    dockerfiles = [root / "images/base/Dockerfile", root / "images/codex/Dockerfile"]
+    validate_build_scripts(root, dockerfiles)
     marker_claims: list[tuple[str, str]] = []
     for component in components:
         markers = component.get("download_url_markers", [])
         if not isinstance(markers, list):
             raise InventoryError(f"{component['id']} download_url_markers must be an array")
         for marker in markers:
-            if not isinstance(marker, str) or not marker.startswith("https://"):
+            if not isinstance(marker, str):
                 raise InventoryError(f"{component['id']} has invalid download URL marker {marker!r}")
+            validate_download_marker(marker)
             marker_claims.append((marker, component["id"]))
 
     discovered_urls: list[str] = []
-    for relative in ("images/base/Dockerfile", "images/codex/Dockerfile"):
-        discovered_urls.extend(docker_download_urls(root / relative))
+    for dockerfile in dockerfiles:
+        discovered_urls.extend(docker_download_urls(dockerfile))
     for url in sorted(set(discovered_urls)):
-        owners = sorted({component for marker, component in marker_claims if marker in url})
-        if len(owners) != 1:
+        matches = [(marker, component) for marker, component in marker_claims if download_marker_matches(marker, url)]
+        owners = sorted({component for _, component in matches})
+        if len(matches) != 1:
             raise InventoryError(
                 f"direct-download URL must be claimed by exactly one component ({', '.join(owners) or 'none'}): {url}"
             )
     for marker, component in marker_claims:
-        if not any(marker in url for url in discovered_urls):
+        if not any(download_marker_matches(marker, url) for url in discovered_urls):
             raise InventoryError(f"{component} claims unused download URL marker: {marker}")
 
     installer_markers: list[tuple[str, str]] = []

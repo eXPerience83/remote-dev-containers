@@ -273,21 +273,21 @@ jobs:
             third_party/inventory.json
             third_party/sources.lock.json
             third_party/README.md
-            third_party/components/codex/NOTICE
-            third_party/components/codex/LICENSE
             third_party/components/codex/SOURCE.env
-            third_party/components/github-cli/LICENSE
             third_party/components/github-cli/SOURCE.env
-            third_party/components/ttyd/LICENSE
             third_party/components/ttyd/SOURCE.env
-            third_party/components/mise/LICENSE
             third_party/components/mise/SOURCE.env
-            third_party/components/python/LICENSE
             third_party/components/python/SOURCE.env
-            third_party/components/uv/LICENSE-APACHE-2.0
-            third_party/components/uv/LICENSE-MIT
             third_party/components/uv/SOURCE.env
           )
+          mapfile -t refreshed_notice_files < <(
+            jq -er '.documents[] | .path' third_party/sources.lock.json | LC_ALL=C sort -u
+          )
+          if (( ${#refreshed_notice_files[@]} == 0 )); then
+            echo "No source-locked legal documents were generated." >&2
+            exit 1
+          fi
+          tracked_files+=("${refreshed_notice_files[@]}")
           if git diff --quiet -- "${tracked_files[@]}"; then
             echo "No upstream release, digest, runtime artifact or reviewed notice changes."
             if [[ -n "$existing_pr" ]]; then
@@ -298,6 +298,11 @@ jobs:
           fi
 
           git add "${tracked_files[@]}"
+          if ! git diff --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            echo "Updater produced changes outside its generated tracked-file set:" >&2
+            git status --short >&2
+            exit 1
+          fi
           git commit -m "chore: update upstream versions, artifacts, and notices"
 
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&

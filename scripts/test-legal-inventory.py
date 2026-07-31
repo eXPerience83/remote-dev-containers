@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import legal_inventory  # noqa: E402
+from legal_inventory import documents  # noqa: E402
 
 
 class LegalInventoryTests(unittest.TestCase):
@@ -134,6 +137,98 @@ RUN bash -lc 'wget https://vendor.example/wrapped -O /tmp/wrapped'
         }
         with self.assertRaisesRegex(legal_inventory.InventoryError, "must use HTTPS"):
             legal_inventory.validate_schema({"schema_version": 1, "components": [component]})
+
+    def test_download_marker_rejects_query_and_fragment(self) -> None:
+        component = {
+            "id": "tool",
+            "name": "Tool",
+            "distribution": "download",
+            "image_scope": "both",
+            "version_source": {"kind": "env", "key": "TOOL_VERSION"},
+            "inputs": ["TOOL_VERSION"],
+            "upstream": "https://example.com/tool",
+            "license_expression": "MIT",
+            "notice_treatment": "license required",
+            "notice_locations": ["components/tool/LICENSE"],
+            "trademark_policy": "descriptive use",
+            "sbom": {"status": "not-guaranteed", "reason": "binary"},
+            "source_documents": [{
+                "path": "third_party/components/tool/LICENSE",
+                "url_template": "https://example.com/{version}/LICENSE",
+            }],
+        }
+        for marker in (
+            "https://example.com/releases/?channel=stable",
+            "https://example.com/releases/#stable",
+        ):
+            with self.subTest(marker=marker):
+                candidate = component | {"download_url_markers": [marker]}
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "query or fragment"):
+                    legal_inventory.validate_schema({"schema_version": 1, "components": [candidate]})
+
+    def test_new_component_refresh_remains_a_reviewable_git_diff(self) -> None:
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b"new reviewed license candidate\n"
+
+        class Opener:
+            addheaders: list[tuple[str, str]] = []
+
+            def open(self, _url: str, timeout: int):
+                self.timeout = timeout
+                return Response()
+
+        component = {
+            "id": "new-tool",
+            "version_source": {"kind": "env", "key": "NEW_TOOL_VERSION"},
+            "notice_locations": ["components/new-tool/LICENSE"],
+            "source_documents": [{
+                "path": "third_party/components/new-tool/LICENSE",
+                "url_template": "https://vendor.example/new-tool/v{version}/LICENSE",
+            }],
+        }
+        inventory = {"schema_version": 1, "components": [component]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            license_path = root / "third_party/components/new-tool/LICENSE"
+            license_path.parent.mkdir(parents=True)
+            license_path.write_text("old reviewed license\n", encoding="utf-8")
+            lock_path = root / "third_party/sources.lock.json"
+            lock_path.write_text(
+                json.dumps({"schema_version": 1, "documents": [{
+                    "component": "new-tool",
+                    "git_blob_sha1": legal_inventory.git_blob_sha1(license_path.read_bytes()),
+                    "path": "third_party/components/new-tool/LICENSE",
+                    "url": "https://vendor.example/new-tool/v0.9/LICENSE",
+                    "version": "0.9",
+                }]}) + "\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=root, check=True)
+
+            with mock.patch("legal_inventory.documents.urllib.request.build_opener", return_value=Opener()):
+                documents.refresh_sources(root, inventory, {"NEW_TOOL_VERSION": "1.0"}, {})
+
+            documents.validate_sources(root, inventory, {"NEW_TOOL_VERSION": "1.0"}, {})
+            changed = subprocess.check_output(
+                ["git", "diff", "--name-only"], cwd=root, text=True
+            ).splitlines()
+            self.assertEqual(
+                changed,
+                ["third_party/components/new-tool/LICENSE", "third_party/sources.lock.json"],
+            )
 
     def test_unclaimed_version_input_fails_closed(self) -> None:
         inventory = {

@@ -204,6 +204,147 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                 legal_inventory.docker_download_urls,
             )
 
+    def test_onbuild_triggers_fail_closed_case_insensitively(self) -> None:
+        for instruction in (
+            "ONBUILD RUN curl https://vendor.example/tool -o /tmp/tool\n",
+            "onbuild add https://vendor.example/tool /usr/local/bin/tool\n",
+            'OnBuild RUN ["curl", "https://vendor.example/tool", "-o", "/tmp/tool"]\n',
+        ):
+            with self.subTest(instruction=instruction):
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "ONBUILD is unsupported"):
+                    self.dockerfile_result(instruction, legal_inventory.docker_download_urls)
+
+    def test_download_markers_use_https_origin_and_path_boundaries(self) -> None:
+        marker = "https://github.com/cli/cli/releases/download/"
+        self.assertTrue(
+            legal_inventory.download_marker_matches(
+                marker,
+                "https://GitHub.COM/cli/cli/releases/download/v1/file",
+            )
+        )
+        for url in (
+            "https://mirror.example/fetch?source=https://github.com/cli/cli/releases/download/",
+            "https://mirror.example/https://github.com/cli/cli/releases/download/v1/file",
+            "https://github.com/cli/cli/releases/download-evil/file",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(legal_inventory.download_marker_matches(marker, url))
+
+    def test_download_ownership_rejects_unowned_and_ambiguous_urls(self) -> None:
+        def validate(url: str, markers: list[tuple[str, str]]) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images/base").mkdir(parents=True)
+                (root / "images/codex").mkdir(parents=True)
+                (root / "images/base/Dockerfile").write_text(
+                    f"FROM ubuntu:${{UBUNTU_VERSION}}@${{UBUNTU_DIGEST}}\nRUN curl {url} -o /tmp/tool\n",
+                    encoding="utf-8",
+                )
+                (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                components: dict[str, list[str]] = {}
+                for component, marker in markers:
+                    components.setdefault(component, []).append(marker)
+                inventory = {
+                    "components": [
+                        {"id": component, "download_url_markers": component_markers}
+                        for component, component_markers in components.items()
+                    ]
+                }
+                legal_inventory.validate_discovery(root, inventory)
+
+        validate(
+            "https://GitHub.COM/cli/cli/releases/download/v1/file",
+            [("github-cli", "https://github.com/cli/cli/releases/download/")],
+        )
+        for url in (
+            "https://mirror.example/fetch?source=https://github.com/cli/cli/releases/download/",
+            "https://mirror.example/https://github.com/cli/cli/releases/download/v1/file",
+            "https://github.com/cli/cli/releases/download-evil/file",
+        ):
+            with self.subTest(url=url):
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "exactly one component"):
+                    validate(url, [("github-cli", "https://github.com/cli/cli/releases/download/")])
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "exactly one component"):
+            validate(
+                "https://github.com/cli/cli/releases/download/v1/file",
+                [
+                    ("github-cli", "https://github.com/cli/cli/releases/"),
+                    ("github-cli-mirror", "https://github.com/cli/cli/releases/download/"),
+                ],
+            )
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "exactly one component"):
+            validate(
+                "https://github.com/cli/cli/releases/download/v1/file",
+                [
+                    ("github-cli", "https://github.com/cli/cli/releases/"),
+                    ("github-cli", "https://github.com/cli/cli/releases/download/"),
+                ],
+            )
+
+    def test_build_helper_acquisition_fails_closed_but_validation_is_allowed(self) -> None:
+        def validate(script_text: str) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images/base").mkdir(parents=True)
+                (root / "images/codex").mkdir(parents=True)
+                (root / "scripts").mkdir()
+                (root / "scripts/install-new-tool.sh").write_text(script_text, encoding="utf-8")
+                (root / "images/base/Dockerfile").write_text(
+                    "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                    "COPY scripts/install-new-tool.sh /tmp/install-new-tool.sh\n"
+                    "RUN bash /tmp/install-new-tool.sh\n",
+                    encoding="utf-8",
+                )
+                (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*curl"):
+            validate("#!/usr/bin/env bash\ncurl https://vendor.example/tool -o /tmp/tool\n")
+        validate("#!/usr/bin/env bash\nset -euo pipefail\nprintf 'validation only\\n'\n")
+
+    def test_build_helper_interpreter_downloads_fail_closed(self) -> None:
+        for command in (
+            "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://vendor.example/tool')\"",
+            "node -e \"fetch('https://vendor.example/tool')\"",
+            "busybox wget https://vendor.example/tool",
+        ):
+            with self.subTest(command=command):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "images/base").mkdir(parents=True)
+                    (root / "images/codex").mkdir(parents=True)
+                    (root / "scripts").mkdir()
+                    (root / "scripts/helper.sh").write_text(f"#!/bin/sh\n{command}\n", encoding="utf-8")
+                    (root / "images/base/Dockerfile").write_text(
+                        "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                        "COPY scripts/helper.sh /helper.sh\nRUN sh /helper.sh\n",
+                        encoding="utf-8",
+                    )
+                    (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                    with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper"):
+                        legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_inline_interpreter_downloads_and_dynamic_helpers_fail_closed(self) -> None:
+        for instruction in (
+            "RUN python3 -c \"import urllib.request; urllib.request.urlretrieve('https://vendor.example/tool')\"\n",
+            "RUN node -e \"fetch('https://vendor.example/tool')\"\n",
+            "RUN busybox wget https://vendor.example/tool\n",
+        ):
+            with self.subTest(instruction=instruction):
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "network acquisition|busybox wget"):
+                    self.dockerfile_result(instruction, legal_inventory.docker_download_urls)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "images/base/Dockerfile").write_text(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\nRUN bash $GENERATED_INSTALLER\n",
+                encoding="utf-8",
+            )
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "cannot be resolved"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
     def test_pip_global_options_are_discovered(self) -> None:
         for instruction in (
             "RUN pip --disable-pip-version-check install tool==1.0\n",

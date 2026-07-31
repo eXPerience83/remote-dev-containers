@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import SCHEMA_VERSION, InventoryError, SourceDocument, VERSION_KEY_RE, read_docker_args
+from .url_match import validate_download_marker
 
 
 def inventory_components(inventory: dict[str, Any]) -> list[dict[str, Any]]:
@@ -144,6 +145,12 @@ def validate_schema(inventory: dict[str, Any]) -> None:
             source_paths[path] = component["id"]
 
         download_markers = component.get("download_url_markers", [])
+        if not isinstance(download_markers, list):
+            raise InventoryError(f"{component['id']} download_url_markers must be an array")
+        for marker in download_markers:
+            if not isinstance(marker, str):
+                raise InventoryError(f"{component['id']} has invalid download URL marker {marker!r}")
+            validate_download_marker(marker)
         if download_markers and not documents:
             raise InventoryError(
                 f"{component['id']} is directly downloaded but has no source-locked legal document"

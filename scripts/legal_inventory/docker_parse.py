@@ -38,6 +38,11 @@ def docker_instructions(path: Path) -> list[str]:
         if line.endswith("\\"):
             continue
         instruction = " ".join(filter(None, current))
+        if instruction_payload(instruction, "ONBUILD") is not None:
+            raise InventoryError(
+                f"ONBUILD is unsupported by legal discovery in {path}; "
+                "deferred triggers can introduce content after inventory validation"
+            )
         run_payload = instruction_payload(instruction, "RUN")
         if run_payload is not None and HEREDOC_RE.search(run_payload):
             raise InventoryError(f"RUN heredocs are unsupported by legal discovery in {path}")

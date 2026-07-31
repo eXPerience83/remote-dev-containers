@@ -10,11 +10,13 @@ from .discovery import (
 from .inventory import validate_inputs, validate_schema
 from .io import InventoryError, git_blob_sha1
 from .sbom import reconcile_sboms
+from .url_match import download_marker_matches
 
 __all__ = [
     "InventoryError",
     "discovered_installer_instructions",
     "docker_download_urls",
+    "download_marker_matches",
     "git_blob_sha1",
     "global_npm_specs",
     "main",

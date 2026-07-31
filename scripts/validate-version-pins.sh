@@ -137,22 +137,22 @@ for path in \
   third_party/inventory.json \
   third_party/sources.lock.json \
   third_party/README.md \
-  third_party/components/codex/NOTICE \
-  third_party/components/codex/LICENSE \
   third_party/components/codex/SOURCE.env \
-  third_party/components/github-cli/LICENSE \
   third_party/components/github-cli/SOURCE.env \
-  third_party/components/ttyd/LICENSE \
   third_party/components/ttyd/SOURCE.env \
-  third_party/components/mise/LICENSE \
   third_party/components/mise/SOURCE.env \
-  third_party/components/python/LICENSE \
   third_party/components/python/SOURCE.env \
-  third_party/components/uv/LICENSE-APACHE-2.0 \
-  third_party/components/uv/LICENSE-MIT \
   third_party/components/uv/SOURCE.env; do
   require_upstream_tracked_file "$path"
 done
+if ! grep -Fq "jq -er '.documents[] | .path' third_party/sources.lock.json" "$upstream_workflow"; then
+  echo "ERROR: upstream maintenance must derive refreshed legal documents from sources.lock.json" >&2
+  exit 1
+fi
+if ! grep -Fq 'git ls-files --others --exclude-standard' "$upstream_workflow"; then
+  echo "ERROR: upstream maintenance must reject generated files outside tracked_files" >&2
+  exit 1
+fi
 
 if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
