@@ -26,7 +26,9 @@ LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
       org.opencontainers.image.version="${BASE_VERSION}" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      io.github.experience83.remote-dev.project-license="Apache-2.0" \
+      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
+      io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
@@ -97,6 +99,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
+# Validate the human inventory and optional-agent policy against only the files
+# it reads, so unrelated repository changes do not invalidate later tool layers.
+# Pass the effective build arguments explicitly so overrides cannot install a
+# release whose preserved license record belongs to a different version.
+RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
+    --mount=type=bind,source=third_party,target=/src/third_party,ro \
+    --mount=type=bind,source=mise.lock,target=/src/mise.lock,ro \
+    --mount=type=bind,source=images/base/Dockerfile,target=/src/images/base/Dockerfile,ro \
+    --mount=type=bind,source=images/codex/Dockerfile,target=/src/images/codex/Dockerfile,ro \
+    REMOTE_DEV_GH_VERSION="${GH_VERSION}" \
+    REMOTE_DEV_TTYD_VERSION="${TTYD_VERSION}" \
+    REMOTE_DEV_MISE_VERSION="${MISE_VERSION}" \
+    REMOTE_DEV_PYTHON_VERSION="${PYTHON_VERSION}" \
+    bash /src/scripts/validate-third-party-inventory.sh
+
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
 RUN case "${TARGETARCH}" in \
       amd64) gh_arch=amd64; expected_sha="$GH_AMD64_SHA256" ;; \
@@ -159,6 +176,45 @@ RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
     && test "$(npm --version)" = "$NPM_VERSION" \
     && uv --version \
     && rm -rf "${MISE_CACHE_DIR:?}"/*
+
+# Keep project and bundled-component terms inspectable in both the repository and
+# the built image. Runtime archives contribute their own license files here.
+COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
+COPY third_party/ /usr/share/doc/remote-dev/third_party/
+COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
+COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
+RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
+    locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
+    && for expected in \
+      "PYTHON_VERSION=${PYTHON_VERSION}" \
+      "NODE_VERSION=${NODE_VERSION}" \
+      "UV_VERSION=${UV_VERSION}"; do \
+        if ! grep -Fqx -- "$expected" <<< "$locked_runtime_manifest"; then \
+          echo "ERROR: build argument disagrees with mise.lock: $expected" >&2; \
+          exit 1; \
+        fi; \
+      done \
+    && printf '%s\n' \
+      "TARGETARCH=${TARGETARCH}" \
+      "BASE_VERSION=${BASE_VERSION}" \
+      "UBUNTU_VERSION=${UBUNTU_VERSION}" \
+      "UBUNTU_DIGEST=${UBUNTU_DIGEST}" \
+      "GH_VERSION=${GH_VERSION}" \
+      "GH_AMD64_SHA256=${GH_AMD64_SHA256}" \
+      "GH_ARM64_SHA256=${GH_ARM64_SHA256}" \
+      "TTYD_VERSION=${TTYD_VERSION}" \
+      "TTYD_AMD64_SHA256=${TTYD_AMD64_SHA256}" \
+      "TTYD_ARM64_SHA256=${TTYD_ARM64_SHA256}" \
+      "MISE_VERSION=${MISE_VERSION}" \
+      "MISE_AMD64_SHA256=${MISE_AMD64_SHA256}" \
+      "MISE_ARM64_SHA256=${MISE_ARM64_SHA256}" \
+      "NPM_VERSION=${NPM_VERSION}" \
+      > /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
+    && printf '%s\n' "$locked_runtime_manifest" \
+      >> /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
+    && chmod 0755 /usr/local/bin/copy-runtime-notices /usr/local/bin/remote-dev-notices \
+    && copy-runtime-notices \
+    && remote-dev-notices --check
 
 COPY config/tmux.conf /etc/tmux.conf
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify

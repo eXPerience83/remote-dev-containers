@@ -13,8 +13,11 @@ LABEL org.opencontainers.image.title="Codex Remote Dev" \
       org.opencontainers.image.description="Community browser-hosted Codex CLI development container" \
       org.opencontainers.image.version="${PROJECT_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI"
+      org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md" \
+      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI" \
+      io.github.experience83.remote-dev.project-license="Apache-2.0" \
+      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
+      io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
 ENV HOME=/root \
     WORKSPACE=/workspace \
@@ -59,7 +62,6 @@ COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
-COPY third_party/ /usr/share/doc/codex-remote-dev/third_party/
 
 RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
     chmod 0755 \
@@ -77,12 +79,24 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: untrusted' \
-    && install -d -m 0755 /usr/share/remote-dev \
+    && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
+    && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \
+    && ln -sfn ../remote-dev/third_party /usr/share/doc/codex-remote-dev/third_party \
+    && printf '%s\n' \
+      "SOURCE_REVISION=${SOURCE_REVISION}" \
+      "PROJECT_VERSION=${PROJECT_VERSION}" \
+      "TARGETARCH=${TARGETARCH}" \
+      "CODEX_RELEASE_TAG=${CODEX_RELEASE_TAG}" \
+      "CODEX_AMD64_SHA256=${CODEX_AMD64_SHA256}" \
+      "CODEX_ARM64_SHA256=${CODEX_ARM64_SHA256}" \
+      > /usr/share/doc/remote-dev/third_party/CODEX-BUILD.env \
+    && remote-dev-notices --check \
     && printf '%s\n' "$PROJECT_VERSION" > /usr/share/remote-dev/image-version \
     && printf '%s\n' "$SOURCE_REVISION" > /usr/share/remote-dev/source-revision \
     && chmod 0444 \
       /usr/share/remote-dev/image-version \
       /usr/share/remote-dev/source-revision \
+      /usr/share/doc/remote-dev/third_party/CODEX-BUILD.env \
     && mkdir -p \
       /workspace \
       /root/.codex \
