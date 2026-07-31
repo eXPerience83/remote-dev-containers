@@ -1,10 +1,13 @@
 """SPDX package-URL reconciliation against declared inventory coverage."""
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
+
 from .discovery import parse_apt_packages
 from .io import InventoryError, load_json
+
 
 def purl_type(locator: str) -> str | None:
     """Extract the package-url type from a purl."""
@@ -12,6 +15,7 @@ def purl_type(locator: str) -> str | None:
         return None
     value = locator[4:].split("/", 1)[0]
     return value or None
+
 
 def purl_name(locator: str) -> str | None:
     """Extract and decode the package name from a purl."""
@@ -22,6 +26,7 @@ def purl_name(locator: str) -> str | None:
     name = body.rsplit("/", 1)[-1]
     return unquote(name) if name else None
 
+
 def spdx_packages(path: Path) -> list[dict[str, Any]]:
     """Load package objects from an SPDX JSON document."""
     data = load_json(path)
@@ -29,6 +34,7 @@ def spdx_packages(path: Path) -> list[dict[str, Any]]:
     if not isinstance(packages, list):
         raise InventoryError(f"SPDX document has no packages array: {path}")
     return [package for package in packages if isinstance(package, dict)]
+
 
 def package_purls(package: dict[str, Any]) -> set[str]:
     """Return all package URLs attached to an SPDX package."""
@@ -40,6 +46,7 @@ def package_purls(package: dict[str, Any]) -> set[str]:
         if isinstance(locator, str) and locator.startswith("pkg:"):
             result.add(locator)
     return result
+
 
 def reconcile_sboms(root: Path, inventory: dict[str, Any], named_paths: list[str]) -> None:
     """Compare generated image SPDX inventories with declared coverage."""
@@ -77,12 +84,15 @@ def reconcile_sboms(root: Path, inventory: dict[str, Any], named_paths: list[str
         raise InventoryError("SBOM reconciliation requires exactly base and final documents")
 
     apt_packages = set(parse_apt_packages(root / "images/base/Dockerfile"))
+    scope_purls: dict[str, set[str]] = {}
     for scope, sbom_path in sorted(parsed_paths.items()):
         packages = spdx_packages(sbom_path)
         seen_types: set[str] = set()
         deb_names: set[str] = set()
+        purls: set[str] = set()
         for package in packages:
             for purl in package_purls(package):
+                purls.add(purl)
                 kind = purl_type(purl)
                 if kind:
                     seen_types.add(kind)
@@ -100,4 +110,11 @@ def reconcile_sboms(root: Path, inventory: dict[str, Any], named_paths: list[str
             raise InventoryError(f"{scope} SBOM is missing directly installed APT packages: {', '.join(missing_apt)}")
         if not seen_types:
             raise InventoryError(f"{scope} SBOM contains no package URLs")
+        scope_purls[scope] = purls
         print(f"{scope} SBOM reconciled: {len(packages)} packages, ecosystems={','.join(sorted(seen_types))}")
+
+    missing_from_final = sorted(scope_purls["base"] - scope_purls["final"])
+    if missing_from_final:
+        preview = ", ".join(missing_from_final[:10])
+        suffix = " ..." if len(missing_from_final) > 10 else ""
+        raise InventoryError("final SBOM is missing packages from the base image: " + preview + suffix)
