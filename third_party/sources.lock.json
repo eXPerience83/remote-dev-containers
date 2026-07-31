@@ -8,6 +8,13 @@
       "version": "rust-v0.146.0"
     },
     {
+      "component": "codex-cli",
+      "git_blob_sha1": "4606e72e042564097e8780d66c1d4dcb611869bd",
+      "path": "third_party/components/codex/LICENSE",
+      "url": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/LICENSE",
+      "version": "rust-v0.146.0"
+    },
+    {
       "component": "github-cli",
       "git_blob_sha1": "b6a58a9572cbd7e4550f8205a9c4fd199cd442f2",
       "path": "third_party/components/github-cli/LICENSE",
