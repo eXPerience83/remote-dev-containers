@@ -160,8 +160,20 @@ check_notices() {
   local has_codex=0
   local scope_filter='select(.image_scope == "base" or .image_scope == "both" or .image_scope == "project")'
 
-  if command -v codex >/dev/null 2>&1; then
-    has_codex=1
+  case "${REMOTE_DEV_NOTICE_IMAGE_SCOPE:-auto}" in
+    auto)
+      if command -v codex >/dev/null 2>&1; then
+        has_codex=1
+      fi
+      ;;
+    base) has_codex=0 ;;
+    final) has_codex=1 ;;
+    *)
+      echo "ERROR: REMOTE_DEV_NOTICE_IMAGE_SCOPE must be auto, base or final" >&2
+      return 1
+      ;;
+  esac
+  if (( has_codex == 1 )); then
     scope_filter='select(.image_scope != "optional")'
   fi
 

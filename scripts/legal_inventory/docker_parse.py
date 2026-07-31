@@ -29,7 +29,7 @@ def docker_instructions(path: Path) -> list[str]:
     current: list[str] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
-        if not current and (not line or line.startswith("#")):
+        if not line or line.startswith("#"):
             continue
         run_payload = instruction_payload(line, "RUN") if not current else None
         if run_payload is not None and HEREDOC_RE.search(run_payload):

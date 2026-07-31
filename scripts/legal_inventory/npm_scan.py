@@ -11,18 +11,18 @@ PACKAGE_SPEC_RE = re.compile(
     r"(?P<name>@?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@\$\{(?P<key>[A-Z][A-Z0-9_]*)\}"
 )
 
-# Keep this command namespace aligned with npm CLI 11.12.1's
+# Keep this command namespace aligned with npm CLI 12.0.2's
 # lib/utils/cmd-list.js. npm resolves camelCase, exact commands/aliases and then
 # unambiguous prefixes across this complete namespace.
 NPM_COMMANDS = {
-    "access", "adduser", "audit", "bugs", "cache", "ci", "completion", "config",
-    "dedupe", "deprecate", "diff", "dist-tag", "docs", "doctor", "edit", "exec",
+    "access", "approve-scripts", "audit", "bugs", "cache", "ci", "completion", "config",
+    "dedupe", "deny-scripts", "deprecate", "diff", "dist-tag", "docs", "doctor", "edit", "exec",
     "explain", "explore", "find-dupes", "fund", "get", "help", "help-search", "init",
-    "install", "install-ci-test", "install-test", "link", "ll", "login", "logout", "ls",
-    "org", "outdated", "owner", "pack", "ping", "pkg", "prefix", "profile", "prune",
+    "install", "install-ci-test", "install-scripts", "install-test", "link", "ll", "login", "logout", "ls",
+    "org", "outdated", "owner", "pack", "patch", "ping", "pkg", "prefix", "profile", "prune",
     "publish", "query", "rebuild", "repo", "restart", "root", "run", "sbom", "search",
-    "set", "shrinkwrap", "star", "stars", "start", "stop", "team", "test", "token",
-    "trust", "undeprecate", "uninstall", "unpublish", "unstar", "update", "version",
+    "set", "stage", "start", "stop", "team", "test", "token",
+    "trust", "undeprecate", "uninstall", "unpublish", "update", "version",
     "view", "whoami",
 }
 NPM_ALIASES = {
@@ -30,7 +30,7 @@ NPM_ALIASES = {
     "find": "search", "add": "install", "unlink": "uninstall", "remove": "uninstall",
     "rm": "uninstall", "r": "uninstall", "un": "uninstall", "rb": "rebuild",
     "list": "ls", "ln": "link", "create": "init", "i": "install", "it": "install-test",
-    "cit": "install-ci-test", "up": "update", "c": "config", "s": "search", "se": "search",
+    "cit": "install-ci-test", "u": "update", "up": "update", "c": "config", "s": "search", "se": "search",
     "tst": "test", "t": "test", "ddp": "dedupe", "v": "view", "run-script": "run",
     "clean-install": "ci", "clean-install-test": "install-ci-test", "x": "exec",
     "why": "explain", "la": "ll", "verison": "version", "ic": "ci", "innit": "init",
@@ -38,7 +38,7 @@ NPM_ALIASES = {
     "instal": "install", "isnt": "install", "isnta": "install", "isntal": "install",
     "isntall": "install", "install-clean": "ci", "isntall-clean": "ci", "hlep": "help",
     "dist-tags": "dist-tag", "upgrade": "update", "udpate": "update", "rum": "run",
-    "sit": "install-ci-test", "urn": "run", "ogr": "org", "add-user": "adduser",
+    "sit": "install-ci-test", "urn": "run", "ogr": "org",
 }
 NPM_INSTALL_COMMANDS = {"install", "ci", "install-test", "install-ci-test"}
 NPM_TERMINAL_OPTIONS = {"--help", "-h", "--version", "-v", "--versions"}

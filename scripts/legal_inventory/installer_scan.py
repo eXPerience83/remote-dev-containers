@@ -7,7 +7,9 @@ from pathlib import Path
 from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, run_commands, strip_command_prefix
 from .io import InventoryError
 
-INSTALLER_RE = re.compile(COMMAND_PREFIX + r"(?:pip3?|python3?|uv|cargo|go|gem|composer)(?=\s|$)")
+INSTALLER_RE = re.compile(
+    COMMAND_PREFIX + r"(?:apk|bun|cargo|composer|dnf|dotnet|gem|go|pip3?|pipx|pnpm|poetry|python3?|uv|yarn|yum)(?=\s|$)"
+)
 PIP_VALUE_OPTIONS = {
     "--cache-dir",
     "--cert",
@@ -70,14 +72,38 @@ def _is_installer(tokens: list[str], path: Path) -> bool:
 
     if executable == "uv":
         index = _skip_options(tokens, 1, set(), path, "uv")
+        if index < len(tokens) and tokens[index] in {"add", "sync"}:
+            return True
         if index >= len(tokens) or tokens[index] not in {"pip", "tool"}:
             return False
         index = _skip_options(tokens, index + 1, set(), path, "uv")
         return index < len(tokens) and tokens[index] == "install"
 
-    if executable in {"cargo", "go", "gem"}:
+    if executable in {"cargo", "gem"}:
         index = _skip_options(tokens, 1, set(), path, executable)
         return index < len(tokens) and tokens[index] == "install"
+
+    if executable == "go":
+        index = _skip_options(tokens, 1, set(), path, "go")
+        return index < len(tokens) and tokens[index] in {"get", "install"}
+
+    if executable in {"pipx", "poetry", "pnpm", "yarn", "bun", "apk", "dnf", "yum"}:
+        index = _skip_options(tokens, 1, set(), path, executable)
+        commands = {
+            "pipx": {"install"},
+            "poetry": {"add", "install", "sync"},
+            "pnpm": {"add", "install"},
+            "yarn": {"add", "install"},
+            "bun": {"add", "install"},
+            "apk": {"add"},
+            "dnf": {"install"},
+            "yum": {"install"},
+        }
+        return index < len(tokens) and tokens[index] in commands[executable]
+
+    if executable == "dotnet":
+        index = _skip_options(tokens, 1, set(), path, "dotnet")
+        return index + 1 < len(tokens) and tokens[index : index + 2] == ["tool", "install"]
 
     if executable == "composer":
         index = _skip_options(tokens, 1, set(), path, "composer")

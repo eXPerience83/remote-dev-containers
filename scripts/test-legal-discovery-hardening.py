@@ -344,6 +344,98 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
             with self.assertRaisesRegex(legal_inventory.InventoryError, "cannot be resolved"):
                 legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "dynamic executable"):
+            self.dockerfile_result(
+                'RUN FETCH=curl; "$FETCH" https://vendor.example/tool -o /tmp/tool\n',
+                legal_inventory.docker_download_urls,
+            )
+
+    def test_sourced_build_helpers_are_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "images/base").mkdir(parents=True)
+            (root / "images/codex").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/fetch.sh").write_text(
+                "curl https://vendor.example/tool -o /tmp/tool\n", encoding="utf-8"
+            )
+            (root / "images/base/Dockerfile").write_text(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "RUN --mount=type=bind,source=scripts,target=/src/scripts,ro "
+                "source /src/scripts/fetch.sh\n",
+                encoding="utf-8",
+            )
+            (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+            with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*curl"):
+                legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_bundled_python_options_fail_closed(self) -> None:
+        for command in (
+            "python3 -uc \"import urllib.request; urllib.request.urlopen('https://vendor.example/tool')\"",
+            "python3 -mpip install tool",
+        ):
+            with self.subTest(command=command):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "images/base").mkdir(parents=True)
+                    (root / "images/codex").mkdir(parents=True)
+                    (root / "scripts").mkdir()
+                    (root / "scripts/helper.sh").write_text(f"#!/bin/sh\n{command}\n", encoding="utf-8")
+                    (root / "images/base/Dockerfile").write_text(
+                        "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                        "COPY scripts/helper.sh /helper.sh\nRUN sh /helper.sh\n",
+                        encoding="utf-8",
+                    )
+                    (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                    with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper"):
+                        legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
+    def test_additional_fetch_and_installer_forms_fail_closed(self) -> None:
+        attributable_fetches = (
+            "rsync https://vendor.example/tool /tmp/tool",
+            "aria2c https://vendor.example/tool",
+            "http https://vendor.example/tool",
+        )
+        for command in attributable_fetches:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    self.dockerfile_result(f"RUN {command}\n", legal_inventory.docker_download_urls),
+                    ["https://vendor.example/tool"],
+                )
+
+        rejected_fetches = (
+            "scp vendor.example:tool /tmp/tool",
+            "git lfs pull",
+            "perl -e \"use LWP; get('https://vendor.example/tool')\"",
+            "ruby -e \"require 'open-uri'; URI.open('https://vendor.example/tool')\"",
+            "php -e \"file_get_contents('https://vendor.example/tool')\"",
+        )
+        for command in rejected_fetches:
+            with self.subTest(command=command):
+                with self.assertRaises(legal_inventory.InventoryError):
+                    self.dockerfile_result(f"RUN {command}\n", legal_inventory.docker_download_urls)
+
+        installers = (
+            "uv add tool", "uv sync", "pipx install tool", "poetry add tool",
+            "pnpm add tool", "yarn install", "bun add tool", "go get example.com/tool",
+            "dotnet tool install tool", "apk add tool", "dnf install tool", "yum install tool",
+        )
+        for command in installers:
+            with self.subTest(command=command):
+                self.assertTrue(
+                    self.dockerfile_result(f"RUN {command}\n", discovered_installer_instructions)
+                )
+
+    def test_comment_only_lines_do_not_enter_continued_run(self) -> None:
+        self.assertEqual(
+            self.dockerfile_result(
+                "RUN curl https://vendor.example/tool \\\n"
+                "# https://vendor.example/comment-only \\\n"
+                "    -o /tmp/tool\n",
+                legal_inventory.docker_download_urls,
+            ),
+            ["https://vendor.example/tool"],
+        )
 
     def test_pip_global_options_are_discovered(self) -> None:
         for instruction in (
@@ -494,50 +586,39 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
             source_lock_path.write_text(json.dumps(source_lock), encoding="utf-8")
             (third_party / "BUILD-VERSIONS.env").write_text("TOOL_VERSION=1.0\n", encoding="utf-8")
+            if shutil.which("jq") is None:
+                self.skipTest("jq is required for remote-dev-notices.sh --check")
             environment = os.environ | {
-                "PATH": "/usr/bin:/bin",
+                "REMOTE_DEV_NOTICE_IMAGE_SCOPE": "base",
                 "REMOTE_DEV_NOTICE_ROOT": str(notice_root),
                 "REMOTE_DEV_SYSTEM_DOC_ROOT": str(system_docs),
                 "REMOTE_DEV_INSTALLED_PACKAGES_FILE": str(packages),
             }
             command = ["bash", str(SCRIPTS / "remote-dev-notices.sh"), "--check"]
-            self.assertEqual(subprocess.run(command, env=environment, check=False).returncode, 0)
+            def run_check() -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    command, env=environment, text=True, capture_output=True, check=False
+                )
+
+            self.assertEqual(run_check().returncode, 0)
 
             component_license.write_text("tampered\n", encoding="utf-8")
-            self.assertNotEqual(
-                subprocess.run(
-                    command,
-                    env=environment,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode,
-                0,
-            )
+            result = run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("differs from its locked blob identity", result.stderr)
             component_license.write_text("license\n", encoding="utf-8")
 
             truncated_lock = {"schema_version": 1, "documents": source_lock["documents"][:1]}
             source_lock_path.write_text(json.dumps(truncated_lock), encoding="utf-8")
-            self.assertNotEqual(
-                subprocess.run(
-                    command,
-                    env=environment,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode,
-                0,
-            )
+            result = run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not exactly match inventory source documents", result.stderr)
             source_lock_path.write_text(json.dumps(source_lock), encoding="utf-8")
 
             copyright_path.unlink()
-            self.assertNotEqual(
-                subprocess.run(
-                    command,
-                    env=environment,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode,
-                0,
-            )
+            result = run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("bash/copyright", result.stderr)
 
 
 if __name__ == "__main__":

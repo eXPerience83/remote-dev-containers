@@ -10,7 +10,7 @@ from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, 
 from .io import InventoryError
 
 URL_RE = re.compile(r"https://[^\s\"'<>]+")
-NETWORK_RE = re.compile(COMMAND_PREFIX + r"(?:curl|wget)(?=\s|$)")
+NETWORK_RE = re.compile(COMMAND_PREFIX + r"(?:aria2c|curl|http|httpie|rsync|scp|wget)(?=\s|$)")
 GIT_RE = re.compile(COMMAND_PREFIX + r"git(?=\s|$)")
 GIT_VALUE_OPTIONS = {
     "-c",
@@ -88,9 +88,11 @@ def _network_command(tokens: list[str], path: Path) -> bool:
     if not tokens:
         return False
     executable = executable_name(tokens[0])
-    if executable in {"curl", "wget"}:
+    if executable in {"aria2c", "curl", "http", "httpie", "rsync", "scp", "wget"}:
         return True
-    return executable == "git" and _git_subcommand(tokens, path) == "clone"
+    return executable == "git" and (
+        _git_subcommand(tokens, path) == "clone" or ("lfs" in tokens[1:] and any(x in tokens[1:] for x in {"fetch", "pull"}))
+    )
 
 
 def _interpreter_network_fetch(tokens: list[str]) -> str | None:
@@ -109,6 +111,10 @@ def _interpreter_network_fetch(tokens: list[str]) -> str | None:
         return "Node.js inline network acquisition"
     if executable == "busybox" and len(tokens) > 1 and tokens[1] == "wget":
         return "busybox wget"
+    if executable in {"perl", "ruby", "php"} and "-e" in tokens and re.search(
+        r"(?:https?://|LWP|Net::HTTP|open-uri|file_get_contents|curl_exec)", text, re.I
+    ):
+        return f"{executable} inline network acquisition"
     return None
 
 
@@ -144,6 +150,8 @@ def docker_download_urls(path: Path) -> list[str]:
             if apt_packages_from_command(tokens, path) is not None:
                 continue
             text = " ".join(tokens)
+            if tokens and tokens[0].startswith(("$", "${")):
+                raise InventoryError(f"dynamic executable is unsupported by legal discovery in {path}: {text}")
             interpreter_fetch = _interpreter_network_fetch(tokens)
             if interpreter_fetch is not None:
                 raise InventoryError(f"{interpreter_fetch} is unsupported by legal discovery in {path}: {text}")

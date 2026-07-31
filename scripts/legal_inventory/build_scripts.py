@@ -82,7 +82,9 @@ def _invoked_scripts(root: Path, dockerfile: Path) -> set[Path]:
                 continue
             executable = executable_name(tokens[0])
             candidates: list[str] = []
-            if executable in {"bash", "sh", "dash", "python", "python3"}:
+            if executable in {"source", "."} and len(tokens) > 1:
+                candidates.append(tokens[1])
+            elif executable in {"bash", "sh", "dash", "python", "python3"}:
                 index = 1
                 while index < len(tokens) and tokens[index].startswith("-"):
                     if tokens[index] in {"-c", "-m"}:
@@ -155,12 +157,21 @@ def _acquisition_reason(tokens: list[str]) -> str | None:
     if executable in {"pip", "pip3"} and "install" in tokens[1:]:
         return f"{executable} install"
     if executable.startswith("python"):
-        if "-m" in tokens and "pip" in tokens and "install" in tokens:
+        module: str | None = None
+        code: str | None = None
+        for index, token in enumerate(tokens[1:], 1):
+            if token == "-m" or (token.startswith("-") and not token.startswith("--") and token.endswith("m")):
+                module = tokens[index + 1] if index + 1 < len(tokens) else None
+            elif token.startswith("-m") and len(token) > 2:
+                module = token[2:]
+            if token == "-c" or (token.startswith("-") and not token.startswith("--") and token.endswith("c")):
+                code = tokens[index + 1] if index + 1 < len(tokens) else ""
+            elif token.startswith("-c") and len(token) > 2:
+                code = token[2:]
+        if module == "pip" and "install" in tokens:
             return "python -m pip install"
-        if "-c" in tokens:
-            code = tokens[tokens.index("-c") + 1] if tokens.index("-c") + 1 < len(tokens) else ""
-            if PYTHON_NETWORK_RE.search(code):
-                return "Python inline network acquisition"
+        if code is not None and PYTHON_NETWORK_RE.search(code):
+            return "Python inline network acquisition"
     if executable == "node" and any(option in tokens for option in {"-e", "--eval"}):
         option = "-e" if "-e" in tokens else "--eval"
         code = tokens[tokens.index(option) + 1] if tokens.index(option) + 1 < len(tokens) else ""
