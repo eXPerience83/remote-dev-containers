@@ -46,6 +46,7 @@ NPM_BOOLEAN_OPTIONS = {
     "--audit", "--dry-run", "--force", "--foreground-scripts", "--fund",
     "--ignore-scripts", "--json", "--silent", "--verbose", "--yes", "-y",
 }
+BOOLEAN_VALUES = {"true": True, "false": False}
 # Only options that unambiguously consume the following token belong here.
 # Unknown pre-command options are rejected instead of guessing and potentially
 # treating their value as the npm command.
@@ -86,29 +87,67 @@ def _resolve_npm_command(command: str) -> str | None:
     return _resolve_alias(candidates[0])
 
 
-def _consume_precommand_option(tokens: list[str], index: int, path: Path) -> tuple[int, bool, bool]:
-    """Consume one option before the npm command, or fail closed if ambiguous."""
+def _following_boolean(tokens: list[str], index: int) -> tuple[int, bool | None]:
+    """Consume a separate explicit true/false value when npm accepts one."""
+    if index + 1 >= len(tokens):
+        return index + 1, None
+    value = BOOLEAN_VALUES.get(tokens[index + 1].lower())
+    if value is None:
+        return index + 1, None
+    return index + 2, value
+
+
+def _attached_boolean(token: str, option: str, path: Path) -> bool | None:
+    prefix = option + "="
+    if not token.startswith(prefix):
+        return None
+    raw_value = token[len(prefix):].lower()
+    if raw_value not in BOOLEAN_VALUES:
+        raise InventoryError(f"npm option {option} has invalid Boolean value {raw_value!r} in {path}")
+    return BOOLEAN_VALUES[raw_value]
+
+
+def _consume_option(tokens: list[str], index: int, path: Path) -> tuple[int, bool | None, bool]:
+    """Consume one npm option and return an optional global-mode override."""
     token = tokens[index]
     if token in NPM_TERMINAL_OPTIONS:
-        return index + 1, False, True
-    if token in {"-g", "--global", "--location=global"}:
-        return index + 1, True, False
+        return index + 1, None, True
+
+    if token in {"-g", "--global"}:
+        next_index, explicit = _following_boolean(tokens, index)
+        return next_index, True if explicit is None else explicit, False
+    attached_global = _attached_boolean(token, "--global", path)
+    if attached_global is not None:
+        return index + 1, attached_global, False
+
+    if token == "--location":
+        if index + 1 >= len(tokens):
+            raise InventoryError(f"npm option {token} has no value in {path}")
+        return index + 2, tokens[index + 1] == "global", False
     if token.startswith("--location="):
         return index + 1, token.split("=", 1)[1] == "global", False
+
     if token in NPM_VALUE_OPTIONS:
         if index + 1 >= len(tokens):
             raise InventoryError(f"npm option {token} has no value in {path}")
-        return index + 2, token == "--location" and tokens[index + 1] == "global", False
+        return index + 2, None, False
+
     if token in NPM_BOOLEAN_OPTIONS or token.startswith("--no-"):
-        return index + 1, False, False
+        next_index, _ = _following_boolean(tokens, index)
+        return next_index, None, False
+    if any(token.startswith(option + "=") for option in NPM_BOOLEAN_OPTIONS):
+        option = token.split("=", 1)[0]
+        _attached_boolean(token, option, path)
+        return index + 1, None, False
+
     if token.startswith("--") and "=" in token:
-        return index + 1, False, False
+        return index + 1, None, False
     if token.startswith("-"):
         raise InventoryError(
             f"unsupported npm option before command in {path}: {token}; "
             "classify whether it consumes a value before relying on legal discovery"
         )
-    return index, False, False
+    return index, None, False
 
 
 def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
@@ -139,8 +178,9 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
         if not token.startswith("-"):
             subcommand_index = index
             break
-        index, option_global, terminal_query = _consume_precommand_option(tokens, index, path)
-        global_mode = global_mode or option_global
+        index, global_override, terminal_query = _consume_option(tokens, index, path)
+        if global_override is not None:
+            global_mode = global_override
         if terminal_query:
             return None
 
@@ -153,20 +193,16 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
     index = subcommand_index + 1
     while index < len(tokens):
         token = tokens[index]
-        if token in {"-g", "--global", "--location=global"}:
-            global_mode = True
+        if token == "--":
+            break
+        if not token.startswith("-"):
             index += 1
-        elif token.startswith("--location="):
-            global_mode = token.split("=", 1)[1] == "global"
-            index += 1
-        elif token in NPM_VALUE_OPTIONS:
-            if index + 1 >= len(tokens):
-                raise InventoryError(f"npm option {token} has no value in {path}")
-            if token == "--location":
-                global_mode = tokens[index + 1] == "global"
-            index += 2
-        else:
-            index += 1
+            continue
+        index, global_override, terminal_query = _consume_option(tokens, index, path)
+        if global_override is not None:
+            global_mode = global_override
+        if terminal_query:
+            return None
     return subcommand_index, global_mode
 
 
@@ -191,13 +227,13 @@ def global_npm_specs(dockerfile: Path) -> list[tuple[str, str]]:
             while index < len(tokens):
                 token = tokens[index]
                 if token == "--":
-                    package_tokens.extend(tokens[index + 1 :])
+                    package_tokens.extend(tokens[index + 1:])
                     break
-                if token in NPM_VALUE_OPTIONS:
-                    index += 2
-                    continue
-                if token.startswith("--location=") or token.startswith("-"):
-                    index += 1
+                if token.startswith("-"):
+                    index, _, terminal_query = _consume_option(tokens, index, dockerfile)
+                    if terminal_query:
+                        package_tokens = []
+                        break
                     continue
                 package_tokens.append(token)
                 index += 1
