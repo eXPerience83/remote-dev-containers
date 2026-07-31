@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .docker_parse import COMMAND_PREFIX, docker_instructions, executable_name, run_commands, strip_command_prefix
+from .docker_parse import docker_instructions, executable_name, run_commands, strip_command_prefix
 from .io import InventoryError
 
 PACKAGE_SPEC_RE = re.compile(
@@ -24,7 +24,6 @@ NPM_INSTALL_ALIASES = {
     "isntal",
     "isntall",
 }
-NPM_RE = re.compile(COMMAND_PREFIX + r"npm(?=\s|$)")
 NPM_VALUE_OPTIONS = {
     "--cache",
     "--prefix",
@@ -43,8 +42,12 @@ def _npm_layout(tokens: list[str], path: Path) -> tuple[int, bool] | None:
         return None
     text = " ".join(tokens)
     if executable_name(tokens[0]) != "npm":
-        if NPM_RE.search(text):
-            raise InventoryError(f"unsupported compound shell around an npm command in {path}: {text}")
+        for index, token in enumerate(tokens):
+            if executable_name(token) != "npm":
+                continue
+            nested = _npm_layout(tokens[index:], path)
+            if nested is not None and nested[1]:
+                raise InventoryError(f"unsupported compound shell around a global npm install in {path}: {text}")
         return None
 
     subcommand_index: int | None = None
