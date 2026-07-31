@@ -41,6 +41,32 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             ["https://vendor.example/wrapped"],
         )
 
+    def test_command_substitution_downloads_are_discovered(self) -> None:
+        self.assertEqual(
+            self.dockerfile_result(
+                'RUN token="$(curl https://vendor.example/substituted)"\n',
+                legal_inventory.docker_download_urls,
+            ),
+            ["https://vendor.example/substituted"],
+        )
+        self.assertEqual(
+            self.dockerfile_result(
+                'RUN test "$(npm --version)" = "1.0.0"\n',
+                legal_inventory.global_npm_specs,
+            ),
+            [],
+        )
+
+    def test_docker_instruction_keywords_are_case_insensitive(self) -> None:
+        self.assertEqual(
+            self.dockerfile_result(
+                "run curl https://vendor.example/run -o /tmp/run\n"
+                "aDd https://vendor.example/add /tmp/add\n",
+                legal_inventory.docker_download_urls,
+            ),
+            ["https://vendor.example/add", "https://vendor.example/run"],
+        )
+
     def test_every_apt_install_is_discovered(self) -> None:
         self.assertEqual(
             self.dockerfile_result(
