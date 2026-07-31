@@ -390,6 +390,27 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
                     with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper"):
                         legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
 
+    def test_python_build_helper_import_aliases_fail_closed(self) -> None:
+        helpers = (
+            "import urllib.request as net\nnet.urlopen('https://vendor.example/tool')\n",
+            "from urllib.request import urlopen as fetch\nfetch('https://vendor.example/tool')\n",
+        )
+        for helper in helpers:
+            with self.subTest(helper=helper), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images/base").mkdir(parents=True)
+                (root / "images/codex").mkdir(parents=True)
+                (root / "scripts").mkdir()
+                (root / "scripts/helper.py").write_text(helper, encoding="utf-8")
+                (root / "images/base/Dockerfile").write_text(
+                    "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                    "COPY scripts/helper.py /helper.py\nRUN python3 /helper.py\n",
+                    encoding="utf-8",
+                )
+                (root / "images/codex/Dockerfile").write_text("FROM ${BASE_IMAGE}\n", encoding="utf-8")
+                with self.assertRaisesRegex(legal_inventory.InventoryError, "build helper.*urlopen"):
+                    legal_inventory.validate_discovery(root, {"components": [{"id": "project"}]})
+
     def test_additional_fetch_and_installer_forms_fail_closed(self) -> None:
         attributable_fetches = (
             "rsync https://vendor.example/tool /tmp/tool",

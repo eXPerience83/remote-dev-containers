@@ -209,6 +209,17 @@ def _python_acquisition_reason(text: str) -> str | None:
         "http.client.HTTPConnection",
         "http.client.HTTPSConnection",
     }
+    import_aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for imported in node.names:
+                local_name = imported.asname or imported.name.split(".")[0]
+                import_aliases[local_name] = imported.name if imported.asname else local_name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for imported in node.names:
+                if imported.name == "*":
+                    raise InventoryError("wildcard imports are unsupported in Python build helpers")
+                import_aliases[imported.asname or imported.name] = f"{node.module}.{imported.name}"
 
     def call_name(node: ast.AST) -> str:
         parts: list[str] = []
@@ -217,7 +228,11 @@ def _python_acquisition_reason(text: str) -> str | None:
             node = node.value
         if isinstance(node, ast.Name):
             parts.append(node.id)
-        return ".".join(reversed(parts))
+        name = ".".join(reversed(parts))
+        head, separator, tail = name.partition(".")
+        if head in import_aliases:
+            return import_aliases[head] + (separator + tail if separator else "")
+        return name
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and call_name(node.func) in network_calls:
