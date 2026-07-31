@@ -74,6 +74,38 @@ class LegalDiscoveryHardeningTests(unittest.TestCase):
             ["https://vendor.example/add", "https://vendor.example/run"],
         )
 
+    def test_dynamic_add_sources_fail_closed(self) -> None:
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "variable-based ADD"):
+            self.dockerfile_result(
+                "ARG TOOL_URL\nADD ${TOOL_URL} /usr/local/bin/tool\n",
+                legal_inventory.docker_download_urls,
+            )
+
+    def test_external_build_stages_fail_closed(self) -> None:
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "external FROM image"):
+            self.dockerfile_result(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "FROM vendor/tool:1.0 AS tool\n"
+                "COPY --from=tool /usr/local/bin/tool /usr/local/bin/tool\n",
+                legal_inventory.docker_download_urls,
+            )
+
+        self.assertEqual(
+            self.dockerfile_result(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST} AS builder\n"
+                "FROM builder AS final\n"
+                "COPY --from=builder /tool /usr/local/bin/tool\n",
+                legal_inventory.docker_download_urls,
+            ),
+            [],
+        )
+        with self.assertRaisesRegex(legal_inventory.InventoryError, "external COPY --from"):
+            self.dockerfile_result(
+                "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}\n"
+                "COPY --from=vendor/tool:1.0 /tool /usr/local/bin/tool\n",
+                legal_inventory.docker_download_urls,
+            )
+
     def test_every_apt_install_is_discovered(self) -> None:
         self.assertEqual(
             self.dockerfile_result(

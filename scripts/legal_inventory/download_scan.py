@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 from .apt_scan import apt_packages_from_command
@@ -20,6 +21,46 @@ GIT_VALUE_OPTIONS = {
     "--namespace",
     "--config-env",
 }
+ALLOWED_BASE_IMAGES = {
+    "ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}",
+    "${BASE_IMAGE}",
+}
+
+
+def _validate_image_sources(instructions: list[str], path: Path) -> None:
+    """Reject external build stages that bypass the component inventory."""
+    stages: set[str] = set()
+    for instruction in instructions:
+        from_payload = instruction_payload(instruction, "FROM")
+        if from_payload is not None:
+            try:
+                tokens = shlex.split(from_payload)
+            except ValueError as exc:
+                raise InventoryError(f"cannot parse FROM instruction in {path}: {from_payload}") from exc
+            while tokens and tokens[0].startswith("--"):
+                tokens.pop(0)
+            if not tokens:
+                raise InventoryError(f"FROM instruction has no image in {path}: {from_payload}")
+            image = tokens[0]
+            if image not in ALLOWED_BASE_IMAGES and image not in stages:
+                raise InventoryError(
+                    f"external FROM image is not covered by legal discovery in {path}: {image}; "
+                    "inventory the image explicitly before copying or redistributing its contents"
+                )
+            if len(tokens) >= 3 and tokens[-2].upper() == "AS":
+                stages.add(tokens[-1])
+
+        copy_payload = instruction_payload(instruction, "COPY")
+        if copy_payload is None:
+            continue
+        match = re.search(r"(?:^|\s)--from(?:=|\s+)([^\s]+)", copy_payload)
+        if match is None:
+            continue
+        source = match.group(1)
+        if source not in stages and not source.isdigit():
+            raise InventoryError(
+                f"external COPY --from source is not covered by legal discovery in {path}: {source}"
+            )
 
 
 def _git_subcommand(tokens: list[str], path: Path) -> str | None:
@@ -70,9 +111,15 @@ def _contains_hidden_fetch(tokens: list[str], path: Path) -> bool:
 def docker_download_urls(path: Path) -> list[str]:
     """Return literal HTTPS sources or reject unparsed fetch forms."""
     urls: set[str] = set()
-    for instruction in docker_instructions(path):
+    instructions = docker_instructions(path)
+    _validate_image_sources(instructions, path)
+    for instruction in instructions:
         add_payload = instruction_payload(instruction, "ADD")
         if add_payload is not None:
+            if "$" in add_payload:
+                raise InventoryError(
+                    f"variable-based ADD sources are unsupported by legal discovery in {path}: {add_payload}"
+                )
             urls.update(match.group(0).rstrip("),.;") for match in URL_RE.finditer(add_payload))
         for tokens in run_commands(instruction, path):
             if apt_packages_from_command(tokens, path) is not None:
