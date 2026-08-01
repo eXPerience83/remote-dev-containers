@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "python_version": "3.14.6",
+  "target_triple": "x86_64-unknown-linux-gnu",
+  "implementation_licenses": [
+    "CNRI-Python",
+    "Python-2.0"
+  ],
+  "implementation_license_path": "licenses/LICENSE.cpython.txt",
+  "referenced_license_paths": [
+    "licenses/LICENSE.bdb.txt",
+    "licenses/LICENSE.bzip2.txt",
+    "licenses/LICENSE.cpython.txt",
+    "licenses/LICENSE.expat.txt",
+    "licenses/LICENSE.libX11.txt",
+    "licenses/LICENSE.libXau.txt",
+    "licenses/LICENSE.libedit.txt",
+    "licenses/LICENSE.libffi.txt",
+    "licenses/LICENSE.liblzma.txt",
+    "licenses/LICENSE.libuuid.txt",
+    "licenses/LICENSE.libxcb.txt",
+    "licenses/LICENSE.mpdecimal.txt",
+    "licenses/LICENSE.ncurses.txt",
+    "licenses/LICENSE.openssl-1.1.txt",
+    "licenses/LICENSE.openssl-3.txt",
+    "licenses/LICENSE.sqlite.txt",
+    "licenses/LICENSE.tcl.txt",
+    "licenses/LICENSE.zlib-ng.txt",
+    "licenses/LICENSE.zlib.txt",
+    "licenses/LICENSE.zstd.txt"
+  ],
+  "extensions": {
+    "_bz2": [
+      {
+        "licenses": ["bzip2-1.0.6"],
+        "license_paths": ["licenses/LICENSE.bzip2.txt"]
+      }
+    ],
+    "_ctypes": [
+      {
+        "licenses": ["MIT"],
+        "license_paths": ["licenses/LICENSE.libffi.txt"]
+      }
+    ],
+    "_curses": [
+      {
+        "licenses": ["X11"],
+        "license_paths": ["licenses/LICENSE.ncurses.txt"]
+      }
+    ],
+    "_curses_panel": [
+      {
+        "licenses": ["X11"],
+        "license_paths": ["licenses/LICENSE.ncurses.txt"]
+      }
+    ],
+    "_dbm": [
+      {
+        "licenses": ["Sleepycat"],
+        "license_paths": ["licenses/LICENSE.bdb.txt"]
+      }
+    ],
+    "_decimal": [
+      {
+        "licenses": ["BSD-2-Clause"],
+        "license_paths": ["licenses/LICENSE.mpdecimal.txt"]
+      }
+    ],
+    "_elementtree": [
+      {
+        "licenses": ["MIT"],
+        "license_paths": ["licenses/LICENSE.expat.txt"]
+      }
+    ],
+    "_hashlib": [
+      {
+        "licenses": ["Apache-2.0", "OpenSSL"],
+        "license_paths": [
+          "licenses/LICENSE.openssl-1.1.txt",
+          "licenses/LICENSE.openssl-3.txt"
+        ]
+      }
+    ],
+    "_lzma": [
+      {
+        "licenses": ["0BSD"],
+        "license_paths": ["licenses/LICENSE.liblzma.txt"]
+      }
+    ],
+    "_sqlite3": [
+      {
+        "licenses": [],
+        "license_paths": ["licenses/LICENSE.sqlite.txt"]
+      }
+    ],
+    "_ssl": [
+      {
+        "licenses": ["Apache-2.0", "OpenSSL"],
+        "license_paths": [
+          "licenses/LICENSE.openssl-1.1.txt",
+          "licenses/LICENSE.openssl-3.txt"
+        ]
+      }
+    ],
+    "_tkinter": [
+      {
+        "licenses": ["MIT", "TCL", "X11"],
+        "license_paths": [
+          "licenses/LICENSE.libX11.txt",
+          "licenses/LICENSE.libXau.txt",
+          "licenses/LICENSE.libxcb.txt",
+          "licenses/LICENSE.tcl.txt"
+        ]
+      }
+    ],
+    "_uuid": [
+      {
+        "licenses": ["BSD-3-Clause"],
+        "license_paths": ["licenses/LICENSE.libuuid.txt"]
+      }
+    ],
+    "_zstd": [
+      {
+        "licenses": ["BSD-3-Clause"],
+        "license_paths": ["licenses/LICENSE.zstd.txt"]
+      }
+    ],
+    "pyexpat": [
+      {
+        "licenses": ["MIT"],
+        "license_paths": ["licenses/LICENSE.expat.txt"]
+      }
+    ],
+    "readline": [
+      {
+        "licenses": ["BSD-3-Clause", "X11"],
+        "license_paths": [
+          "licenses/LICENSE.libedit.txt",
+          "licenses/LICENSE.ncurses.txt"
+        ]
+      }
+    ],
+    "zlib": [
+      {
+        "licenses": ["Zlib"],
+        "license_paths": [
+          "licenses/LICENSE.zlib-ng.txt",
+          "licenses/LICENSE.zlib.txt"
+        ]
+      }
+    ]
+  }
+}
