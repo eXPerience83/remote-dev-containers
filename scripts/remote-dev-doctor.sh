@@ -26,23 +26,50 @@ Remote Dev diagnostics
 Role: $role
 User: $(id)
 Home: ${HOME:-unset}
-Workspace: ${WORKSPACE:-unset}
-GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_HEADER
 
-if [[ "$role" == codex ]]; then
-  echo "Codex home: ${CODEX_HOME:-unset}"
+if [[ "$role" == launcher ]]; then
+  cat <<EOF_LAUNCHER
+Web bind: ${WEB_BIND:-0.0.0.0}
+Web port: ${WEB_PORT:-7680}
+Web base path: ${WEB_BASE_PATH:-/}
+Codex route host: ${REMOTE_DEV_LAUNCHER_CODEX_HOST:-browser hostname}
+Codex route port: ${REMOTE_DEV_LAUNCHER_CODEX_PORT:-7681}
+Codex route scheme: ${REMOTE_DEV_LAUNCHER_CODEX_SCHEME:-browser scheme}
+Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
+Available roles: launcher, codex
+EOF_LAUNCHER
+else
+  cat <<EOF_AGENT
+Workspace: ${WORKSPACE:-unset}
+GitHub config: ${GH_CONFIG_DIR:-unset}
+EOF_AGENT
+  if [[ "$role" == codex ]]; then
+    echo "Codex home: ${CODEX_HOME:-unset}"
+  fi
 fi
 
 echo
-common_commands=(
-  start-remote-dev-web
-  attach-remote-dev-tmux
-  remote-dev-menu
-  remote-dev-doctor
-  remote-dev-version
-  gh git python node npm uv mise ttyd tmux ssh rg fd
-)
+if [[ "$role" == launcher ]]; then
+  common_commands=(
+    start-remote-dev-web
+    remote-dev-launcher
+    remote-dev-healthcheck
+    remote-dev-doctor
+    remote-dev-version
+    python curl
+  )
+else
+  common_commands=(
+    start-remote-dev-web
+    attach-remote-dev-tmux
+    remote-dev-menu
+    remote-dev-healthcheck
+    remote-dev-doctor
+    remote-dev-version
+    gh git python node npm uv mise ttyd tmux ssh rg fd
+  )
+fi
 for cmd in "${common_commands[@]}"; do
   check_cmd "$cmd"
 done
@@ -59,10 +86,15 @@ else
   remote-dev-version 2>/dev/null || true
   status=1
 fi
-gh --version 2>/dev/null | head -n 1 || true
-python --version 2>/dev/null || true
-node --version 2>/dev/null || true
-uv --version 2>/dev/null || true
+
+if [[ "$role" == launcher ]]; then
+  echo 'Launcher state boundary: no agent workspace or credential mounts are required.'
+else
+  gh --version 2>/dev/null | head -n 1 || true
+  python --version 2>/dev/null || true
+  node --version 2>/dev/null || true
+  uv --version 2>/dev/null || true
+fi
 
 if [[ "$role" == codex ]]; then
   echo
@@ -88,29 +120,31 @@ if [[ "$role" == codex ]]; then
   fi
 fi
 
-printf 'GitHub auth: '
-if gh auth status >/dev/null 2>&1; then
-  echo OK
-else
-  echo 'not authenticated'
-fi
-
-writable_paths=(
-  "${WORKSPACE:-/workspace}"
-  "${GH_CONFIG_DIR:-/root/.config/gh}"
-)
-if [[ "$role" == codex ]]; then
-  writable_paths+=("${CODEX_HOME:-/root/.codex}")
-fi
-for path in "${writable_paths[@]}"; do
-  printf 'Writable %-38s ' "$path"
-  if [[ -d "$path" && -w "$path" ]]; then
+if [[ "$role" != launcher ]]; then
+  printf 'GitHub auth: '
+  if gh auth status >/dev/null 2>&1; then
     echo OK
   else
-    echo NO
-    status=1
+    echo 'not authenticated'
   fi
-done
+
+  writable_paths=(
+    "${WORKSPACE:-/workspace}"
+    "${GH_CONFIG_DIR:-/root/.config/gh}"
+  )
+  if [[ "$role" == codex ]]; then
+    writable_paths+=("${CODEX_HOME:-/root/.codex}")
+  fi
+  for path in "${writable_paths[@]}"; do
+    printf 'Writable %-38s ' "$path"
+    if [[ -d "$path" && -w "$path" ]]; then
+      echo OK
+    else
+      echo NO
+      status=1
+    fi
+  done
+fi
 
 if [[ -S /var/run/docker.sock ]]; then
   echo 'WARNING: /var/run/docker.sock is mounted. This is not supported.'
