@@ -34,7 +34,7 @@
       "groupName": "Ubuntu LTS base"
     },
     {
-      "description": "Runtime pins are updated atomically by check-upstream.yml",
+      "description": "Runtime pins, digests, locks and legal notices are updated atomically by check-upstream.yml",
       "matchManagers": [
         "mise"
       ],
