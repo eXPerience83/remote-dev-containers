@@ -1,0 +1,39 @@
+name: Inspect standalone artifacts
+
+on:
+  pull_request:
+    paths:
+      - .github/scripts/inspect-standalone-artifacts.py
+      - .github/workflows/inspect-standalone-artifacts.yml
+      - versions.env
+      - mise.lock
+      - third_party/components/**
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    if: github.head_ref == 'legal/standalone-artifact-inspection'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - name: Inspect exact assets
+        run: python3 .github/scripts/inspect-standalone-artifacts.py
+      - name: Commit report
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            third_party/standalone-artifact-inspection.json \
+            third_party/standalone-artifact-inspection.md
+          if git diff --cached --quiet; then
+            echo "Inspection report is already current."
+          else
+            git commit -m "legal: record standalone artifact inspection"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
