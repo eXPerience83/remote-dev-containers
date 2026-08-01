@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.26.0@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
-ARG BASE_IMAGE=codex-remote-dev-base:local
+ARG BASE_IMAGE=remote-dev-base:local
 FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
@@ -9,8 +9,8 @@ ARG CODEX_ARM64_SHA256=975bac91562abeedeb8f79636d51a86649b31f34a9de6a3bcb059565b
 ARG PROJECT_VERSION=0.1.0-dev
 ARG SOURCE_REVISION=local-untracked
 
-LABEL org.opencontainers.image.title="Codex Remote Dev" \
-      org.opencontainers.image.description="Community browser-hosted Codex CLI development container" \
+LABEL org.opencontainers.image.title="Remote Dev" \
+      org.opencontainers.image.description="Community browser-hosted remote development runtime with a built-in Codex reference role" \
       org.opencontainers.image.version="${PROJECT_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md" \
