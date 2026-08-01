@@ -237,7 +237,7 @@ assert_invalid_mode() {
     echo "ERROR: $label invoked Codex despite invalid project-owned policy input" >&2
     exit 1
   fi
-  if ! grep -Fq "$expected_text" "$error_file"; then
+  if ! grep -Fq -- "$expected_text" "$error_file"; then
     printf 'ERROR: %s did not report %q\n' "$label" "$expected_text" >&2
     cat "$error_file" >&2 || true
     exit 1
