@@ -69,6 +69,21 @@ status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
+non_ascii_basic="$(printf 'rémote:wrong' | base64 -w 0)"
+status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header "Authorization: Basic ${non_ascii_basic}" \
+  "$base_url/launcher/")"
+[[ "$status" == 401 ]] || {
+  echo "ERROR: non-ASCII launcher credentials returned $status instead of 401" >&2
+  cat "$log_file" >&2
+  exit 1
+}
+kill -0 "$launcher_pid" 2>/dev/null || {
+  echo 'ERROR: malformed credentials crashed the launcher' >&2
+  cat "$log_file" >&2
+  exit 1
+}
+
 status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --user "remote-dev:${secret}" \
   --header 'Origin: http://example.invalid' \
