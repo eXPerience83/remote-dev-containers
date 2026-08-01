@@ -22,6 +22,7 @@ Stack Remote Dev
 - El launcher es la entrada normal desde el navegador.
 - Codex sigue ejecutándose en su propio contenedor con sus montajes privados actuales.
 - Docker reutiliza la misma imagen y sus mismas capas para ambos servicios.
+- El launcher y el terminal Codex utilizan secretos de contraseña distintos.
 - La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
 - AMD64 continúa siendo la arquitectura inicial.
 
@@ -53,11 +54,11 @@ El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOT
 
 La página del launcher utiliza autenticación HTTP Basic, comprueba el origen cuando el navegador envía la cabecera `Origin` y aplica una política CSP restrictiva. Solo muestra el servicio Codex soportado y la identidad de la imagen instalada.
 
-Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no actúa como proxy, no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, las credenciales de Codex, GitHub, Git ni SSH.
+Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no actúa como proxy, no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH ni la contraseña del terminal.
 
-El terminal Codex se autentica de manera independiente. Es normal que el navegador solicite autenticación una segunda vez después de entrar en el launcher. Las credenciales no se incluyen en el enlace ni se transmiten mediante el launcher.
+El terminal Codex se autentica de manera independiente mediante otro secreto. Es normal que el navegador solicite autenticación una segunda vez después de entrar en el launcher. Las credenciales no se incluyen en el enlace, no se transmiten mediante el launcher y no se comparten entre los servicios.
 
-Esta fase todavía no cambia las rutas persistentes actuales, no migra `CODEX_DATA_ROOT`, no añade Antigravity/Claude y no incorpora un proxy de origen único.
+Las rutas configuradas se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Esta fase todavía no cambia las rutas persistentes actuales, no migra `CODEX_DATA_ROOT`, no añade Antigravity/Claude y no incorpora un proxy de origen único.
 
 ### Modos de aprobación de Codex
 
@@ -81,7 +82,7 @@ Los valores desconocidos y los flags directos de sandbox/aprobación se rechazan
 
 ## Aislamiento en TrueNAS
 
-El launcher y Codex son contenedores separados. El launcher solo recibe la configuración de navegación y el secreto de autenticación web. Codex conserva sus montajes privados actuales.
+El launcher y Codex son contenedores separados. El launcher solo recibe su configuración de navegación y su propio secreto de autenticación. Codex conserva sus montajes privados actuales y otro secreto para el terminal.
 
 La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
 
@@ -104,10 +105,13 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 ```bash
 cp .env.example .env
 mkdir -p secrets data/{workspace,codex,gh,git,ssh}
-printf '%s\n' 'sustituir-por-una-contraseña-larga' > secrets/web_password.txt
-chmod 600 secrets/web_password.txt
+printf '%s\n' 'contraseña-distinta-del-launcher' > secrets/launcher_password.txt
+printf '%s\n' 'contraseña-distinta-de-codex' > secrets/web_password.txt
+chmod 600 secrets/launcher_password.txt secrets/web_password.txt
 ./scripts/build-local.sh
 ```
+
+Utiliza contraseñas diferentes: el launcher no debe poder acceder al terminal leyendo su propio secreto.
 
 Define `REMOTE_DEV_IMAGE=remote-dev:local` y ejecuta:
 
@@ -116,12 +120,10 @@ docker compose -f compose/docker-compose.yml up -d
 ```
 
 1. Abre el launcher en el puerto publicado `7680`.
-2. Autentícate con `LAUNCHER_USERNAME` —por defecto `remote-dev`—.
+2. Autentícate con `LAUNCHER_USERNAME` —por defecto `remote-dev`— y la contraseña de `launcher_password.txt`.
 3. Pulsa Codex.
-4. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`—.
+4. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
 5. Desde el menú realiza el login de Codex/GitHub, inicia o reanuda sesiones y ejecuta diagnósticos.
-
-Los dos servicios leen por defecto el mismo archivo de contraseña montado, aunque utilizan nombres de usuario distintos.
 
 ## Prueba pública de la imagen edge
 
@@ -148,7 +150,8 @@ ghcr.io/experience83/remote-dev@sha256:<digest>
 ## Advertencias importantes
 
 - No expongas los puertos 7680 o 7681 directamente a Internet.
-- El launcher y Codex se autentican por separado.
+- El launcher y Codex se autentican por separado y con secretos distintos.
+- El launcher no monta, reenvía ni incluye en la URL la contraseña de Codex.
 - El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
 - No montes workspaces ni credenciales de agente en el launcher.
 - No montes el socket Docker ni uses modo privilegiado.
