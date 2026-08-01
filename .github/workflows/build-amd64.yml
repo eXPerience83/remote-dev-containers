@@ -23,9 +23,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Refresh standalone artifact evidence for branch validation
-        run: python3 scripts/sync-standalone-artifact-inspection.py
-
       - name: Validate repository configuration
         run: |
           while IFS= read -r -d '' script; do
