@@ -29,6 +29,7 @@ jobs:
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
           bash scripts/validate-version-pins.sh
+          bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
           for file in compose/*.yml; do
@@ -38,6 +39,27 @@ jobs:
 
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
+
+      - name: Verify bundled notices
+        run: |
+          docker run --rm --entrypoint remote-dev-notices \
+            codex-remote-dev-base:local --check
+          docker run --rm --entrypoint remote-dev-notices \
+            codex-remote-dev:local --check
+
+      - name: Generate base image SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev-base:local
+          format: spdx-json
+          output: sbom-base.spdx.json
+
+      - name: Generate Codex image SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: codex-remote-dev:local
+          format: spdx-json
+          output: sbom-codex.spdx.json
 
       - name: Scan base image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -61,12 +83,14 @@ jobs:
           severity: CRITICAL
           exit-code: "0"
 
-      - name: Upload vulnerability scan reports
+      - name: Upload security and SBOM reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: trivy-reports
+          name: security-and-sbom-reports
           path: |
+            sbom-base.spdx.json
+            sbom-codex.spdx.json
             trivy-base.json
             trivy-codex.json
           if-no-files-found: warn

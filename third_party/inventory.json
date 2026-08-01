@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-07-31",
+  "policy": {
+    "source_of_truth": "versions.env",
+    "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
+    "discovery_boundary": "This inventory is declarative. It does not attempt to parse arbitrary Docker or shell installation syntax."
+  },
+  "components": [
+    {
+      "id": "ubuntu-base",
+      "name": "Ubuntu base image",
+      "image_scope": "both",
+      "version_key": "UBUNTU_VERSION",
+      "version": "26.04",
+      "source": "https://hub.docker.com/_/ubuntu",
+      "license": "Multiple upstream licenses",
+      "notices": [
+        {
+          "path": "/usr/share/doc/<package>/copyright",
+          "source": "system"
+        }
+      ]
+    },
+    {
+      "id": "ubuntu-apt",
+      "name": "APT-installed Ubuntu packages",
+      "image_scope": "both",
+      "version": "resolved by the Ubuntu package database at build time",
+      "source": "Ubuntu archives and each package upstream",
+      "license": "Multiple upstream licenses",
+      "notices": [
+        {
+          "path": "/usr/share/doc/<package>/copyright",
+          "source": "system"
+        }
+      ]
+    },
+    {
+      "id": "github-cli",
+      "name": "GitHub CLI",
+      "image_scope": "both",
+      "version_key": "GH_VERSION",
+      "version": "2.96.0",
+      "source": "https://github.com/cli/cli",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/github-cli/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.96.0/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "ttyd",
+      "name": "ttyd",
+      "image_scope": "both",
+      "version_key": "TTYD_VERSION",
+      "version": "1.7.7",
+      "source": "https://github.com/tsl0922/ttyd",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/ttyd/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/tsl0922/ttyd/1.7.7/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "mise",
+      "name": "mise",
+      "image_scope": "both",
+      "version_key": "MISE_VERSION",
+      "version": "2026.7.17",
+      "source": "https://github.com/jdx/mise",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/mise/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.7.17/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "python-runtime",
+      "name": "Python runtime",
+      "image_scope": "both",
+      "version_key": "PYTHON_VERSION",
+      "version": "3.14.6",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "license": "Python-2.0 plus bundled dependency terms",
+      "notices": [
+        {
+          "path": "components/python/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/python/cpython/v3.14.6/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "node-runtime",
+      "name": "Node.js runtime",
+      "image_scope": "both",
+      "version_key": "NODE_VERSION",
+      "version": "24.18.1",
+      "source": "https://github.com/nodejs/node",
+      "license": "MIT plus third-party terms in the runtime LICENSE",
+      "notices": [
+        {
+          "path": "runtime/node/",
+          "source": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "npm-cli",
+      "name": "npm CLI and bundled dependencies",
+      "image_scope": "both",
+      "version_key": "NPM_VERSION",
+      "version": "12.0.2",
+      "source": "https://github.com/npm/cli",
+      "license": "Artistic-2.0 plus dependency-specific terms",
+      "notices": [
+        {
+          "path": "runtime/npm/",
+          "source": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "uv",
+      "name": "uv",
+      "image_scope": "both",
+      "version_key": "UV_VERSION",
+      "version": "0.12.0",
+      "source": "https://github.com/astral-sh/uv",
+      "license": "Apache-2.0 OR MIT",
+      "notices": [
+        {
+          "path": "components/uv/LICENSE-APACHE-2.0",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.0/LICENSE-APACHE"
+        },
+        {
+          "path": "components/uv/LICENSE-MIT",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.0/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "id": "codex-cli",
+      "name": "OpenAI Codex CLI",
+      "image_scope": "final",
+      "version_key": "CODEX_RELEASE_TAG",
+      "version": "rust-v0.146.0",
+      "source": "https://github.com/openai/codex",
+      "license": "Apache-2.0",
+      "notices": [
+        {
+          "path": "components/codex/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/LICENSE"
+        },
+        {
+          "path": "components/codex/NOTICE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/NOTICE"
+        }
+      ]
+    }
+  ]
+}
