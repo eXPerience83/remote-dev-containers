@@ -28,6 +28,8 @@ jobs:
           while IFS= read -r -d '' script; do
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
+          python3 -m py_compile scripts/update-third-party-inventory.py
+          python3 scripts/update-third-party-inventory.py --check
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
