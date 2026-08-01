@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Committed mise runtime configuration and lock data for Linux AMD64 and ARM64, plus validation and a documented regeneration helper.
 - Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
 - A single `run-codex` launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
+- Canonical `start-remote-dev-web`, `remote-dev-menu` and `remote-dev-doctor` commands with validated `REMOTE_DEV_ROLE=codex|shell` and neutral `REMOTE_DEV_START_MODE=menu|agent|shell` resolution.
 
 ### Changed
 
@@ -51,6 +52,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Extended upstream automation to regenerate and review the mise lock whenever runtime versions or resolved artifacts change.
 - Updated the pinned stable releases to Codex CLI `0.146.0`, mise `2026.7.16` and uv `0.12.0`, and refreshed the locked Python 3.14.6 artifacts.
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
+- Changed `start-codex-web`, `codex-menu` and `codex-doctor` into compatibility wrappers around the canonical role-neutral implementation while retaining legacy `START_MODE=menu|codex|shell` behavior.
+- Limited persistent-state hardening for `REMOTE_DEV_ROLE=shell` to common GitHub, Git and SSH state so that the neutral shell role does not inspect or modify Codex state.
 
 ### Security
 
