@@ -74,7 +74,7 @@ check_notices() {
 
   while IFS=$'\t' read -r source relative; do
     case "$source" in
-      repository|runtime)
+      repository|artifact|runtime)
         path="$third_party_root/$relative"
         if [[ "$relative" == */ ]]; then
           require_directory "$path" || failed=1
