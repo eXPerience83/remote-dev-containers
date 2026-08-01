@@ -109,6 +109,8 @@ jobs:
           while IFS= read -r -d '' script; do
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
+          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
+            bash scripts/test-image-name-compat.sh
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
@@ -124,10 +126,10 @@ jobs:
           SOURCE_REVISION: ${{ steps.pr.outputs.head_sha }}
         run: ./scripts/build-local.sh
 
-      - name: Export candidate images
+      - name: Export canonical candidate images
         run: |
           set -euo pipefail
-          docker save codex-remote-dev-base:local codex-remote-dev:local \
+          docker save remote-dev-base:local remote-dev:local \
             | gzip -1 > candidate-images.tar.gz
 
       - name: Upload candidate image artifact
@@ -188,7 +190,7 @@ jobs:
           EXPECTED_VERSION: candidate-pr-${{ needs.build.outputs.pr_number }}
         run: |
           set -euo pipefail
-          output="$(docker run --rm --entrypoint /usr/local/bin/remote-dev-version codex-remote-dev:local)"
+          output="$(docker run --rm --entrypoint /usr/local/bin/remote-dev-version remote-dev:local)"
           grep -Fxq "Image version: $EXPECTED_VERSION" <<<"$output"
           grep -Fxq "Source revision: $EXPECTED_SOURCE" <<<"$output"
 
@@ -201,7 +203,7 @@ jobs:
       - name: Scan base image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev-base:local
+          image-ref: remote-dev-base:local
           format: json
           output: trivy-candidate-base.json
           scanners: vuln
@@ -212,9 +214,9 @@ jobs:
       - name: Scan final image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev:local
+          image-ref: remote-dev:local
           format: json
-          output: trivy-candidate-final.json
+          output: trivy-candidate-remote-dev.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -225,7 +227,7 @@ jobs:
           set -euo pipefail
           bash scripts/enforce-trivy-gate.sh \
             "candidate base image:trivy-candidate-base.json" \
-            "candidate final image:trivy-candidate-final.json"
+            "candidate Remote Dev image:trivy-candidate-remote-dev.json"
 
       - name: Upload candidate vulnerability reports
         if: always()
@@ -234,7 +236,7 @@ jobs:
           name: candidate-trivy-pr-${{ needs.build.outputs.pr_number }}-${{ needs.build.outputs.short_sha }}
           path: |
             trivy-candidate-base.json
-            trivy-candidate-final.json
+            trivy-candidate-remote-dev.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -294,7 +296,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Publish the candidate under an isolated tag
+      - name: Publish the candidate under the canonical package
         id: image
         env:
           PR_NUMBER: ${{ needs.build.outputs.pr_number }}
@@ -303,11 +305,11 @@ jobs:
         run: |
           set -euo pipefail
           namespace="${GITHUB_REPOSITORY_OWNER,,}"
-          image="ghcr.io/${namespace}/codex-remote-dev"
+          image="ghcr.io/${namespace}/remote-dev"
           tag="candidate-pr-${PR_NUMBER}-${SHORT_SHA}"
           ref="${image}:${tag}"
 
-          docker tag codex-remote-dev:local "$ref"
+          docker tag remote-dev:local "$ref"
           docker push "$ref"
 
           digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
