@@ -47,6 +47,8 @@ jobs:
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
           python3 scripts/validate-standalone-artifact-inspection.py
+          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
+            bash scripts/test-image-name-compat.sh
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
@@ -59,31 +61,41 @@ jobs:
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
 
+      - name: Verify canonical and legacy local aliases
+        run: |
+          set -euo pipefail
+          canonical_base="$(docker image inspect remote-dev-base:local --format '{{.Id}}')"
+          legacy_base="$(docker image inspect codex-remote-dev-base:local --format '{{.Id}}')"
+          canonical_runtime="$(docker image inspect remote-dev:local --format '{{.Id}}')"
+          legacy_runtime="$(docker image inspect codex-remote-dev:local --format '{{.Id}}')"
+          test "$canonical_base" = "$legacy_base"
+          test "$canonical_runtime" = "$legacy_runtime"
+
       - name: Verify bundled notices
         run: |
           docker run --rm --entrypoint remote-dev-notices \
-            codex-remote-dev-base:local --check
+            remote-dev-base:local --check
           docker run --rm --entrypoint remote-dev-notices \
-            codex-remote-dev:local --check
+            remote-dev:local --check
 
       - name: Generate base image SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev-base:local
+          image-ref: remote-dev-base:local
           format: spdx-json
           output: sbom-base.spdx.json
 
-      - name: Generate Codex image SPDX SBOM
+      - name: Generate Remote Dev image SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev:local
+          image-ref: remote-dev:local
           format: spdx-json
-          output: sbom-codex.spdx.json
+          output: sbom-remote-dev.spdx.json
 
       - name: Scan base image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev-base:local
+          image-ref: remote-dev-base:local
           format: json
           output: trivy-base.json
           scanners: vuln
@@ -91,12 +103,12 @@ jobs:
           severity: CRITICAL
           exit-code: "0"
 
-      - name: Scan Codex image for critical vulnerabilities
+      - name: Scan Remote Dev image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: codex-remote-dev:local
+          image-ref: remote-dev:local
           format: json
-          output: trivy-codex.json
+          output: trivy-remote-dev.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -109,9 +121,9 @@ jobs:
           name: security-and-sbom-reports
           path: |
             sbom-base.spdx.json
-            sbom-codex.spdx.json
+            sbom-remote-dev.spdx.json
             trivy-base.json
-            trivy-codex.json
+            trivy-remote-dev.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -119,4 +131,4 @@ jobs:
         run: |
           bash scripts/enforce-trivy-gate.sh \
             "base image:trivy-base.json" \
-            "Codex image:trivy-codex.json"
+            "Remote Dev image:trivy-remote-dev.json"
