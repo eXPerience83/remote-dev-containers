@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import tarfile
 import tempfile
@@ -277,9 +276,6 @@ def download_verified(url: str, expected_sha256: str, destination: Path) -> None
     if not url.startswith("https://github.com/"):
         fail(f"refusing non-GitHub standalone asset URL: {url}")
     headers = {"User-Agent": "remote-dev-containers-standalone-inspection"}
-    token = os.environ.get("GH_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
     last_error: Exception | None = None
     for attempt in range(1, 4):
         digest = hashlib.sha256()
