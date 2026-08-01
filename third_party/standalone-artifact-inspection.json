@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "scope": "Exact amd64 and arm64 standalone assets distributed by the current images",
+  "components": [
+    {
+      "id": "github-cli",
+      "version": "2.97.0",
+      "packaging": "tar.gz",
+      "repository_notices": [
+        {
+          "path": "third_party/components/github-cli/LICENSE",
+          "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
+          "size": 1068
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "amd64": {
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_linux_amd64.tar.gz",
+          "asset_sha256": "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112",
+          "asset_size": 14770812,
+          "archive_member_count": 231,
+          "legal_members": [
+            {
+              "path": "gh_2.97.0_linux_amd64/LICENSE",
+              "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
+              "size": 1068,
+              "matches_repository_notice": "third_party/components/github-cli/LICENSE"
+            }
+          ]
+        },
+        "arm64": {
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_linux_arm64.tar.gz",
+          "asset_sha256": "73ea440ecad9c9e284429997ee6f93577bc6f7bc6fba357ef62c53ad8fb641a5",
+          "asset_size": 13428558,
+          "archive_member_count": 231,
+          "legal_members": [
+            {
+              "path": "gh_2.97.0_linux_arm64/LICENSE",
+              "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
+              "size": 1068,
+              "matches_repository_notice": "third_party/components/github-cli/LICENSE"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "codex-cli",
+      "version": "rust-v0.146.0",
+      "packaging": "tar.gz",
+      "repository_notices": [
+        {
+          "path": "third_party/components/codex/LICENSE",
+          "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+          "size": 10926
+        },
+        {
+          "path": "third_party/components/codex/NOTICE",
+          "sha256": "3ce7450e8b97d94d27b8c99175b21f86bd786cea3620e5d6b5a7c41e7ed35cee",
+          "size": 240
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "amd64": {
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.0/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "5ba3b9405543953081f661d0854d266f76e2abbe51d41349355a36de7673776a",
+          "asset_size": 114169492,
+          "archive_member_count": 1,
+          "legal_members": []
+        },
+        "arm64": {
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.0/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "975bac91562abeedeb8f79636d51a86649b31f34a9de6a3bcb059565b6cf1f87",
+          "asset_size": 105630444,
+          "archive_member_count": 1,
+          "legal_members": []
+        }
+      }
+    },
+    {
+      "id": "ttyd",
+      "version": "1.7.7",
+      "packaging": "raw-binary",
+      "repository_notices": [
+        {
+          "path": "third_party/components/ttyd/LICENSE",
+          "sha256": "8b7e100f8311cb428c57609164d93099bada2599f948359045d1ac876a7a625b",
+          "size": 1094
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "amd64": {
+          "asset_url": "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64",
+          "asset_sha256": "8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55",
+          "asset_size": 1362040,
+          "archive_member_count": null,
+          "legal_members": []
+        },
+        "arm64": {
+          "asset_url": "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64",
+          "asset_sha256": "b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165",
+          "asset_size": 1370112,
+          "archive_member_count": null,
+          "legal_members": []
+        }
+      }
+    },
+    {
+      "id": "mise",
+      "version": "2026.7.18",
+      "packaging": "raw-binary",
+      "repository_notices": [
+        {
+          "path": "third_party/components/mise/LICENSE",
+          "sha256": "4d22d6f9222adef0a45ef895bfdd6f71d6394b1784b1001a4bebb4298b8ddc69",
+          "size": 1068
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "amd64": {
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.7.18/mise-v2026.7.18-linux-x64",
+          "asset_sha256": "e1fc2899f2bc7dfe9a3553f4c2d5944cf69d11b5f561545504a20f1e11cd6cc5",
+          "asset_size": 107990848,
+          "archive_member_count": null,
+          "legal_members": []
+        },
+        "arm64": {
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.7.18/mise-v2026.7.18-linux-arm64",
+          "asset_sha256": "7d96bad004ba706d7ce4e999113f61296ff317ad23754471743be883817e8a75",
+          "asset_size": 109819112,
+          "archive_member_count": null,
+          "legal_members": []
+        }
+      }
+    },
+    {
+      "id": "uv",
+      "version": "0.12.0",
+      "packaging": "tar.gz",
+      "repository_notices": [
+        {
+          "path": "third_party/components/uv/LICENSE-APACHE-2.0",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "size": 11357
+        },
+        {
+          "path": "third_party/components/uv/LICENSE-MIT",
+          "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
+          "size": 1077
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "arm64": {
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.0/uv-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "936fbbf20188a2b1c66bce3dca3f4009a5c9cdf12bb2bbd084e71926f75d6a15",
+          "asset_size": 19965666,
+          "archive_member_count": 2,
+          "legal_members": []
+        },
+        "amd64": {
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.0/uv-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "3340a9d8cffc4d801bc1a7459ebfaf5790c79400720d9b6963d806f058526684",
+          "asset_size": 21555691,
+          "archive_member_count": 2,
+          "legal_members": []
+        }
+      }
+    }
+  ]
+}
