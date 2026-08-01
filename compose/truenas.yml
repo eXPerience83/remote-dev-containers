@@ -34,7 +34,7 @@ services:
       - "192.168.1.10:7680:7680"
 
     volumes:
-      - /mnt/Pool1/remote-dev/launcher/secrets/web_password.txt:/run/secrets/launcher_password:ro
+      - /mnt/Pool1/remote-dev/launcher/secrets/launcher_password.txt:/run/secrets/launcher_password:ro
 
     tmpfs:
       - /tmp:size=64m,mode=1777
