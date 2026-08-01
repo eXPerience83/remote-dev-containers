@@ -4,7 +4,9 @@ This is a single-user development appliance, not a multi-tenant service.
 
 ## Root decision
 
-The containers intentionally run as root. Root is constrained to each container and to the paths mounted into that container. Any person who reaches an agent terminal can operate everything accessible to that agent service.
+The Codex container intentionally runs as root. Root is constrained to that container and to the paths mounted into it. Any person who reaches the Codex terminal can operate everything accessible to that service.
+
+The launcher container starts with UID 0 only long enough to read its root-readable password secret. Before binding its HTTP server or accepting requests, the launcher clears supplementary groups and drops permanently to UID/GID `65532`. Automated tests verify the effective serving UID. The launcher has no agent-state mounts, so this startup step does not grant access to Codex data.
 
 ## Launcher boundary
 
@@ -14,14 +16,15 @@ The launcher:
 
 - receives no Codex workspace, agent state, GitHub CLI configuration, Git configuration or SSH mounts;
 - receives no Codex terminal password or other agent web credential;
-- receives no Docker socket and performs no container-management operation;
+- receives no Docker or Podman socket and performs no container-management operation;
 - serves only a fixed navigation page for reviewed, declared services;
 - does not relay or proxy the Codex terminal's HTTP or WebSocket traffic;
 - uses HTTP Basic authentication from its own mounted launcher-password secret;
+- validates DNS names and IP literals and rejects a destination host containing an embedded port;
 - restricts configured paths to safe RFC 3986 URL-path characters before embedding them into the page;
 - checks that an `Origin` header, when present, matches the request host;
 - sends a restrictive Content Security Policy and rejects state-changing HTTP methods;
-- exposes an unauthenticated local health endpoint containing no secrets.
+- exposes an unauthenticated, secret-free health endpoint.
 
 The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The Codex endpoint uses a separate mounted password secret, authenticates independently and may produce a second browser challenge.
 
@@ -44,7 +47,7 @@ Separate future agent services must receive separate narrow mounts and separate 
 - Configure different strong passwords for launcher and Codex through their separate mounted secret files.
 - Keep launcher and agent authentication independent; never place credentials in navigation URLs.
 - Never mount an agent password, state or workspace into the launcher.
-- Never mount `/var/run/docker.sock`.
+- Never mount Docker or Podman sockets, including `/var/run/docker.sock` or `/run/docker.sock`.
 - Never use `privileged: true`, host PID, or host networking.
 - Mount only the documented persistent directories into the Codex service.
 - Treat `/root/.codex/auth.json`, GitHub credentials and SSH keys as secrets.
