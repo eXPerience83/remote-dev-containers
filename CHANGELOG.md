@@ -19,19 +19,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates and immutable GitHub Action pins.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
-- CodeRabbit configuration focused on Dockerfiles, Bash, GitHub Actions, Compose and security-sensitive changes.
+- CodeRabbit configuration focused on Dockerfiles, Bash, Python launcher code, GitHub Actions, Compose and security-sensitive changes.
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
-- Embedded image channel and source revision metadata exposed in the menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
+- Embedded image channel and source revision metadata exposed in the launcher, menu, diagnostics and `remote-dev-version`, together with the installed Codex CLI version reported at runtime.
 - Trivy JSON reports for all critical findings in locally built images and exact publication candidates; only findings with a known fixed version fail the gate.
 - Committed mise runtime configuration and lock data for Linux AMD64 and ARM64, plus validation and a documented regeneration helper.
 - Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
-- A single `run-codex` launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
-- Canonical `start-remote-dev-web`, `remote-dev-menu` and `remote-dev-doctor` commands with validated `REMOTE_DEV_ROLE=codex|shell` and neutral `REMOTE_DEV_START_MODE=menu|agent|shell` resolution.
+- A single `run-codex` command launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
+- Canonical `start-remote-dev-web`, `remote-dev-menu`, `remote-dev-doctor` and role-aware healthcheck commands.
+- Implemented fixed `REMOTE_DEV_ROLE=launcher|codex|shell` resolution with `antigravity` and `claude` reserved.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
 - Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge and stable tags are promoted from the same scanned digest as their `codex-remote-dev` compatibility tags, while PR candidates are canonical-only.
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.
+- Authenticated `remote-dev-launcher` page with fixed Codex navigation, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
+- Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
+- Automated launcher authentication/routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 
 ### Changed
 
@@ -61,10 +65,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Limited persistent-state hardening for `REMOTE_DEV_ROLE=shell` to common GitHub, Git and SSH state so that the neutral shell role does not inspect or modify Codex state.
 - Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining legacy aliases through `v0.1.x`.
 - Changed PR candidate publication to use the canonical `remote-dev` package; edge and stable publication retain legacy package tags without rebuilding.
+- Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
+- Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
 
 ### Security
 
-- Web authentication is required by default.
+- Web authentication is required by default for both launcher and Codex services.
+- The launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration or SSH mounts and does not receive the Docker socket.
+- The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
+- The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
 - Image startup and publication fail when repository version pins are inconsistent.
 - Codex stable release tags are validated to reject prerelease identifiers.
@@ -72,13 +81,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Codex and GitHub credential files are tightened after startup, login and interactive sessions.
 - Direct `START_MODE=codex` and `START_MODE=shell` sessions reapply credential hardening when their foreground process exits.
 - Runtime tests keep `no-new-privileges`; they do not add `SYS_ADMIN`, privileged mode or unconfined security profiles to force a nested sandbox.
-- The supported TrueNAS security boundary is the outer container; the inner Codex sandbox is disabled explicitly in both autonomous and guarded modes.
-- Autonomous mode can act on all mounted state without confirmations; guarded prompts add friction but are not a sandbox or a substitute for narrow mounts.
-- The launcher rejects arbitrary sandbox/approval flags, dangerous aliases, relevant config overrides and invalid project-owned mode values before Codex starts.
-- Public availability does not change the warning against exposing the ttyd port directly to the Internet.
+- The supported TrueNAS security boundary is each outer container; the inner Codex sandbox is disabled explicitly in both autonomous and guarded modes.
+- Autonomous mode can act on all state mounted into Codex without confirmations; guarded prompts add friction but are not a sandbox or a substitute for narrow mounts.
+- The Codex command launcher rejects arbitrary sandbox/approval flags, dangerous aliases, relevant config overrides and invalid project-owned mode values before Codex starts.
+- Public availability does not change the warning against exposing ports 7680 or 7681 directly to the Internet.
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical and compatibility edge/stable tag resolves to that digest.
-- The target launcher receives no agent workspaces, OAuth tokens, GitHub CLI state or SSH keys and does not receive the Docker socket.
