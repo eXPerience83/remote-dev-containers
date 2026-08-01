@@ -6,16 +6,32 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import io
+import os
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MODULE_PATH = Path(__file__).with_name("sync-standalone-artifact-inspection.py")
 SPEC = importlib.util.spec_from_file_location("standalone_sync", MODULE_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+
+class FakeResponse:
+    def __init__(self, data: bytes) -> None:
+        self.stream = io.BytesIO(data)
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, size: int = -1) -> bytes:
+        return self.stream.read(size)
 
 
 class StandaloneInspectionTests(unittest.TestCase):
@@ -55,6 +71,31 @@ class StandaloneInspectionTests(unittest.TestCase):
             self.assertEqual(result["asset_size"], 3)
             self.assertIsNone(result["archive_member_count"])
             self.assertEqual(result["legal_members"], [])
+
+    def test_public_download_never_sends_repository_tokens(self) -> None:
+        payload = b"public release asset"
+        expected_sha256 = hashlib.sha256(payload).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "asset"
+            with mock.patch.dict(
+                os.environ,
+                {"GH_TOKEN": "repository-secret", "GITHUB_TOKEN": "repository-secret"},
+            ), mock.patch.object(
+                MODULE.urllib.request,
+                "urlopen",
+                return_value=FakeResponse(payload),
+            ) as urlopen:
+                MODULE.download_verified(
+                    "https://github.com/example/tool/releases/download/v1/tool.tar.gz",
+                    expected_sha256,
+                    destination,
+                )
+            request = urlopen.call_args.args[0]
+            self.assertEqual(
+                request.header_items(),
+                [("User-agent", "remote-dev-containers-standalone-inspection")],
+            )
+            self.assertEqual(destination.read_bytes(), payload)
 
     def test_legal_set_ignores_architecture_parent_directory(self) -> None:
         amd64 = {
