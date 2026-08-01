@@ -31,7 +31,12 @@ jq -e '
     and (.notices | type == "array" and length > 0)
     and all(.notices[];
       (.path | type == "string" and length > 0)
-      and (.source == "repository" or .source == "runtime" or .source == "system")
+      and (
+        .source == "repository"
+        or .source == "artifact"
+        or .source == "runtime"
+        or .source == "system"
+      )
     )
   )
 ' "$inventory" >/dev/null
@@ -89,13 +94,19 @@ while IFS= read -r relative; do
   if [[ "$relative" == */ ]]; then
     if [[ ! -d "$root/third_party/$relative" ]] \
       || [[ -z "$(find "$root/third_party/$relative" -type f -size +0c -print -quit)" ]]; then
-      echo "ERROR: repository notice directory is missing or empty: third_party/$relative" >&2
+      echo "ERROR: preserved notice directory is missing or empty: third_party/$relative" >&2
       exit 1
     fi
   elif [[ ! -s "$root/third_party/$relative" ]]; then
-    echo "ERROR: repository notice file is missing or empty: third_party/$relative" >&2
+    echo "ERROR: preserved notice file is missing or empty: third_party/$relative" >&2
     exit 1
   fi
-done < <(jq -r '.components[].notices[] | select(.source == "repository") | .path' "$inventory")
+done < <(
+  jq -r '
+    .components[].notices[]
+    | select(.source == "repository" or .source == "artifact")
+    | .path
+  ' "$inventory"
+)
 
 printf 'Third-party inventory: OK (%s components)\n' "$(jq '.components | length' "$inventory")"
