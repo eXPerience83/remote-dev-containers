@@ -29,6 +29,8 @@ jobs:
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
+            scripts/remote-dev-launcher.py \
+            scripts/test_single_stack_compose.py \
             scripts/update-third-party-inventory.py \
             scripts/test_update_third_party_inventory.py \
             scripts/sync-python-runtime-notices.py \
@@ -50,6 +52,9 @@ jobs:
           REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
             bash scripts/test-image-name-compat.sh
           bash scripts/test-compose-image-compat.sh
+          REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
+            bash scripts/test-remote-dev-launcher.sh
+          python3 scripts/test_single_stack_compose.py
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
