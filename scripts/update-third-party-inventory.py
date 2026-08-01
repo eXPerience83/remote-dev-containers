@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
+ALLOWED_NOTICE_HOSTS = frozenset({"raw.githubusercontent.com"})
 MAX_NOTICE_BYTES = 2 * 1024 * 1024
 USER_AGENT = "remote-dev-containers legal inventory updater"
 
@@ -54,13 +55,20 @@ def load_inventory(path: Path) -> dict[str, Any]:
     return data
 
 
-def validate_notice_url(url: str, version: str) -> None:
-    """Require a version-specific HTTPS source without embedded credentials."""
+def validate_download_url(url: str) -> None:
+    """Require an approved HTTPS host without embedded credentials."""
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or not parsed.hostname:
         fail(f"repository notice URL must use HTTPS: {url}")
     if parsed.username or parsed.password:
         fail(f"repository notice URL must not contain credentials: {url}")
+    if parsed.hostname.lower() not in ALLOWED_NOTICE_HOSTS:
+        fail(f"repository notice URL host is not approved: {url}")
+
+
+def validate_notice_url(url: str, version: str) -> None:
+    """Require an approved, version-specific repository notice URL."""
+    validate_download_url(url)
     if url.count(version) != 1:
         fail(f"repository notice URL must contain component version exactly once: {url}")
 
@@ -74,13 +82,13 @@ def derive_notice_url(url: str, old_version: str, new_version: str) -> str:
 
 
 def download_notice(url: str) -> bytes:
-    """Download one bounded legal document from its reviewed HTTPS source."""
+    """Download one bounded legal document from its approved HTTPS source."""
+    validate_download_url(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             final_url = response.geturl()
-            if urllib.parse.urlsplit(final_url).scheme != "https":
-                fail(f"notice download redirected away from HTTPS: {final_url}")
+            validate_download_url(final_url)
             content = response.read(MAX_NOTICE_BYTES + 1)
     except OSError as exc:
         fail(f"cannot download {url}: {exc}")
@@ -90,6 +98,19 @@ def download_notice(url: str) -> bytes:
     if len(content) > MAX_NOTICE_BYTES:
         fail(f"downloaded notice exceeds {MAX_NOTICE_BYTES} bytes: {url}")
     return content
+
+
+def resolve_notice_path(root: Path, relative: str, component_id: str) -> Path:
+    """Resolve a repository notice and keep it inside third_party/."""
+    base = (root / "third_party").resolve()
+    candidate = (base / relative).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        fail(f"{component_id} repository notice path escapes third_party/: {relative}")
+    if candidate == base:
+        fail(f"{component_id} repository notice path must identify a file: {relative}")
+    return candidate
 
 
 def atomic_write_bytes(path: Path, content: bytes) -> None:
@@ -119,6 +140,7 @@ def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, s
     for component in inventory["components"]:
         if not isinstance(component, dict):
             fail("inventory component must be an object")
+        component_id = component.get("id", "<unknown>")
         key = component.get("version_key")
         if key is None:
             continue
@@ -137,18 +159,18 @@ def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, s
 
         notices = component.get("notices")
         if not isinstance(notices, list):
-            fail(f"{component.get('id', '<unknown>')} has no notices array")
+            fail(f"{component_id} has no notices array")
         for notice in notices:
             if not isinstance(notice, dict) or notice.get("source") != "repository":
                 continue
             relative = notice.get("path")
             url = notice.get("reviewed_from")
             if not isinstance(relative, str) or not relative:
-                fail(f"{component.get('id', '<unknown>')} has an invalid repository notice path")
+                fail(f"{component_id} has an invalid repository notice path")
             if not isinstance(url, str) or not url:
-                fail(f"{component.get('id', '<unknown>')} repository notice lacks reviewed_from")
+                fail(f"{component_id} repository notice lacks reviewed_from")
             validate_notice_url(url, expected)
-            notice_path = root / "third_party" / relative
+            notice_path = resolve_notice_path(root, relative, str(component_id))
             if not notice_path.is_file() or notice_path.stat().st_size == 0:
                 fail(f"repository notice is missing or empty: {notice_path}")
 
@@ -157,39 +179,45 @@ def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, 
     """Refresh changed versions and their repository-preserved legal documents."""
     changed = False
     pending_files: list[tuple[Path, bytes]] = []
+    seen_keys: set[str] = set()
 
     for component in inventory["components"]:
         if not isinstance(component, dict):
             fail("inventory component must be an object")
+        component_id = component.get("id", "<unknown>")
         key = component.get("version_key")
         if key is None:
             continue
         if not isinstance(key, str) or not key:
             fail("component version_key must be a non-empty string")
+        if key in seen_keys:
+            fail(f"duplicate inventory version_key: {key}")
+        seen_keys.add(key)
 
         new_version = versions.get(key)
         old_version = component.get("version")
         if new_version is None:
             fail(f"inventory version key is absent from versions.env: {key}")
         if not isinstance(old_version, str) or not old_version:
-            fail(f"{component.get('id', '<unknown>')} has no valid version")
+            fail(f"{component_id} has no valid version")
         if new_version == old_version:
             continue
 
         notices = component.get("notices")
         if not isinstance(notices, list):
-            fail(f"{component.get('id', '<unknown>')} has no notices array")
+            fail(f"{component_id} has no notices array")
         for notice in notices:
             if not isinstance(notice, dict) or notice.get("source") != "repository":
                 continue
             relative = notice.get("path")
             old_url = notice.get("reviewed_from")
             if not isinstance(relative, str) or not relative:
-                fail(f"{component.get('id', '<unknown>')} has an invalid repository notice path")
+                fail(f"{component_id} has an invalid repository notice path")
             if not isinstance(old_url, str) or not old_url:
-                fail(f"{component.get('id', '<unknown>')} repository notice lacks reviewed_from")
+                fail(f"{component_id} repository notice lacks reviewed_from")
+            notice_path = resolve_notice_path(root, relative, str(component_id))
             new_url = derive_notice_url(old_url, old_version, new_version)
-            pending_files.append((root / "third_party" / relative, download_notice(new_url)))
+            pending_files.append((notice_path, download_notice(new_url)))
             notice["reviewed_from"] = new_url
 
         component["version"] = new_version
@@ -201,7 +229,7 @@ def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, 
     for path, content in pending_files:
         atomic_write_bytes(path, content)
 
-    inventory["reviewed_on"] = datetime.now(timezone.utc).date().isoformat()
+    inventory["refreshed_on"] = datetime.now(timezone.utc).date().isoformat()
     atomic_write_json(root / "third_party" / "inventory.json", inventory)
     return True
 
@@ -233,7 +261,7 @@ def main() -> None:
     refreshed = load_inventory(root / "third_party" / "inventory.json")
     check_inventory(root, refreshed, versions)
     if changed:
-        print("Third-party inventory and repository notices updated.")
+        print("Third-party inventory and repository notices refreshed for review.")
     else:
         print("Third-party inventory already current.")
 
