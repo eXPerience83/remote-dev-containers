@@ -223,7 +223,7 @@ jobs:
           replace_env GH_ARM64_SHA256 "$gh_arm64_sha256"
           replace_env TTYD_VERSION "$latest_ttyd"
           replace_env TTYD_AMD64_SHA256 "$ttyd_amd64_sha256"
-          replace_env TTYD_ARM64_SHA256 "$ttyd_arm64_sha256"
+          replace_env TTYD_ARM64_SHA256 "$latest_mise"
           replace_env MISE_VERSION "$latest_mise"
           replace_env MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_env MISE_ARM64_SHA256 "$mise_arm64_sha256"
@@ -264,6 +264,8 @@ jobs:
           bash scripts/validate-version-pins.sh
           python3 scripts/update-third-party-inventory.py --write
           bash scripts/validate-third-party-inventory.sh
+          python3 scripts/sync-standalone-artifact-inspection.py
+          python3 scripts/validate-standalone-artifact-inspection.py
 
           tracked_files=(
             versions.env
@@ -273,12 +275,14 @@ jobs:
             images/codex/Dockerfile
             third_party/inventory.json
             third_party/components
+            third_party/standalone-artifact-inspection.json
+            third_party/standalone-artifact-inspection.md
           )
           if git diff --quiet -- "${tracked_files[@]}"; then
-            echo "No upstream release, digest, runtime artifact, inventory or notice changes."
+            echo "No upstream release, digest, runtime artifact, inventory, notice or standalone-inspection changes."
             if [[ -n "$existing_pr" ]]; then
               gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts and legal notices."
+                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts, legal notices and standalone inspection evidence."
             fi
             exit 0
           fi
@@ -302,7 +306,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release, digest, runtime-lock and legal-notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory and refreshes repository-preserved notices from exact version tags. Any changed legal text remains visible in the pull-request diff for human review. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release, digest, runtime-lock and legal-notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory, refreshes repository-preserved notices from exact version tags and updates the bounded standalone-artifact inspection for changed GitHub CLI, Codex CLI, ttyd, mise or uv assets. Any changed legal text or asset-packaging evidence remains visible in the pull-request diff for human review. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
