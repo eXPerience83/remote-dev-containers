@@ -20,6 +20,26 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Collect exact Python runtime legal metadata
+        if: github.event_name == 'pull_request' && github.head_ref == 'legal/python-runtime-notices'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zstd
+          python3 scripts/sync-python-runtime-notices.py \
+            --write \
+            --output "$RUNNER_TEMP/python-build-standalone"
+
+      - name: Upload collected Python runtime legal metadata
+        if: github.event_name == 'pull_request' && github.head_ref == 'legal/python-runtime-notices'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: python-runtime-notices
+          path: ${{ runner.temp }}/python-build-standalone
+          if-no-files-found: error
+          retention-days: 2
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
@@ -30,7 +50,8 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
             scripts/update-third-party-inventory.py \
-            scripts/test_update_third_party_inventory.py
+            scripts/test_update_third_party_inventory.py \
+            scripts/sync-python-runtime-notices.py
           python3 scripts/test_update_third_party_inventory.py
           python3 scripts/update-third-party-inventory.py --check
           bash scripts/validate-version-pins.sh
