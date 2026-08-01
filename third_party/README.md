@@ -23,6 +23,10 @@ The current upstream full archives reference but omit the zlib-ng 2.2.4 and zstd
 
 `standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex, ttyd, mise and uv assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner, and should be repeated when an upstream changes its distribution packaging.
 
+CI runs `scripts/validate-standalone-artifact-inspection.py` to compare the report's component versions, asset URLs and SHA-256 values with `versions.env` and `mise.lock`. An automated upstream-update PR can still be created, but it cannot pass validation or merge with stale inspection evidence. The bounded inspection must be repeated and the report updated in that PR whenever one of the five inspected assets changes.
+
+The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change.
+
 ## Maintenance contract
 
 A version update is not complete until the same pull request:
