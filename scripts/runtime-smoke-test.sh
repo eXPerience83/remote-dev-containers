@@ -120,6 +120,7 @@ for _ in $(seq 1 30); do
       --env REMOTE_DEV_START_MODE=menu \
       --env WEB_BIND=0.0.0.0 \
       --env WEB_PORT=7680 \
+      --env WEB_BASE_PATH=/launcher// \
       --env WEB_USERNAME=remote-dev \
       --env WEB_PASSWORD="$launcher_secret" \
       --env WEB_CHECK_ORIGIN=1 \
@@ -128,7 +129,7 @@ for _ in $(seq 1 30); do
 
     for _ in $(seq 1 30); do
       if docker exec "$launcher_name" \
-        curl -fsS http://127.0.0.1:7680/healthz >/dev/null 2>&1; then
+        curl -fsS http://127.0.0.1:7680/launcher/healthz >/dev/null 2>&1; then
         break
       fi
       if [[ "$(docker inspect -f '{{.State.Running}}' "$launcher_name" 2>/dev/null || true)" != true ]]; then
@@ -142,7 +143,7 @@ for _ in $(seq 1 30); do
     docker exec "$launcher_name" remote-dev-healthcheck
     unauthenticated_status="$(docker exec "$launcher_name" \
       curl --silent --output /dev/null --write-out '%{http_code}' \
-      http://127.0.0.1:7680/)"
+      http://127.0.0.1:7680/launcher/)"
     if [[ "$unauthenticated_status" != 401 ]]; then
       echo "ERROR: launcher returned $unauthenticated_status without authentication" >&2
       exit 1
@@ -151,7 +152,7 @@ for _ in $(seq 1 30); do
       curl --fail --silent --show-error \
       --user "remote-dev:${launcher_secret}" \
       --header 'Origin: http://127.0.0.1:7680' \
-      http://127.0.0.1:7680/)"
+      http://127.0.0.1:7680/launcher/)"
     grep -Fq 'Open Codex' <<<"$launcher_page"
     grep -Fq '"port":7681' <<<"$launcher_page"
     if grep -Fq "$launcher_secret" <<<"$launcher_page"; then
@@ -181,6 +182,7 @@ for _ in $(seq 1 30); do
     echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
     echo "Authenticated isolated launcher role: OK"
+    echo "Launcher base-path normalization: OK"
     echo "Launcher and Codex same-image reuse: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
