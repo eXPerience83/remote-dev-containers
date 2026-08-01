@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "source": "astral-sh/python-build-standalone",
+  "selection_policy": [
+    "pgo+lto",
+    "pgo",
+    "lto",
+    "noopt"
+  ],
+  "shared_license_texts": true,
+  "supplemental_licenses": [
+    {
+      "path": "licenses/LICENSE.zlib-ng.txt",
+      "source_url": "https://raw.githubusercontent.com/python/cpython-source-deps/zlib-ng-2.2.4/LICENSE.md",
+      "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee"
+    },
+    {
+      "path": "licenses/LICENSE.zstd.txt",
+      "source_url": "https://raw.githubusercontent.com/python/cpython-source-deps/zstd-1.5.7/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+    }
+  ],
+  "artifacts": [
+    {
+      "arch": "amd64",
+      "target": "x86_64-unknown-linux-gnu",
+      "python_version": "3.14.6",
+      "release": "20260728",
+      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.14.6+20260728-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "full_asset_name": "cpython-3.14.6+20260728-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.14.6%2B20260728-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+      "full_asset_sha256": "26abf1a5675b3445a4e8982a9e415fb4ad548ea2245595f8a82511341216c6c7",
+      "full_asset_size": 127652438
+    },
+    {
+      "arch": "arm64",
+      "target": "aarch64-unknown-linux-gnu",
+      "python_version": "3.14.6",
+      "release": "20260728",
+      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.14.6+20260728-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "full_asset_name": "cpython-3.14.6+20260728-aarch64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.14.6%2B20260728-aarch64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+      "full_asset_sha256": "112319162e4b6305c5021c10591fd30cbe98f92c9359847ba58507e66e1e0fa9",
+      "full_asset_size": 102858066
+    }
+  ]
+}
