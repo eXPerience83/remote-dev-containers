@@ -30,7 +30,7 @@ ENV HOME=/root \
     WEB_MAX_CLIENTS=1 \
     WEB_CHECK_ORIGIN=1 \
     ALLOW_INSECURE_WEB=0 \
-    TMUX_SESSION=codex \
+    REMOTE_DEV_ROLE=codex \
     START_MODE=menu \
     CODEX_CA_CERTIFICATE=
 
@@ -52,30 +52,47 @@ RUN case "${TARGETARCH}" in \
     && cd / \
     && rm -rf "$workdir"
 
+COPY scripts/start-remote-dev-web.sh /usr/local/bin/start-remote-dev-web
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
+COPY scripts/remote-dev-doctor.sh /usr/local/bin/remote-dev-doctor
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
+COPY scripts/lib/remote-dev-runtime.sh /usr/local/lib/remote-dev/remote-dev-runtime.sh
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
+    --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     chmod 0755 \
+      /usr/local/bin/start-remote-dev-web \
       /usr/local/bin/start-codex-web \
       /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/run-direct-session \
       /usr/local/bin/run-codex \
+      /usr/local/bin/remote-dev-menu \
       /usr/local/bin/codex-menu \
+      /usr/local/bin/remote-dev-doctor \
       /usr/local/bin/codex-doctor \
       /usr/local/bin/remote-dev-version \
       /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
-    && chmod 0644 /usr/local/lib/remote-dev/format-short-revision.sh \
+    && chmod 0644 \
+      /usr/local/lib/remote-dev/remote-dev-runtime.sh \
+      /usr/local/lib/remote-dev/format-short-revision.sh \
+    && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && bash /tmp/test-run-codex-policy \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/start-codex-web \
+    && grep -Fx 'exec /usr/local/bin/start-remote-dev-web "$@"' /usr/local/bin/start-codex-web \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-menu \
+    && grep -Fx 'exec /usr/local/bin/remote-dev-menu "$@"' /usr/local/bin/codex-menu \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
+    && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: untrusted' \
@@ -104,6 +121,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /root/.config/git \
       /root/.ssh \
     && /usr/local/bin/secure-persistent-state \
+    && REMOTE_DEV_ROLE=shell remote-dev-doctor | grep -Fx 'Role: shell' \
     && REMOTE_DEV_SKIP_TMUX_SMOKE=1 codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
@@ -112,4 +130,4 @@ EXPOSE 7681
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD pgrep -x ttyd >/dev/null && codex --version >/dev/null || exit 1
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/start-codex-web"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/start-remote-dev-web"]

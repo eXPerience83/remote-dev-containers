@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-session="${TMUX_SESSION:-codex}"
+runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+# shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+source "$runtime_lib"
+
+role="$(remote_dev_resolve_role)"
+start_mode="$(remote_dev_resolve_start_mode "$role")"
+export REMOTE_DEV_ROLE="$role"
+export REMOTE_DEV_START_MODE="$start_mode"
+
+session="${TMUX_SESSION:-$(remote_dev_default_tmux_session "$role")}"
 window_name=remote-dev
 workspace="${WORKSPACE:-/workspace}"
 readonly run_codex_binary=/usr/local/bin/run-codex
@@ -11,21 +20,29 @@ if [[ -z "$session" ]]; then
   exit 2
 fi
 
-case "${START_MODE:-menu}" in
+case "$start_mode" in
   menu)
-    session_command=/usr/local/bin/codex-menu
+    session_command=/usr/local/bin/remote-dev-menu
     ;;
-  codex)
-    printf -v quoted_workspace '%q' "$workspace"
-    printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
-    session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
+  agent)
+    case "$role" in
+      codex)
+        printf -v quoted_workspace '%q' "$workspace"
+        printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
+        session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
+        ;;
+      *)
+        echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2
+        exit 2
+        ;;
+    esac
     ;;
   shell)
     printf -v quoted_workspace '%q' "$workspace"
     session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session bash --login"
     ;;
   *)
-    echo "ERROR: unsupported START_MODE=${START_MODE:-unset} (menu|codex|shell)" >&2
+    echo "ERROR: internal unsupported start mode: $start_mode" >&2
     exit 2
     ;;
 esac

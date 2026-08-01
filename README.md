@@ -23,6 +23,35 @@ The current edge image is the Codex reference implementation:
 - separate persistent paths for workspace and credentials;
 - AMD64 first.
 
+### Role-neutral entrypoints
+
+The first migration slice toward the accepted single-stack architecture keeps the current image, Compose files and persistence layout unchanged, but introduces one canonical runtime implementation:
+
+- `start-remote-dev-web`;
+- `remote-dev-menu`;
+- `remote-dev-doctor`.
+
+`start-codex-web`, `codex-menu` and `codex-doctor` remain compatibility wrappers that select the Codex role and call those canonical commands.
+
+The implemented role selector is:
+
+```dotenv
+REMOTE_DEV_ROLE=codex
+# or: shell
+```
+
+`launcher`, `antigravity` and `claude` are reserved names and fail clearly because those roles are not implemented. They never trigger an implicit download.
+
+The neutral direct-start selector accepts `menu`, `agent` or `shell`:
+
+```dotenv
+REMOTE_DEV_START_MODE=menu
+```
+
+The existing `START_MODE=menu|codex|shell` setting remains compatible; legacy `codex` maps to neutral `agent`. `REMOTE_DEV_START_MODE`, when set, takes precedence. Unknown roles and modes are rejected without evaluating shell fragments.
+
+This slice does not yet provide the launcher URL, multiple services, image renaming, new mounts or data migration.
+
 ### Isolation on TrueNAS
 
 The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access` and uses `--ask-for-approval untrusted`. The menu, resume action and direct Codex start mode all use that same launcher.
@@ -149,10 +178,11 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
 
-Read `CONTRIBUTING.md` before proposing changes. Pull requests use the repository template, and GitHub requests review from the code owner when a non-draft pull request is ready for review.
+Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests use the repository template, and GitHub requests review from the code owner when a non-draft pull request is ready for review.
 
 ## Documentation
 
+- `AGENTS.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
 - `SECURITY.md`

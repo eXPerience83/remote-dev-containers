@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+role="${REMOTE_DEV_ROLE:-codex}"
+case "$role" in
+  codex|shell) ;;
+  *)
+    echo "ERROR: unsupported REMOTE_DEV_ROLE=$role while securing persistent state" >&2
+    exit 2
+    ;;
+esac
+
 codex_home="${CODEX_HOME:-/root/.codex}"
 gh_config_dir="${GH_CONFIG_DIR:-/root/.config/gh}"
 git_config_global="${GIT_CONFIG_GLOBAL:-/root/.config/git/config}"
@@ -21,12 +30,14 @@ secure_file() {
   fi
 }
 
-secure_dir "$codex_home"
+if [[ "$role" == codex ]]; then
+  secure_dir "$codex_home"
+  secure_file "$codex_home/auth.json"
+fi
 secure_dir "$gh_config_dir"
 secure_dir "$git_config_dir"
 secure_dir "$ssh_dir"
 
-secure_file "$codex_home/auth.json"
 secure_file "$gh_config_dir/hosts.yml"
 secure_file "$git_config_global"
 secure_file "$ssh_dir/config"
