@@ -2,16 +2,30 @@
 
 ## Status
 
-This document records the accepted target architecture for the next Remote Dev
-runtime. The current development image is still Codex-specific. Implementation
-of the neutral runtime and launcher is tracked separately so this decision does
-not imply that unfinished services are already supported.
+This document records the accepted target architecture and the portion now implemented by the experimental edge stack.
+
+Implemented:
+
+- one canonical Remote Dev image/package;
+- fixed `launcher`, `codex` and `shell` runtime roles;
+- one Compose/TrueNAS stack containing launcher and Codex services;
+- one primary launcher URL;
+- one image reference reused by both services;
+- redirect/navigation from the launcher to the independently authenticated Codex endpoint;
+- no agent-state mounts or Docker socket in the launcher.
+
+Still pending under issues #25 and #31:
+
+- the neutral persistent-data layout and migration from the Codex-only paths;
+- optional Antigravity and future Claude services;
+- the later outer-hardening and cross-service canary phase;
+- any reviewed one-origin reverse-proxy design.
 
 Related work:
 
 - issue #24 defines this architecture contract;
 - issue #25 implements the neutral image roles, launcher and stack migration;
-- issue #36 evaluates the TrueNAS outer-isolation model and Bubblewrap removal;
+- issue #36 evaluates the TrueNAS outer-isolation model;
 - issue #31 tracks the complete delivery sequence.
 
 ## User-facing contract
@@ -24,111 +38,109 @@ A supported installation consists of:
 - one launcher service;
 - one isolated service for each enabled coding agent.
 
-Docker may instantiate several containers from the image, but it stores and
-reuses the same immutable image layers. Users do not install or maintain a
-separate image or TrueNAS App for every agent.
+Docker may instantiate several containers from the image, but it stores and reuses the same immutable image layers. Users do not install or maintain a separate image or TrueNAS App for every agent.
 
-The current Codex deployment remains the reference implementation during the
-migration.
+The current implementation includes the launcher and Codex services. Codex remains the reference agent during the migration.
 
-## Target topology
+## Current topology
 
 ```text
 Remote Dev App / Compose stack
-├── launcher service
-├── Codex service
-├── Antigravity service (optional, when supported)
-└── Claude service (future)
+├── launcher service  (primary port 7680)
+└── Codex service     (authenticated terminal port 7681)
 ```
 
-Every service references the same reviewed image digest and starts with a fixed,
-validated role. A conceptual selector is:
+Both services reference the same `REMOTE_DEV_IMAGE` value. The fixed roles are:
 
 ```text
-REMOTE_DEV_ROLE=launcher|codex|antigravity|claude|shell
+REMOTE_DEV_ROLE=launcher|codex|shell
 ```
 
-The exact variable and role names are settled by issue #25.
+`antigravity` and `claude` remain reserved and fail without downloading anything.
 
 ## One launcher, isolated execution
 
-The launcher provides the normal user entry point and lists only available,
-supported tools. Selecting an agent navigates or redirects the browser to that
-agent service's own authenticated endpoint. The launcher does not execute the
-agent or relay the agent terminal's HTTP or WebSocket traffic.
+The launcher provides the normal user entry point and lists only available, supported tools. Selecting Codex navigates the browser to the Codex service's own authenticated endpoint. The launcher does not execute Codex and does not relay the terminal's HTTP or WebSocket traffic.
 
-The launcher must:
+The implemented launcher:
 
-- expose no Docker or Podman control socket;
-- avoid dynamic container creation;
-- contain no agent OAuth tokens, histories, workspaces or SSH keys;
-- enforce the reviewed browser authentication and origin policy;
-- link or redirect only to fixed services declared by the stack;
-- remain usable when an optional agent service is unavailable.
+- is a project-owned Python standard-library HTTP service bundled in the final image;
+- uses HTTP Basic authentication from the shared web-password secret;
+- validates its fixed destination host, scheme, port and path settings;
+- uses the browser hostname and scheme when no explicit public host/scheme is configured;
+- checks same-origin requests when an `Origin` header is present;
+- sends a restrictive nonce-based Content Security Policy;
+- accepts only `GET` and `HEAD`;
+- exposes a secret-free health endpoint;
+- contains no agent OAuth tokens, histories, workspaces, GitHub state or SSH keys;
+- receives no Docker/Podman socket and creates no containers.
 
-Agent services may remain running but idle. This keeps navigation independent
-from container-management privileges. Optional direct agent ports may be used
-for troubleshooting during development. The documented normal workflow begins
-at the single primary launcher entry point.
+The Codex endpoint authenticates independently. The normal browser flow can therefore challenge once for the launcher and again for Codex. Credentials are never embedded into the navigation URL or forwarded by the launcher.
 
-A future implementation may place a fixed reverse proxy in front of the agent
-services to provide one browser origin. Such a proxy is a trusted transport
-component because it can observe or alter terminal traffic. It must not mount
-agent workspaces or at-rest credentials, but it cannot be described as unable to
-inspect secrets entered into or displayed by a proxied terminal. That design
-requires an explicit threat-model review in issue #25 before adoption.
+The direct Codex port remains published because the redirect-based design does not proxy terminal traffic. It is the normal navigation destination and can also be used for troubleshooting. The documented workflow still begins at the launcher URL.
+
+A future fixed reverse proxy could provide one browser origin, but it would become a trusted transport component capable of observing terminal traffic. That requires a separate threat-model review and is not part of the current implementation.
 
 ## Shared immutable image
 
-The final image contains the project-owned runtime and common development tools:
+The final image contains:
 
-- Ubuntu base and Remote Dev scripts;
+- Ubuntu and Remote Dev scripts;
 - Git, Git LFS, OpenSSH client and GitHub CLI executable;
 - Python, Node.js, npm, uv and mise;
-- ttyd, tmux, tini and common shell, build and search utilities;
-- neutral diagnostics, health checks and version reporting;
+- ttyd, tmux, tini and common shell/build/search utilities;
 - launcher runtime;
-- reviewed managers for optional integrations.
+- neutral diagnostics, health checks and version reporting;
+- Codex CLI as the built-in reference agent.
 
-Sharing executables through image layers does not share mutable user state.
-Image version and source revision are reported independently from the selected
-agent version.
+Sharing executables through image layers does not share mutable state. Runtime tests and Compose validation assert that launcher and Codex use the same image reference/ID.
 
 ## Service roles
 
 ### Launcher role
 
-The launcher owns only the state required for its UI, authentication and fixed
-navigation configuration. It does not mount an agent workspace or private agent
-state and, in the default design, does not carry agent terminal traffic.
+`REMOTE_DEV_ROLE=launcher` starts `remote-dev-launcher` directly. It accepts only the `menu` start mode and does not initialize a workspace, GitHub configuration, Git configuration, SSH state, Codex state or tmux session.
+
+Launcher diagnostics report image identity, fixed routing configuration and available roles without reading agent state. Its healthcheck calls the local secret-free `/healthz` endpoint.
 
 ### Codex role
 
-Codex remains built into the reference image and retains:
+Codex retains:
 
 - device-code authentication;
 - start and resume actions;
-- persistent Codex sessions;
+- persistent tmux sessions;
+- autonomous and guarded approval modes;
 - Codex-specific diagnostics;
-- post-session credential permission hardening.
+- post-session credential permission hardening;
+- the existing narrow persistent mounts.
+
+### Shell role
+
+The shell role remains available for direct troubleshooting and uses ttyd/tmux without inspecting Codex state.
 
 ### Optional agent roles
 
-An optional proprietary agent is installed or updated only through an explicit,
-reviewed action from an official vendor-controlled source unless redistribution
-rights have been confirmed and documented.
+An optional proprietary agent will be installed or updated only through an explicit reviewed action from an official vendor-controlled source unless redistribution rights are confirmed.
 
-A missing optional agent is reported as unavailable. It is never downloaded
-silently during launcher startup or normal container startup.
-
-Claude Code is a future role and is not advertised as supported until its own
-installation, licensing, authentication, persistence and sandbox behavior have
-been implemented and validated.
+A missing optional agent is reported as unavailable. It is never downloaded during launcher or container startup. Claude remains unavailable until its dedicated path is implemented and validated.
 
 ## Persistence boundaries
 
-Each agent service receives only its own narrow mounts. A recommended logical
-layout is:
+The current launcher service is stateless apart from the mounted web-password secret. It receives no agent data mounts.
+
+The Codex service temporarily retains the existing layout:
+
+```text
+CODEX_DATA_ROOT/
+├── workspace/
+├── codex/
+├── gh/
+├── git/
+└── ssh/
+```
+
+The later migration slice will introduce the neutral administrative layout without deleting or sharing existing Codex state:
 
 ```text
 remote-dev-data/
@@ -139,132 +151,97 @@ remote-dev-data/
 │   ├── gh/
 │   ├── git/
 │   └── ssh/
-├── antigravity/
-│   ├── workspace/
-│   ├── agent/
-│   ├── gh/
-│   ├── git/
-│   └── ssh/
-└── claude/
-    └── ... future private state ...
+└── future-agent/
+    └── private state
 ```
 
-The parent directory is an administrative layout, not a volume mounted into the
-services. Compose or TrueNAS mounts only the required child paths into each
-service.
+The parent data directory is never mounted wholesale. Agent services receive only their own child paths.
 
 | State | Shared in image | Shared between services | Persistent per agent service |
 |---|---:|---:|---:|
 | Common executables | Yes | Read-only image layers | No |
 | Workspace or worktree | No | No by default | Yes |
-| Agent authentication and configuration | No | No | Yes |
-| Agent cache, history and sessions | No | No | Yes |
+| Agent authentication/configuration | No | No | Yes |
 | GitHub CLI configuration | Executable only | No | Yes |
 | Git global configuration | Executable only | No | Yes |
-| SSH keys and configuration | Client only | No | Yes |
-| MCP or integration credentials | Manager only | No | Yes |
+| SSH keys/configuration | Client only | No | Yes |
 | Launcher navigation configuration | Runtime only | Not mounted into agents | Launcher only |
 
-The supported configuration does not mount these paths wholesale:
-
-- `/root`;
-- `/home`;
-- `/opt`;
-- `/usr/local`;
-- the parent Remote Dev data directory.
-
-Broad mounts could hide image-provided tools or expose another service's private
-state.
+The supported configuration does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent data directory or the Docker socket.
 
 ## Workspace concurrency
 
-The default stack does not mount one writable checkout into two agent services.
-Users who intentionally work on the same repository from several agents should
-use separate Git worktrees or separate clones and coordinate branches normally.
-Sharing one writable checkout is an explicit advanced choice with documented
-concurrency risk.
+The default stack does not mount one writable checkout into two agent services. Future multi-agent users should use separate Git worktrees or clones and coordinate branches normally.
 
 ## Security and trust boundaries
 
-The supported TrueNAS-first design treats each outer container as an isolation
-boundary. An inner Bubblewrap, Landlock, nsjail or similar sandbox is reported as
-active only after a positive runtime test.
+Each outer container is a separate boundary. Anyone with terminal/root access inside the Codex service is trusted for the state mounted into Codex, but the launcher cannot see that state because it is not mounted there.
 
-The stack must not require:
+The stack does not require:
 
 - privileged mode;
 - `SYS_ADMIN`;
-- an unconfined seccomp or AppArmor profile;
+- unconfined seccomp/AppArmor;
 - the Docker socket;
 - host-root mounts;
-- host security changes solely to start an inner sandbox.
+- host security changes to start an inner sandbox.
 
-Anyone with terminal or root access inside an agent service is trusted for all
-state mounted into that service. Separate mounts are what prevent that user from
-reading another agent service's credentials and workspace. Container separation
-does not protect two users who share the same terminal credentials for one
-service.
-
-The launcher UI and process must not become a container-management control plane,
-must not mount agent secrets and, in the default redirect-based design, must not
-receive agent terminal traffic. Any proxy that terminates or relays that traffic
-is separately treated as a trusted transport component.
+The launcher is navigation, not a container-management control plane and not a terminal proxy.
 
 ## Versioning and updates
 
-All stack services should reference the same exact image digest. Mutable channel
-tags may locate a candidate, but reproducible deployments and rollback record the
-published digest and embedded source revision.
+All stack services use the same image reference. Immutable deployments record the published digest and embedded source revision.
 
-Built-in components such as Codex are updated through reviewed image rebuilds.
-Optional vendor-installed agents may have an independent persisted version. Their
-installers and state remain scoped to their own agent service.
+Built-in components are updated through reviewed image rebuilds. Future vendor-installed agents may keep an independent persisted version only inside their own service state.
 
-A broken optional agent must not make the launcher or Codex service unhealthy.
-Health checks validate local role readiness without requiring credentials or a
-successful vendor-service request.
+A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate local role readiness without requiring user login.
 
 ## Migration from the Codex-only App
 
-The migration implemented by issue #25 must:
+The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data is not copied, renamed or exposed to the launcher.
 
-- preserve the existing Codex workspace and credential data;
+The later migration slice must:
+
+- preserve the existing workspace and credentials;
 - avoid deleting or silently copying authentication state;
-- map existing Codex paths only into the new Codex service;
-- keep temporary compatibility names only when they call the canonical runtime;
-- document rollback to the previous Codex-only deployment;
-- avoid exposing Codex state to the launcher or future agent services.
+- map existing Codex paths only into the Codex service;
+- document rollback;
+- avoid exposing Codex state to the launcher or future agents.
 
-The current `codex-remote-dev` package name may remain temporarily as a
-compatibility tag pointing to the same digest. Its lifetime and the canonical
-final image name are decided in the implementation PR.
+The `codex-remote-dev` package and `CODEX_IMAGE` variable remain compatibility aliases through `v0.1.x` and will not be removed before `v0.2.0`.
 
 ## Validation contract
 
-Before the architecture is advertised as implemented, automated and manual tests
-must prove that:
+Automated tests now cover:
 
-- one stack deploys on generic Compose and TrueNAS;
-- all services reference the same image ID or digest;
-- the primary URL reaches the launcher and selecting Codex navigates or redirects
-  to the authenticated Codex endpoint;
-- launcher refresh and reconnect preserve the correct agent session;
-- synthetic agent services cannot read one another's canary files;
-- the launcher cannot read any agent canary, credential mount or workspace;
-- the default launcher does not receive agent terminal traffic;
-- invalid roles fail deterministically;
-- current Codex login, start, resume, diagnostics and persistence still work;
-- existing Codex data migrates without deletion or accidental sharing.
+- fixed launcher-role resolution and invalid-mode rejection;
+- launcher authentication, origin checking, CSP and method restrictions;
+- fixed Codex navigation configuration without password exposure;
+- role-aware healthchecks;
+- launcher diagnostics without agent-state access;
+- generic and TrueNAS Compose topology;
+- one image reference across launcher and Codex;
+- absence of workspace/Codex/GitHub/Git/SSH/Docker-socket configuration in the launcher;
+- launcher and Codex containers reusing the same image ID in runtime smoke tests;
+- existing Codex start, resume, policy, diagnostics, ttyd and tmux smoke tests.
+
+Still required before the architecture is advertised as stable:
+
+- real TrueNAS launcher-to-Codex navigation;
+- browser refresh/reconnect behavior;
+- existing-data migration;
+- later synthetic cross-service canaries and outer hardening;
+- optional-agent service validation.
 
 ## Non-goals
 
 This architecture does not include:
 
 - a virtual-machine distribution;
-- several agents running inside one agent container;
+- several agents in one agent container;
 - one manually maintained TrueNAS App per agent;
-- shared OAuth or token files between agents;
+- shared OAuth/token files between agents;
 - dynamic privileged child containers;
 - concurrent writes by several agents to one checkout by default;
-- weakening TrueNAS or Docker security to force an inner sandbox;
-- shipping Claude Code before a dedicated implementation and validation path.
+- weakening TrueNAS/Docker security to force an inner sandbox;
+- shipping Claude before dedicated implementation and validation.
