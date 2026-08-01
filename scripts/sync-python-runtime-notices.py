@@ -18,9 +18,12 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 API_ROOT = "https://api.github.com/repos/astral-sh/python-build-standalone"
-ALLOWED_HOSTS = frozenset({"api.github.com", "github.com", "objects.githubusercontent.com"})
+ALLOWED_HOSTS = frozenset(
+    {"api.github.com", "github.com", "objects.githubusercontent.com", "raw.githubusercontent.com"}
+)
 FULL_BUILD_PREFERENCE = ("pgo+lto", "pgo", "lto", "noopt")
 MAX_ARCHIVE_BYTES = 300 * 1024 * 1024
+MAX_LICENSE_BYTES = 256 * 1024
 USER_AGENT = "remote-dev-containers python runtime notice synchronizer"
 URL_PATTERN = re.compile(
     r'url\s*=\s*"(?P<url>https://github\.com/astral-sh/python-build-standalone/'
@@ -30,6 +33,16 @@ URL_PATTERN = re.compile(
     r'install_only_stripped\.tar\.gz)"'
 )
 ARCH_NAMES = {"x86_64-unknown-linux-gnu": "amd64", "aarch64-unknown-linux-gnu": "arm64"}
+SUPPLEMENTAL_LICENSES = {
+    "licenses/LICENSE.zlib-ng.txt": {
+        "url": "https://raw.githubusercontent.com/python/cpython-source-deps/zlib-ng-2.2.4/LICENSE.md",
+        "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee",
+    },
+    "licenses/LICENSE.zstd.txt": {
+        "url": "https://raw.githubusercontent.com/python/cpython-source-deps/zstd-1.5.7/LICENSE",
+        "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+    },
+}
 
 
 def fail(message: str) -> NoReturn:
@@ -173,8 +186,59 @@ def download_verified_asset(asset: dict[str, Any], token: str | None, destinatio
     return actual
 
 
-def extract_legal_metadata(archive: Path, destination: Path) -> None:
-    """Extract only PYTHON.json and upstream license texts from a full archive."""
+def referenced_license_paths(metadata: Any) -> set[str]:
+    """Collect every license path declared anywhere in PYTHON.json."""
+    paths: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == "license_path" and isinstance(child, str):
+                    paths.add(child)
+                elif key == "license_paths" and isinstance(child, list):
+                    if not all(isinstance(item, str) for item in child):
+                        fail("PYTHON.json contains a non-string license_paths entry")
+                    paths.update(child)
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(metadata)
+    for path in paths:
+        if not path.startswith("licenses/") or ".." in Path(path).parts:
+            fail(f"PYTHON.json contains an unsafe license path: {path}")
+    return paths
+
+
+def supplement_missing_licenses(
+    python_root: Path, metadata: dict[str, Any], token: str | None
+) -> list[dict[str, str]]:
+    """Fill known upstream omissions using exact reviewed dependency tags."""
+    supplemented: list[dict[str, str]] = []
+    for relative in sorted(referenced_license_paths(metadata)):
+        destination = python_root / relative
+        if destination.is_file() and destination.stat().st_size:
+            continue
+        source = SUPPLEMENTAL_LICENSES.get(relative)
+        if source is None:
+            fail(f"full distribution omits an unreviewed license path: {relative}")
+        url = source["url"]
+        expected = source["sha256"]
+        content = request_bytes(url, token=token, limit=MAX_LICENSE_BYTES)
+        actual = hashlib.sha256(content).hexdigest()
+        if actual != expected:
+            fail(f"supplemental license digest changed for {relative}: {actual}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        supplemented.append({"path": relative, "source_url": url, "sha256": actual})
+    return supplemented
+
+
+def extract_legal_metadata(
+    archive: Path, destination: Path, token: str | None
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Extract and complete PYTHON.json legal metadata from a full archive."""
     if shutil.which("tar") is None or shutil.which("zstd") is None:
         fail("tar and zstd are required to extract Python full distributions")
     destination.mkdir(parents=True, exist_ok=True)
@@ -193,17 +257,30 @@ def extract_legal_metadata(archive: Path, destination: Path) -> None:
         fail(f"cannot extract legal metadata from {archive.name}: {completed.stderr.strip()}")
 
     python_root = destination / "python"
-    metadata = python_root / "PYTHON.json"
-    licenses = python_root / "licenses"
-    if not metadata.is_file() or metadata.stat().st_size == 0:
-        fail(f"full distribution has no non-empty PYTHON.json: {archive.name}")
+    metadata_path = python_root / "PYTHON.json"
     try:
-        json.loads(metadata.read_text(encoding="utf-8"))
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         fail(f"full distribution contains invalid PYTHON.json: {exc}")
-    license_files = [path for path in licenses.rglob("*") if path.is_file() and path.stat().st_size]
-    if not license_files:
-        fail(f"full distribution has no license texts: {archive.name}")
+    if not isinstance(metadata, dict):
+        fail(f"full distribution PYTHON.json is not an object: {archive.name}")
+    supplemented = supplement_missing_licenses(python_root, metadata, token)
+    for relative in referenced_license_paths(metadata):
+        license_path = python_root / relative
+        if not license_path.is_file() or license_path.stat().st_size == 0:
+            fail(f"required Python license text is missing: {relative}")
+    return metadata, supplemented
+
+
+def compare_license_trees(first: Path, second: Path) -> None:
+    """Require architecture-specific full archives to carry identical texts."""
+    first_files = {path.relative_to(first) for path in first.rglob("*") if path.is_file()}
+    second_files = {path.relative_to(second) for path in second.rglob("*") if path.is_file()}
+    if first_files != second_files:
+        fail("Python full distributions contain different license file sets by architecture")
+    for relative in sorted(first_files):
+        if (first / relative).read_bytes() != (second / relative).read_bytes():
+            fail(f"Python license text differs by architecture: {relative}")
 
 
 def atomic_replace_directory(source: Path, destination: Path) -> None:
@@ -230,15 +307,27 @@ def generate(root: Path, output: Path, token: str | None) -> None:
         generated = temp_root / "generated"
         generated.mkdir()
         manifest_records: list[dict[str, Any]] = []
+        common_licenses: Path | None = None
+        supplemental_records: list[dict[str, str]] | None = None
 
         for record in records:
             asset = select_full_asset(record, assets)
             archive = temp_root / str(asset["name"])
             sha256 = download_verified_asset(asset, token, archive)
             extracted = temp_root / f"extract-{record['arch']}"
-            extract_legal_metadata(archive, extracted)
-            target = generated / record["arch"]
-            shutil.copytree(extracted / "python", target)
+            _, supplemented = extract_legal_metadata(archive, extracted, token)
+            python_root = extracted / "python"
+            arch_root = generated / record["arch"]
+            arch_root.mkdir()
+            shutil.copy2(python_root / "PYTHON.json", arch_root / "PYTHON.json")
+            if common_licenses is None:
+                shutil.copytree(python_root / "licenses", generated / "licenses")
+                common_licenses = generated / "licenses"
+                supplemental_records = supplemented
+            else:
+                compare_license_trees(common_licenses, python_root / "licenses")
+                if supplemented != supplemental_records:
+                    fail("supplemental Python license sources differ by architecture")
             manifest_records.append(
                 {
                     **record,
@@ -253,6 +342,8 @@ def generate(root: Path, output: Path, token: str | None) -> None:
             "schema_version": 1,
             "source": "astral-sh/python-build-standalone",
             "selection_policy": list(FULL_BUILD_PREFERENCE),
+            "shared_license_texts": True,
+            "supplemental_licenses": supplemental_records or [],
             "artifacts": manifest_records,
         }
         (generated / "manifest.json").write_text(
@@ -272,6 +363,8 @@ def check(root: Path, output: Path) -> None:
         fail(f"cannot read valid {manifest_path}: {exc}")
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
         fail(f"unsupported Python notice manifest: {manifest_path}")
+    if manifest.get("shared_license_texts") is not True:
+        fail("Python notice manifest must declare shared license texts")
     records = manifest.get("artifacts")
     if not isinstance(records, list):
         fail(f"Python notice manifest has no artifacts array: {manifest_path}")
@@ -283,6 +376,7 @@ def check(root: Path, output: Path) -> None:
     if set(by_arch) != {"amd64", "arm64"}:
         fail("Python notice manifest must contain exactly amd64 and arm64")
 
+    licenses_root = output / "licenses"
     for expected in expected_records:
         actual = by_arch[expected["arch"]]
         for key in ("target", "python_version", "release", "install_asset_url"):
@@ -291,16 +385,30 @@ def check(root: Path, output: Path) -> None:
         digest = actual.get("full_asset_sha256")
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
             fail(f"Python notice manifest has no valid digest for {expected['arch']}")
-        arch_root = output / expected["arch"]
-        metadata = arch_root / "PYTHON.json"
-        licenses = arch_root / "licenses"
+        metadata_path = output / expected["arch"] / "PYTHON.json"
         try:
-            json.loads(metadata.read_text(encoding="utf-8"))
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             fail(f"invalid committed PYTHON.json for {expected['arch']}: {exc}")
-        license_files = [path for path in licenses.rglob("*") if path.is_file() and path.stat().st_size]
-        if not license_files:
-            fail(f"no committed Python license texts for {expected['arch']}")
+        for relative in referenced_license_paths(metadata):
+            name = Path(relative).name
+            license_path = licenses_root / name
+            if not license_path.is_file() or license_path.stat().st_size == 0:
+                fail(f"no committed Python license text for {expected['arch']}: {relative}")
+
+    supplemental = manifest.get("supplemental_licenses")
+    if not isinstance(supplemental, list):
+        fail("Python notice manifest has no supplemental_licenses array")
+    expected_supplemental = {
+        (entry["url"], entry["sha256"]) for entry in SUPPLEMENTAL_LICENSES.values()
+    }
+    actual_supplemental = {
+        (entry.get("source_url"), entry.get("sha256"))
+        for entry in supplemental
+        if isinstance(entry, dict)
+    }
+    if actual_supplemental != expected_supplemental:
+        fail("Python supplemental license sources do not match the reviewed mapping")
 
     print("Python standalone runtime notices: OK")
 
