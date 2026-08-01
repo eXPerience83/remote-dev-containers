@@ -10,6 +10,10 @@ start_mode="$(remote_dev_resolve_start_mode "$role")"
 export REMOTE_DEV_ROLE="$role"
 export REMOTE_DEV_START_MODE="$start_mode"
 
+if [[ "$role" == launcher ]]; then
+  exec /usr/local/bin/remote-dev-launcher
+fi
+
 if [[ -z "${TMUX_SESSION:-}" ]]; then
   TMUX_SESSION="$(remote_dev_default_tmux_session "$role")"
   export TMUX_SESSION
