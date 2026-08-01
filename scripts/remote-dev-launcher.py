@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 _SAFE_HOST = re.compile(r"^[A-Za-z0-9.:[\]_-]+$")
+_SAFE_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -44,10 +45,10 @@ def _env_port(name: str, default: int) -> int:
 
 
 def _normalize_path(name: str, value: str) -> str:
-    if not value.startswith("/"):
-        raise ValueError(f"{name} must start with /")
-    if any(character in value for character in ("\r", "\n", "?", "#")):
-        raise ValueError(f"{name} must not contain CR, LF, query or fragment data")
+    if not _SAFE_PATH.fullmatch(value):
+        raise ValueError(
+            f"{name} must be an absolute URL path containing only RFC 3986 path characters"
+        )
     if value != "/":
         value = value.rstrip("/")
     return value
