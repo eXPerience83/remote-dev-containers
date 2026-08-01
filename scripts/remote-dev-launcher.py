@@ -214,6 +214,7 @@ document.getElementById('codex-link').href = `${{scheme}}://${{formattedHost}}:$
 
 class LauncherServer(ThreadingHTTPServer):
     daemon_threads = True
+    request_queue_size = 16
 
     def __init__(self, config: LauncherConfig) -> None:
         self.config = config
@@ -223,6 +224,10 @@ class LauncherServer(ThreadingHTTPServer):
 class LauncherHandler(BaseHTTPRequestHandler):
     server: LauncherServer
     protocol_version = "HTTP/1.1"
+
+    def setup(self) -> None:
+        super().setup()
+        self.connection.settimeout(10)
 
     def log_message(self, format_string: str, *args: object) -> None:
         sys.stderr.write(
@@ -277,15 +282,15 @@ class LauncherHandler(BaseHTTPRequestHandler):
         if not header.startswith("Basic "):
             return False
         try:
-            decoded = base64.b64decode(header[6:], validate=True).decode("utf-8")
-        except (binascii.Error, UnicodeDecodeError):
+            decoded = base64.b64decode(header[6:], validate=True)
+        except binascii.Error:
             return False
-        if ":" not in decoded:
+        username, separator, password = decoded.partition(b":")
+        if not separator:
             return False
-        username, password = decoded.split(":", 1)
-        return hmac.compare_digest(username, config.username) and hmac.compare_digest(
-            password, config.password
-        )
+        return hmac.compare_digest(
+            username, config.username.encode("utf-8")
+        ) and hmac.compare_digest(password, config.password.encode("utf-8"))
 
     def _origin_allowed(self) -> bool:
         if not self.server.config.check_origin:
@@ -294,14 +299,21 @@ class LauncherHandler(BaseHTTPRequestHandler):
         if origin is None:
             return True
         host = self.headers.get("Host", "")
-        if not host or any(character in host for character in ("\r", "\n", "/", "@")):
-            return False
         parsed = urlsplit(origin)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             return False
         if parsed.username is not None or parsed.password is not None:
             return False
-        return hmac.compare_digest(parsed.netloc.lower(), host.lower())
+
+        normalized_host = host.lower()
+        normalized_origin = parsed.netloc.lower()
+        if not _SAFE_HOST.fullmatch(normalized_host):
+            return False
+        if not _SAFE_HOST.fullmatch(normalized_origin):
+            return False
+        return hmac.compare_digest(
+            normalized_origin.encode("ascii"), normalized_host.encode("ascii")
+        )
 
     def _serve(self, *, send_body: bool) -> None:
         path = urlsplit(self.path).path
@@ -362,9 +374,11 @@ class LauncherHandler(BaseHTTPRequestHandler):
         self._serve(send_body=False)
 
     def _method_not_allowed(self) -> None:
+        self.close_connection = True
         self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
         self._security_headers()
         self.send_header("Allow", "GET, HEAD")
+        self.send_header("Connection", "close")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
