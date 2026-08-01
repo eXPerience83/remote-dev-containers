@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_on": "2026-07-31",
+  "reviewed_on": "2026-08-01",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -41,14 +41,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.96.0",
+      "version": "2.97.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.96.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.97.0/LICENSE"
         }
       ]
     },
@@ -73,14 +73,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.7.17",
+      "version": "2026.7.18",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.7.17/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.7.18/LICENSE"
         }
       ]
     },
