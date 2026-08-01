@@ -56,6 +56,8 @@ assert_eq menu "$(env -u REMOTE_DEV_START_MODE START_MODE=menu bash -c 'source "
 assert_eq agent "$(env -u REMOTE_DEV_START_MODE START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "legacy codex mode"
 assert_eq shell "$(env REMOTE_DEV_START_MODE=shell START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "neutral mode precedence"
 assert_fails_with 2 "unsupported REMOTE_DEV_START_MODE" env REMOTE_DEV_START_MODE='agent;id' bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib"
+assert_fails_with 2 "unsupported START_MODE=agent" env -u REMOTE_DEV_START_MODE START_MODE=agent bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib"
+assert_fails_with 2 "unsupported START_MODE=codex;id" env -u REMOTE_DEV_START_MODE START_MODE='codex;id' bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib"
 assert_fails_with 2 "not available" env REMOTE_DEV_START_MODE=agent bash -c 'source "$1"; remote_dev_resolve_start_mode shell' _ "$runtime_lib"
 
 assert_eq codex "$(remote_dev_default_tmux_session codex)" "codex compatibility session"
