@@ -27,7 +27,9 @@ A version update is not complete until the same pull request:
 4. passes `scripts/validate-third-party-inventory.sh`;
 5. builds both images and passes `remote-dev-notices --check`.
 
-The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing version pins. For each already inventoried component it updates the exact reviewed source URL and downloads the legal document from the new version tag into the same pull request. Changed legal text is never accepted silently: it remains visible in the pull-request diff for human review. If the version-specific URL cannot be derived safely or the upstream document cannot be downloaded, the maintenance workflow fails before creating an incoherent update commit.
+The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing version pins. For each already inventoried component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. Downloads are restricted to explicitly approved HTTPS hosts and repository notice paths are confined to `third_party/`.
+
+Changed legal text is never accepted silently: it remains visible in the pull-request diff for human review. The robot updates `refreshed_on` when it prepares new candidate documents; `reviewed_on` records a human review and is not changed automatically. If the version-specific URL cannot be derived safely or the upstream document cannot be downloaded, the maintenance workflow fails before creating an incoherent update commit.
 
 CI compares all tool version keys in `versions.env` with the declarative inventory. A new pinned tool therefore requires an explicit inventory entry, but the validator does not implement a general-purpose Docker or shell parser.
 
