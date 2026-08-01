@@ -4,13 +4,27 @@
 
 `edge` is the public experimental development channel for the current `main` branch.
 
-The **Publish edge AMD64** workflow runs automatically after relevant image, runtime or version changes merge into `main`. It can also be started manually from `main`. Each run publishes:
+The **Publish edge AMD64** workflow runs automatically after relevant image, runtime or version changes merge into `main`. It can also be started manually from `main`. Each run builds and scans one final Remote Dev digest and promotes it to:
 
-- `ghcr.io/experience83/remote-dev-base:edge-amd64`
-- `ghcr.io/experience83/remote-dev-base:sha-<full-commit-sha>`
-- `ghcr.io/experience83/codex-remote-dev:edge`
-- `ghcr.io/experience83/codex-remote-dev:edge-amd64`
-- `ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>`
+- canonical package:
+  - `ghcr.io/experience83/remote-dev:edge`
+  - `ghcr.io/experience83/remote-dev:edge-amd64`
+  - `ghcr.io/experience83/remote-dev:sha-<full-commit-sha>`
+- compatibility package, pointing to the same digest:
+  - `ghcr.io/experience83/codex-remote-dev:edge`
+  - `ghcr.io/experience83/codex-remote-dev:edge-amd64`
+  - `ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>`
+- shared base package:
+  - `ghcr.io/experience83/remote-dev-base:edge-amd64`
+  - `ghcr.io/experience83/remote-dev-base:sha-<full-commit-sha>`
+
+The workflow verifies that the canonical and compatibility tags resolve to the exact digest that passed Trivy. The compatibility package is not a second build and does not duplicate the image's immutable content.
+
+The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. A deprecation notice must appear in release notes before removal.
+
+### Canonical-package bootstrap
+
+A newly created GHCR package starts with private visibility. After the first workflow run creates `remote-dev`, the maintainer must open that package's settings and change its visibility to **Public** before documentation or Compose defaults point anonymous users at it. Until that one-time action is confirmed, the checked-in Compose examples continue to use the public `codex-remote-dev` compatibility package.
 
 Public container-registry images can be pulled without authentication. The `sha-...` tag identifies the source commit, but container tags remain mutable in GHCR. Record and deploy the published `sha256:...` digest when immutable reproduction is required. Use `edge-amd64` only when intentionally following the latest development build.
 
@@ -39,7 +53,7 @@ For example:
 v0.1.0
 ```
 
-The tagged commit must belong to the history of `main`; a semantic-version tag placed on an unrelated branch is rejected. Stable publication produces versioned tags and updates the moving `stable`, `stable-amd64` and `latest` tags. Pre-release tags such as `v0.1.0-rc.1` are intentionally rejected by the stable workflow.
+The tagged commit must belong to the history of `main`; a semantic-version tag placed on an unrelated branch is rejected. Stable publication produces identical versioned, `stable`, `stable-amd64` and `latest` tags under the canonical and compatibility packages. Pre-release tags such as `v0.1.0-rc.1` are intentionally rejected by the stable workflow.
 
 Both publication workflows first push untagged candidates by digest, scan those exact digests and only then promote them to public moving or versioned tags. A fixable `CRITICAL` vulnerability blocks tag promotion. Critical findings without a known fix remain visible in the retained JSON reports but do not fail the gate.
 
@@ -48,16 +62,18 @@ Both publication workflows first push untagged candidates by digest, scan those 
 Before creating a stable version tag:
 
 1. The AMD64 build, runtime smoke tests and fixable-critical vulnerability gate pass on `main`.
-2. The `edge` image has been deployed on TrueNAS.
-3. Browser access, authentication and tmux reconnection have been verified.
-4. Codex device-code login persists across recreation.
-5. GitHub CLI login, clone, push and pull-request creation have been verified.
-6. The fixed sandbox and both Codex approval modes have been tested on the target TrueNAS host: autonomous completes a representative workflow without routine prompts, guarded still prompts where expected, and diagnostics report the exact mode, upstream policy, source and outer-container boundary.
-7. Changing the permanent approval setting affects subsequent sessions without silently changing an already running Codex process; a one-launch selection affects only that launch.
-8. The changelog has a dated release section.
-9. Third-party licenses and notices are complete.
-10. The repository contains no credentials, personal paths or private infrastructure details.
+2. The canonical `remote-dev` GHCR package is public and anonymously pullable.
+3. Canonical and compatibility tags resolve to the same tested digest.
+4. The `edge` image has been deployed on TrueNAS.
+5. Browser access, authentication and tmux reconnection have been verified.
+6. Codex device-code login persists across recreation.
+7. GitHub CLI login, clone, push and pull-request creation have been verified.
+8. The fixed sandbox and both Codex approval modes have been tested on the target TrueNAS host: autonomous completes a representative workflow without routine prompts, guarded still prompts where expected, and diagnostics report the exact mode, upstream policy, source and outer-container boundary.
+9. Changing the permanent approval setting affects subsequent sessions without silently changing an already running Codex process; a one-launch selection affects only that launch.
+10. The changelog has a dated release section.
+11. Third-party licenses and notices are complete.
+12. The repository contains no credentials, personal paths or private infrastructure details.
 
 ## Rollback
 
-Do not depend exclusively on moving tags. Record the tested image digest, its `sha-...` tag and the source commit. For an immutable rollback, set `CODEX_IMAGE` to `ghcr.io/experience83/codex-remote-dev@sha256:<digest>` and recreate the container.
+Do not depend exclusively on moving tags. Record the tested image digest, its `sha-...` tag and the source commit. During the bootstrap phase, existing deployments may continue setting `CODEX_IMAGE` to `ghcr.io/experience83/codex-remote-dev@sha256:<digest>`. After the deployment-default switch, use `REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>`; both references identify the same promoted digest throughout `v0.1.x`.
