@@ -17,4 +17,4 @@ validate:
 	@for file in compose/*.yml; do docker compose -f "$$file" config --quiet; echo "OK $$file"; done
 
 package:
-	tar --exclude=.git -czf remote-dev-containers-starter.tar.gz .
+	tar --exclude=.git -czf codex-remote-dev-starter.tar.gz .
