@@ -223,7 +223,7 @@ jobs:
           replace_env GH_ARM64_SHA256 "$gh_arm64_sha256"
           replace_env TTYD_VERSION "$latest_ttyd"
           replace_env TTYD_AMD64_SHA256 "$ttyd_amd64_sha256"
-          replace_env TTYD_ARM64_SHA256 "$latest_mise"
+          replace_env TTYD_ARM64_SHA256 "$ttyd_arm64_sha256"
           replace_env MISE_VERSION "$latest_mise"
           replace_env MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_env MISE_ARM64_SHA256 "$mise_arm64_sha256"
