@@ -222,15 +222,16 @@ jobs:
             exit 1
           fi
 
-          for tag_ref in \
-            "ghcr.io/${NAMESPACE}/remote-dev:edge-amd64" \
-            "ghcr.io/${NAMESPACE}/codex-remote-dev:edge-amd64"; do
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-              exit 1
-            fi
+          for package in remote-dev codex-remote-dev; do
+            for tag in edge edge-amd64 "sha-${GITHUB_SHA}"; do
+              tag_ref="ghcr.io/${NAMESPACE}/${package}:${tag}"
+              actual_digest="$(
+                docker buildx imagetools inspect "$tag_ref" \
+                  --format '{{json .Manifest.Digest}}' | tr -d '"'
+              )"
+              if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
+                echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
+                exit 1
+              fi
+            done
           done
