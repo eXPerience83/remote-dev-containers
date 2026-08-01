@@ -58,6 +58,10 @@ result="$(
     REMOTE_DEV_IMAGE=canonical:local CODEX_IMAGE=legacy:local 2>"$warning_file"
 )"
 assert_eq canonical:local "$result" "conflicting canonical value"
-grep -Fq -- 'REMOTE_DEV_IMAGE=canonical:local overrides deprecated CODEX_IMAGE=legacy:local' "$warning_file"
+if ! grep -Fq -- 'REMOTE_DEV_IMAGE=canonical:local overrides deprecated CODEX_IMAGE=legacy:local' "$warning_file"; then
+  echo "ERROR: conflict warning text missing or changed" >&2
+  cat "$warning_file" >&2
+  exit 1
+fi
 
 echo "Canonical and legacy image-name resolution tests: OK"
