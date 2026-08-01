@@ -4,8 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck disable=SC1091
 source "$ROOT/versions.env"
+# shellcheck source=scripts/lib/remote-dev-image-names.sh
+source "$ROOT/scripts/lib/remote-dev-image-names.sh"
 
 bash "$ROOT/scripts/validate-version-pins.sh"
+REMOTE_DEV_IMAGE_NAMES_LIB="$ROOT/scripts/lib/remote-dev-image-names.sh" \
+  bash "$ROOT/scripts/test-image-name-compat.sh"
 
 require_build_value() {
   local label="$1"
@@ -27,8 +31,14 @@ require_build_value() {
   esac
 }
 
-BASE_IMAGE="${BASE_IMAGE:-codex-remote-dev-base:local}"
-CODEX_IMAGE="${CODEX_IMAGE:-codex-remote-dev:local}"
+remote_dev_base_image="$(
+  remote_dev_resolve_compatible_image \
+    REMOTE_DEV_BASE_IMAGE BASE_IMAGE remote-dev-base:local
+)"
+remote_dev_image="$(
+  remote_dev_resolve_compatible_image \
+    REMOTE_DEV_IMAGE CODEX_IMAGE remote-dev:local
+)"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-${BASE_VERSION:-}}"
 
@@ -59,19 +69,51 @@ common_args=(
   --build-arg "UV_VERSION=$UV_VERSION"
 )
 
-docker build "${common_args[@]}" -t "$BASE_IMAGE" -f "$ROOT/images/base/Dockerfile" "$ROOT"
+docker build \
+  "${common_args[@]}" \
+  -t "$remote_dev_base_image" \
+  -f "$ROOT/images/base/Dockerfile" \
+  "$ROOT"
+remote_dev_tag_compatibility_aliases \
+  "$remote_dev_base_image" \
+  remote-dev-base:local \
+  codex-remote-dev-base:local
+
 docker build \
   --platform "$PLATFORM" \
-  --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+  --build-arg "BASE_IMAGE=$remote_dev_base_image" \
   --build-arg "CODEX_RELEASE_TAG=$CODEX_RELEASE_TAG" \
   --build-arg "CODEX_AMD64_SHA256=$CODEX_AMD64_SHA256" \
   --build-arg "CODEX_ARM64_SHA256=$CODEX_ARM64_SHA256" \
   --build-arg "PROJECT_VERSION=$PROJECT_VERSION" \
   --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
-  -t "$CODEX_IMAGE" \
+  -t "$remote_dev_image" \
   -f "$ROOT/images/codex/Dockerfile" \
   "$ROOT"
+remote_dev_tag_compatibility_aliases \
+  "$remote_dev_image" \
+  remote-dev:local \
+  codex-remote-dev:local
 
-docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$CODEX_IMAGE"
-bash "$ROOT/scripts/runtime-smoke-test.sh" "$CODEX_IMAGE"
-docker image inspect "$BASE_IMAGE" "$CODEX_IMAGE" --format '{{.RepoTags}} {{.Size}}'
+docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$remote_dev_image"
+bash "$ROOT/scripts/runtime-smoke-test.sh" "$remote_dev_image"
+
+canonical_base_id="$(docker image inspect remote-dev-base:local --format '{{.Id}}')"
+legacy_base_id="$(docker image inspect codex-remote-dev-base:local --format '{{.Id}}')"
+canonical_runtime_id="$(docker image inspect remote-dev:local --format '{{.Id}}')"
+legacy_runtime_id="$(docker image inspect codex-remote-dev:local --format '{{.Id}}')"
+if [[ "$canonical_base_id" != "$legacy_base_id" ]]; then
+  echo "ERROR: legacy base tag does not reference the canonical local image" >&2
+  exit 1
+fi
+if [[ "$canonical_runtime_id" != "$legacy_runtime_id" ]]; then
+  echo "ERROR: legacy runtime tag does not reference the canonical local image" >&2
+  exit 1
+fi
+
+docker image inspect \
+  remote-dev-base:local \
+  remote-dev:local \
+  codex-remote-dev-base:local \
+  codex-remote-dev:local \
+  --format '{{.RepoTags}} {{.Id}} {{.Size}}'
