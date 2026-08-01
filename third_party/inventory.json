@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-01",
+  "refreshed_on": "2026-08-01",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
