@@ -16,6 +16,7 @@ The current edge stack is the Codex reference implementation:
 - one Remote Dev image reused by the launcher and Codex services;
 - one authenticated launcher as the normal browser entry point;
 - one isolated Codex terminal service with its existing private mounts;
+- separate web credentials for the launcher and Codex terminal;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset;
@@ -68,11 +69,11 @@ Remote Dev stack
 
 The launcher page is protected with HTTP Basic authentication, checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
 
-Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration or SSH mounts.
+Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts or Codex terminal password.
 
-The Codex endpoint authenticates independently. In a normal browser session this can produce a second authentication challenge after entering the launcher. That is deliberate in the redirect-based design: credentials are not embedded in the link or passed through the launcher.
+The Codex endpoint authenticates independently with a different mounted secret. In a normal browser session this can produce a second authentication challenge after entering the launcher. That is deliberate in the redirect-based design: credentials are not embedded in the link, passed through the launcher or shared between services.
 
-This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
+Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
 
 ### Codex approval modes
 
@@ -133,7 +134,7 @@ The target architecture is:
 - Claude Code preserved as a future path only;
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
-The current implementation now delivers the launcher and Codex portion of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts. Optional agent services, persistent-data migration and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
+The current implementation now delivers the launcher and Codex portion of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. Optional agent services, persistent-data migration and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
 
 The default launcher navigates to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
@@ -142,10 +143,13 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 ```bash
 cp .env.example .env
 mkdir -p secrets data/{workspace,codex,gh,git,ssh}
-printf '%s\n' 'replace-with-a-long-password' > secrets/web_password.txt
-chmod 600 secrets/web_password.txt
+printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
+printf '%s\n' 'replace-with-a-different-codex-password' > secrets/web_password.txt
+chmod 600 secrets/launcher_password.txt secrets/web_password.txt
 ./scripts/build-local.sh
 ```
+
+Use distinct passwords. The launcher must not be able to authenticate to the Codex terminal by reading its own secret.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
@@ -161,7 +165,7 @@ Open the launcher at the published port `7680`, authenticate with `LAUNCHER_USER
 4. choose an autonomous or guarded mode for one launch;
 5. run diagnostics.
 
-By default both services read the same mounted web-password file, but the username defaults differ (`remote-dev` for the launcher and `codex` for the terminal).
+The default usernames differ (`remote-dev` for the launcher and `codex` for the terminal), and the two services mount different password files.
 
 ## Public edge testing
 
@@ -212,7 +216,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 ## Important warnings
 
 - Do not publish ports 7680 or 7681 directly to the Internet.
-- The launcher and Codex terminal authenticate independently; the launcher never embeds or forwards the terminal password.
+- The launcher and Codex terminal authenticate independently with different mounted secrets.
+- The launcher never embeds, forwards or mounts the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces or credentials into the launcher.
 - Do not mount the Docker socket.
