@@ -11,8 +11,9 @@ Implemented:
 - one Compose/TrueNAS stack containing launcher and Codex services;
 - one primary launcher URL;
 - one image reference reused by both services;
-- redirect/navigation from the launcher to the independently authenticated Codex endpoint;
-- no agent-state mounts or Docker socket in the launcher.
+- navigation from the launcher to the independently authenticated Codex endpoint;
+- separate launcher and Codex web-password secrets;
+- no agent-state mounts, agent credentials or Docker socket in the launcher.
 
 Still pending under issues #25 and #31:
 
@@ -46,8 +47,8 @@ The current implementation includes the launcher and Codex services. Codex remai
 
 ```text
 Remote Dev App / Compose stack
-├── launcher service  (primary port 7680)
-└── Codex service     (authenticated terminal port 7681)
+├── launcher service  (primary port 7680, launcher-only password)
+└── Codex service     (terminal port 7681, separate password)
 ```
 
 Both services reference the same `REMOTE_DEV_IMAGE` value. The fixed roles are:
@@ -65,8 +66,10 @@ The launcher provides the normal user entry point and lists only available, supp
 The implemented launcher:
 
 - is a project-owned Python standard-library HTTP service bundled in the final image;
-- uses HTTP Basic authentication from the shared web-password secret;
+- uses HTTP Basic authentication from its own launcher-password secret;
+- does not mount or know the Codex terminal password;
 - validates its fixed destination host, scheme, port and path settings;
+- restricts paths to safe RFC 3986 URL-path characters before embedding them in the page;
 - uses the browser hostname and scheme when no explicit public host/scheme is configured;
 - checks same-origin requests when an `Origin` header is present;
 - sends a restrictive nonce-based Content Security Policy;
@@ -75,9 +78,9 @@ The implemented launcher:
 - contains no agent OAuth tokens, histories, workspaces, GitHub state or SSH keys;
 - receives no Docker/Podman socket and creates no containers.
 
-The Codex endpoint authenticates independently. The normal browser flow can therefore challenge once for the launcher and again for Codex. Credentials are never embedded into the navigation URL or forwarded by the launcher.
+The Codex endpoint uses a different mounted password secret and authenticates independently. The normal browser flow can therefore challenge once for the launcher and again for Codex. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher.
 
-The direct Codex port remains published because the redirect-based design does not proxy terminal traffic. It is the normal navigation destination and can also be used for troubleshooting. The documented workflow still begins at the launcher URL.
+The direct Codex port remains published because the navigation design does not proxy terminal traffic. It is the normal navigation destination and can also be used for troubleshooting. The documented workflow still begins at the launcher URL.
 
 A future fixed reverse proxy could provide one browser origin, but it would become a trusted transport component capable of observing terminal traffic. That requires a separate threat-model review and is not part of the current implementation.
 
@@ -93,7 +96,7 @@ The final image contains:
 - neutral diagnostics, health checks and version reporting;
 - Codex CLI as the built-in reference agent.
 
-Sharing executables through image layers does not share mutable state. Runtime tests and Compose validation assert that launcher and Codex use the same image reference/ID.
+Sharing executables through image layers does not share mutable state or secrets. Runtime tests and Compose validation assert that launcher and Codex use the same image reference/ID while their password sources remain distinct.
 
 ## Service roles
 
@@ -127,7 +130,7 @@ A missing optional agent is reported as unavailable. It is never downloaded duri
 
 ## Persistence boundaries
 
-The current launcher service is stateless apart from the mounted web-password secret. It receives no agent data mounts.
+The current launcher service is stateless apart from its launcher-only web-password secret. It receives no agent data mounts or agent web-password secret.
 
 The Codex service temporarily retains the existing layout:
 
@@ -138,6 +141,18 @@ CODEX_DATA_ROOT/
 ├── gh/
 ├── git/
 └── ssh/
+```
+
+The TrueNAS reference keeps the existing Codex secret at:
+
+```text
+/mnt/Pool1/codex/secrets/web_password.txt
+```
+
+and uses a separate launcher secret at:
+
+```text
+/mnt/Pool1/remote-dev/launcher/secrets/web_password.txt
 ```
 
 The later migration slice will introduce the neutral administrative layout without deleting or sharing existing Codex state:
@@ -157,14 +172,15 @@ remote-dev-data/
 
 The parent data directory is never mounted wholesale. Agent services receive only their own child paths.
 
-| State | Shared in image | Shared between services | Persistent per agent service |
+| State | Shared in image | Shared between services | Persistent per service |
 |---|---:|---:|---:|
 | Common executables | Yes | Read-only image layers | No |
-| Workspace or worktree | No | No by default | Yes |
-| Agent authentication/configuration | No | No | Yes |
-| GitHub CLI configuration | Executable only | No | Yes |
-| Git global configuration | Executable only | No | Yes |
-| SSH keys/configuration | Client only | No | Yes |
+| Workspace or worktree | No | No by default | Agent only |
+| Agent authentication/configuration | No | No | Agent only |
+| Web password | No | No | Separate launcher/agent secrets |
+| GitHub CLI configuration | Executable only | No | Agent only |
+| Git global configuration | Executable only | No | Agent only |
+| SSH keys/configuration | Client only | No | Agent only |
 | Launcher navigation configuration | Runtime only | Not mounted into agents | Launcher only |
 
 The supported configuration does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent data directory or the Docker socket.
@@ -175,7 +191,7 @@ The default stack does not mount one writable checkout into two agent services. 
 
 ## Security and trust boundaries
 
-Each outer container is a separate boundary. Anyone with terminal/root access inside the Codex service is trusted for the state mounted into Codex, but the launcher cannot see that state because it is not mounted there.
+Each outer container is a separate boundary. Anyone with terminal/root access inside the Codex service is trusted for the state mounted into Codex, but the launcher cannot see that state or authenticate to the terminal because neither is mounted there.
 
 The stack does not require:
 
@@ -198,15 +214,15 @@ A broken optional agent must not make the launcher or Codex unhealthy. Healthche
 
 ## Migration from the Codex-only App
 
-The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data is not copied, renamed or exposed to the launcher.
+The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data and the Codex terminal password are not copied, renamed or exposed to the launcher.
 
-The later migration slice must:
+The launcher introduces only its own new password file. The later data-migration slice must:
 
 - preserve the existing workspace and credentials;
 - avoid deleting or silently copying authentication state;
 - map existing Codex paths only into the Codex service;
 - document rollback;
-- avoid exposing Codex state to the launcher or future agents.
+- avoid exposing Codex state or credentials to the launcher or future agents.
 
 The `codex-remote-dev` package and `CODEX_IMAGE` variable remain compatibility aliases through `v0.1.x` and will not be removed before `v0.2.0`.
 
@@ -217,6 +233,8 @@ Automated tests now cover:
 - fixed launcher-role resolution and invalid-mode rejection;
 - launcher authentication, origin checking, CSP and method restrictions;
 - fixed Codex navigation configuration without password exposure;
+- rejection of unsafe configured URL paths;
+- independent launcher and Codex password targets and sources;
 - role-aware healthchecks;
 - launcher diagnostics without agent-state access;
 - generic and TrueNAS Compose topology;
@@ -240,7 +258,7 @@ This architecture does not include:
 - a virtual-machine distribution;
 - several agents in one agent container;
 - one manually maintained TrueNAS App per agent;
-- shared OAuth/token files between agents;
+- shared OAuth/token or web-password files between services;
 - dynamic privileged child containers;
 - concurrent writes by several agents to one checkout by default;
 - weakening TrueNAS/Docker security to force an inner sandbox;
