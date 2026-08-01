@@ -5,6 +5,7 @@ launcher="${REMOTE_DEV_LAUNCHER:-/usr/local/bin/remote-dev-launcher}"
 workdir="$(mktemp -d)"
 log_file="$workdir/launcher.log"
 password_file="$workdir/password"
+starting_uid="$(id -u)"
 port="$(python - <<'PY'
 import socket
 with socket.socket() as sock:
@@ -54,6 +55,15 @@ for _ in $(seq 1 50); do
 done
 curl --fail --silent --show-error "$base_url/launcher/healthz" \
   | grep -Fq '"role":"launcher"'
+
+if [[ "$starting_uid" == 0 ]]; then
+  effective_uid="$(ps -o uid= -p "$launcher_pid" | tr -d '[:space:]')"
+  [[ "$effective_uid" == 65532 ]] || {
+    echo "ERROR: launcher serves as UID $effective_uid instead of 65532" >&2
+    cat "$log_file" >&2
+    exit 1
+  }
+fi
 
 status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   "$base_url/launcher/")"
@@ -142,4 +152,16 @@ REMOTE_DEV_LAUNCHER_CODEX_PATH='/codex</script>' \
 }
 grep -Fq 'absolute URL path containing only RFC 3986 path characters' "$unsafe_path_log"
 
-echo 'Authenticated launcher, origin policy and fixed routing tests: OK'
+embedded_port_log="$workdir/embedded-port.log"
+embedded_port_status=0
+ALLOW_INSECURE_WEB=1 \
+REMOTE_DEV_LAUNCHER_CODEX_HOST='codex.example.com:8443' \
+  python "$launcher" > /dev/null 2>"$embedded_port_log" || embedded_port_status=$?
+[[ "$embedded_port_status" == 2 ]] || {
+  echo "ERROR: host with embedded port returned $embedded_port_status instead of 2" >&2
+  cat "$embedded_port_log" >&2
+  exit 1
+}
+grep -Fq 'must not include a port' "$embedded_port_log"
+
+echo 'Authenticated launcher, privilege drop and fixed routing tests: OK'
