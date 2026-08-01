@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -18,30 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
-          persist-credentials: true
-
-      - name: Collect exact Python runtime legal metadata
-        if: github.event_name == 'pull_request' && github.head_ref == 'legal/python-runtime-notices'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zstd
-          python3 scripts/sync-python-runtime-notices.py --write
-
-      - name: Commit collected Python runtime legal metadata
-        if: github.event_name == 'pull_request' && github.head_ref == 'legal/python-runtime-notices'
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add third_party/components/python-build-standalone
-          if git diff --cached --quiet; then
-            echo "Python runtime legal metadata is already committed."
-          else
-            git commit -m "legal: preserve exact Python runtime notices"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
-          fi
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
