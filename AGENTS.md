@@ -42,7 +42,7 @@ Never weaken these constraints to make a feature easier:
 - no `eval`, sourced editable state, or user-controlled shell fragments for role, mode, installer, or command dispatch;
 - no secret values in diagnostics, logs, tests, issues, or PR descriptions.
 
-The supported TrueNAS isolation boundary is the outer container. Do not claim that Bubblewrap, Landlock, approvals, or another inner mechanism provides isolation unless a positive runtime test proves it.
+The supported TrueNAS isolation boundary is the outer container. Approval prompts are never a sandbox or an isolation boundary. Do not claim that Bubblewrap, Landlock, or another inner sandbox is active unless a positive runtime test proves that exact mechanism is operational.
 
 ## Runtime implementation rules
 
