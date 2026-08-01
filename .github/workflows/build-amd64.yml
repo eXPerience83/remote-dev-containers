@@ -30,9 +30,16 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
             scripts/update-third-party-inventory.py \
-            scripts/test_update_third_party_inventory.py
+            scripts/test_update_third_party_inventory.py \
+            scripts/sync-python-runtime-notices.py \
+            scripts/test_sync_python_runtime_notices.py \
+            scripts/compact-python-runtime-notices.py \
+            scripts/test_compact_python_runtime_notices.py
           python3 scripts/test_update_third_party_inventory.py
+          python3 scripts/test_sync_python_runtime_notices.py
+          python3 scripts/test_compact_python_runtime_notices.py
           python3 scripts/update-third-party-inventory.py --check
+          python3 scripts/compact-python-runtime-notices.py --check
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh

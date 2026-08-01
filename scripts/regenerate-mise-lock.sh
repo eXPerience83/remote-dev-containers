@@ -95,4 +95,26 @@ install -m 0644 "$workspace/mise.lock" "$replacement"
 mv -f -- "$replacement" "$ROOT/mise.lock"
 replacement=""
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
+
+# The compact Python install-only artifacts omit their full legal metadata. Keep
+# the exact matching full-distribution metadata synchronized whenever mise.lock
+# selects a new Python artifact, but avoid the large downloads when it is current.
+if ! python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check; then
+  if ! command -v zstd >/dev/null 2>&1; then
+    if [[ "${CI:-}" == "true" ]] && command -v sudo >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y --no-install-recommends zstd
+    else
+      cat >&2 <<'EOF'
+ERROR: zstd is required to refresh Python runtime legal metadata.
+Install zstd and rerun scripts/regenerate-mise-lock.sh.
+EOF
+      exit 1
+    fi
+  fi
+  python3 "$ROOT/scripts/sync-python-runtime-notices.py" --write
+  python3 "$ROOT/scripts/compact-python-runtime-notices.py" --write
+fi
+python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check
+
 echo "Regenerated mise.lock with mise $MISE_VERSION from isolated inputs."

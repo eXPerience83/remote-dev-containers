@@ -58,7 +58,7 @@ chmod 0755 "$fake_mise"
 
 copy_fixture() {
   local destination="$1"
-  mkdir -p "$destination/scripts"
+  mkdir -p "$destination/scripts" "$destination/third_party/components"
   cp \
     "$ROOT/versions.env" \
     "$ROOT/mise.toml" \
@@ -67,7 +67,12 @@ copy_fixture() {
   cp \
     "$ROOT/scripts/regenerate-mise-lock.sh" \
     "$ROOT/scripts/validate-mise-lock.py" \
+    "$ROOT/scripts/sync-python-runtime-notices.py" \
+    "$ROOT/scripts/compact-python-runtime-notices.py" \
     "$destination/scripts/"
+  cp -R \
+    "$ROOT/third_party/components/python-build-standalone" \
+    "$destination/third_party/components/"
 }
 
 assert_no_temp_lock() {
