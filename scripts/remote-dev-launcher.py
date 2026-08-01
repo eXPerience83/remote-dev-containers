@@ -7,6 +7,7 @@ import base64
 import binascii
 import hmac
 import html
+import ipaddress
 import json
 import os
 import re
@@ -18,8 +19,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-_SAFE_HOST = re.compile(r"^[A-Za-z0-9.:[\]_-]+$")
+_SAFE_AUTHORITY = re.compile(r"^[A-Za-z0-9.:[\]_-]+$")
 _SAFE_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
+_DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_LAUNCHER_UID = 65532
+_LAUNCHER_GID = 65532
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -54,13 +58,42 @@ def _normalize_path(name: str, value: str) -> str:
     return value
 
 
+def _valid_dns_name(value: str) -> bool:
+    candidate = value[:-1] if value.endswith(".") else value
+    if not candidate or len(candidate) > 253:
+        return False
+    return all(_DNS_LABEL.fullmatch(label) for label in candidate.split("."))
+
+
 def _optional_host(name: str, value: str) -> str:
     if value == "":
         return value
-    if not _SAFE_HOST.fullmatch(value):
-        raise ValueError(f"{name} contains unsupported characters")
     if "/" in value or "@" in value or any(character.isspace() for character in value):
         raise ValueError(f"{name} must be a host or IP address without a scheme or path")
+
+    if value.startswith("[") or value.endswith("]"):
+        if not (value.startswith("[") and value.endswith("]")):
+            raise ValueError(f"{name} contains malformed IPv6 brackets")
+        try:
+            ipaddress.IPv6Address(value[1:-1])
+        except ipaddress.AddressValueError as exc:
+            raise ValueError(f"{name} must contain a valid IPv6 address") from exc
+        return value
+
+    if ":" in value:
+        try:
+            ipaddress.IPv6Address(value)
+        except ipaddress.AddressValueError as exc:
+            raise ValueError(
+                f"{name} must not include a port; use REMOTE_DEV_LAUNCHER_CODEX_PORT"
+            ) from exc
+        return value
+
+    try:
+        ipaddress.IPv4Address(value)
+    except ipaddress.AddressValueError:
+        if not _valid_dns_name(value):
+            raise ValueError(f"{name} must contain a valid DNS name or IP address")
     return value
 
 
@@ -92,6 +125,19 @@ def _read_password() -> str | None:
     raise ValueError(
         "web authentication is not configured; set WEB_PASSWORD_FILE or WEB_PASSWORD"
     )
+
+
+def _drop_launcher_privileges() -> None:
+    if os.geteuid() != 0:
+        return
+    try:
+        os.setgroups([])
+        os.setgid(_LAUNCHER_GID)
+        os.setuid(_LAUNCHER_UID)
+    except OSError as exc:
+        raise ValueError("failed to drop launcher privileges") from exc
+    if os.geteuid() != _LAUNCHER_UID or os.getegid() != _LAUNCHER_GID:
+        raise ValueError("launcher privilege drop did not take effect")
 
 
 @dataclass(frozen=True)
@@ -307,9 +353,9 @@ class LauncherHandler(BaseHTTPRequestHandler):
 
         normalized_host = host.lower()
         normalized_origin = parsed.netloc.lower()
-        if not _SAFE_HOST.fullmatch(normalized_host):
+        if not _SAFE_AUTHORITY.fullmatch(normalized_host):
             return False
-        if not _SAFE_HOST.fullmatch(normalized_origin):
+        if not _SAFE_AUTHORITY.fullmatch(normalized_origin):
             return False
         return hmac.compare_digest(
             normalized_origin.encode("ascii"), normalized_host.encode("ascii")
@@ -391,12 +437,13 @@ class LauncherHandler(BaseHTTPRequestHandler):
 def main() -> int:
     try:
         config = load_config()
+        _drop_launcher_privileges()
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
     print(
-        f"Remote Dev launcher listening on {config.bind}:{config.port}{config.base_path}",
+        f"Remote Dev launcher listening on {config.bind}:{config.port}{config.base_path} as uid {os.geteuid()}",
         file=sys.stderr,
         flush=True,
     )
