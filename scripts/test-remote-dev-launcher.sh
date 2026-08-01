@@ -115,4 +115,16 @@ ALLOW_INSECURE_WEB=1 WEB_PORT=70000 python "$launcher" \
 }
 grep -Fq 'WEB_PORT must be between 1 and 65535' "$invalid_log"
 
+unsafe_path_log="$workdir/unsafe-path.log"
+unsafe_path_status=0
+ALLOW_INSECURE_WEB=1 \
+REMOTE_DEV_LAUNCHER_CODEX_PATH='/codex</script>' \
+  python "$launcher" > /dev/null 2>"$unsafe_path_log" || unsafe_path_status=$?
+[[ "$unsafe_path_status" == 2 ]] || {
+  echo "ERROR: unsafe route path returned $unsafe_path_status instead of 2" >&2
+  cat "$unsafe_path_log" >&2
+  exit 1
+}
+grep -Fq 'absolute URL path containing only RFC 3986 path characters' "$unsafe_path_log"
+
 echo 'Authenticated launcher, origin policy and fixed routing tests: OK'
