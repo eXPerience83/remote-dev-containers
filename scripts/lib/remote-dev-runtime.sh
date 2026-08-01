@@ -30,30 +30,28 @@ remote_dev_resolve_role() {
 remote_dev_resolve_start_mode() {
   local role="$1"
   local raw_mode=""
-  local source_name=""
-  local source_value=""
 
   if [[ -n "${REMOTE_DEV_START_MODE:-}" ]]; then
-    raw_mode="$REMOTE_DEV_START_MODE"
-    source_name=REMOTE_DEV_START_MODE
-    source_value="$REMOTE_DEV_START_MODE"
+    case "$REMOTE_DEV_START_MODE" in
+      menu|agent|shell)
+        raw_mode="$REMOTE_DEV_START_MODE"
+        ;;
+      *)
+        remote_dev_runtime_error "unsupported REMOTE_DEV_START_MODE=$REMOTE_DEV_START_MODE (menu|agent|shell)"
+        return 2
+        ;;
+    esac
   else
-    raw_mode="${START_MODE:-menu}"
-    source_name=START_MODE
-    source_value="${START_MODE:-unset}"
-    case "$raw_mode" in
+    case "${START_MODE:-menu}" in
+      menu) raw_mode=menu ;;
       codex) raw_mode=agent ;;
-      menu|shell) ;;
+      shell) raw_mode=shell ;;
+      *)
+        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|shell)"
+        return 2
+        ;;
     esac
   fi
-
-  case "$raw_mode" in
-    menu|agent|shell) ;;
-    *)
-      remote_dev_runtime_error "unsupported $source_name=$source_value (neutral: menu|agent|shell; legacy START_MODE: menu|codex|shell)"
-      return 2
-      ;;
-  esac
 
   if [[ "$role" == shell && "$raw_mode" == agent ]]; then
     remote_dev_runtime_error "REMOTE_DEV_START_MODE=agent is not available for REMOTE_DEV_ROLE=shell"
