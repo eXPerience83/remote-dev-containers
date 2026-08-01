@@ -18,7 +18,7 @@ The **Publish edge AMD64** workflow runs automatically after relevant image, run
   - `ghcr.io/experience83/remote-dev-base:edge-amd64`
   - `ghcr.io/experience83/remote-dev-base:sha-<full-commit-sha>`
 
-The workflow verifies that the canonical and compatibility tags resolve to the exact digest that passed Trivy. The compatibility package is not a second build and does not duplicate the image's immutable content.
+The edge workflow inspects every canonical and compatibility `edge`, `edge-amd64` and commit-addressed tag after promotion and verifies that each resolves to the exact digest that passed Trivy. The stable workflow performs the equivalent verification for every versioned, `stable`, `stable-amd64` and `latest` tag. The compatibility package is not a second build and does not duplicate the image's immutable content. PR candidate tags are intentionally published only under the canonical `remote-dev` package.
 
 The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. A deprecation notice must appear in release notes before removal.
 
