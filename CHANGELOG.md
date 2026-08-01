@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A single `run-codex` launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
 - Canonical `start-remote-dev-web`, `remote-dev-menu` and `remote-dev-doctor` commands with validated `REMOTE_DEV_ROLE=codex|shell` and neutral `REMOTE_DEV_START_MODE=menu|agent|shell` resolution.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
+- Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
+- Canonical GHCR package `ghcr.io/experience83/remote-dev`, promoted from the same scanned digest as the `codex-remote-dev` compatibility package.
 
 ### Changed
 
@@ -55,6 +57,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
 - Changed `start-codex-web`, `codex-menu` and `codex-doctor` into compatibility wrappers around the canonical role-neutral implementation while retaining legacy `START_MODE=menu|codex|shell` behavior.
 - Limited persistent-state hardening for `REMOTE_DEV_ROLE=shell` to common GitHub, Git and SSH state so that the neutral shell role does not inspect or modify Codex state.
+- Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining legacy aliases through `v0.1.x`.
+- Changed PR candidate publication to use the canonical `remote-dev` package; edge and stable publication retain legacy package tags without rebuilding.
 
 ### Security
 
@@ -74,5 +78,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
-- Publication workflows scan exact pushed digests before promoting public tags and use only the permissions required to read source and write packages.
+- Publication workflows scan exact pushed digests before promoting public tags and verify that canonical and compatibility package tags resolve to that digest.
 - The target launcher receives no agent workspaces, OAuth tokens, GitHub CLI state or SSH keys and does not receive the Docker socket.
