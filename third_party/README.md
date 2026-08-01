@@ -21,9 +21,11 @@ The Python runtime comes from architecture-specific `python-build-standalone` `i
 
 The current upstream full archives reference but omit the zlib-ng 2.2.4 and zstd 1.5.7 license files. Those two texts are supplemented from the exact official `python/cpython-source-deps` tags with reviewed SHA-256 values. Any other referenced-but-missing license makes synchronization fail rather than being guessed or silently omitted.
 
-`standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex, ttyd, mise and uv assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner, and should be repeated when an upstream changes its distribution packaging.
+`standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex, ttyd, mise and uv assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner.
 
-CI runs `scripts/validate-standalone-artifact-inspection.py` to compare the report's component versions, asset URLs and SHA-256 values with `versions.env` and `mise.lock`. An automated upstream-update PR can still be created, but it cannot pass validation or merge with stale inspection evidence. The bounded inspection must be repeated and the report updated in that PR whenever one of the five inspected assets changes.
+`scripts/sync-standalone-artifact-inspection.py` refreshes this evidence only for those five explicitly supported components. It downloads an asset only when its pinned version, URL, SHA-256 or preserved repository notice changed, verifies the repository-controlled digest before inspection, supports only the known `tar.gz` and raw-binary packaging forms and never extracts an archive into the filesystem. The daily upstream workflow runs it after updating pins and `mise.lock`, so the generated JSON and Markdown remain in the same reviewable pull request as the version change.
+
+CI remains offline for this evidence: `scripts/validate-standalone-artifact-inspection.py` compares the committed report's component versions, asset URLs and SHA-256 values with `versions.env` and `mise.lock`. An update PR cannot pass validation with stale evidence, while ordinary builds do not redownload release assets.
 
 The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change.
 
@@ -34,14 +36,15 @@ A version update is not complete until the same pull request:
 1. updates `versions.env`;
 2. updates the matching entry in `third_party/inventory.json`;
 3. reviews and replaces any repository-preserved or artifact-derived license or NOTICE file whose upstream text changed;
-4. passes `scripts/validate-third-party-inventory.sh` and the component-specific notice validators;
-5. builds both images and passes `remote-dev-notices --check`.
+4. refreshes the bounded standalone-artifact report when GitHub CLI, Codex CLI, ttyd, mise or uv changes;
+5. passes `scripts/validate-third-party-inventory.sh` and the component-specific notice validators;
+6. builds both images and passes `remote-dev-notices --check`.
 
 Renovate owns standard dependency references that it understands directly, such as Dockerfile frontend images, the Ubuntu base image and pinned GitHub Actions. The custom upstream workflow owns Codex, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv because those updates also require architecture-specific digests, runtime-lock regeneration and legal-inventory synchronization. Each dependency has one automation owner.
 
-The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing version pins. For each already inventoried repository-sourced component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. When `mise.lock` changes the Python artifact, `scripts/regenerate-mise-lock.sh` regenerates and compacts the bounded Python legal metadata before the update commit is created. Downloads are restricted to explicitly approved HTTPS hosts and preserved notice paths are confined to `third_party/`.
+The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing version pins. For each already inventoried repository-sourced component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. When `mise.lock` changes the Python artifact, `scripts/regenerate-mise-lock.sh` regenerates and compacts the bounded Python legal metadata before the update commit is created. It then runs `scripts/sync-standalone-artifact-inspection.py` to refresh exact packaging evidence for any changed supported standalone asset. Downloads are restricted to explicitly approved HTTPS hosts and preserved notice paths are confined to `third_party/`.
 
-Changed legal text is never accepted silently: it remains visible in the pull-request diff for human review. The robot updates `refreshed_on` when it prepares new candidate documents; `reviewed_on` records a human review and is not changed automatically. If a version-specific URL cannot be derived safely, an upstream document cannot be downloaded, an artifact digest disagrees or a referenced license is missing, the maintenance workflow fails before creating an incoherent update commit.
+Changed legal text and changed packaging evidence are never accepted silently: they remain visible in the pull-request diff for human review. The robot updates `refreshed_on` when it prepares new candidate documents; `reviewed_on` records a human review and is not changed automatically. If a version-specific URL cannot be derived safely, an upstream document cannot be downloaded, an artifact digest disagrees, AMD64 and ARM64 legal-file findings differ or a referenced license is missing, the maintenance workflow fails before creating an incoherent update commit.
 
 CI compares all tool version keys in `versions.env` with the declarative inventory. A new pinned tool therefore requires an explicit inventory entry, but the validator does not implement a general-purpose Docker or shell parser.
 
