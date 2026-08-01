@@ -95,7 +95,9 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
-    && run-codex --print-policy | grep -Fx 'Codex approval policy: untrusted' \
+    && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
+    && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
+    && run-codex --print-policy | grep -Fx 'Mode source: default' \
     && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
     && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \
     && ln -sfn ../remote-dev/third_party /usr/share/doc/codex-remote-dev/third_party \
