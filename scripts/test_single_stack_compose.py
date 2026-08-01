@@ -101,14 +101,23 @@ def mount_sources(service: dict[str, object], target: str) -> list[str]:
 
 def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
     sources: list[str] = []
+    expected_name = target.removeprefix("/run/secrets/")
     for secret in service.get("secrets", []):
-        if not isinstance(secret, dict):
+        if isinstance(secret, str):
+            source = secret
+            secret_target = secret
+        elif isinstance(secret, dict):
+            source_value = secret.get("source")
+            if source_value is None:
+                continue
+            source = str(source_value)
+            secret_target = str(secret.get("target", source))
+        else:
             continue
-        secret_target = str(secret.get("target", secret.get("source", "")))
-        if secret_target == target.removeprefix("/run/secrets/"):
-            source = secret.get("source")
-            if source is not None:
-                sources.append(str(source))
+
+        normalized_target = secret_target.removeprefix("/run/secrets/")
+        if normalized_target == expected_name:
+            sources.append(source)
     return sources
 
 
