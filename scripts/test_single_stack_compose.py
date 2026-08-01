@@ -22,6 +22,8 @@ FORBIDDEN_LAUNCHER_TEXT = (
     "/root/.config/git",
     "/root/.ssh",
     "/var/run/docker.sock",
+    "/mnt/Pool1/codex/secrets/web_password.txt",
+    "/run/secrets/web_password",
     "OPENAI_API_KEY",
     "CODEX_HOME",
     "GH_CONFIG_DIR",
@@ -72,6 +74,14 @@ def published_targets(service: dict[str, object]) -> set[int]:
     return targets
 
 
+def mount_source(service: dict[str, object], target: str) -> str | None:
+    for mount in service.get("volumes", []):
+        if isinstance(mount, dict) and mount.get("target") == target:
+            source = mount.get("source")
+            return str(source) if source is not None else None
+    return None
+
+
 def validate(path: Path, config: dict[str, object]) -> None:
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
@@ -102,12 +112,44 @@ def validate(path: Path, config: dict[str, object]) -> None:
         launcher_env.get("REMOTE_DEV_START_MODE") == "menu",
         f"{path}: launcher start mode",
     )
+    require(
+        launcher_env.get("WEB_PASSWORD_FILE") == "/run/secrets/launcher_password",
+        f"{path}: launcher password target",
+    )
+    require(
+        codex_env.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password",
+        f"{path}: Codex password target",
+    )
+    require(
+        launcher_env.get("WEB_PASSWORD_FILE") != codex_env.get("WEB_PASSWORD_FILE"),
+        f"{path}: launcher and Codex share a credential target",
+    )
 
     launcher_text = json.dumps(launcher, sort_keys=True)
     for forbidden in FORBIDDEN_LAUNCHER_TEXT:
         require(
             forbidden not in launcher_text,
             f"{path}: launcher unexpectedly contains {forbidden}",
+        )
+
+    top_level_secrets = config.get("secrets")
+    if isinstance(top_level_secrets, dict):
+        launcher_secret = top_level_secrets.get("launcher_password")
+        codex_secret = top_level_secrets.get("web_password")
+        require(isinstance(launcher_secret, dict), f"{path}: launcher secret missing")
+        require(isinstance(codex_secret, dict), f"{path}: Codex secret missing")
+        require(
+            launcher_secret.get("file") != codex_secret.get("file"),
+            f"{path}: launcher and Codex secret files must be independent",
+        )
+
+    launcher_mount = mount_source(launcher, "/run/secrets/launcher_password")
+    codex_mount = mount_source(codex, "/run/secrets/web_password")
+    if launcher_mount is not None:
+        require(codex_mount is not None, f"{path}: Codex password mount missing")
+        require(
+            launcher_mount != codex_mount,
+            f"{path}: launcher and Codex bind the same password source",
         )
 
     require(
@@ -143,7 +185,7 @@ def main() -> int:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
             validate(path, compose_config(path, env_path))
-    print("Single-stack image reuse and launcher mount boundaries: OK")
+    print("Single-stack image, launcher mounts and credential boundaries: OK")
     return 0
 
 
