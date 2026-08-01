@@ -21,6 +21,8 @@ The Python runtime comes from architecture-specific `python-build-standalone` `i
 
 The current upstream full archives reference but omit the zlib-ng 2.2.4 and zstd 1.5.7 license files. Those two texts are supplemented from the exact official `python/cpython-source-deps` tags with reviewed SHA-256 values. Any other referenced-but-missing license makes synchronization fail rather than being guessed or silently omitted.
 
+`standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex, ttyd, mise and uv assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner, and should be repeated when an upstream changes its distribution packaging.
+
 ## Maintenance contract
 
 A version update is not complete until the same pull request:
