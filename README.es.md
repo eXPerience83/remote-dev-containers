@@ -20,6 +20,35 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 - Volúmenes separados para workspace, Codex, GitHub, Git y SSH.
 - AMD64 como única arquitectura inicial.
 
+### Puntos de entrada neutrales por rol
+
+El primer paso de la migración hacia la arquitectura de stack único mantiene sin cambios la imagen, los archivos Compose y la persistencia actuales, pero introduce una única implementación canónica:
+
+- `start-remote-dev-web`;
+- `remote-dev-menu`;
+- `remote-dev-doctor`.
+
+`start-codex-web`, `codex-menu` y `codex-doctor` continúan como wrappers de compatibilidad que seleccionan el rol Codex y llaman a los comandos canónicos.
+
+El selector de rol implementado es:
+
+```dotenv
+REMOTE_DEV_ROLE=codex
+# o: shell
+```
+
+`launcher`, `antigravity` y `claude` son nombres reservados y fallan de forma clara porque todavía no están implementados. Nunca provocan una descarga implícita.
+
+El selector neutral de arranque directo acepta `menu`, `agent` o `shell`:
+
+```dotenv
+REMOTE_DEV_START_MODE=menu
+```
+
+La configuración existente `START_MODE=menu|codex|shell` sigue siendo compatible; el valor antiguo `codex` se traduce a `agent`. Cuando se define `REMOTE_DEV_START_MODE`, tiene prioridad. Los roles y modos desconocidos se rechazan sin evaluar fragmentos de shell.
+
+Este paso todavía no incorpora la URL del launcher, múltiples servicios, cambio de nombre de imagen, nuevos montajes ni migración de datos.
+
 ## Aislamiento en TrueNAS
 
 La imagen predeterminada no instala el paquete Bubblewrap del sistema. El lanzador soportado desactiva explícitamente el sandbox interno no compatible de Codex mediante `--sandbox danger-full-access` y usa `--ask-for-approval untrusted`. El menú, la opción de reanudar y el arranque directo de Codex utilizan el mismo lanzador.
@@ -86,4 +115,4 @@ Codex CLI: codex-cli <versión>
 
 El desarrollo se realiza mediante pull requests. CodeRabbit se configura en `.coderabbit.yaml` para revisar Dockerfiles, scripts Bash, GitHub Actions, archivos Compose y cambios sensibles de seguridad. Durante esta fase sus comentarios son orientativos: CI y las pruebas manuales siguen siendo obligatorios.
 
-Consulta `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `third_party/README.md`, `third_party/optional-agents.md` y `docs/roadmap.md` para el estado y el orden de trabajo completos.
+Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `third_party/README.md`, `third_party/optional-agents.md` y `docs/roadmap.md` para el estado, los límites y el orden de trabajo completos.
