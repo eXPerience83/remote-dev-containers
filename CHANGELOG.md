@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Canonical `start-remote-dev-web`, `remote-dev-menu` and `remote-dev-doctor` commands with validated `REMOTE_DEV_ROLE=codex|shell` and neutral `REMOTE_DEV_START_MODE=menu|agent|shell` resolution.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
-- Canonical GHCR package `ghcr.io/experience83/remote-dev`, promoted from the same scanned digest as the `codex-remote-dev` compatibility package.
+- Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge and stable tags are promoted from the same scanned digest as their `codex-remote-dev` compatibility tags, while PR candidates are canonical-only.
 
 ### Changed
 
@@ -78,5 +78,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
-- Publication workflows scan exact pushed digests before promoting public tags and verify that canonical and compatibility package tags resolve to that digest.
+- Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical and compatibility edge/stable tag resolves to that digest.
 - The target launcher receives no agent workspaces, OAuth tokens, GitHub CLI state or SSH keys and does not receive the Docker socket.
