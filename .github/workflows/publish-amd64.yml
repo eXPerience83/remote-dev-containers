@@ -44,6 +44,8 @@ jobs:
           while IFS= read -r -d '' script; do
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
+          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
+            bash scripts/test-image-name-compat.sh
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
@@ -127,14 +129,14 @@ jobs:
           severity: CRITICAL
           exit-code: "0"
 
-      - name: Build untagged stable Codex candidate
-        id: codex
+      - name: Build untagged stable Remote Dev candidate
+        id: runtime
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: images/codex/Dockerfile
           platforms: linux/amd64
-          outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
@@ -149,12 +151,12 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact stable Codex candidate for critical vulnerabilities
+      - name: Scan exact stable Remote Dev candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/codex-remote-dev@${{ steps.codex.outputs.digest }}
+          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
           format: json
-          output: trivy-publish-codex.json
+          output: trivy-publish-remote-dev.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -167,7 +169,7 @@ jobs:
           name: trivy-publication-reports
           path: |
             trivy-publish-base.json
-            trivy-publish-codex.json
+            trivy-publish-remote-dev.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -175,17 +177,17 @@ jobs:
         run: |
           bash scripts/enforce-trivy-gate.sh \
             "exact stable base publication candidate:trivy-publish-base.json" \
-            "exact stable Codex publication candidate:trivy-publish-codex.json"
+            "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
 
-      - name: Promote scanned digests to public stable tags
+      - name: Promote one scanned digest to canonical and legacy stable tags
         env:
           NAMESPACE: ${{ steps.registry.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
-          CODEX_DIGEST: ${{ steps.codex.outputs.digest }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
         run: |
           set -euo pipefail
           base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
-          codex_ref="ghcr.io/${NAMESPACE}/codex-remote-dev@${CODEX_DIGEST}"
+          runtime_ref="ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}"
 
           docker buildx imagetools create \
             --prefer-index=false \
@@ -196,21 +198,38 @@ jobs:
 
           docker buildx imagetools create \
             --prefer-index=false \
-            --metadata-file codex-promotion.json \
+            --metadata-file runtime-promotion.json \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
             --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:${GITHUB_REF_NAME}" \
             --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable" \
             --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable-amd64" \
             --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:latest" \
-            "$codex_ref"
+            "$runtime_ref"
 
           promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          promoted_codex="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' codex-promotion.json)"
+          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
 
           if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
             echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
             exit 1
           fi
-          if [[ "$promoted_codex" != "$CODEX_DIGEST" ]]; then
-            echo "ERROR: promoted Codex digest $promoted_codex differs from scanned digest $CODEX_DIGEST" >&2
+          if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
+            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
             exit 1
           fi
+
+          for tag_ref in \
+            "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
+            "ghcr.io/${NAMESPACE}/codex-remote-dev:${GITHUB_REF_NAME}"; do
+            actual_digest="$(
+              docker buildx imagetools inspect "$tag_ref" \
+                --format '{{json .Manifest.Digest}}' | tr -d '"'
+            )"
+            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
+              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
+              exit 1
+            fi
+          done
