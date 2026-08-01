@@ -49,6 +49,7 @@ jobs:
           python3 scripts/validate-standalone-artifact-inspection.py
           REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
             bash scripts/test-image-name-compat.sh
+          bash scripts/test-compose-image-compat.sh
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh

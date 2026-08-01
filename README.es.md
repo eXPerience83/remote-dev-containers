@@ -22,7 +22,7 @@ Mantener Codex, las herramientas y los repositorios en un Docker remoto para que
 
 ### Puntos de entrada neutrales por rol
 
-El primer paso de la migración hacia la arquitectura de stack único mantiene sin cambios la imagen, los archivos Compose y la persistencia actuales, pero introduce una única implementación canónica:
+La migración hacia la arquitectura de stack único utiliza una única implementación canónica:
 
 - `start-remote-dev-web`;
 - `remote-dev-menu`;
@@ -47,7 +47,7 @@ REMOTE_DEV_START_MODE=menu
 
 La configuración existente `START_MODE=menu|codex|shell` sigue siendo compatible; el valor antiguo `codex` se traduce a `agent`. Cuando se define `REMOTE_DEV_START_MODE`, tiene prioridad. Los roles y modos desconocidos se rechazan sin evaluar fragmentos de shell.
 
-Este paso todavía no incorpora la URL del launcher, múltiples servicios, cambio de nombre de imagen, nuevos montajes ni migración de datos.
+Esta fase todavía no incorpora la URL del launcher, múltiples servicios, nuevos montajes ni migración de datos.
 
 ### Modos de aprobación de Codex
 
@@ -100,28 +100,30 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 La imagen `edge` es una compilación experimental publicada automáticamente después de fusionar en `main` cambios relevantes para la imagen o el runtime. Puede descargarse sin credenciales:
 
 ```bash
-docker pull ghcr.io/experience83/codex-remote-dev:edge-amd64
+docker pull ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
 Para Docker Compose o TrueNAS:
 
 ```dotenv
-CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
+REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
+
+Los despliegues existentes de la serie `v0.1.x` pueden conservar `CODEX_IMAGE` y `ghcr.io/experience83/codex-remote-dev`. `REMOTE_DEV_IMAGE` tiene prioridad cuando ambas variables están definidas, y los dos paquetes apuntan al mismo digest promocionado en edge y stable. Los nombres de compatibilidad no se eliminarán antes de `v0.2.0`.
 
 Utiliza `guarded` en lugar de `autonomous` cuando quieras confirmaciones de comandos. El cambio se aplica a las sesiones nuevas; no altera un proceso Codex que ya está ejecutándose.
 
 Para identificar la compilación correspondiente a un commit concreto, utiliza la etiqueta `sha-...` mostrada en GHCR:
 
 ```text
-ghcr.io/experience83/codex-remote-dev:sha-<commit-completo>
+ghcr.io/experience83/remote-dev:sha-<commit-completo>
 ```
 
 Las etiquetas de GHCR son mutables. Para una reproducción o rollback inmutable, registra el digest publicado y fija la imagen así:
 
 ```text
-ghcr.io/experience83/codex-remote-dev@sha256:<digest>
+ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
 El menú web muestra el canal de imagen embebido, la revisión de origen embebida en forma abreviada y la versión instalada de Codex CLI detectada en tiempo de ejecución. Para consultar los metadatos completos de la imagen junto con la versión de Codex CLI en ejecución desde los diagnósticos o desde un shell:

@@ -20,11 +20,9 @@ The **Publish edge AMD64** workflow runs automatically after relevant image, run
 
 The edge workflow inspects every canonical and compatibility `edge`, `edge-amd64` and commit-addressed tag after promotion and verifies that each resolves to the exact digest that passed Trivy. The stable workflow performs the equivalent verification for every versioned, `stable`, `stable-amd64` and `latest` tag. The compatibility package is not a second build and does not duplicate the image's immutable content. PR candidate tags are intentionally published only under the canonical `remote-dev` package.
 
-The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. A deprecation notice must appear in release notes before removal.
+The canonical `remote-dev` package is public and is the deployment default. Generic and TrueNAS Compose use `REMOTE_DEV_IMAGE`, defaulting to `ghcr.io/experience83/remote-dev:edge-amd64`.
 
-### Canonical-package bootstrap
-
-A newly created GHCR package starts with private visibility. After the first workflow run creates `remote-dev`, the maintainer must open that package's settings and change its visibility to **Public** before documentation or Compose defaults point anonymous users at it. Until that one-time action is confirmed, the checked-in Compose examples continue to use the public `codex-remote-dev` compatibility package.
+The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set. A deprecation notice must appear in release notes before removal.
 
 Public container-registry images can be pulled without authentication. The `sha-...` tag identifies the source commit, but container tags remain mutable in GHCR. Record and deploy the published `sha256:...` digest when immutable reproduction is required. Use `edge-amd64` only when intentionally following the latest development build.
 
@@ -76,4 +74,4 @@ Before creating a stable version tag:
 
 ## Rollback
 
-Do not depend exclusively on moving tags. Record the tested image digest, its `sha-...` tag and the source commit. During the bootstrap phase, existing deployments may continue setting `CODEX_IMAGE` to `ghcr.io/experience83/codex-remote-dev@sha256:<digest>`. After the deployment-default switch, use `REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>`; both references identify the same promoted digest throughout `v0.1.x`.
+Do not depend exclusively on moving tags. Record the tested image digest, its `sha-...` tag and the source commit. Set `REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>` and recreate the container. Existing `v0.1.x` deployments may continue setting `CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev@sha256:<digest>` when `REMOTE_DEV_IMAGE` is unset; both references identify the same promoted edge/stable digest.

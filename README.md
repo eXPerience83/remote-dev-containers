@@ -25,7 +25,7 @@ The current edge image is the Codex reference implementation:
 
 ### Role-neutral entrypoints
 
-The first migration slice toward the accepted single-stack architecture keeps the current image, Compose files and persistence layout unchanged, but introduces one canonical runtime implementation:
+The migration toward the accepted single-stack architecture uses one canonical runtime implementation:
 
 - `start-remote-dev-web`;
 - `remote-dev-menu`;
@@ -50,7 +50,7 @@ REMOTE_DEV_START_MODE=menu
 
 The existing `START_MODE=menu|codex|shell` setting remains compatible; legacy `codex` maps to neutral `agent`. `REMOTE_DEV_START_MODE`, when set, takes precedence. Unknown roles and modes are rejected without evaluating shell fragments.
 
-This slice does not yet provide the launcher URL, multiple services, image renaming, new mounts or data migration.
+This phase does not yet provide the launcher URL, multiple services, new mounts or data migration.
 
 ### Codex approval modes
 
@@ -127,7 +127,7 @@ chmod 600 secrets/web_password.txt
 ./scripts/build-local.sh
 ```
 
-Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `CODEX_IMAGE=codex-remote-dev:local`, and run:
+Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d
@@ -148,25 +148,27 @@ The `edge` image is an unstable development build published automatically after 
 Pull the current AMD64 edge image without registry credentials:
 
 ```bash
-docker pull ghcr.io/experience83/codex-remote-dev:edge-amd64
+docker pull ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
 For the generic or TrueNAS Compose file, set:
 
 ```dotenv
-CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
+REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
+
+Existing `v0.1.x` deployments may keep `CODEX_IMAGE` and `ghcr.io/experience83/codex-remote-dev`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set, and both package names identify the same promoted edge/stable digest. The compatibility names will not be removed before `v0.2.0`.
 
 For a source-commit-addressed deployment, use the `sha-...` tag shown by the edge workflow and package page:
 
 ```text
-ghcr.io/experience83/codex-remote-dev:sha-<full-commit-sha>
+ghcr.io/experience83/remote-dev:sha-<full-commit-sha>
 ```
 
 GHCR tags are mutable. For immutable reproduction or rollback, record the published digest and pin the image as:
 
 ```text
-ghcr.io/experience83/codex-remote-dev@sha256:<digest>
+ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
 The web menu shows the embedded image channel, abbreviated embedded source revision and installed Codex CLI version detected at runtime. To display the complete embedded image metadata together with the runtime Codex CLI version from the menu diagnostics or a shell, run:

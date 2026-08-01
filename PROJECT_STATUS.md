@@ -16,7 +16,9 @@
 
 ## Current implementation
 
-- The public edge image and TrueNAS reference deployment remain Codex-specific.
+- The public canonical edge package is `ghcr.io/experience83/remote-dev`; generic and TrueNAS Compose select it through `REMOTE_DEV_IMAGE`.
+- The `codex-remote-dev` package and `CODEX_IMAGE` remain lower-priority compatibility aliases throughout `v0.1.x` and identify the same promoted edge/stable digest.
+- The current public edge image and TrueNAS reference deployment remain Codex-specific.
 - The shared base plus Codex child image graph is the migration source, not the target architecture.
 - The neutral launcher, shared final image roles and isolated multi-service stack are tracked by issues #25 and #31.
 - Antigravity and Claude are not currently shipped or advertised as supported.
