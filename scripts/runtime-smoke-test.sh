@@ -14,6 +14,20 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+assert_output_lines() {
+  local label="$1"
+  local output="$2"
+  shift 2
+
+  for expected_line in "$@"; do
+    if ! grep -Fxq "$expected_line" <<<"$output"; then
+      echo "ERROR: $label is missing: $expected_line" >&2
+      printf '%s\n' "$output" >&2
+      exit 1
+    fi
+  done
+}
+
 # Secure by default: startup without a password must fail unless explicitly overridden.
 guard_status=0
 if timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1; then
@@ -65,30 +79,39 @@ for _ in $(seq 1 30); do
     docker exec "$name" run-codex resume --help >/dev/null
 
     policy_output="$(docker exec "$name" run-codex --print-policy)"
-    for expected_line in \
+    assert_output_lines 'default Codex launch policy' "$policy_output" \
       'Inner sandbox: disabled explicitly' \
       'Isolation boundary: outer container' \
-      'Codex approval policy: untrusted'; do
-      if ! grep -Fxq "$expected_line" <<<"$policy_output"; then
-        echo "ERROR: Codex launch policy is missing: $expected_line" >&2
-        printf '%s\n' "$policy_output" >&2
-        exit 1
-      fi
-    done
+      'Codex approval mode: autonomous' \
+      'Codex approval policy: never' \
+      'Mode source: default'
+
+    guarded_output="$(docker exec \
+      --env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded \
+      "$name" run-codex --print-policy)"
+    assert_output_lines 'guarded deployment policy' "$guarded_output" \
+      'Codex approval mode: guarded' \
+      'Codex approval policy: untrusted' \
+      'Mode source: deployment'
+
+    override_output="$(docker exec \
+      --env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded \
+      "$name" run-codex --approval-mode autonomous --print-policy)"
+    assert_output_lines 'per-launch policy override' "$override_output" \
+      'Codex approval mode: autonomous' \
+      'Codex approval policy: never' \
+      'Mode source: per-launch'
 
     doctor_output="$(docker exec "$name" codex-doctor)"
-    for expected_line in \
+    assert_output_lines 'Codex diagnostics' "$doctor_output" \
       'Inner sandbox: disabled explicitly' \
       'Isolation boundary: outer container' \
-      'Codex approval policy: untrusted'; do
-      if ! grep -Fxq "$expected_line" <<<"$doctor_output"; then
-        echo "ERROR: diagnostics are missing: $expected_line" >&2
-        printf '%s\n' "$doctor_output" >&2
-        exit 1
-      fi
-    done
+      'Codex approval mode: autonomous' \
+      'Codex approval policy: never' \
+      'Mode source: default'
 
     echo "Pinned Codex launcher and resume compatibility: OK"
+    echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0

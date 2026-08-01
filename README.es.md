@@ -49,11 +49,35 @@ La configuración existente `START_MODE=menu|codex|shell` sigue siendo compatibl
 
 Este paso todavía no incorpora la URL del launcher, múltiples servicios, cambio de nombre de imagen, nuevos montajes ni migración de datos.
 
+### Modos de aprobación de Codex
+
+Codex siempre se inicia mediante el lanzador controlado por el proyecto, con el sandbox interno no compatible desactivado expresamente. El despliegue puede seleccionar uno de estos dos modos validados:
+
+```dotenv
+REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
+# o: guarded
+```
+
+- `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
+- `guarded` se traduce a `--ask-for-approval untrusted`.
+
+El menú inicia o reanuda Codex con el modo configurado y permite escoger otro modo para una sola ejecución sin reescribir la configuración permanente. La interfaz equivalente es:
+
+```bash
+run-codex --approval-mode autonomous
+run-codex --approval-mode guarded resume
+run-codex --print-policy
+```
+
+La selección de una ejecución tiene prioridad sobre el valor del despliegue solo para ese proceso. Los valores desconocidos y los intentos de introducir flags directos de sandbox o aprobación se rechazan antes de iniciar Codex. Los argumentos situados después de `--` se conservan literalmente.
+
 ## Aislamiento en TrueNAS
 
-La imagen predeterminada no instala el paquete Bubblewrap del sistema. El lanzador soportado desactiva explícitamente el sandbox interno no compatible de Codex mediante `--sandbox danger-full-access` y usa `--ask-for-approval untrusted`. El menú, la opción de reanudar y el arranque directo de Codex utilizan el mismo lanzador.
+La imagen predeterminada no instala el paquete Bubblewrap del sistema. El lanzador soportado desactiva explícitamente el sandbox interno no compatible de Codex mediante `--sandbox danger-full-access`. El modo autónomo utiliza `--ask-for-approval never`; el modo protegido utiliza `--ask-for-approval untrusted`. Todos los arranques y reanudaciones soportados pasan por el mismo resolver.
 
-En este contexto, `danger-full-access` solo describe el sandbox interno de Codex: no concede privilegios Docker ni acceso adicional al host. El límite de seguridad soportado es el contenedor exterior y sus montajes mínimos. Los comandos de shell no considerados fiables requieren aprobación, pero las aprobaciones no son un sandbox ni ocultan a Codex los archivos y credenciales ya montados en el servicio.
+En este contexto, `danger-full-access` solo describe el sandbox interno de Codex: no concede privilegios Docker ni acceso adicional al host. El límite de seguridad soportado es el contenedor exterior y sus montajes mínimos. Las aprobaciones no son un sandbox ni ocultan a Codex los archivos y credenciales ya montados en el servicio.
+
+En modo autónomo, Codex puede leer, modificar o eliminar cualquier elemento montado en su servicio y utilizar las credenciales disponibles sin pedir confirmación. No obtiene acceso adicional al concedido por los montajes, la red y las credenciales existentes. El modo protegido añade confirmaciones, pero no aislamiento del sistema de archivos.
 
 No debilites el host ni el contenedor con modo privilegiado, `SYS_ADMIN`, perfiles de seguridad sin restricciones o el socket de Docker para intentar iniciar un sandbox anidado. Monta únicamente las rutas que necesite el servicio.
 
@@ -83,7 +107,10 @@ Para Docker Compose o TrueNAS:
 
 ```dotenv
 CODEX_IMAGE=ghcr.io/experience83/codex-remote-dev:edge-amd64
+REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
+
+Utiliza `guarded` en lugar de `autonomous` cuando quieras confirmaciones de comandos. El cambio se aplica a las sesiones nuevas; no altera un proceso Codex que ya está ejecutándose.
 
 Para identificar la compilación correspondiente a un commit concreto, utiliza la etiqueta `sha-...` mostrada en GHCR:
 

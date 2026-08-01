@@ -20,7 +20,7 @@
 - The shared base plus Codex child image graph is the migration source, not the target architecture.
 - The neutral launcher, shared final image roles and isolated multi-service stack are tracked by issues #25 and #31.
 - Antigravity and Claude are not currently shipped or advertised as supported.
-- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly and `untrusted` approvals, while the outer container remains the supported TrueNAS isolation boundary.
+- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as an operator or one-launch option. The outer container remains the supported TrueNAS isolation boundary in both modes.
 
 ## Must validate before the first stable release
 
@@ -30,7 +30,7 @@
 - GitHub CLI checksum installation
 - ttyd authentication and origin checking
 - mise installation of the pinned Python/Node/uv versions
-- Codex approval behavior under the documented outer-container isolation model
+- Autonomous and guarded Codex behavior under the documented outer-container isolation model
 - Device-code login persistence
 - GH login, credential helper, clone/push/PR
 - TrueNAS x-portals behavior
@@ -57,4 +57,4 @@ The update policy tracks final upstream releases for Codex, GitHub CLI, ttyd, mi
 
 The Ubuntu base image, Dockerfile frontend, GitHub Actions and downloaded release assets use immutable digests or hashes. APT package resolution follows the current security revisions in the selected Ubuntu repositories and is not claimed to be bit-for-bit reproducible without an APT snapshot service.
 
-Every pin update must pass the automated AMD64 build, runtime smoke tests and Trivy gate. Critical findings without a known fix remain visible in retained reports, while fixable `CRITICAL` findings fail the workflow. Real TrueNAS deployment, authentication, persistence and approval-flow validation remain required before the first stable release.
+Every pin update must pass the automated AMD64 build, runtime smoke tests and Trivy gate. Critical findings without a known fix remain visible in retained reports, while fixable `CRITICAL` findings fail the workflow. Real TrueNAS deployment, authentication, persistence and both approval-mode validations remain required before the first stable release.

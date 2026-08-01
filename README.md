@@ -52,11 +52,35 @@ The existing `START_MODE=menu|codex|shell` setting remains compatible; legacy `c
 
 This slice does not yet provide the launcher URL, multiple services, image renaming, new mounts or data migration.
 
+### Codex approval modes
+
+Codex always runs through the project-owned launcher with the unsupported inner sandbox disabled explicitly. The deployment can select one of two validated modes:
+
+```dotenv
+REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
+# or: guarded
+```
+
+- `autonomous` is the default and maps to `--ask-for-approval never`.
+- `guarded` maps to `--ask-for-approval untrusted`.
+
+The menu starts or resumes Codex with the configured deployment mode and also offers a one-time selection that does not rewrite the permanent setting. The equivalent command-line interface is:
+
+```bash
+run-codex --approval-mode autonomous
+run-codex --approval-mode guarded resume
+run-codex --print-policy
+```
+
+A per-launch selection overrides the deployment value only for that process. Unknown values and raw Codex sandbox/approval overrides are rejected before Codex starts. Arguments after `--` remain literal Codex/prompt arguments.
+
 ### Isolation on TrueNAS
 
-The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access` and uses `--ask-for-approval untrusted`. The menu, resume action and direct Codex start mode all use that same launcher.
+The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
 
-Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Untrusted shell commands require approval, but approvals are not a sandbox and do not protect files or credentials already mounted into the service.
+Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Approval prompts are not a sandbox and do not protect files or credentials already mounted into the service.
+
+Autonomous mode means Codex may read, modify or delete anything mounted into its service and may use credentials available there without asking first. It does not add access beyond the existing container mounts, network and credentials. Guarded mode adds confirmation friction but does not provide filesystem isolation.
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
@@ -103,7 +127,7 @@ chmod 600 secrets/web_password.txt
 ./scripts/build-local.sh
 ```
 
-Then set `CODEX_IMAGE=codex-remote-dev:local` in `.env` and run:
+Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `CODEX_IMAGE=codex-remote-dev:local`, and run:
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d
@@ -113,8 +137,9 @@ Open the published web address and choose:
 
 1. Codex device-code login
 2. GitHub CLI login
-3. Diagnostics
-4. Start Codex
+3. Start or resume with the configured mode
+4. Choose an autonomous or guarded mode for one launch
+5. Diagnostics
 
 ## Public edge testing
 
@@ -166,7 +191,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not mount the Docker socket.
 - Do not use privileged mode.
 - The default Codex launcher disables the inner sandbox explicitly; the outer container is the supported isolation boundary.
-- Approval prompts are not a sandbox and do not hide mounted files or credentials from Codex.
+- Autonomous mode permits Codex to act on all mounted state without confirmations.
+- Guarded prompts are not a sandbox and do not hide mounted files or credentials from Codex.
 - Anyone with terminal access can read repositories and credentials mounted into that service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.

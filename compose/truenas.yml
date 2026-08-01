@@ -22,6 +22,7 @@ services:
       ALLOW_INSECURE_WEB: "0"
       START_MODE: menu
       TMUX_SESSION: codex
+      REMOTE_DEV_CODEX_APPROVAL_MODE: autonomous
 
       GH_HOST: github.com
       GH_PAGER: cat
