@@ -31,7 +31,6 @@ ENV HOME=/root \
     WEB_CHECK_ORIGIN=1 \
     ALLOW_INSECURE_WEB=0 \
     REMOTE_DEV_ROLE=codex \
-    TMUX_SESSION=codex \
     START_MODE=menu \
     CODEX_CA_CERTIFICATE=
 
@@ -88,8 +87,11 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/lib/remote-dev/format-short-revision.sh \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && bash /tmp/test-run-codex-policy \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/start-codex-web \
     && grep -Fx 'exec /usr/local/bin/start-remote-dev-web "$@"' /usr/local/bin/start-codex-web \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-menu \
     && grep -Fx 'exec /usr/local/bin/remote-dev-menu "$@"' /usr/local/bin/codex-menu \
+    && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
