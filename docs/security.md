@@ -8,20 +8,22 @@ The containers intentionally run as root. Root is constrained to each container 
 
 ## Launcher boundary
 
-The supported stack starts an authenticated launcher service and an independently authenticated Codex service from the same immutable image. Sharing image layers does not share mutable state.
+The supported stack starts an authenticated launcher service and an independently authenticated Codex service from the same immutable image. Sharing image layers does not share mutable state or credentials.
 
 The launcher:
 
 - receives no Codex workspace, agent state, GitHub CLI configuration, Git configuration or SSH mounts;
+- receives no Codex terminal password or other agent web credential;
 - receives no Docker socket and performs no container-management operation;
 - serves only a fixed navigation page for reviewed, declared services;
 - does not relay or proxy the Codex terminal's HTTP or WebSocket traffic;
-- uses HTTP Basic authentication from the mounted web-password secret;
+- uses HTTP Basic authentication from its own mounted launcher-password secret;
+- restricts configured paths to safe RFC 3986 URL-path characters before embedding them into the page;
 - checks that an `Origin` header, when present, matches the request host;
 - sends a restrictive Content Security Policy and rejects state-changing HTTP methods;
 - exposes an unauthenticated local health endpoint containing no secrets.
 
-The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds the password or forwards an Authorization header. The Codex endpoint therefore authenticates independently and may produce a second browser challenge.
+The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The Codex endpoint uses a separate mounted password secret, authenticates independently and may produce a second browser challenge.
 
 Port `7680` is the normal launcher entry point. Port `7681` remains the direct Codex endpoint used after navigation and for troubleshooting. Neither port should be exposed directly to the public Internet.
 
@@ -33,15 +35,15 @@ The supported TrueNAS security boundary for Codex is its outer Docker container.
 
 Approval prompts are never a sandbox or an isolation boundary. Whether the selected approval policy is `never` or `untrusted`, Codex can access every path and credential mounted into its service. The guarded policy adds command-by-command friction in cases classified as untrusted; it does not hide mounted state, and some built-in editing operations may not map to a shell-command prompt.
 
-Separate future agent services must receive separate narrow mounts. The outer-container boundary protects one agent service from state that is not mounted into it; it does not protect files or credentials from a person who already controls that service's terminal.
+Separate future agent services must receive separate narrow mounts and separate web credentials. The outer-container boundary protects one agent service from state that is not mounted into it; it does not protect files or credentials from a person who already controls that service's terminal.
 
 ## Required controls
 
 - Do not expose ports 7680 or 7681 directly to the public Internet.
 - Use LAN, Tailscale, WireGuard, or an explicitly reviewed authenticated HTTPS design.
-- Configure a strong web password through the mounted secret file.
+- Configure different strong passwords for launcher and Codex through their separate mounted secret files.
 - Keep launcher and agent authentication independent; never place credentials in navigation URLs.
-- Never mount agent state or workspaces into the launcher.
+- Never mount an agent password, state or workspace into the launcher.
 - Never mount `/var/run/docker.sock`.
 - Never use `privileged: true`, host PID, or host networking.
 - Mount only the documented persistent directories into the Codex service.
