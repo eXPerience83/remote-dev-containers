@@ -14,10 +14,13 @@ case "$role" in
       echo "ERROR: invalid WEB_BASE_PATH for launcher health check" >&2
       exit 2
     fi
-    if [[ "$base_path" == / ]]; then
+    while [[ "$base_path" != / && "$base_path" == */ ]]; do
+      base_path="${base_path%/}"
+    done
+    if [[ -z "$base_path" || "$base_path" == / ]]; then
       health_path=/healthz
     else
-      health_path="${base_path%/}/healthz"
+      health_path="${base_path}/healthz"
     fi
     curl --fail --silent --show-error \
       --connect-timeout 2 --max-time 4 \
