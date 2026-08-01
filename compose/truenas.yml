@@ -1,12 +1,55 @@
+x-remote-dev-image: &remote-dev-image ${REMOTE_DEV_IMAGE:-${CODEX_IMAGE:-ghcr.io/experience83/remote-dev:edge-amd64}}
+
 services:
+  launcher:
+    image: *remote-dev-image
+    container_name: remote-dev-launcher
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: launcher
+      REMOTE_DEV_START_MODE: menu
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7680"
+      WEB_BASE_PATH: /
+      WEB_USERNAME: remote-dev
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "0"
+
+      # Leave host/scheme empty to reuse the browser hostname and scheme.
+      REMOTE_DEV_LAUNCHER_CODEX_HOST: ""
+      REMOTE_DEV_LAUNCHER_CODEX_PORT: "7681"
+      REMOTE_DEV_LAUNCHER_CODEX_SCHEME: ""
+      REMOTE_DEV_LAUNCHER_CODEX_PATH: /
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      # Replace with the LAN or Tailscale IP of TrueNAS.
+      - "192.168.1.10:7680:7680"
+
+    volumes:
+      - /mnt/Pool1/codex/secrets/web_password.txt:/run/secrets/web_password:ro
+
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    stop_grace_period: 10s
+
   codex:
-    image: ${REMOTE_DEV_IMAGE:-${CODEX_IMAGE:-ghcr.io/experience83/remote-dev:edge-amd64}}
+    image: *remote-dev-image
     container_name: codex-remote-dev
     restart: unless-stopped
     user: "0:0"
 
     environment:
       TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: codex
       WORKSPACE: /workspace
       CODEX_HOME: /root/.codex
       GH_CONFIG_DIR: /root/.config/gh
@@ -39,7 +82,7 @@ services:
       - no-new-privileges:true
 
     ports:
-      # Replace with the LAN or Tailscale IP of TrueNAS.
+      # Retained as the independently authenticated Codex endpoint.
       - "192.168.1.10:7681:7681"
 
     volumes:
@@ -58,7 +101,7 @@ services:
 
 x-portals:
   - host: truenas
-    name: "Codex Web Terminal"
+    name: "Remote Dev Launcher"
     path: /
-    port: 7681
+    port: 7680
     scheme: http
