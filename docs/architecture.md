@@ -66,15 +66,17 @@ The launcher provides the normal user entry point and lists only available, supp
 The implemented launcher:
 
 - is a project-owned Python standard-library HTTP service bundled in the final image;
+- reads its root-readable password secret during startup and then clears supplementary groups and drops permanently to UID/GID `65532` before binding or serving;
 - uses HTTP Basic authentication from its own launcher-password secret;
 - does not mount or know the Codex terminal password;
-- validates its fixed destination host, scheme, port and path settings;
+- validates DNS names and IPv4/IPv6 literals and rejects an embedded destination port because the port has its own setting;
+- validates its fixed destination scheme, port and path settings;
 - restricts paths to safe RFC 3986 URL-path characters before embedding them in the page;
 - uses the browser hostname and scheme when no explicit public host/scheme is configured;
 - checks same-origin requests when an `Origin` header is present;
 - sends a restrictive nonce-based Content Security Policy;
 - accepts only `GET` and `HEAD`;
-- exposes a secret-free health endpoint;
+- exposes an unauthenticated, secret-free health endpoint;
 - contains no agent OAuth tokens, histories, workspaces, GitHub state or SSH keys;
 - receives no Docker/Podman socket and creates no containers.
 
@@ -104,7 +106,7 @@ Sharing executables through image layers does not share mutable state or secrets
 
 `REMOTE_DEV_ROLE=launcher` starts `remote-dev-launcher` directly. It accepts only the `menu` start mode and does not initialize a workspace, GitHub configuration, Git configuration, SSH state, Codex state or tmux session.
 
-Launcher diagnostics report image identity, fixed routing configuration and available roles without reading agent state. Its healthcheck calls the local secret-free `/healthz` endpoint.
+Launcher diagnostics report image identity, fixed routing configuration and available roles without reading agent state. Its healthcheck calls the secret-free `/healthz` endpoint.
 
 ### Codex role
 
@@ -152,7 +154,7 @@ The TrueNAS reference keeps the existing Codex secret at:
 and uses a separate launcher secret at:
 
 ```text
-/mnt/Pool1/remote-dev/launcher/secrets/web_password.txt
+/mnt/Pool1/remote-dev/launcher/secrets/launcher_password.txt
 ```
 
 The later migration slice will introduce the neutral administrative layout without deleting or sharing existing Codex state:
@@ -183,7 +185,7 @@ The parent data directory is never mounted wholesale. Agent services receive onl
 | SSH keys/configuration | Client only | No | Agent only |
 | Launcher navigation configuration | Runtime only | Not mounted into agents | Launcher only |
 
-The supported configuration does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent data directory or the Docker socket.
+The supported configuration does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent data directory or Docker/Podman sockets.
 
 ## Workspace concurrency
 
@@ -198,7 +200,7 @@ The stack does not require:
 - privileged mode;
 - `SYS_ADMIN`;
 - unconfined seccomp/AppArmor;
-- the Docker socket;
+- Docker or Podman sockets;
 - host-root mounts;
 - host security changes to start an inner sandbox.
 
@@ -210,7 +212,7 @@ All stack services use the same image reference. Immutable deployments record th
 
 Built-in components are updated through reviewed image rebuilds. Future vendor-installed agents may keep an independent persisted version only inside their own service state.
 
-A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate local role readiness without requiring user login.
+A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate role readiness without requiring user login.
 
 ## Migration from the Codex-only App
 
@@ -231,15 +233,18 @@ The `codex-remote-dev` package and `CODEX_IMAGE` variable remain compatibility a
 Automated tests now cover:
 
 - fixed launcher-role resolution and invalid-mode rejection;
-- launcher authentication, origin checking, CSP and method restrictions;
+- launcher authentication, malformed credentials, origin checking, CSP and method restrictions;
+- launcher privilege drop before serving when startup begins as root;
 - fixed Codex navigation configuration without password exposure;
+- structural DNS/IP validation and rejection of an embedded route port;
 - rejection of unsafe configured URL paths;
 - independent launcher and Codex password targets and sources;
+- separate launcher and Codex insecure-web overrides;
 - role-aware healthchecks;
 - launcher diagnostics without agent-state access;
-- generic and TrueNAS Compose topology;
+- generic and TrueNAS Compose topology rendered from deterministic defaults;
 - one image reference across launcher and Codex;
-- absence of workspace/Codex/GitHub/Git/SSH/Docker-socket configuration in the launcher;
+- absence of workspace/Codex/GitHub/Git/SSH/Docker/Podman-socket configuration in the launcher;
 - launcher and Codex containers reusing the same image ID in runtime smoke tests;
 - existing Codex start, resume, policy, diagnostics, ttyd and tmux smoke tests.
 
