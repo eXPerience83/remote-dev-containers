@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import re
@@ -115,6 +116,17 @@ def compact(output: Path, sync: ModuleType) -> None:
             fail(f"neither raw nor compact Python metadata exists for {arch}")
 
 
+def safe_preserved_path(output: Path, relative: str) -> Path:
+    """Resolve one metadata path and keep it inside the generated directory."""
+    base = output.resolve()
+    candidate = (base / relative).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        fail(f"Python notice path escapes the preserved directory: {relative}")
+    return candidate
+
+
 def check(root: Path, output: Path, sync: ModuleType) -> None:
     """Validate compact metadata and shared licenses against mise.lock."""
     expected_records = sync.parse_install_artifacts(root / "mise.lock")
@@ -139,7 +151,6 @@ def check(root: Path, output: Path, sync: ModuleType) -> None:
     if set(by_arch) != {"amd64", "arm64"}:
         fail("Python notice manifest must contain exactly amd64 and arm64")
 
-    licenses_root = output / "licenses"
     for expected in expected_records:
         actual = by_arch[expected["arch"]]
         for key in ("target", "python_version", "release", "install_asset_url"):
@@ -168,7 +179,7 @@ def check(root: Path, output: Path, sync: ModuleType) -> None:
         for relative in paths:
             if not relative.startswith("licenses/") or ".." in Path(relative).parts:
                 fail(f"unsafe compact Python license path: {relative}")
-            license_path = licenses_root / Path(relative).name
+            license_path = safe_preserved_path(output, relative)
             if not license_path.is_file() or license_path.stat().st_size == 0:
                 fail(f"missing Python license text for {expected['arch']}: {relative}")
         if (output / expected["arch"] / "PYTHON.json").exists():
@@ -178,14 +189,23 @@ def check(root: Path, output: Path, sync: ModuleType) -> None:
     if not isinstance(supplemental, list):
         fail("Python notice manifest has no supplemental_licenses array")
     expected_supplemental = {
-        (entry["url"], entry["sha256"])
-        for entry in sync.SUPPLEMENTAL_LICENSES.values()
+        (path, entry["url"], entry["sha256"])
+        for path, entry in sync.SUPPLEMENTAL_LICENSES.items()
     }
-    actual_supplemental = {
-        (entry.get("source_url"), entry.get("sha256"))
-        for entry in supplemental
-        if isinstance(entry, dict)
-    }
+    actual_supplemental: set[tuple[str, str, str]] = set()
+    for entry in supplemental:
+        if not isinstance(entry, dict):
+            fail("Python supplemental license record must be an object")
+        path = entry.get("path")
+        url = entry.get("source_url")
+        digest = entry.get("sha256")
+        if not all(isinstance(value, str) for value in (path, url, digest)):
+            fail("Python supplemental license record is malformed")
+        actual_supplemental.add((path, url, digest))
+        content = safe_preserved_path(output, path).read_bytes()
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if actual_digest != digest:
+            fail(f"supplemental Python license digest mismatch: {path}")
     if actual_supplemental != expected_supplemental:
         fail("Python supplemental license sources do not match the reviewed mapping")
 
