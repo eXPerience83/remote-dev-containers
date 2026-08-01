@@ -10,8 +10,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
 COMPOSE_FILES = (
-    ROOT / "compose/docker-compose.yml",
+    GENERIC_COMPOSE,
     ROOT / "compose/truenas.yml",
 )
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
@@ -21,7 +22,8 @@ FORBIDDEN_LAUNCHER_TEXT = (
     "/root/.config/gh",
     "/root/.config/git",
     "/root/.ssh",
-    "/var/run/docker.sock",
+    "docker.sock",
+    "podman.sock",
     "/mnt/Pool1/codex/secrets/web_password.txt",
     "/run/secrets/web_password",
     "OPENAI_API_KEY",
@@ -31,10 +33,23 @@ FORBIDDEN_LAUNCHER_TEXT = (
 )
 
 
-def compose_config(path: Path, env_file: Path) -> dict[str, object]:
-    env = os.environ.copy()
-    env.pop("REMOTE_DEV_IMAGE", None)
-    env.pop("CODEX_IMAGE", None)
+def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Keep only process values needed to invoke Docker, then apply test inputs."""
+    environment = {
+        key: os.environ[key]
+        for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
+        if key in os.environ
+    }
+    if overrides:
+        environment.update(overrides)
+    return environment
+
+
+def compose_config(
+    path: Path,
+    env_file: Path,
+    overrides: dict[str, str] | None = None,
+) -> dict[str, object]:
     completed = subprocess.run(
         [
             "docker",
@@ -48,7 +63,7 @@ def compose_config(path: Path, env_file: Path) -> dict[str, object]:
             "json",
         ],
         cwd=ROOT,
-        env=env,
+        env=compose_environment(overrides),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -74,12 +89,47 @@ def published_targets(service: dict[str, object]) -> set[int]:
     return targets
 
 
-def mount_source(service: dict[str, object], target: str) -> str | None:
+def mount_sources(service: dict[str, object], target: str) -> list[str]:
+    sources: list[str] = []
     for mount in service.get("volumes", []):
         if isinstance(mount, dict) and mount.get("target") == target:
             source = mount.get("source")
-            return str(source) if source is not None else None
-    return None
+            if source is not None:
+                sources.append(str(source))
+    return sources
+
+
+def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
+    sources: list[str] = []
+    for secret in service.get("secrets", []):
+        if not isinstance(secret, dict):
+            continue
+        secret_target = str(secret.get("target", secret.get("source", "")))
+        if secret_target == target.removeprefix("/run/secrets/"):
+            source = secret.get("source")
+            if source is not None:
+                sources.append(str(source))
+    return sources
+
+
+def credential_sources(
+    config: dict[str, object],
+    service: dict[str, object],
+    target: str,
+) -> list[str]:
+    sources = [f"bind:{source}" for source in mount_sources(service, target)]
+    top_level = config.get("secrets")
+    for secret_name in service_secret_sources(service, target):
+        require(isinstance(top_level, dict), "service secret has no top-level definition")
+        secret_definition = top_level.get(secret_name)
+        require(
+            isinstance(secret_definition, dict),
+            f"top-level secret {secret_name} is missing",
+        )
+        secret_file = secret_definition.get("file")
+        require(secret_file is not None, f"secret {secret_name} has no file source")
+        sources.append(f"secret:{secret_file}")
+    return sources
 
 
 def validate(path: Path, config: dict[str, object]) -> None:
@@ -124,6 +174,14 @@ def validate(path: Path, config: dict[str, object]) -> None:
         launcher_env.get("WEB_PASSWORD_FILE") != codex_env.get("WEB_PASSWORD_FILE"),
         f"{path}: launcher and Codex share a credential target",
     )
+    require(
+        str(launcher_env.get("ALLOW_INSECURE_WEB")) == "0",
+        f"{path}: launcher insecure default",
+    )
+    require(
+        str(codex_env.get("ALLOW_INSECURE_WEB")) == "0",
+        f"{path}: Codex insecure default",
+    )
 
     launcher_text = json.dumps(launcher, sort_keys=True)
     for forbidden in FORBIDDEN_LAUNCHER_TEXT:
@@ -132,25 +190,22 @@ def validate(path: Path, config: dict[str, object]) -> None:
             f"{path}: launcher unexpectedly contains {forbidden}",
         )
 
-    top_level_secrets = config.get("secrets")
-    if isinstance(top_level_secrets, dict):
-        launcher_secret = top_level_secrets.get("launcher_password")
-        codex_secret = top_level_secrets.get("web_password")
-        require(isinstance(launcher_secret, dict), f"{path}: launcher secret missing")
-        require(isinstance(codex_secret, dict), f"{path}: Codex secret missing")
-        require(
-            launcher_secret.get("file") != codex_secret.get("file"),
-            f"{path}: launcher and Codex secret files must be independent",
-        )
-
-    launcher_mount = mount_source(launcher, "/run/secrets/launcher_password")
-    codex_mount = mount_source(codex, "/run/secrets/web_password")
-    if launcher_mount is not None:
-        require(codex_mount is not None, f"{path}: Codex password mount missing")
-        require(
-            launcher_mount != codex_mount,
-            f"{path}: launcher and Codex bind the same password source",
-        )
+    launcher_credentials = credential_sources(
+        config, launcher, "/run/secrets/launcher_password"
+    )
+    codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
+    require(
+        len(launcher_credentials) == 1,
+        f"{path}: launcher must have exactly one password source, got {launcher_credentials}",
+    )
+    require(
+        len(codex_credentials) == 1,
+        f"{path}: Codex must have exactly one password source, got {codex_credentials}",
+    )
+    require(
+        launcher_credentials[0] != codex_credentials[0],
+        f"{path}: launcher and Codex password sources must be independent",
+    )
 
     require(
         published_targets(launcher) == {7680},
@@ -180,12 +235,44 @@ def validate(path: Path, config: dict[str, object]) -> None:
     )
 
 
+def validate_insecure_override_separation(env_path: Path) -> None:
+    codex_relaxed = compose_config(
+        GENERIC_COMPOSE,
+        env_path,
+        {"ALLOW_INSECURE_WEB": "1"},
+    )["services"]
+    require(
+        str(codex_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: Codex insecure override leaked into launcher",
+    )
+    require(
+        str(codex_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
+        "generic Compose: Codex insecure override was not applied",
+    )
+
+    launcher_relaxed = compose_config(
+        GENERIC_COMPOSE,
+        env_path,
+        {"LAUNCHER_ALLOW_INSECURE_WEB": "1"},
+    )["services"]
+    require(
+        str(launcher_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"])
+        == "1",
+        "generic Compose: launcher insecure override was not applied",
+    )
+    require(
+        str(launcher_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: launcher insecure override leaked into Codex",
+    )
+
+
 def main() -> int:
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
             validate(path, compose_config(path, env_path))
-    print("Single-stack image, launcher mounts and credential boundaries: OK")
+        validate_insecure_override_separation(env_path)
+    print("Single-stack image, socket, credential and override boundaries: OK")
     return 0
 
 
