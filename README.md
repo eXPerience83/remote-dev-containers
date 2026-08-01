@@ -3,7 +3,7 @@
 Community-maintained, browser-accessible Codex CLI development environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose the web terminal directly to the Internet. This project is not affiliated with or endorsed by OpenAI.
+> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose either web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI.
 
 ## Goal
 
@@ -11,8 +11,12 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 
 ## Current implementation
 
-The current edge image is the Codex reference implementation:
+The current edge stack is the Codex reference implementation:
 
+- one Remote Dev image reused by the launcher and Codex services;
+- one authenticated launcher as the normal browser entry point;
+- one isolated Codex terminal service with its existing private mounts;
+- separate web credentials for the launcher and Codex terminal;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset;
@@ -20,7 +24,7 @@ The current edge image is the Codex reference implementation:
 - Python 3.14, Node 24, uv and mise;
 - browser terminal through ttyd;
 - persistent sessions through tmux;
-- separate persistent paths for workspace and credentials;
+- separate persistent paths for the Codex workspace and credentials;
 - AMD64 first.
 
 ### Role-neutral entrypoints
@@ -28,33 +32,52 @@ The current edge image is the Codex reference implementation:
 The migration toward the accepted single-stack architecture uses one canonical runtime implementation:
 
 - `start-remote-dev-web`;
+- `remote-dev-launcher`;
 - `remote-dev-menu`;
-- `remote-dev-doctor`.
+- `remote-dev-doctor`;
+- `remote-dev-healthcheck`.
 
-`start-codex-web`, `codex-menu` and `codex-doctor` remain compatibility wrappers that select the Codex role and call those canonical commands.
+`start-codex-web`, `codex-menu` and `codex-doctor` remain compatibility wrappers that select the Codex role and call the canonical commands.
 
-The implemented role selector is:
+Implemented roles are:
 
 ```dotenv
-REMOTE_DEV_ROLE=codex
+REMOTE_DEV_ROLE=launcher
+# or: codex
 # or: shell
 ```
 
-`launcher`, `antigravity` and `claude` are reserved names and fail clearly because those roles are not implemented. They never trigger an implicit download.
+`antigravity` and `claude` remain reserved and fail clearly because they are not implemented. They never trigger an implicit download.
 
-The neutral direct-start selector accepts `menu`, `agent` or `shell`:
+The neutral direct-start selector accepts `menu`, `agent` or `shell` for agent-role services:
 
 ```dotenv
 REMOTE_DEV_START_MODE=menu
 ```
 
-The existing `START_MODE=menu|codex|shell` setting remains compatible; legacy `codex` maps to neutral `agent`. `REMOTE_DEV_START_MODE`, when set, takes precedence. Unknown roles and modes are rejected without evaluating shell fragments.
+The launcher accepts only `menu`. The existing `START_MODE=menu|codex|shell` setting remains compatible for Codex and shell deployments; legacy `codex` maps to neutral `agent`. Unknown roles and modes are rejected without evaluating editable shell fragments.
 
-This phase does not yet provide the launcher URL, multiple services, new mounts or data migration.
+### Single-stack launcher
+
+The generic and TrueNAS Compose files start two services from the same `REMOTE_DEV_IMAGE` reference:
+
+```text
+Remote Dev stack
+├── launcher  → primary browser port 7680
+└── codex     → authenticated terminal port 7681
+```
+
+The launcher page is protected with HTTP Basic authentication, checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
+
+Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts or Codex terminal password.
+
+The Codex endpoint authenticates independently with a different mounted secret. In a normal browser session this can produce a second authentication challenge after entering the launcher. That is deliberate in the redirect-based design: credentials are not embedded in the link, passed through the launcher or shared between services.
+
+Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
 
 ### Codex approval modes
 
-Codex always runs through the project-owned launcher with the unsupported inner sandbox disabled explicitly. The deployment can select one of two validated modes:
+Codex always runs through the project-owned command launcher with the unsupported inner sandbox disabled explicitly. The deployment can select one of two validated modes:
 
 ```dotenv
 REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
@@ -76,7 +99,7 @@ A per-launch selection overrides the deployment value only for that process. Unk
 
 ### Isolation on TrueNAS
 
-The default image does not install the system Bubblewrap package. The supported launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
+The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
 
 Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Approval prompts are not a sandbox and do not protect files or credentials already mounted into the service.
 
@@ -100,32 +123,33 @@ Antigravity, Claude Code and similar vendor products are not covered by this rep
 
 ## Accepted target architecture
 
-The next runtime architecture is documented before implementation:
+The target architecture is:
 
 - one user-installed Remote Dev App or Compose stack;
 - one final Remote Dev image digest reused by every service;
-- one primary launcher or gateway URL;
+- one primary launcher URL;
 - one isolated service per enabled coding agent;
 - Codex as the built-in reference service;
 - Antigravity as the first planned optional vendor-installed service;
 - Claude Code preserved as a future path only;
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
-Docker reuses the same immutable image layers. Users will not install one image or TrueNAS App per tool, and several agents will not share one container's private state.
+The current implementation now delivers the launcher and Codex portion of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. Optional agent services, persistent-data migration and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
 
-The default launcher navigates or redirects to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
-
-This target is not yet implemented in the current edge image. See `docs/architecture.md`, issue #24 and implementation issue #25.
+The default launcher navigates to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
 ## Build locally
 
 ```bash
 cp .env.example .env
 mkdir -p secrets data/{workspace,codex,gh,git,ssh}
-printf '%s\n' 'replace-with-a-long-password' > secrets/web_password.txt
-chmod 600 secrets/web_password.txt
+printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
+printf '%s\n' 'replace-with-a-different-codex-password' > secrets/web_password.txt
+chmod 600 secrets/launcher_password.txt secrets/web_password.txt
 ./scripts/build-local.sh
 ```
+
+Use distinct passwords. The launcher must not be able to authenticate to the Codex terminal by reading its own secret.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
@@ -133,13 +157,15 @@ Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REM
 docker compose -f compose/docker-compose.yml up -d
 ```
 
-Open the published web address and choose:
+Open the launcher at the published port `7680`, authenticate with `LAUNCHER_USERNAME`, and select Codex. The browser then opens the independently authenticated terminal on published port `7681`. Inside the Codex menu you can:
 
-1. Codex device-code login
-2. GitHub CLI login
-3. Start or resume with the configured mode
-4. Choose an autonomous or guarded mode for one launch
-5. Diagnostics
+1. use Codex device-code login;
+2. use GitHub CLI login;
+3. start or resume with the configured mode;
+4. choose an autonomous or guarded mode for one launch;
+5. run diagnostics.
+
+The default usernames differ (`remote-dev` for the launcher and `codex` for the terminal), and the two services mount different password files.
 
 ## Public edge testing
 
@@ -171,7 +197,7 @@ GHCR tags are mutable. For immutable reproduction or rollback, record the publis
 ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
-The web menu shows the embedded image channel, abbreviated embedded source revision and installed Codex CLI version detected at runtime. To display the complete embedded image metadata together with the runtime Codex CLI version from the menu diagnostics or a shell, run:
+The launcher and terminal diagnostics show the embedded image channel and source revision. To display the complete embedded image metadata together with the runtime Codex CLI version from a Codex shell, run:
 
 ```bash
 remote-dev-version
@@ -189,22 +215,25 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 ## Important warnings
 
-- Do not publish the terminal port directly to the Internet.
+- Do not publish ports 7680 or 7681 directly to the Internet.
+- The launcher and Codex terminal authenticate independently with different mounted secrets.
+- The launcher never embeds, forwards or mounts the terminal password.
+- The launcher is navigation only and does not make the Codex terminal a same-origin application.
+- Do not mount agent workspaces or credentials into the launcher.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
-- The default Codex launcher disables the inner sandbox explicitly; the outer container is the supported isolation boundary.
-- Autonomous mode permits Codex to act on all mounted state without confirmations.
+- The default Codex command launcher disables the inner sandbox explicitly; the outer Codex container is the supported isolation boundary.
+- Autonomous mode permits Codex to act on all state mounted into the Codex service without confirmations.
 - Guarded prompts are not a sandbox and do not hide mounted files or credentials from Codex.
-- Anyone with terminal access can read repositories and credentials mounted into that service.
+- Anyone with terminal access can read repositories and credentials mounted into that agent service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
-- The current edge deployment is Codex-specific; the single-stack launcher is not implemented yet.
 - Optional vendor agents are not bundled or covered by the project Apache-2.0 license.
 - `edge` is experimental and may be replaced without notice.
 - Breaking configuration and persistence changes are still possible before `v0.1.0`.
 
 ## Development and reviews
 
-Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
+Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, Python launcher code, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
 
 Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests use the repository template, and GitHub requests review from the code owner when a non-draft pull request is ready for review.
 

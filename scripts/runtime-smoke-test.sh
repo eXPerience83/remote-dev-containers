@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${1:-codex-remote-dev:local}"
-name="codex-remote-dev-smoke-${RANDOM}-$$"
+image="${1:-remote-dev:local}"
+name="remote-dev-smoke-${RANDOM}-$$"
+launcher_name="${name}-launcher"
 guard_name="${name}-guard"
 log_file="$(mktemp)"
+launcher_secret='synthetic-launcher-secret'
 
 cleanup() {
-  docker rm -f "$name" "$guard_name" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$launcher_name" "$guard_name" >/dev/null 2>&1 || true
   rm -f "$log_file"
 }
 trap cleanup EXIT
@@ -63,6 +65,7 @@ docker run -d \
 for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
+    docker exec "$name" remote-dev-healthcheck
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
       echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2
@@ -110,9 +113,77 @@ for _ in $(seq 1 30); do
       'Codex approval policy: never' \
       'Mode source: default'
 
+    docker run -d \
+      --name "$launcher_name" \
+      --security-opt no-new-privileges:true \
+      --env REMOTE_DEV_ROLE=launcher \
+      --env REMOTE_DEV_START_MODE=menu \
+      --env WEB_BIND=0.0.0.0 \
+      --env WEB_PORT=7680 \
+      --env WEB_BASE_PATH=/launcher// \
+      --env WEB_USERNAME=remote-dev \
+      --env WEB_PASSWORD="$launcher_secret" \
+      --env WEB_CHECK_ORIGIN=1 \
+      --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \
+      "$image" >/dev/null
+
+    for _ in $(seq 1 30); do
+      if docker exec "$launcher_name" \
+        curl -fsS http://127.0.0.1:7680/launcher/healthz >/dev/null 2>&1; then
+        break
+      fi
+      if [[ "$(docker inspect -f '{{.State.Running}}' "$launcher_name" 2>/dev/null || true)" != true ]]; then
+        echo "ERROR: launcher smoke container stopped unexpectedly" >&2
+        docker logs "$launcher_name" >&2 || true
+        exit 1
+      fi
+      sleep 1
+    done
+
+    docker exec "$launcher_name" remote-dev-healthcheck
+    unauthenticated_status="$(docker exec "$launcher_name" \
+      curl --silent --output /dev/null --write-out '%{http_code}' \
+      http://127.0.0.1:7680/launcher/)"
+    if [[ "$unauthenticated_status" != 401 ]]; then
+      echo "ERROR: launcher returned $unauthenticated_status without authentication" >&2
+      exit 1
+    fi
+    launcher_page="$(docker exec "$launcher_name" \
+      curl --fail --silent --show-error \
+      --user "remote-dev:${launcher_secret}" \
+      --header 'Origin: http://127.0.0.1:7680' \
+      http://127.0.0.1:7680/launcher/)"
+    grep -Fq 'Open Codex' <<<"$launcher_page"
+    grep -Fq '"port":7681' <<<"$launcher_page"
+    if grep -Fq "$launcher_secret" <<<"$launcher_page"; then
+      echo "ERROR: launcher page exposed its web password" >&2
+      exit 1
+    fi
+
+    launcher_doctor="$(docker exec "$launcher_name" remote-dev-doctor)"
+    assert_output_lines 'Launcher diagnostics' "$launcher_doctor" \
+      'Role: launcher' \
+      'Available roles: launcher, codex' \
+      'Launcher state boundary: no agent workspace or credential mounts are required.'
+
+    codex_image_id="$(docker inspect -f '{{.Image}}' "$name")"
+    launcher_image_id="$(docker inspect -f '{{.Image}}' "$launcher_name")"
+    if [[ "$codex_image_id" != "$launcher_image_id" ]]; then
+      echo "ERROR: launcher and Codex containers do not reuse one image ID" >&2
+      exit 1
+    fi
+    if [[ "$(docker inspect -f '{{json .Mounts}}' "$launcher_name")" != '[]' ]]; then
+      echo "ERROR: isolated launcher smoke container unexpectedly has mounts" >&2
+      docker inspect -f '{{json .Mounts}}' "$launcher_name" >&2
+      exit 1
+    fi
+
     echo "Pinned Codex launcher and resume compatibility: OK"
     echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
+    echo "Authenticated isolated launcher role: OK"
+    echo "Launcher base-path normalization: OK"
+    echo "Launcher and Codex same-image reuse: OK"
     echo "Web entrypoint smoke test: OK"
     exit 0
   fi

@@ -16,7 +16,7 @@ assert_eq() {
   fi
 }
 
-resolve_image() {
+resolve_unique_image() {
   local compose_file="$1"
   shift
 
@@ -24,38 +24,39 @@ resolve_image() {
     docker compose \
       --env-file "$empty_env" \
       -f "$root/$compose_file" \
-      config --images
+      config --images \
+    | sort -u
 }
 
 for compose_file in compose/docker-compose.yml compose/truenas.yml; do
   assert_eq \
     ghcr.io/experience83/remote-dev:edge-amd64 \
-    "$(resolve_image "$compose_file")" \
+    "$(resolve_unique_image "$compose_file")" \
     "$compose_file canonical default"
 
   assert_eq \
     example.invalid/legacy:test \
-    "$(resolve_image "$compose_file" CODEX_IMAGE=example.invalid/legacy:test)" \
+    "$(resolve_unique_image "$compose_file" CODEX_IMAGE=example.invalid/legacy:test)" \
     "$compose_file legacy fallback"
 
   assert_eq \
     example.invalid/canonical:test \
-    "$(resolve_image "$compose_file" REMOTE_DEV_IMAGE=example.invalid/canonical:test)" \
+    "$(resolve_unique_image "$compose_file" REMOTE_DEV_IMAGE=example.invalid/canonical:test)" \
     "$compose_file canonical override"
 
   assert_eq \
     example.invalid/canonical:test \
-    "$(resolve_image "$compose_file" \
+    "$(resolve_unique_image "$compose_file" \
       REMOTE_DEV_IMAGE=example.invalid/canonical:test \
       CODEX_IMAGE=example.invalid/legacy:test)" \
     "$compose_file canonical precedence"
 
   assert_eq \
     example.invalid/legacy:test \
-    "$(resolve_image "$compose_file" \
+    "$(resolve_unique_image "$compose_file" \
       REMOTE_DEV_IMAGE= \
       CODEX_IMAGE=example.invalid/legacy:test)" \
     "$compose_file empty canonical fallback"
 done
 
-echo "Compose canonical and legacy image resolution tests: OK"
+echo "Compose single-image and legacy resolution tests: OK"

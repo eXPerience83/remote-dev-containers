@@ -6,6 +6,7 @@
 
 - One user-installed Remote Dev App or Compose stack
 - One final image digest reused by isolated launcher and agent services
+- One primary launcher URL
 - Ubuntu 26.04 LTS
 - Root runtime inside each agent service
 - GitHub CLI essential
@@ -18,11 +19,11 @@
 
 - The public canonical edge package is `ghcr.io/experience83/remote-dev`; generic and TrueNAS Compose select it through `REMOTE_DEV_IMAGE`.
 - The `codex-remote-dev` package and `CODEX_IMAGE` remain lower-priority compatibility aliases throughout `v0.1.x` and identify the same promoted edge/stable digest.
-- The current public edge image and TrueNAS reference deployment remain Codex-specific.
-- The shared base plus Codex child image graph is the migration source, not the target architecture.
-- The neutral launcher, shared final image roles and isolated multi-service stack are tracked by issues #25 and #31.
-- Antigravity and Claude are not currently shipped or advertised as supported.
-- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as an operator or one-launch option. The outer container remains the supported TrueNAS isolation boundary in both modes.
+- Generic and TrueNAS Compose now start a `launcher` service on primary port 7680 and the existing isolated `codex` terminal service on port 7681 from the same image reference.
+- The launcher uses fixed validated navigation, independent Basic authentication, origin checking and CSP; it does not proxy terminal traffic or mount Codex/GitHub/Git/SSH/workspace state.
+- Codex keeps its existing service name, container name, `CODEX_DATA_ROOT` and mount layout until the dedicated migration slice.
+- Implemented runtime roles are `launcher`, `codex` and `shell`; `antigravity` and `claude` remain reserved and unavailable.
+- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as a deployment or one-launch option.
 
 ## Must validate before the first stable release
 
@@ -30,20 +31,22 @@
 - Ubuntu 26.04 package compatibility and build stability
 - Codex binary release and digest resolution
 - GitHub CLI checksum installation
-- ttyd authentication and origin checking
-- mise installation of the pinned Python/Node/uv versions
+- Launcher authentication, origin checking and browser navigation on real TrueNAS
+- ttyd authentication, origin checking and tmux reconnection through the navigated Codex endpoint
+- Both services using the exact published image digest on TrueNAS
 - Autonomous and guarded Codex behavior under the documented outer-container isolation model
 - Device-code login persistence
 - GH login, credential helper, clone/push/PR
-- TrueNAS x-portals behavior
+- TrueNAS x-portals behavior for the primary launcher
 - Complete third-party licenses, SBOM and notices
 - Migration from the Codex-only deployment without data loss or credential sharing
-- Launcher and agent-service isolation, including synthetic canary tests
+- Later launcher/agent and cross-agent synthetic canary tests
 
 ## Out of scope for v0.1
 
 - Enabling Antigravity or Claude by default before their dedicated legal, installation and isolation validation
 - Separate per-agent images or one manually maintained TrueNAS App per agent
+- A reverse proxy that relays terminal traffic without a dedicated threat-model review
 - ARM64 stable support
 - Docker socket
 - Browser automation
@@ -59,4 +62,4 @@ The update policy tracks final upstream releases for Codex, GitHub CLI, ttyd, mi
 
 The Ubuntu base image, Dockerfile frontend, GitHub Actions and downloaded release assets use immutable digests or hashes. APT package resolution follows the current security revisions in the selected Ubuntu repositories and is not claimed to be bit-for-bit reproducible without an APT snapshot service.
 
-Every pin update must pass the automated AMD64 build, runtime smoke tests and Trivy gate. Critical findings without a known fix remain visible in retained reports, while fixable `CRITICAL` findings fail the workflow. Real TrueNAS deployment, authentication, persistence and both approval-mode validations remain required before the first stable release.
+Every pin update must pass the automated AMD64 build, launcher/Codex runtime smoke tests and Trivy gate. Critical findings without a known fix remain visible in retained reports, while fixable `CRITICAL` findings fail the workflow. Real TrueNAS deployment, authentication, navigation, persistence and approval-mode validation remain required before the first stable release.

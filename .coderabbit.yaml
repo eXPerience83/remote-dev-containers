@@ -32,6 +32,18 @@ reviews:
         bounded retries and timeouts, non-interactive execution, idempotency and useful failure messages.
         Flag commands that can hang, leak credentials, silently ignore failures or mutate persistent data unexpectedly.
 
+    - path: "scripts/remote-dev-launcher.py"
+      instructions: |
+        Treat this as a security boundary. Review authentication parsing, constant-time credential comparison,
+        origin and Host validation, CSP/header construction, URL/input validation, HTTP method handling,
+        secret exposure, redirects/navigation and denial-of-service risks. The launcher must not proxy terminal
+        traffic, access agent mounts or become a container-management control plane.
+
+    - path: "scripts/test_single_stack_compose.py"
+      instructions: |
+        Check that topology assertions are deterministic and really prove one image reference, fixed roles,
+        no launcher access to agent state, no Docker socket/privilege escalation and preserved Codex compatibility.
+
     - path: ".github/workflows/**"
       instructions: |
         Review GitHub Actions for least-privilege permissions, safe event triggers, untrusted input handling,
@@ -43,6 +55,7 @@ reviews:
         Review Docker Compose files for TrueNAS and generic Docker compatibility.
         Flag privileged mode, host networking, Docker socket mounts, overly broad host mounts,
         missing authentication, unsafe public bindings and persistence paths that could lose credentials or workspaces.
+        Require launcher and agent services to reference one image while keeping agent state out of the launcher.
 
     - path: "**/*.md"
       instructions: |
