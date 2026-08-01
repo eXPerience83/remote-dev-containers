@@ -12,7 +12,7 @@ Before changing runtime architecture or support claims, read the current GitHub 
 - #26 and #53 define the third-party notice and recurring legal-review process.
 - #36 records the completed TrueNAS outer-isolation and no-Bubblewrap decision.
 - #42 covers later outer-container hardening and cross-service canaries.
-- #46 covers configurable Codex approval modes and is intentionally separate from the first role-neutral runtime slice.
+- #46 covers configurable Codex approval modes.
 
 If an issue and repository code disagree, report the discrepancy before expanding scope.
 
@@ -39,7 +39,7 @@ Never weaken these constraints to make a feature easier:
 - no broad `/root`, `/home`, `/opt`, `/usr/local`, or parent data-root persistence;
 - no shared writable agent credentials, GitHub CLI state, Git configuration, SSH state, caches, histories, or workspaces between role services;
 - no launcher access to agent credentials or workspaces;
-- no `eval`, sourced editable state, or user-controlled shell fragments for role, mode, installer, or command dispatch;
+- no `eval`, sourced editable state, or user-controlled shell fragments for role, mode, installer, routing, or command dispatch;
 - no secret values in diagnostics, logs, tests, issues, or PR descriptions.
 
 The supported TrueNAS isolation boundary is the outer container. Approval prompts are never a sandbox or an isolation boundary. Do not claim that Bubblewrap, Landlock, or another inner sandbox is active unless a positive runtime test proves that exact mechanism is operational.
@@ -54,6 +54,15 @@ The supported TrueNAS isolation boundary is the outer container. Approval prompt
 - Preserve command exit status and run persistent-state hardening after supported interactive sessions.
 - Preserve ttyd authentication, origin checking, tmux reconnect behavior, image identity checks, and existing Codex login/start/resume behavior.
 
+### Launcher rules
+
+- `REMOTE_DEV_ROLE=launcher` is navigation only. It must not execute an agent or relay/proxy agent terminal HTTP or WebSocket traffic unless a later PR has an explicit threat-model review.
+- The launcher may link only to fixed, validated services declared by the stack.
+- Keep launcher authentication, origin checks, CSP, method restrictions and secret-free health behavior covered by tests.
+- Never embed credentials in launcher URLs, HTML, JavaScript, logs or diagnostics.
+- The launcher service may receive only its web-auth/routing configuration and web-password secret. It must not receive agent workspaces, agent state, GitHub/Git/SSH mounts or the Docker socket.
+- Launcher and agent services must use the same final image reference/digest while retaining separate container roles and state boundaries.
+
 ## Boundaries for issue #25
 
 Implement #25 as separate reviewed slices:
@@ -61,11 +70,11 @@ Implement #25 as separate reviewed slices:
 1. role-neutral commands, validated role/start-mode resolution, and Codex compatibility wrappers;
 2. configurable Codex approval modes under #46;
 3. canonical image and variable naming with time-bounded aliases;
-4. launcher/gateway and Codex services using the same image digest;
+4. launcher and Codex services using the same image digest;
 5. Compose and persistent-state migration;
 6. outer hardening and cross-service canaries under #42.
 
-The first slice must not add the launcher proxy, new Compose services, image renaming, data-root migration, Antigravity, Context7, or new persistent mounts.
+The launcher slice uses the accepted navigation/redirect design. Do not silently turn it into a reverse proxy, container-management plane, persistent-state migration or optional-agent implementation.
 
 ## Validation expectations
 
@@ -73,6 +82,10 @@ Run the narrowest relevant tests during development and the repository's complet
 
 - role and start-mode validation;
 - compatibility-wrapper equivalence;
+- launcher authentication, origin policy, CSP and fixed navigation;
+- launcher absence of agent mounts and Docker socket;
+- launcher and Codex same-image reference/ID;
+- role-aware health checks;
 - Codex version and fixed launch policy;
 - start, resume, device-code login paths, and direct-session exit status;
 - post-session credential hardening;
@@ -88,5 +101,5 @@ Use synthetic credentials and state in tests. Never require a real vendor accoun
 - Update the owning issue with the exact completed slice and remaining work.
 - Update #31 when a tracked phase or dependency changes state.
 - Keep English and Spanish user documentation aligned when user-visible behavior changes.
-- Record compatibility aliases, defaults, migration effects, and removal points explicitly.
+- Record compatibility aliases, defaults, migration effects, authentication boundaries and removal points explicitly.
 - Do not mark optional software as shipped, installed, supported, or covered by the project Apache-2.0 license before the relevant legal and real-environment gates are complete.
