@@ -81,8 +81,10 @@ def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> No
     require(mount.get("type") == "bind", f"{path}: {source} is not a bind mount")
     bind = mount.get("bind")
     require(isinstance(bind, dict), f"{path}: {source} has no bind options")
+    # Compose v2 omits an explicitly false create_host_path value from rendered JSON.
+    # The source-level validation below requires the literal false setting in both files.
     require(
-        bind.get("create_host_path") is False,
+        bind.get("create_host_path") is not True,
         f"{path}: {source} may silently create a missing host path",
     )
 
@@ -172,14 +174,18 @@ def validate_sources() -> None:
         ".env.example must define the canonical data root",
     )
     generic_text = GENERIC_COMPOSE.read_text(encoding="utf-8")
+    truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
     require(
         "${REMOTE_DEV_DATA_ROOT:-../data}" in generic_text,
         "generic Compose must derive role mounts from REMOTE_DEV_DATA_ROOT",
     )
     require(
-        "create_host_path: false" in generic_text
-        and "create_host_path: false" in TRUENAS_COMPOSE.read_text(encoding="utf-8"),
-        "Compose examples must fail instead of creating missing host paths",
+        generic_text.count("create_host_path: false") == 5,
+        "generic Compose must disable host-path creation on every persistent bind",
+    )
+    require(
+        truenas_text.count("create_host_path: false") == 6,
+        "TrueNAS Compose must disable host-path creation on every persistent bind",
     )
 
 
