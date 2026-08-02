@@ -1,29 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly DEFAULT_MANAGER=/usr/local/bin/remote-dev-antigravity
-readonly DEFAULT_SECURE_STATE=/usr/local/bin/secure-persistent-state
-readonly DEFAULT_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+readonly manager=/usr/local/bin/remote-dev-antigravity
+readonly secure_state=/usr/local/bin/secure-persistent-state
+readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
-testing=0
-if [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]; then
-  testing=1
-  manager="${REMOTE_DEV_ANTIGRAVITY_MANAGER:-$DEFAULT_MANAGER}"
-  secure_state="${REMOTE_DEV_SECURE_STATE:-$DEFAULT_SECURE_STATE}"
-else
-  manager="$DEFAULT_MANAGER"
-  secure_state="$DEFAULT_SECURE_STATE"
-  [[ -f "$DEFAULT_RUNTIME_LIB" && -r "$DEFAULT_RUNTIME_LIB" && ! -L "$DEFAULT_RUNTIME_LIB" ]] \
-    || { echo "ERROR: Remote Dev role definitions are unavailable" >&2; exit 1; }
-  # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
-  source "$DEFAULT_RUNTIME_LIB"
-  resolved_role="$(remote_dev_resolve_role)" || exit $?
-  if [[ "$resolved_role" != antigravity ]]; then
-    echo "ERROR: run-antigravity requires the gated REMOTE_DEV_ROLE=antigravity service" >&2
-    exit 2
-  fi
-  export REMOTE_DEV_ROLE="$resolved_role"
+[[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
+  || { echo "ERROR: Remote Dev role definitions are unavailable" >&2; exit 1; }
+# shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+source "$runtime_lib"
+resolved_role="$(remote_dev_resolve_role)" || exit $?
+if [[ "$resolved_role" != antigravity ]]; then
+  echo "ERROR: run-antigravity requires the gated REMOTE_DEV_ROLE=antigravity service" >&2
+  exit 2
 fi
+export REMOTE_DEV_ROLE="$resolved_role"
 
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
 [[ -x "$secure_state" ]] || { echo "ERROR: persistent-state hardening command is unavailable" >&2; exit 1; }
@@ -59,11 +50,7 @@ case "$workspace" in
     exit 2
     ;;
 esac
-if (( testing == 1 )); then
-  mkdir -p "$workspace"
-else
-  [[ -d "$workspace" ]] || { echo "ERROR: WORKSPACE does not exist: $workspace" >&2; exit 2; }
-fi
+[[ -d "$workspace" ]] || { echo "ERROR: WORKSPACE does not exist: $workspace" >&2; exit 2; }
 
 current="$workspace"
 previous=""
