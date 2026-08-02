@@ -42,29 +42,69 @@ def canonical_path(path: Path) -> Path:
     return Path(os.path.abspath(os.path.expanduser(os.fspath(path))))
 
 
+def validate_no_symlink_components(
+    root: Path, paths: tuple[Path, ...], errors: list[str]
+) -> None:
+    """Reject symlinks at the root or at any component below the root."""
+    checked: set[Path] = set()
+    for path in paths:
+        try:
+            relative_parts = path.relative_to(root).parts
+        except ValueError:
+            errors.append(f"required path escapes the configured root: {path}")
+            continue
+
+        current = root
+        for part in (None, *relative_parts):
+            if part is not None:
+                current /= part
+            if current in checked:
+                continue
+            checked.add(current)
+            if current.is_symlink():
+                errors.append(f"persistent path component must not be a symlink: {current}")
+                break
+
+
 def validate_directory(path: Path, errors: list[str]) -> None:
     """Record an error unless a required host path is a real directory."""
-    if path.is_symlink():
-        errors.append(f"required directory must not be a symlink: {path}")
-    elif not path.exists():
+    if not path.exists():
         errors.append(f"required directory is missing: {path}")
     elif not path.is_dir():
         errors.append(f"required directory is not a directory: {path}")
 
 
 def validate_password_file(path: Path, errors: list[str]) -> None:
-    """Record missing, non-regular, symlinked or overly broad password files."""
-    if path.is_symlink():
-        errors.append(f"password file must not be a symlink: {path}")
-        return
+    """Validate the file exactly as the shell runtime will consume it."""
     if not path.exists():
         errors.append(f"password file is missing: {path}")
         return
     if not path.is_file():
         errors.append(f"password path is not a regular file: {path}")
         return
-    if path.stat().st_size == 0:
+
+    try:
+        password_bytes = path.read_bytes()
+    except OSError as error:
+        errors.append(f"password file cannot be read: {path} ({error})")
+        return
+
+    if not password_bytes:
         errors.append(f"password file is empty: {path}")
+    else:
+        # start-remote-dev-web.sh reads through shell command substitution,
+        # which removes every trailing LF. Validate the resulting credential,
+        # not merely the on-disk byte count.
+        effective_password = password_bytes.rstrip(b"\n")
+        if not effective_password:
+            errors.append(
+                f"password is empty after trailing newline removal: {path}"
+            )
+        elif b"\x00" in effective_password:
+            errors.append(f"password must not contain NUL bytes: {path}")
+        elif b"\n" in effective_password or b"\r" in effective_password:
+            errors.append(f"password must be a single LF-terminated line: {path}")
+
     if os.name == "posix":
         mode = stat.S_IMODE(path.stat().st_mode)
         if mode & 0o077:
@@ -77,10 +117,14 @@ def validate_password_file(path: Path, errors: list[str]) -> None:
 def validate_layout(root: Path) -> list[str]:
     """Return every problem found in one canonical host data root."""
     errors: list[str] = []
+    directories = tuple(root / suffix for suffix in DIRECTORY_SUFFIXES)
+    password_file = root / PASSWORD_SUFFIX
+
+    validate_no_symlink_components(root, (*directories, password_file), errors)
     validate_directory(root, errors)
-    for suffix in DIRECTORY_SUFFIXES:
-        validate_directory(root / suffix, errors)
-    validate_password_file(root / PASSWORD_SUFFIX, errors)
+    for directory in directories:
+        validate_directory(directory, errors)
+    validate_password_file(password_file, errors)
     return errors
 
 
