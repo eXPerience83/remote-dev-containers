@@ -1,0 +1,139 @@
+# Antigravity CLI installer and package inspection
+
+## Status
+
+Inspection date: **2026-08-02 UTC**
+
+This report records bounded metadata from the installer and package currently served by Google. It does not contain or redistribute the installer or the Antigravity CLI binary.
+
+The reproducible workflow is `.github/workflows/inspect-antigravity-cli.yml`. The normalized machine-readable evidence is `third_party/antigravity-cli-inspection.json`.
+
+## Official sources reviewed
+
+- Product repository: <https://github.com/google-antigravity/antigravity-cli>
+- Installer: <https://antigravity.google/cli/install.sh>
+- CLI overview: <https://antigravity.google/docs/cli-overview>
+- CLI installation: <https://antigravity.google/docs/cli-installation>
+- CLI settings: <https://antigravity.google/docs/cli-settings>
+- CLI troubleshooting: <https://antigravity.google/docs/cli-troubleshooting>
+- Terms: <https://antigravity.google/terms>
+- Google Privacy Policy: <https://policies.google.com/privacy>
+
+## Inspection method
+
+The dedicated GitHub Actions job:
+
+1. checks out the repository without persisting GitHub credentials;
+2. creates a new temporary home directory;
+3. downloads the installer from the fixed official HTTPS URL to a temporary file;
+4. verifies that it is valid Bash and reads its live `--help` output;
+5. uses only a currently advertised option to install under the isolated home;
+6. fingerprints shell profiles before and after installation;
+7. records file paths, modes, sizes and SHA-256 values without retaining file contents;
+8. runs `agy --version` and `agy --help` without authenticating;
+9. repeats the installer to observe its update/idempotency behavior;
+10. uploads only a bounded JSON metadata artifact.
+
+The job does not start an authenticated Antigravity session, does not provide a Google account and does not upload the installer or installed executable.
+
+## Exact inspected installer
+
+| Field | Value |
+|---|---|
+| URL | `https://antigravity.google/cli/install.sh` |
+| Content type | `application/x-sh` |
+| Size | `7,354` bytes |
+| SHA-256 | `ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640` |
+| Embedded release service host | `antigravity-cli-auto-updater-974169037036.us-central1.run.app` |
+
+The live installer help currently advertises only:
+
+```text
+-d, --dir <path>    Specify a custom directory to install the binary
+-h, --help          Display this help menu
+```
+
+Older official documentation described `--skip-aliases` and `--skip-path`, but the inspected installer rejects those options. Remote Dev must therefore query and validate the live installer contract and currently use an explicit private `--dir` target. It must not assume the older flags are present.
+
+## Installed package
+
+The installer detected `linux_amd64`, reported that it verified the downloaded package checksum and placed the executable at the requested path.
+
+| Field | Value |
+|---|---|
+| Relative path | `.local/bin/agy` |
+| Reported version | `1.1.9` |
+| Size | `193,233,344` bytes |
+| SHA-256 | `2e44783f64b231bc1437e84bb1b93c99c48163cb818210f0d2d48295ec78d3ce` |
+| Format | ELF 64-bit x86-64 PIE, dynamically linked, stripped |
+| Interpreter | `/lib64/ld-linux-x86-64.so.2` |
+
+Observed dynamic libraries were `libc`, `libdl`, `libm`, `libpthread`, `libresolv` and `librt` from the runner operating system.
+
+The package created only these relevant paths under the isolated home:
+
+```text
+.cache/antigravity/
+.cache/antigravity/staging/
+.local/bin/agy
+```
+
+No shell profile was created or modified. No separate `LICENSE`, `NOTICE`, `COPYING`, `COPYRIGHT` or `AUTHORS` file was installed alongside the binary.
+
+Absence of an installed legal file is **not** evidence of redistribution permission.
+
+## Update behavior
+
+Running the installer a second time returned success but did not replace the existing executable. Its SHA-256 remained unchanged. The installer stated that:
+
+- Antigravity CLI automatically self-updates in the background during regular runs;
+- a fresh installation requires deleting the existing binary first.
+
+Google's troubleshooting documentation provides the opt-out:
+
+```text
+AGY_CLI_DISABLE_AUTO_UPDATE=true
+```
+
+It also documents updater state under:
+
+```text
+~/.gemini/antigravity-cli/updater/
+```
+
+A Remote Dev integration must set the opt-out for normal agent sessions so that starting Antigravity never mutates the executable silently. Updating must be a separate explicit action that uses an upstream-supported command or reviewed installation flow and reports the before/after versions.
+
+## Persistent state and credentials
+
+Official documentation places persistent CLI settings at:
+
+```text
+~/.gemini/antigravity-cli/settings.json
+```
+
+Authentication uses the official client and Google Sign-In, including a remote/SSH authorization URL flow. Credentials, histories, settings, updater files and optional plugins must remain inside the Antigravity service's private state mounts. Remote Dev must not inspect, print, transform, share or reuse those credentials.
+
+Real authentication and exact post-login state paths remain manual TrueNAS validation items; CI deliberately performs no account login.
+
+## Distribution decision
+
+The installer is public, but no reviewed evidence grants this project permission to redistribute the proprietary executable. Therefore:
+
+- the public Remote Dev image must not contain the installer or Antigravity binary;
+- installation must be explicit and initiated by the user;
+- the wrapper must download from the fixed official Google endpoint into a temporary file rather than piping remote content into a shell;
+- the binary must be installed into Antigravity-owned persistent storage;
+- Google terms, privacy disclosures, data-use behavior and the non-affiliation notice must be shown before installation;
+- the integration must fail closed if installer options, destination paths or post-install checks differ from this reviewed contract.
+
+## Re-review triggers
+
+Repeat this inspection before support is claimed whenever any of these changes:
+
+- installer SHA-256 or advertised options;
+- installer endpoint or release-service host;
+- executable location or packaging;
+- automatic-update controls;
+- state, credential or cache paths;
+- vendor terms, privacy disclosures or data-use behavior;
+- supported architectures.
