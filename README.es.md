@@ -72,7 +72,9 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
 - `guarded` se traduce a `--ask-for-approval untrusted`.
 
-El menú inicia o reanuda Codex con el modo configurado y permite escoger otro modo para una sola ejecución:
+El menú separa **Start Codex** y **Resume a Codex session** y añade **Approval mode for next launch**. Ese selector permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
+
+La interfaz equivalente es:
 
 ```bash
 run-codex --approval-mode autonomous
@@ -81,6 +83,8 @@ run-codex --print-policy
 ```
 
 Los valores desconocidos y los flags directos de sandbox/aprobación se rechazan antes de iniciar Codex.
+
+La interfaz de Codex también ofrece `/permissions`. Ese comando modifica el perfil de permisos activo dentro del proceso Codex en ejecución; no cambia `REMOTE_DEV_CODEX_APPROVAL_MODE` ni sustituye el resolver validado autonomous/guarded de Remote Dev. Utiliza el menú o la variable del despliegue para el comportamiento soportado y persistente entre nuevos procesos.
 
 ## Aislamiento en TrueNAS
 
@@ -121,7 +125,7 @@ docker compose -f compose/docker-compose.yml up -d
 1. Abre el launcher en el puerto publicado `7680`.
 2. Pulsa Codex.
 3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
-4. Desde el menú realiza el login de Codex/GitHub, inicia o reanuda sesiones y ejecuta diagnósticos.
+4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, realiza los login de Codex/GitHub y ejecuta diagnósticos.
 
 Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
 
