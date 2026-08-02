@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly OFFICIAL_INSTALLER_URL="https://antigravity.google/cli/install.sh"
 readonly ANTIGRAVITY_PATHS_LIB=/usr/local/lib/remote-dev/antigravity-paths.sh
+readonly ANTIGRAVITY_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
 cleanup_root=""
 cleanup() {
@@ -39,6 +40,25 @@ recovery_hint() {
 
 is_testing() {
   [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]
+}
+
+require_antigravity_role() {
+  if is_testing; then
+    return 0
+  fi
+
+  [[ -f "$ANTIGRAVITY_RUNTIME_LIB" && -r "$ANTIGRAVITY_RUNTIME_LIB" && ! -L "$ANTIGRAVITY_RUNTIME_LIB" ]] \
+    || fail "Remote Dev role definitions are unavailable: $ANTIGRAVITY_RUNTIME_LIB"
+  # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+  source "$ANTIGRAVITY_RUNTIME_LIB"
+
+  local resolved_role=""
+  resolved_role="$(remote_dev_resolve_role)" || exit $?
+  if [[ "$resolved_role" != antigravity ]]; then
+    echo "ERROR: Antigravity runtime operations require the gated REMOTE_DEV_ROLE=antigravity service" >&2
+    exit 2
+  fi
+  export REMOTE_DEV_ROLE="$resolved_role"
 }
 
 load_canonical_paths() {
@@ -528,6 +548,8 @@ main() {
   local command="${1:-}"
   [[ -n "$command" ]] || { usage >&2; exit 2; }
   shift || true
+
+  require_antigravity_role
 
   local assume_yes=0 menu=0
   while (( $# )); do
