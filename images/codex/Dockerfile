@@ -70,6 +70,7 @@ COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
+    --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
     chmod 0755 \
@@ -93,6 +94,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && python -m py_compile /usr/local/bin/remote-dev-launcher \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
+    && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
     && bash /tmp/test-run-codex-policy \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/start-codex-web \
     && grep -Fx 'exec /usr/local/bin/start-remote-dev-web "$@"' /usr/local/bin/start-codex-web \
