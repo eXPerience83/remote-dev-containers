@@ -1,66 +1,85 @@
 # Security model
 
-This is a single-user development appliance, not a multi-tenant service.
+Remote Dev is a single-user development appliance, not a multi-tenant service.
 
 ## Root decision
 
-The Codex container intentionally runs as root. Root is constrained to that container and to the paths mounted into it. Any person who reaches the Codex terminal can operate everything accessible to that service.
+Agent containers intentionally run as root. Root is constrained to that container and to the paths mounted into it. Anyone who reaches an agent terminal can operate everything accessible to that service.
 
-The launcher container starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server or accepting requests, the launcher clears supplementary groups and drops permanently to UID/GID `65532`. Automated tests verify the effective serving UID. The launcher has no agent-state mounts, so this startup step does not grant access to Codex data.
+The launcher starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server, it clears supplementary groups and drops permanently to UID/GID `65532`. The launcher has no agent-state mounts.
 
 ## Launcher boundary
 
-The supported stack starts a stateless launcher service and an independently authenticated Codex service from the same immutable image. Sharing image layers does not share mutable state or credentials.
+The launcher and Codex run as separate containers from the same immutable image. Sharing image layers does not share mutable state or credentials.
 
 The launcher:
 
-- receives no Codex workspace, agent state, GitHub CLI configuration, Git configuration or SSH mounts;
-- receives no Codex terminal password or other agent web credential;
-- receives no Docker or Podman socket and performs no container-management operation;
-- serves only a fixed navigation page for reviewed, declared services;
-- does not relay or proxy the Codex terminal's HTTP or WebSocket traffic;
+- receives no agent workspace, state, GitHub CLI configuration, Git configuration, SSH state or agent password;
+- receives no Docker or Podman socket;
+- performs no container-management operation;
+- serves only fixed reviewed navigation;
+- does not proxy terminal HTTP or WebSocket traffic;
 - requires no password by default on localhost/LAN/Tailscale deployments;
-- supports optional HTTP Basic authentication only through the separate file-backed `compose/launcher-auth.yml` override in the generic Compose deployment;
-- validates DNS names and IP literals and rejects a destination host containing an embedded port;
-- restricts configured paths to safe RFC 3986 URL-path characters before embedding them into the page;
-- checks that an `Origin` header, when present, matches the request host;
-- sends a restrictive Content Security Policy and rejects state-changing HTTP methods;
-- exposes an unauthenticated, secret-free health endpoint.
+- supports optional file-backed Basic authentication only through `compose/launcher-auth.yml`;
+- validates route inputs, matching origins and URL paths;
+- sends a restrictive Content Security Policy;
+- rejects state-changing HTTP methods;
+- exposes a secret-free health endpoint.
 
-The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The optional launcher password is exposed to the container only as `/run/secrets/launcher_password`; it is not copied into the rendered service environment. The Codex endpoint uses its own mounted password secret and authenticates independently.
+The launcher never embeds a password or forwards an Authorization header. Each agent endpoint authenticates independently.
 
-Port `7680` is the normal launcher entry point. Port `7681` remains the direct Codex endpoint used after navigation and for troubleshooting. Neither port should be exposed directly to the public Internet. An unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale/WireGuard address.
+## Outer-container isolation
 
-## Supported Codex isolation boundary
+The supported TrueNAS security boundary is the outer agent container. The default image does not install system Bubblewrap and the project-owned Codex launcher fixes `--sandbox danger-full-access` so no unsupported nested sandbox is attempted.
 
-The supported TrueNAS security boundary for Codex is its outer Docker container. The default image does not install the system Bubblewrap package or executable and does not enable deprecated Landlock as a fallback. The pinned Codex release may carry its own packaged Bubblewrap fallback, but the supported command launcher starts Codex with `--sandbox danger-full-access` so that fallback is not invoked and no unsupported nested sandbox is attempted.
+`danger-full-access` describes only the Codex inner sandbox. It does not add Docker privileges, capabilities, host mounts, unconfined profiles or a container-engine socket.
 
-`danger-full-access` describes the Codex inner sandbox only. It does not add Docker privileges, `SYS_ADMIN`, host mounts, unconfined AppArmor/seccomp profiles or a Docker socket. The container's normal isolation and narrow mounts remain the security boundary.
+Approval prompts are not a sandbox. Autonomous and guarded modes can access every path and credential mounted into Codex. Guarded mode adds confirmation friction only.
 
-Approval prompts are never a sandbox or an isolation boundary. Whether the selected approval policy is `never` or `untrusted`, Codex can access every path and credential mounted into its service. The guarded policy adds command-by-command friction in cases classified as untrusted; it does not hide mounted state, and some built-in editing operations may not map to a shell-command prompt.
+## Canonical persistent-data boundary
 
-Separate future agent services must receive separate narrow mounts and separate web credentials. The outer-container boundary protects one agent service from state that is not mounted into it; it does not protect files or credentials from a person who already controls that service's terminal.
+All generic Compose persistence is derived from one administrative root, `REMOTE_DEV_DATA_ROOT`, but that root is never mounted into a container.
+
+The Codex service receives only:
+
+```text
+workspaces/codex              -> /workspace
+state/codex/agent             -> /root/.codex
+state/codex/gh                -> /root/.config/gh
+state/codex/git               -> /root/.config/git
+state/codex/ssh               -> /root/.ssh
+secrets/codex/web_password.txt -> /run/secrets/web_password
+```
+
+The launcher remains mount-free. Future agent services must receive their own separate child paths and credentials.
+
+Bind mounts use `create_host_path: false`. Missing host directories cause startup failure instead of silently creating an unexpected location. Operators must create and review each required path deliberately.
+
+The project does not automatically copy, migrate, delete or symlink experimental data. Automatic migration would risk credential exposure or ambiguous ownership. Existing experimental state must be moved or recreated manually after backup.
+
+Optional SMB sharing is outside the core security contract and tracked under #71. Only the workspace boundary may be considered for sharing; `state` and `secrets` must never be exposed through SMB.
 
 ## Required controls
 
 - Do not expose ports 7680 or 7681 directly to the public Internet.
-- Bind the default unauthenticated launcher only to localhost, a trusted LAN address, Tailscale or WireGuard.
-- Keep the Codex terminal independently authenticated with a strong password.
-- Optional launcher authentication must use a password different from every agent password and the file-backed Compose override rather than a plaintext service environment value.
-- Never place credentials in navigation URLs or rendered Compose environment output.
-- Never mount an agent password, state or workspace into the launcher.
-- Never mount Docker or Podman sockets, including `/var/run/docker.sock` or `/run/docker.sock`.
+- Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard.
+- Keep every agent terminal independently authenticated with a strong password.
+- Never reuse a launcher password as an agent password.
+- Never place credentials in navigation URLs, diagnostics, logs, tests or rendered environment output.
+- Never mount agent data or credentials into the launcher.
+- Never mount Docker or Podman sockets.
 - Never use `privileged: true`, host PID, host networking or added capabilities.
-- Mount only the documented persistent directories into the Codex service.
-- Treat `/root/.codex/auth.json`, GitHub credentials and SSH keys as secrets.
-- Keep `no-new-privileges:true` enabled on both services.
+- Never mount the parent data root, host root, `/root`, `/home`, `/mnt`, `/opt` or `/usr/local` wholesale.
+- Treat Codex authentication, GitHub credentials and SSH keys as secrets.
+- Keep `no-new-privileges:true` enabled on every service.
+- Keep writable workspaces and credentials private per agent service.
 
 ## Codex approval modes
 
-The project-owned Codex command launcher always fixes the inner sandbox to `danger-full-access` and accepts only these reviewed modes:
+The project-owned Codex command launcher accepts only:
 
-- `autonomous` maps to `--ask-for-approval never` and is the supported default;
-- `guarded` maps to `--ask-for-approval untrusted` and remains available when the operator wants confirmation friction.
+- `autonomous`, mapped to `--ask-for-approval never`;
+- `guarded`, mapped to `--ask-for-approval untrusted`.
 
 Configure the permanent service value with:
 
@@ -69,25 +88,19 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 # or: guarded
 ```
 
-The menu exposes fixed start and resume actions plus an approval-mode selector for the next launch. Choosing autonomous or guarded there affects only the next start/resume, is consumed before that process is invoked and then resets to the configured deployment mode. Choosing the configured entry clears a pending override. None of these menu actions rewrite deployment or persistent Codex configuration.
+The menu can select another mode for one start or resume. That override is consumed before invocation and does not rewrite the deployment setting.
 
-The equivalent validated CLI is:
+The command launcher rejects raw sandbox/approval flags and relevant configuration overrides before Codex starts. Users may invoke the raw Codex binary manually from a shell, but that is outside the supported launcher contract.
 
-```bash
-run-codex --approval-mode autonomous
-run-codex --approval-mode guarded resume
-```
+## Optional vendor agents
 
-Precedence is:
+Antigravity, Claude Code and other proprietary agents are not bundled or downloaded by the current image. An optional integration must:
 
-1. an explicit validated `--approval-mode` for that launch;
-2. `REMOTE_DEV_CODEX_APPROVAL_MODE` from the deployment;
-3. the built-in `autonomous` default.
+- use an explicit user action;
+- download from an official vendor-controlled source;
+- pass dedicated legal/package inspection;
+- keep credentials and state inside that agent's private mounts;
+- document vendor terms, privacy, telemetry, updates and uninstall behavior;
+- never weaken the outer-container boundary.
 
-`run-codex --print-policy`, the menu and diagnostics report the selected project mode, exact upstream approval policy and selection source. Invalid values fail before Codex starts.
-
-The upstream Codex `/permissions` command changes the active upstream permission profile in an already running process. It does not update `REMOTE_DEV_CODEX_APPROVAL_MODE`, does not establish the deployment default and is not a replacement for Remote Dev's fixed autonomous/guarded mappings. Supported new-process policy changes should use the menu selector, deployment variable or validated `run-codex --approval-mode` option.
-
-The command launcher continues to reject raw Codex sandbox/approval flags, shortcut aliases and relevant `config.toml` overrides. Arguments after `--` are passed literally and are not interpreted as project policy controls. Users can still invoke the raw Codex binary manually from a shell, but doing so is outside the supported launcher contract.
-
-Autonomous mode does not grant any access beyond the Codex container's existing mounts, network and credentials. It is appropriate here only because this project is designed as a single-user appliance whose terminal operator is already trusted for that individual agent container. Do not use autonomous mode to justify broader mounts or weaker Docker/TrueNAS controls.
+A missing optional agent must remain unavailable and must not download silently during startup.
