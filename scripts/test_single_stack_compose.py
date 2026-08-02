@@ -150,6 +150,14 @@ def credential_sources(
     return sources
 
 
+def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
+    """Resolve a Compose file path using the first Compose file as the base."""
+    path = Path(path_value)
+    if not path.is_absolute():
+        path = base_file.parent / path
+    return path.resolve()
+
+
 def validate(path: Path, config: dict[str, object]) -> None:
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
@@ -276,6 +284,30 @@ def validate_auth_override_separation(env_path: Path) -> None:
     require(
         str(codex_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
         "generic Compose: Codex insecure override was not applied",
+    )
+
+    launcher_default_auth = compose_config(
+        AUTH_COMPOSE_FILES,
+        env_path,
+        {"LAUNCHER_USERNAME": "test-launcher"},
+    )
+    default_launcher = launcher_default_auth["services"]["launcher"]
+    default_sources = credential_sources(
+        launcher_default_auth,
+        default_launcher,
+        "/run/secrets/launcher_password",
+    )
+    require(
+        len(default_sources) == 1 and default_sources[0].startswith("secret:"),
+        "generic Compose: default launcher auth must have one file-backed secret",
+    )
+    default_secret_path = resolve_compose_file_path(
+        default_sources[0].removeprefix("secret:"),
+        GENERIC_COMPOSE,
+    )
+    require(
+        default_secret_path == (ROOT / "secrets/launcher_password.txt").resolve(),
+        "generic Compose: default launcher secret path must match README guidance",
     )
 
     synthetic_secret = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
