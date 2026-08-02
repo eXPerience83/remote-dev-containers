@@ -3,7 +3,7 @@
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]
-> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso. No expongas ninguno de los dos puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
+> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso y aún no han completado toda la validación de TrueNAS, seguridad y persistencia. No expongas ninguno de los dos puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
 
 ## Objetivo
 
@@ -11,7 +11,7 @@ Mantener las herramientas, los repositorios y los agentes de programación en un
 
 ## Implementación actual
 
-El stack edge actual utiliza Codex como implementación de referencia:
+El stack edge actual utiliza una única imagen de Remote Dev para dos servicios:
 
 ```text
 Stack Remote Dev
@@ -19,15 +19,25 @@ Stack Remote Dev
 └── codex     → terminal autenticado 7681
 ```
 
-- una imagen de Remote Dev reutilizada por ambos servicios;
-- launcher sin estado y sin contraseña por defecto en redes privadas de confianza;
-- terminal Codex aislado y autenticado de forma independiente;
-- Ubuntu 26.04 LTS;
-- Git, Git LFS, OpenSSH y GitHub CLI;
-- Python 3.14, Node 24, npm 12, uv y mise;
-- terminal web ttyd y sesiones persistentes mediante tmux;
-- rutas persistentes canónicas y separadas por rol;
-- AMD64 primero.
+- El launcher es la entrada normal desde el navegador y no requiere contraseña por defecto.
+- Codex se ejecuta en su propio contenedor con montajes privados y separados por rol.
+- Docker reutiliza la misma imagen y sus mismas capas para ambos servicios.
+- El terminal Codex conserva su propia autenticación independiente.
+- La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
+- La persistencia utiliza un único contrato canónico y neutral.
+- AMD64 continúa siendo la arquitectura inicial.
+
+### Puntos de entrada y roles
+
+La implementación canónica utiliza:
+
+- `start-remote-dev-web`;
+- `remote-dev-launcher`;
+- `remote-dev-menu`;
+- `remote-dev-doctor`;
+- `remote-dev-healthcheck`.
+
+`start-codex-web`, `codex-menu` y `codex-doctor` continúan como wrappers de compatibilidad.
 
 Los roles implementados son:
 
@@ -37,27 +47,53 @@ REMOTE_DEV_ROLE=launcher
 # o: shell
 ```
 
-`antigravity` y `claude` siguen reservados y no disponibles. Nunca provocan una descarga implícita.
+`antigravity` y `claude` siguen reservados y fallan de forma clara. Nunca provocan una descarga implícita.
 
-## Launcher y autenticación
+El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOTE_DEV_START_MODE=menu|agent|shell` y la compatibilidad existente con `START_MODE=menu|codex|shell`.
 
-El launcher solo sirve para navegar. No actúa como proxy, no utiliza el socket Docker y no recibe workspaces, credenciales ni estado de los agentes. Al seleccionar Codex, el navegador abre su endpoint autenticado independiente.
+### Funcionamiento del launcher
 
-La autenticación Basic del launcher es opcional para despliegues avanzados del Compose genérico mediante `compose/launcher-auth.yml`. El ejemplo normal de TrueNAS/LAN deja el launcher sin contraseña y exige autenticación únicamente en el terminal Codex.
+La página del launcher no requiere autenticación por defecto porque es navegación sin estado: no contiene credenciales, no actúa como proxy y no monta datos privados de los agentes. Mantiene la comprobación de origen cuando el navegador envía la cabecera `Origin` y aplica una política CSP restrictiva.
 
-## Modos de aprobación de Codex
+Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH ni la contraseña del terminal.
+
+El terminal Codex se autentica de manera independiente mediante su propia fuente de contraseña. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
+
+La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante el override separado y respaldado por secreto `compose/launcher-auth.yml`. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña, secreto, mount ni dataset del launcher.
+
+Las rutas configuradas se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity/Claude y un proxy de origen único siguen fuera de la implementación actual.
+
+### Modos de aprobación de Codex
 
 ```dotenv
 REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 # o: guarded
 ```
 
-- `autonomous` se traduce a `--ask-for-approval never`;
+- `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
 - `guarded` se traduce a `--ask-for-approval untrusted`.
 
-El menú ofrece inicio, reanudación y un selector para el siguiente lanzamiento. Un cambio puntual se consume al arrancar Codex y después vuelve al valor del despliegue.
+El menú separa **Start Codex** y **Resume a Codex session** y añade **Approval mode for next launch**. Ese selector permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
 
-Las confirmaciones no son un sandbox. El límite de aislamiento soportado es el contenedor exterior de Codex y sus montajes estrechos. En el perfil validado de TrueNAS, el launcher propio del proyecto fija el sandbox interno no compatible a `danger-full-access`.
+La interfaz equivalente es:
+
+```bash
+run-codex --approval-mode autonomous
+run-codex --approval-mode guarded resume
+run-codex --print-policy
+```
+
+Los valores desconocidos y los flags directos de sandbox/aprobación se rechazan antes de iniciar Codex.
+
+La interfaz de Codex también ofrece `/permissions`. Ese comando modifica el perfil de permisos activo dentro del proceso Codex en ejecución; no cambia `REMOTE_DEV_CODEX_APPROVAL_MODE` ni sustituye el resolver validado autonomous/guarded de Remote Dev. Utiliza el menú o la variable del despliegue para el comportamiento soportado y persistente entre nuevos procesos.
+
+## Aislamiento en TrueNAS
+
+El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher añade únicamente su propio secreto de contraseña en modo solo lectura.
+
+La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
+
+No añadas modo privilegiado, `SYS_ADMIN`, perfiles sin restricciones, el socket Docker ni montajes amplios para intentar habilitar un sandbox anidado.
 
 ## Estructura persistente canónica
 
@@ -84,15 +120,15 @@ REMOTE_DEV_DATA_ROOT/
         └── web_password.txt
 ```
 
-El servicio Codex monta exclusivamente esos directorios hijo. El launcher no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
+El servicio Codex monta exclusivamente esos directorios hijo. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-Todos los bind mounts utilizan `create_host_path: false`. Debes crear deliberadamente todos los directorios necesarios antes de iniciar el stack; una ruta incorrecta falla en lugar de generar silenciosamente una carpeta nueva.
+Todos los bind mounts persistentes utilizan `create_host_path: false`. Debes crear deliberadamente todos los directorios necesarios antes de iniciar el stack; una ruta incorrecta falla en lugar de generar silenciosamente una carpeta nueva.
 
 No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`.
 
 ## Licencias y software opcional
 
-El código propio de Remote Dev utiliza Apache-2.0. Los componentes incluidos conservan sus licencias y avisos originales. Puedes inspeccionarlos con:
+El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv y sus dependencias conservan sus licencias y avisos originales.
 
 ```bash
 remote-dev-notices
@@ -100,9 +136,9 @@ remote-dev-notices --list
 remote-dev-notices --check
 ```
 
-Antigravity, Claude Code y productos similares no quedan cubiertos por Apache-2.0 y la imagen actual no los descarga ni redistribuye. Cualquier integración futura deberá utilizar una instalación explícita desde una fuente oficial después de la revisión legal y técnica específica.
+Antigravity, Claude Code y productos similares no quedan cubiertos por la licencia Apache-2.0 del repositorio. La imagen actual no los descarga ni redistribuye. Cualquier integración futura debe iniciarse expresamente, descargar desde la fuente oficial y superar su revisión legal y técnica específica.
 
-## Compilación local
+## Uso local
 
 ```bash
 cp .env.example .env
@@ -115,15 +151,18 @@ chmod 600 data/secrets/codex/web_password.txt
 ./scripts/build-local.sh
 ```
 
-Define `REMOTE_DEV_IMAGE=remote-dev:local` en `.env` y ejecuta:
+Define `REMOTE_DEV_IMAGE=remote-dev:local` y el modo de aprobación deseado, y ejecuta:
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d
 ```
 
-Abre el puerto `7680`, selecciona Codex y autentícate en el puerto `7681`.
+1. Abre el launcher en el puerto publicado `7680`.
+2. Pulsa Codex.
+3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
+4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, realiza los login de Codex/GitHub y ejecuta diagnósticos.
 
-Para proteger también el launcher en un despliegue genérico avanzado:
+Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
 
 ```bash
 mkdir -p secrets
@@ -135,36 +174,51 @@ docker compose \
   up -d
 ```
 
-La contraseña del launcher debe seguir separada de las contraseñas de los agentes.
+El override monta el valor como secreto Compose en `/run/secrets/launcher_password`; no incluye la contraseña en el entorno renderizado y no sustituye ni reutiliza la contraseña del terminal Codex.
 
-## Prueba pública de edge
+## Prueba pública de la imagen edge
 
 ```bash
 docker pull ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Define:
+Para Docker Compose o TrueNAS:
 
 ```dotenv
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
+REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
-El paquete `codex-remote-dev` y la variable `CODEX_IMAGE` siguen como aliases del nombre de imagen durante `v0.1.x`; no conservan la estructura de datos retirada.
+Los despliegues `v0.1.x` pueden conservar `CODEX_IMAGE` y `ghcr.io/experience83/codex-remote-dev`. Los nombres de compatibilidad no se eliminarán antes de `v0.2.0`, pero no conservan la estructura de datos experimental retirada.
 
-Para reproducción inmutable, registra el digest publicado y utiliza:
+Para fijar un commit o digest:
 
 ```text
+ghcr.io/experience83/remote-dev:sha-<commit-completo>
 ghcr.io/experience83/remote-dev@sha256:<digest>
+```
+
+El launcher y los diagnósticos muestran la identidad embebida de la imagen. Desde una shell de Codex también puedes ejecutar:
+
+```bash
+remote-dev-version
 ```
 
 ## Advertencias importantes
 
-- No publiques los puertos 7680 o 7681 directamente en Internet.
-- Publica el launcher sin contraseña solo en localhost, LAN de confianza o Tailscale/WireGuard.
-- Mantén el terminal Codex autenticado de forma independiente.
+- No expongas los puertos 7680 o 7681 directamente a Internet.
+- El launcher sin contraseña solo debe publicarse en localhost, LAN o Tailscale.
+- Codex sigue autenticado de forma independiente.
+- El launcher no reenvía ni incluye en la URL la contraseña de Codex.
+- El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
+- No montes workspaces ni credenciales de agente en el launcher.
 - No montes el socket Docker ni uses modo privilegiado.
-- No montes estado o credenciales de agentes en el launcher.
-- El modo autónomo puede modificar sin confirmación todo lo montado en Codex.
+- En modo autónomo, Codex puede actuar sin confirmaciones sobre todo lo montado en su servicio.
+- Las confirmaciones del modo protegido no son un sandbox.
 - `edge` sigue siendo experimental.
 
-Consulta `AGENTS.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md`, `docs/releases.md` y `docs/roadmap.md` para los detalles de implementación y publicación.
+## Desarrollo y revisiones
+
+El desarrollo se realiza mediante pull requests. CodeRabbit revisa Dockerfiles, Bash, el launcher Python, GitHub Actions, Compose y cambios sensibles de seguridad. CI y las pruebas manuales siguen siendo obligatorios.
+
+Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md` y `docs/roadmap.md` para el estado y los siguientes pasos.
