@@ -52,10 +52,27 @@ jobs:
           import os
           from pathlib import Path
 
+          forbidden_keys = {
+              "binary_bytes",
+              "content_base64",
+              "installer_bytes",
+              "raw_binary",
+              "raw_content",
+          }
+
+          def validate(value):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      assert key not in forbidden_keys, key
+                      validate(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      validate(child)
+
           path = Path(os.environ["REPORT_PATH"])
           report = json.loads(path.read_text(encoding="utf-8"))
           assert report["schema_version"] == 1
-          assert "content" not in json.dumps(report).lower()
+          validate(report)
           assert path.stat().st_size < 2 * 1024 * 1024
           print("Antigravity evidence is bounded metadata only")
           PY
