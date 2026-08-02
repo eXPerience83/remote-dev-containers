@@ -26,7 +26,8 @@ def run_inspection(
     report_path: Path,
     fixture: Path,
     *,
-    expected_sha256: str | None = None,
+    expected_installer_sha256: str | None = None,
+    expected_binary_sha256: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the inspector against one local non-network fixture."""
     command = [
@@ -37,15 +38,23 @@ def run_inspection(
         "--installer-fixture",
         str(fixture),
     ]
-    if expected_sha256 is not None:
-        command.extend(["--expected-installer-sha256", expected_sha256])
-    return subprocess.run(
-        command,
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    if expected_installer_sha256 is not None:
+        command.extend(["--expected-installer-sha256", expected_installer_sha256])
+    if expected_binary_sha256 is not None:
+        command.extend(["--expected-binary-sha256", expected_binary_sha256])
+    try:
+        return subprocess.run(
+            command,
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AssertionError("fixture inspection exceeded 120 seconds") from error
 
 
 def assert_no_raw_output_fields(value: Any) -> None:
@@ -89,7 +98,7 @@ cp /bin/true \"$2/agy\"
 
 
 def main() -> int:
-    """Exercise success, hash mismatch and help-side-effect rejection."""
+    """Exercise success and every pre-execution rejection boundary."""
     with tempfile.TemporaryDirectory() as temporary:
         temporary_path = Path(temporary)
         report_path = temporary_path / "report.json"
@@ -136,17 +145,36 @@ def main() -> int:
         require(UNTRUSTED_MARKER not in completed.stderr, "vendor output leaked to stderr")
         assert_no_raw_output_fields(report)
 
-        mismatch_report = temporary_path / "mismatch.json"
-        mismatch = run_inspection(
-            mismatch_report,
+        installer_mismatch_report = temporary_path / "installer-mismatch.json"
+        installer_mismatch = run_inspection(
+            installer_mismatch_report,
             FIXTURE,
-            expected_sha256="0" * 64,
+            expected_installer_sha256="0" * 64,
         )
-        require(mismatch.returncode == 1, "unapproved installer hash must fail")
-        require(not mismatch_report.exists(), "hash mismatch must produce no evidence file")
+        require(installer_mismatch.returncode == 1, "unapproved installer hash must fail")
         require(
-            UNTRUSTED_MARKER not in mismatch.stdout + mismatch.stderr,
-            "fixture ran before hash rejection",
+            not installer_mismatch_report.exists(),
+            "installer hash mismatch must produce no evidence file",
+        )
+        require(
+            UNTRUSTED_MARKER not in installer_mismatch.stdout + installer_mismatch.stderr,
+            "fixture ran before installer hash rejection",
+        )
+
+        binary_mismatch_report = temporary_path / "binary-mismatch.json"
+        binary_mismatch = run_inspection(
+            binary_mismatch_report,
+            FIXTURE,
+            expected_binary_sha256="0" * 64,
+        )
+        require(binary_mismatch.returncode == 1, "unapproved binary hash must fail")
+        require(
+            not binary_mismatch_report.exists(),
+            "binary hash mismatch must produce no evidence file",
+        )
+        require(
+            "installed binary SHA-256 differs" in binary_mismatch.stderr,
+            "binary digest rejection was not reported",
         )
 
         mutating_fixture = temporary_path / "mutating-install.sh"
