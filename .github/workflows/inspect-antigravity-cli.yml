@@ -34,18 +34,22 @@ jobs:
             scripts/test_inspect_antigravity_cli.py
           python3 scripts/test_inspect_antigravity_cli.py
 
-      - name: Inspect official installer and installed package
+      - name: Inspect approved official installer and installed package
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
           STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
         run: |
+          expected_sha256="$(jq -r '.installer.sha256' third_party/antigravity-cli-inspection.json)"
           set +e
-          python3 scripts/inspect-antigravity-cli.py --output "$REPORT_PATH"
+          python3 scripts/inspect-antigravity-cli.py \
+            --output "$REPORT_PATH" \
+            --expected-installer-sha256 "$expected_sha256"
           status=$?
           printf '%s\n' "$status" > "$STATUS_PATH"
           exit 0
 
-      - name: Verify report contains metadata only
+      - name: Validate metadata-only report
+        id: metadata
         if: always()
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
@@ -53,6 +57,7 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import re
           from pathlib import Path
 
           forbidden_keys = {
@@ -61,7 +66,30 @@ jobs:
               "installer_bytes",
               "raw_binary",
               "raw_content",
+              "stderr",
+              "stderr_lines",
+              "stdout",
+              "stdout_lines",
           }
+          allowed_top_level = {
+              "binary_after_first",
+              "binary_after_second",
+              "binary_stable_across_second_install",
+              "blocking_findings",
+              "environment_controls",
+              "expected_binary_present",
+              "filesystem",
+              "first_install",
+              "home_unchanged_after_help",
+              "inspected_at_utc",
+              "installed_legal_files",
+              "installer",
+              "platform",
+              "profiles",
+              "schema_version",
+              "second_install",
+          }
+          safe_string = re.compile(r"[ -~]{0,500}")
 
           def validate(value):
               if isinstance(value, dict):
@@ -69,19 +97,23 @@ jobs:
                       assert key not in forbidden_keys, key
                       validate(child)
               elif isinstance(value, list):
+                  assert len(value) <= 1000
                   for child in value:
                       validate(child)
+              elif isinstance(value, str):
+                  assert safe_string.fullmatch(value), "non-printable or oversized string"
 
           path = Path(os.environ["REPORT_PATH"])
           report = json.loads(path.read_text(encoding="utf-8"))
-          assert report["schema_version"] == 1
+          assert report["schema_version"] == 2
+          assert set(report) == allowed_top_level
           validate(report)
           assert path.stat().st_size < 2 * 1024 * 1024
-          print("Antigravity evidence is bounded metadata only")
+          print("Antigravity report passed the metadata-only schema gate")
           PY
 
-      - name: Upload bounded inspection evidence
-        if: always()
+      - name: Upload validated inspection evidence
+        if: always() && steps.metadata.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: antigravity-cli-inspection
@@ -91,7 +123,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload safe status after rejected report
+        if: always() && steps.metadata.outcome != 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: antigravity-cli-inspection-status
+          path: ${{ runner.temp }}/antigravity-cli-inspection.status
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Enforce successful and current inspection
+        if: always() && steps.metadata.outcome == 'success'
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
           STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
@@ -109,11 +151,29 @@ jobs:
 
           assert live["blocking_findings"] == [], live["blocking_findings"]
           assert live["expected_binary_present"] is True
+          assert live["environment_controls"]["auto_update_disabled"] is True
+          assert live["home_unchanged_after_help"] is True
+          assert live["profiles"]["unchanged_after_help"] is True
+          assert live["profiles"]["unchanged_after_first"] is True
+          assert live["profiles"]["unchanged_after_second"] is True
+          assert live["binary_stable_across_second_install"] is True
+
+          live_binary = live["binary_after_second"]
+          expected_binary = expected["installed_binary"]
+          live_paths = [
+              entry["path"]
+              for entry in live["filesystem"]["after_second"]
+              if entry.get("path_redacted") is False
+          ]
 
           comparisons = {
               "installer URL": (
                   live["installer"]["final_url"],
                   expected["installer"]["final_url"],
+              ),
+              "installer content type": (
+                  live["installer"]["content_type"],
+                  expected["installer"]["content_type"],
               ),
               "installer size": (
                   live["installer"]["size"],
@@ -129,19 +189,28 @@ jobs:
               ),
               "installation strategy": (
                   live["installer"]["selected_strategy"],
-                  "custom-directory",
+                  expected["installer"]["selected_strategy"],
               ),
               "binary version": (
-                  live["binary_after_second"]["version"]["stdout_lines"],
-                  [expected["installed_binary"]["version"]],
+                  live_binary["version"]["reported_version"],
+                  expected_binary["version"],
               ),
-              "binary size": (
-                  live["binary_after_second"]["size"],
-                  expected["installed_binary"]["size"],
-              ),
+              "binary size": (live_binary["size"], expected_binary["size"]),
               "binary SHA-256": (
-                  live["binary_after_second"]["sha256"],
-                  expected["installed_binary"]["sha256"],
+                  live_binary["sha256"],
+                  expected_binary["sha256"],
+              ),
+              "binary format": (
+                  live_binary["format"],
+                  expected_binary["format"],
+              ),
+              "dynamic libraries": (
+                  live_binary["dynamic_libraries"]["recognized"],
+                  expected_binary["dynamic_dependencies"],
+              ),
+              "created paths": (
+                  live_paths,
+                  expected["filesystem"]["created_relative_paths"],
               ),
               "installed legal files": (
                   live["installed_legal_files"],
@@ -151,8 +220,12 @@ jobs:
           for label, (actual, recorded) in comparisons.items():
               assert actual == recorded, f"stale {label}: {actual!r} != {recorded!r}"
 
-          assert live["profiles"]["unchanged_after_first"] is True
-          assert live["profiles"]["unchanged_after_second"] is True
-          assert live["binary_stable_across_second_install"] is True
-          print("Official Antigravity installer inspection matches committed evidence")
+          assert live_binary["version"]["exit_code"] == expected_binary["version_check_exit_code"]
+          assert live_binary["help"]["exit_code"] == expected_binary["help_check_exit_code"]
+          assert live_binary["dynamic_libraries"]["unrecognized_count"] == 0
+          assert live["first_install"]["reports_linux_amd64"] is True
+          assert live["first_install"]["reports_checksum_verified"] is True
+          assert live["second_install"]["reports_existing_install"] is True
+          assert live["second_install"]["reports_background_self_update"] is True
+          print("Official Antigravity inspection matches committed evidence")
           PY
