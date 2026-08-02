@@ -36,7 +36,9 @@ assert_antigravity_entrypoint_blocked() {
   local output=""
   local command_status=0
 
-  output="$(docker exec "$name" "$@" 2>&1)" || command_status=$?
+  output="$(docker exec \
+    --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=0 \
+    "$name" "$@" 2>&1)" || command_status=$?
   if (( command_status != 2 )); then
     echo "ERROR: $label returned $command_status outside the Antigravity service, expected 2" >&2
     printf '%s\n' "$output" >&2
