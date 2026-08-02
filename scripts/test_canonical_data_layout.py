@@ -151,13 +151,33 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
         require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
 
 
+def tracked_repository_files() -> list[Path]:
+    completed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            "git ls-files failed while enumerating repository-owned inputs:\n"
+            + completed.stderr.decode(errors="replace")
+        )
+    return [
+        ROOT / os.fsdecode(relative_path)
+        for relative_path in completed.stdout.split(b"\0")
+        if relative_path
+    ]
+
+
 def validate_repository_has_no_legacy_data_root() -> None:
     legacy_variable = "CODEX" + "_DATA_ROOT"
     legacy_path = "/mnt/Pool1/" + "codex"
     ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
 
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or path.suffix.lower() in ignored_suffixes:
+    for path in tracked_repository_files():
+        if not path.is_file() or path.suffix.lower() in ignored_suffixes:
             continue
         try:
             text = path.read_text(encoding="utf-8")
