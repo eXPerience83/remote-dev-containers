@@ -11,9 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
+TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 COMPOSE_FILES = (
     GENERIC_COMPOSE,
-    ROOT / "compose/truenas.yml",
+    TRUENAS_COMPOSE,
 )
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 FORBIDDEN_LAUNCHER_TEXT = (
@@ -272,37 +273,70 @@ def validate_auth_override_separation(env_path: Path) -> None:
     )
 
     synthetic_secret = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
-    for compose_path in COMPOSE_FILES:
-        launcher_hardened = compose_config(
-            compose_path,
-            env_path,
-            {
-                "LAUNCHER_ALLOW_INSECURE_WEB": "0",
-                "LAUNCHER_PASSWORD": synthetic_secret,
-                "LAUNCHER_USERNAME": "test-launcher",
-            },
-        )["services"]
-        launcher_env = launcher_hardened["launcher"]["environment"]
-        codex_env = launcher_hardened["codex"]["environment"]
+    launcher_hardened = compose_config(
+        GENERIC_COMPOSE,
+        env_path,
+        {
+            "LAUNCHER_ALLOW_INSECURE_WEB": "0",
+            "LAUNCHER_PASSWORD": synthetic_secret,
+            "LAUNCHER_USERNAME": "test-launcher",
+        },
+    )["services"]
+    launcher_env = launcher_hardened["launcher"]["environment"]
+    codex_env = launcher_hardened["codex"]["environment"]
+    require(
+        str(launcher_env["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: launcher auth override was not applied",
+    )
+    require(
+        launcher_env["WEB_PASSWORD"] == synthetic_secret,
+        "generic Compose: launcher password override was not applied",
+    )
+    require(
+        launcher_env["WEB_USERNAME"] == "test-launcher",
+        "generic Compose: launcher username override was not applied",
+    )
+    require(
+        str(codex_env["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: launcher auth override leaked into Codex",
+    )
+
+    truenas_launcher = compose_config(
+        TRUENAS_COMPOSE,
+        env_path,
+        {
+            "LAUNCHER_ALLOW_INSECURE_WEB": "0",
+            "LAUNCHER_PASSWORD": synthetic_secret,
+            "LAUNCHER_USERNAME": "test-launcher",
+        },
+    )["services"]["launcher"]["environment"]
+    require(
+        "WEB_PASSWORD" not in truenas_launcher,
+        "TrueNAS Compose: launcher password must not appear in the normal example",
+    )
+    require(
+        "WEB_USERNAME" not in truenas_launcher,
+        "TrueNAS Compose: launcher username must not appear in the normal example",
+    )
+    require(
+        str(truenas_launcher["ALLOW_INSECURE_WEB"]) == "1",
+        "TrueNAS Compose: launcher must remain password-free by default",
+    )
+
+
+def validate_truenas_password_free_source() -> None:
+    launcher_source = TRUENAS_COMPOSE.read_text(encoding="utf-8").split(
+        "\n  codex:", maxsplit=1
+    )[0]
+    for marker in ("LAUNCHER_PASSWORD", "launcher_password", "WEB_PASSWORD", "WEB_USERNAME"):
         require(
-            str(launcher_env["ALLOW_INSECURE_WEB"]) == "0",
-            f"{compose_path}: launcher auth override was not applied",
-        )
-        require(
-            launcher_env["WEB_PASSWORD"] == synthetic_secret,
-            f"{compose_path}: launcher password override was not applied",
-        )
-        require(
-            launcher_env["WEB_USERNAME"] == "test-launcher",
-            f"{compose_path}: launcher username override was not applied",
-        )
-        require(
-            str(codex_env["ALLOW_INSECURE_WEB"]) == "0",
-            f"{compose_path}: launcher auth override leaked into Codex",
+            marker not in launcher_source,
+            f"TrueNAS Compose launcher source unexpectedly contains {marker}",
         )
 
 
 def main() -> int:
+    validate_truenas_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
