@@ -44,9 +44,10 @@ def canonical_path(path: Path) -> Path:
 
 def validate_no_symlink_components(
     root: Path, paths: tuple[Path, ...], errors: list[str]
-) -> None:
+) -> bool:
     """Reject symlinks at the root or at any component below the root."""
     checked: set[Path] = set()
+    found_symlink = False
     for path in paths:
         try:
             relative_parts = path.relative_to(root).parts
@@ -59,11 +60,15 @@ def validate_no_symlink_components(
             if part is not None:
                 current /= part
             if current in checked:
+                if current.is_symlink():
+                    break
                 continue
             checked.add(current)
             if current.is_symlink():
                 errors.append(f"persistent path component must not be a symlink: {current}")
+                found_symlink = True
                 break
+    return found_symlink
 
 
 def validate_directory(path: Path, errors: list[str]) -> None:
@@ -120,7 +125,9 @@ def validate_layout(root: Path) -> list[str]:
     directories = tuple(root / suffix for suffix in DIRECTORY_SUFFIXES)
     password_file = root / PASSWORD_SUFFIX
 
-    validate_no_symlink_components(root, (*directories, password_file), errors)
+    if validate_no_symlink_components(root, (*directories, password_file), errors):
+        return errors
+
     validate_directory(root, errors)
     for directory in directories:
         validate_directory(directory, errors)
