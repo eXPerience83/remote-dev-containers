@@ -18,10 +18,11 @@
 ## Current implementation
 
 - The public canonical edge package is `ghcr.io/experience83/remote-dev`; generic and TrueNAS Compose select it through `REMOTE_DEV_IMAGE`.
-- The `codex-remote-dev` package and `CODEX_IMAGE` remain lower-priority compatibility aliases throughout `v0.1.x` and identify the same promoted edge/stable digest.
-- Generic and TrueNAS Compose now start a `launcher` service on primary port 7680 and the existing isolated `codex` terminal service on port 7681 from the same image reference.
-- The launcher uses fixed validated navigation, independent Basic authentication, origin checking and CSP; it does not proxy terminal traffic or mount Codex/GitHub/Git/SSH/workspace state.
-- Codex keeps its existing service name, container name, `CODEX_DATA_ROOT` and mount layout until the dedicated migration slice.
+- The `codex-remote-dev` package and `CODEX_IMAGE` remain lower-priority image-name compatibility aliases throughout `v0.1.x` and identify the same promoted edge/stable digest.
+- Generic and TrueNAS Compose start a `launcher` service on primary port 7680 and the isolated `codex` terminal service on port 7681 from the same image reference.
+- The launcher uses fixed validated navigation, no password by default, origin checking and CSP; it does not proxy terminal traffic or mount agent state.
+- Persistent data uses one canonical `REMOTE_DEV_DATA_ROOT` contract with separate `workspaces`, per-role `state` and `secrets` boundaries. The launcher remains mount-free.
+- Bind mounts use `create_host_path: false`, so a missing host directory fails clearly instead of creating an unintended path.
 - Implemented runtime roles are `launcher`, `codex` and `shell`; `antigravity` and `claude` remain reserved and unavailable.
 - The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as a deployment or one-launch option.
 
@@ -31,16 +32,17 @@
 - Ubuntu 26.04 package compatibility and build stability
 - Codex binary release and digest resolution
 - GitHub CLI checksum installation
-- Launcher authentication, origin checking and browser navigation on real TrueNAS
+- Launcher origin checking and browser navigation on real TrueNAS
 - ttyd authentication, origin checking and tmux reconnection through the navigated Codex endpoint
 - Both services using the exact published image digest on TrueNAS
 - Autonomous and guarded Codex behavior under the documented outer-container isolation model
+- Canonical data layout persistence across stop/start and container recreation
 - Device-code login persistence
 - GH login, credential helper, clone/push/PR
 - TrueNAS x-portals behavior for the primary launcher
 - Complete third-party licenses, SBOM and notices
-- Migration from the Codex-only deployment without data loss or credential sharing
 - Later launcher/agent and cross-agent synthetic canary tests
+- Optional SMB workspace behavior under #71
 
 ## Out of scope for v0.1
 
