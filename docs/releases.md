@@ -66,7 +66,7 @@ Before creating a stable version tag:
 5. The TrueNAS portal opens the launcher on port 7680.
 6. The launcher opens on the trusted private endpoint and preserves origin/CSP behavior.
 7. Selecting Codex navigates to the independent authenticated endpoint without exposing credentials.
-8. The launcher has no mounts and no Docker/Podman socket.
+8. The base launcher has no mounts and no Docker/Podman socket; when `compose/launcher-auth.yml` is enabled, its only additional input is the dedicated read-only launcher password secret.
 9. Neither service uses host networking, privileged mode or added capabilities.
 10. The canonical data directories were created deliberately and no unexpected host directory was generated.
 11. Workspace, agent state, GitHub CLI state, Git configuration and SSH state persist across stop/start and recreation.
