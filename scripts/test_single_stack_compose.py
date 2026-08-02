@@ -33,6 +33,7 @@ FORBIDDEN_LAUNCHER_TEXT = (
     "GH_CONFIG_DIR",
     "GIT_CONFIG_GLOBAL",
 )
+SOCKET_MARKERS = ("docker.sock", "podman.sock")
 
 
 def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -91,13 +92,16 @@ def published_targets(service: dict[str, object]) -> set[int]:
     return targets
 
 
-def mount_sources(service: dict[str, object], target: str) -> list[str]:
+def mount_sources(service: dict[str, object], target: str | None = None) -> list[str]:
     sources: list[str] = []
     for mount in service.get("volumes", []):
-        if isinstance(mount, dict) and mount.get("target") == target:
-            source = mount.get("source")
-            if source is not None:
-                sources.append(str(source))
+        if not isinstance(mount, dict):
+            continue
+        if target is not None and mount.get("target") != target:
+            continue
+        source = mount.get("source")
+        if source is not None:
+            sources.append(str(source))
     return sources
 
 
@@ -226,11 +230,21 @@ def validate(path: Path, config: dict[str, object]) -> None:
     for name, service in (("launcher", launcher), ("codex", codex)):
         require(service.get("privileged") is not True, f"{path}: {name} privileged")
         require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
+        require(
+            service.get("network_mode") != "host",
+            f"{path}: {name} uses host networking",
+        )
         security_opt = service.get("security_opt", [])
         require(
             "no-new-privileges:true" in security_opt,
             f"{path}: {name} lost no-new-privileges",
         )
+        for source in mount_sources(service):
+            lowered = source.lower()
+            require(
+                not any(marker in lowered for marker in SOCKET_MARKERS),
+                f"{path}: {name} mounts a container-engine socket: {source}",
+            )
 
     require(
         launcher.get("container_name") == "remote-dev-launcher",
@@ -257,28 +271,35 @@ def validate_auth_override_separation(env_path: Path) -> None:
         "generic Compose: Codex insecure override was not applied",
     )
 
-    launcher_hardened = compose_config(
-        GENERIC_COMPOSE,
-        env_path,
-        {
-            "LAUNCHER_ALLOW_INSECURE_WEB": "0",
-            "LAUNCHER_PASSWORD": "synthetic-launcher-password",
-        },
-    )["services"]
-    launcher_env = launcher_hardened["launcher"]["environment"]
-    codex_env = launcher_hardened["codex"]["environment"]
-    require(
-        str(launcher_env["ALLOW_INSECURE_WEB"]) == "0",
-        "generic Compose: launcher auth override was not applied",
-    )
-    require(
-        launcher_env["WEB_PASSWORD"] == "synthetic-launcher-password",
-        "generic Compose: launcher password override was not applied",
-    )
-    require(
-        str(codex_env["ALLOW_INSECURE_WEB"]) == "0",
-        "generic Compose: launcher auth override leaked into Codex",
-    )
+    synthetic_secret = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
+    for compose_path in COMPOSE_FILES:
+        launcher_hardened = compose_config(
+            compose_path,
+            env_path,
+            {
+                "LAUNCHER_ALLOW_INSECURE_WEB": "0",
+                "LAUNCHER_PASSWORD": synthetic_secret,
+                "LAUNCHER_USERNAME": "test-launcher",
+            },
+        )["services"]
+        launcher_env = launcher_hardened["launcher"]["environment"]
+        codex_env = launcher_hardened["codex"]["environment"]
+        require(
+            str(launcher_env["ALLOW_INSECURE_WEB"]) == "0",
+            f"{compose_path}: launcher auth override was not applied",
+        )
+        require(
+            launcher_env["WEB_PASSWORD"] == synthetic_secret,
+            f"{compose_path}: launcher password override was not applied",
+        )
+        require(
+            launcher_env["WEB_USERNAME"] == "test-launcher",
+            f"{compose_path}: launcher username override was not applied",
+        )
+        require(
+            str(codex_env["ALLOW_INSECURE_WEB"]) == "0",
+            f"{compose_path}: launcher auth override leaked into Codex",
+        )
 
 
 def main() -> int:
