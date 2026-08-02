@@ -141,6 +141,7 @@ reset_runtime() {
   printf -v state_dir_q '%q' "$STATE_DIR"
   printf -v manifest_q '%q' "$MANIFEST"
   printf -v vendor_state_q '%q' "$VENDOR_STATE_DIR"
+  rm -f -- "$PATHS_LIB"
   cat >"$PATHS_LIB" <<EOF
 readonly ANTIGRAVITY_EVIDENCE=$evidence_q
 readonly ANTIGRAVITY_BIN_DIR=$bin_dir_q
