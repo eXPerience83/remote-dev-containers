@@ -2,7 +2,7 @@
 
 ## Status
 
-This document records the accepted target architecture and the portion now implemented by the experimental edge stack.
+The accepted architecture is one user-installed Remote Dev stack, one immutable image digest and one isolated service per enabled coding agent.
 
 Implemented:
 
@@ -13,20 +13,22 @@ Implemented:
 - one image reference reused by both services;
 - navigation from the stateless launcher to the independently authenticated Codex endpoint;
 - optional file-backed launcher Basic authentication and required Codex terminal authentication;
+- one canonical role-neutral persistent-data layout;
 - no agent-state mounts, agent credentials or Docker socket in the launcher.
 
-Still pending under issues #25 and #31:
+Still pending:
 
-- the neutral persistent-data layout and migration from the Codex-only paths;
 - optional Antigravity and future Claude services;
-- the later outer-hardening and cross-service canary phase;
+- the later outer-hardening and cross-service canary phase under #42;
+- optional TrueNAS SMB/ACL workspace integration under #71;
 - any reviewed one-origin reverse-proxy design.
 
 Related work:
 
-- issue #24 defines this architecture contract;
-- issue #25 implements the neutral image roles, launcher and stack migration;
-- issue #36 evaluates the TrueNAS outer-isolation model;
+- issue #24 defines the architecture contract;
+- issue #25 tracks the role-neutral runtime and launcher epic;
+- issue #36 records the TrueNAS outer-isolation and no-Bubblewrap decision;
+- issue #70 owns the canonical data layout;
 - issue #31 tracks the complete delivery sequence.
 
 ## User-facing contract
@@ -39,9 +41,7 @@ A supported installation consists of:
 - one launcher service;
 - one isolated service for each enabled coding agent.
 
-Docker may instantiate several containers from the image, but it stores and reuses the same immutable image layers. Users do not install or maintain a separate image or TrueNAS App for every agent.
-
-The current implementation includes the launcher and Codex services. Codex remains the reference agent during the migration.
+Docker may instantiate several containers from the image, but it stores and reuses the same immutable image layers. Users do not maintain a separate image or TrueNAS App for every agent.
 
 ## Current topology
 
@@ -51,7 +51,7 @@ Remote Dev App / Compose stack
 └── Codex service     (terminal port 7681, independently authenticated)
 ```
 
-Both services reference the same `REMOTE_DEV_IMAGE` value. The fixed roles are:
+Both services reference the same `REMOTE_DEV_IMAGE` value. Implemented roles are:
 
 ```text
 REMOTE_DEV_ROLE=launcher|codex|shell
@@ -61,207 +61,124 @@ REMOTE_DEV_ROLE=launcher|codex|shell
 
 ## One launcher, isolated execution
 
-The launcher provides the normal user entry point and lists only available, supported tools. Selecting Codex navigates the browser to the Codex service's own authenticated endpoint. The launcher does not execute Codex and does not relay the terminal's HTTP or WebSocket traffic.
+The launcher provides the normal browser entry point and lists only reviewed services. Selecting Codex navigates to the Codex service's own authenticated endpoint. The launcher does not execute Codex and does not relay terminal HTTP or WebSocket traffic.
 
-The implemented launcher:
+The launcher:
 
-- is a project-owned Python standard-library HTTP service bundled in the final image;
-- reads an optional launcher password during startup when configured and then clears supplementary groups and drops permanently to UID/GID `65532` before binding or serving;
-- requires no password by default in the localhost/LAN/Tailscale examples;
-- supports optional HTTP Basic authentication through the separate file-backed generic Compose override;
-- does not mount or know the Codex terminal password;
-- validates DNS names and IPv4/IPv6 literals and rejects an embedded destination port because the port has its own setting;
-- validates its fixed destination scheme, port and path settings;
-- restricts paths to safe RFC 3986 URL-path characters before embedding them in the page;
-- uses the browser hostname and scheme when no explicit public host/scheme is configured;
-- checks same-origin requests when an `Origin` header is present;
+- is a project-owned Python standard-library HTTP service;
+- drops permanently to UID/GID `65532` before serving;
+- requires no password by default in localhost/LAN/Tailscale examples;
+- supports optional file-backed Basic authentication through `compose/launcher-auth.yml`;
+- validates its fixed destination host, scheme, port and path;
+- checks matching origins when an `Origin` header is present;
 - sends a restrictive nonce-based Content Security Policy;
 - accepts only `GET` and `HEAD`;
-- exposes an unauthenticated, secret-free health endpoint;
-- contains no agent OAuth tokens, histories, workspaces, GitHub state or SSH keys;
-- receives no Docker/Podman socket and creates no containers.
+- exposes a secret-free health endpoint;
+- receives no agent workspace, state, OAuth token, GitHub configuration, SSH key or Docker/Podman socket.
 
-The Codex endpoint uses its own mounted password secret and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher. Enabling optional launcher Basic authentication does not replace the Codex password.
-
-The direct Codex port remains published because the navigation design does not proxy terminal traffic. It is the normal navigation destination and can also be used for troubleshooting. The documented workflow still begins at the launcher URL.
-
-A future fixed reverse proxy could provide one browser origin, but it would become a trusted transport component capable of observing terminal traffic. That requires a separate threat-model review and is not part of the current implementation.
+The Codex endpoint uses its own password source and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher.
 
 ## Shared immutable image
 
-The final image contains:
+The final image contains Ubuntu and Remote Dev scripts, Git/Git LFS/OpenSSH/GitHub CLI, Python, Node.js, npm, uv, mise, ttyd, tmux, tini, the launcher runtime and Codex CLI as the built-in reference agent.
 
-- Ubuntu and Remote Dev scripts;
-- Git, Git LFS, OpenSSH client and GitHub CLI executable;
-- Python, Node.js, npm, uv and mise;
-- ttyd, tmux, tini and common shell/build/search utilities;
-- launcher runtime;
-- neutral diagnostics, health checks and version reporting;
-- Codex CLI as the built-in reference agent.
-
-Sharing executables through image layers does not share mutable state or secrets. Runtime tests and Compose validation assert that launcher and Codex use the same image reference/ID, while only the Codex service requires an agent-terminal password source by default.
+Sharing executable layers does not share mutable state or secrets. Runtime and Compose tests assert that launcher and Codex use the same image reference/ID while retaining separate service boundaries.
 
 ## Service roles
 
-### Launcher role
+### Launcher
 
-`REMOTE_DEV_ROLE=launcher` starts `remote-dev-launcher` directly. It accepts only the `menu` start mode and does not initialize a workspace, GitHub configuration, Git configuration, SSH state, Codex state or tmux session.
+`REMOTE_DEV_ROLE=launcher` accepts only the `menu` start mode. It does not initialize a workspace, GitHub configuration, Git configuration, SSH state, agent state or tmux session.
 
-Launcher diagnostics report image identity, fixed routing configuration and available roles without reading agent state. Its healthcheck calls the secret-free `/healthz` endpoint.
+### Codex
 
-### Codex role
+Codex retains device-code authentication, start/resume actions, persistent tmux sessions, autonomous/guarded approval modes, diagnostics and post-session credential hardening.
 
-Codex retains:
+### Shell
 
-- device-code authentication;
-- start and resume actions;
-- persistent tmux sessions;
-- autonomous and guarded approval modes;
-- Codex-specific diagnostics;
-- post-session credential permission hardening;
-- the existing narrow persistent mounts.
+The shell role remains available for direct troubleshooting and uses ttyd/tmux without inspecting Codex-specific state.
 
-### Shell role
+### Optional agents
 
-The shell role remains available for direct troubleshooting and uses ttyd/tmux without inspecting Codex state.
+A proprietary optional agent may be installed or updated only through an explicit reviewed action using an official vendor-controlled source. Missing agents are reported as unavailable and are never downloaded during launcher or container startup.
 
-### Optional agent roles
+## Canonical persistence boundaries
 
-An optional proprietary agent will be installed or updated only through an explicit reviewed action from an official vendor-controlled source unless redistribution rights are confirmed.
-
-A missing optional agent is reported as unavailable. It is never downloaded during launcher or container startup. Claude remains unavailable until its dedicated path is implemented and validated.
-
-## Persistence boundaries
-
-The launcher service is stateless. It receives no agent data mounts and requires no password file, secret or dataset by default. An advanced generic Compose deployment may explicitly add `compose/launcher-auth.yml`, which mounts one separate file-backed launcher password as a Compose secret. That value must never be reused as an agent password and is not rendered into the service environment.
-
-The Codex service temporarily retains the existing layout:
+Generic Compose derives all persistent paths from one variable:
 
 ```text
-CODEX_DATA_ROOT/
-├── workspace/
-├── codex/
-├── gh/
-├── git/
-└── ssh/
+REMOTE_DEV_DATA_ROOT
 ```
 
-The TrueNAS reference keeps the existing Codex secret at:
+The canonical administrative layout is:
 
 ```text
-/mnt/Pool1/codex/secrets/web_password.txt
+REMOTE_DEV_DATA_ROOT/
+├── workspaces/
+│   └── codex/
+├── state/
+│   └── codex/
+│       ├── agent/
+│       ├── gh/
+│       ├── git/
+│       └── ssh/
+└── secrets/
+    └── codex/
+        └── web_password.txt
 ```
 
-No launcher dataset or launcher password file is required by the default TrueNAS deployment.
+The Codex service receives only these child paths:
 
-The later migration slice will introduce the neutral administrative layout without deleting or sharing existing Codex state:
+| Host child path | Container target |
+|---|---|
+| `workspaces/codex` | `/workspace` |
+| `state/codex/agent` | `/root/.codex` |
+| `state/codex/gh` | `/root/.config/gh` |
+| `state/codex/git` | `/root/.config/git` |
+| `state/codex/ssh` | `/root/.ssh` |
+| `secrets/codex/web_password.txt` | `/run/secrets/web_password` |
 
-```text
-remote-dev-data/
-├── launcher/
-├── codex/
-│   ├── workspace/
-│   ├── agent/
-│   ├── gh/
-│   ├── git/
-│   └── ssh/
-└── future-agent/
-    └── private state
-```
+The launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-The parent data directory is never mounted wholesale. Agent services receive only their own child paths.
+Compose bind mounts set `create_host_path: false`. Required host directories must be created deliberately; an incorrect path fails instead of creating an ambiguous directory.
 
-| State | Shared in image | Shared between services | Persistent per service |
-|---|---:|---:|---:|
-| Common executables | Yes | Read-only image layers | No |
-| Workspace or worktree | No | No by default | Agent only |
-| Agent authentication/configuration | No | No | Agent only |
-| Agent web password | No | No | Agent only |
-| Optional launcher password | No | No | Only when advanced override is enabled |
-| GitHub CLI configuration | Executable only | No | Agent only |
-| Git global configuration | Executable only | No | Agent only |
-| SSH keys/configuration | Client only | No | Agent only |
-| Launcher navigation configuration | Runtime only | Not mounted into agents | Launcher only |
+There is no data-layout compatibility alias, automatic migration, copying, symlink or deletion. Existing experimental directories must be recreated or moved manually before deploying the new stack.
 
-The supported configuration does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent data directory or Docker/Podman sockets.
+Optional SMB sharing is not part of this contract. Only the `workspaces` boundary may be evaluated later under #71; `state` and `secrets` must remain private.
 
 ## Workspace concurrency
 
-The default stack does not mount one writable checkout into two agent services. Future multi-agent users should use separate Git worktrees or clones and coordinate branches normally.
+The default stack does not mount one writable checkout into two agent services. Future multi-agent users should use separate clones or Git worktrees and coordinate branches normally.
 
 ## Security and trust boundaries
 
-Each outer container is a separate boundary. Anyone with terminal/root access inside the Codex service is trusted for the state mounted into Codex, but the launcher cannot see that state or authenticate to the terminal because neither the state nor the Codex password is mounted there.
+Each outer container is a separate boundary. Anyone with terminal/root access inside an agent service is trusted for the state mounted into that service. The launcher cannot see or authenticate to agent state because neither the state nor the agent password is mounted there.
 
-The launcher may be unauthenticated only on a trusted private endpoint such as localhost, a LAN binding or Tailscale. Neither port is intended for direct Internet exposure.
-
-The stack does not require:
-
-- privileged mode;
-- `SYS_ADMIN`;
-- unconfined seccomp/AppArmor;
-- Docker or Podman sockets;
-- host networking;
-- host-root mounts;
-- host security changes to start an inner sandbox.
-
-The launcher is navigation, not a container-management control plane and not a terminal proxy.
+The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
 
 ## Versioning and updates
 
-All stack services use the same image reference. Immutable deployments record the published digest and embedded source revision.
-
-Built-in components are updated through reviewed image rebuilds. Future vendor-installed agents may keep an independent persisted version only inside their own service state.
+All stack services use the same image reference. Built-in components are updated through reviewed image rebuilds. Future vendor-installed agents may keep an independent persisted version only inside their own private service state.
 
 A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate role readiness without requiring user login.
 
-## Migration from the Codex-only App
-
-The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data and the Codex terminal password are not copied, renamed or exposed to the launcher.
-
-The launcher introduces no required dataset or password file. Existing deployments created from the first launcher example may remove the obsolete launcher password mount and use the current password-free base Compose. Operators who deliberately retain launcher Basic authentication must use the separate `compose/launcher-auth.yml` file-backed secret override rather than an inline environment value.
-
-The later data-migration slice must:
-
-- preserve the existing workspace and credentials;
-- avoid deleting or silently copying authentication state;
-- map existing Codex paths only into the Codex service;
-- document rollback;
-- avoid exposing Codex state or credentials to the launcher or future agents.
-
-The `codex-remote-dev` package and `CODEX_IMAGE` variable remain compatibility aliases through `v0.1.x` and will not be removed before `v0.2.0`.
+The `codex-remote-dev` package and `CODEX_IMAGE` variable remain image-name compatibility aliases through `v0.1.x`; they do not preserve the removed Codex-specific data layout.
 
 ## Validation contract
 
-Automated tests now cover:
+Automated tests cover:
 
-- fixed launcher-role resolution and invalid-mode rejection;
-- both unauthenticated and optional Basic-auth launcher behavior;
-- malformed credentials, origin checking, CSP and method restrictions;
-- launcher privilege drop before serving when startup begins as root;
-- fixed Codex navigation configuration without password exposure;
-- structural DNS/IP validation and rejection of an embedded route port;
-- rejection of unsafe configured URL paths;
-- absence of a required launcher password source and preservation of the Codex password source;
-- one file-backed launcher password source only when the optional override is enabled;
-- absence of the launcher password value from rendered Compose configuration;
-- separation of launcher and Codex authentication sources;
-- rejection of host networking, added capabilities, privileged mode and Docker/Podman socket mounts for both services;
-- role-aware healthchecks;
-- launcher diagnostics without agent-state access;
-- generic and TrueNAS Compose topology rendered from deterministic defaults;
+- fixed role/start-mode validation;
+- launcher optional authentication, origin policy, CSP and fixed navigation;
+- launcher absence of mounts and container-engine sockets;
 - one image reference across launcher and Codex;
-- absence of workspace/Codex/GitHub/Git/SSH configuration in the launcher;
-- launcher and Codex containers reusing the same image ID in runtime smoke tests;
-- existing Codex start, resume, policy, diagnostics, ttyd and tmux smoke tests.
+- exact role-scoped Codex mount targets and canonical source suffixes;
+- failure to create missing bind paths silently;
+- absence of legacy data-root names and paths;
+- role-aware health checks;
+- existing Codex start, resume, policy, diagnostics, ttyd and tmux behavior.
 
-Still required before the architecture is advertised as stable:
-
-- real TrueNAS launcher-to-Codex navigation;
-- browser refresh/reconnect behavior;
-- existing-data migration;
-- later synthetic cross-service canaries and outer hardening;
-- optional-agent service validation.
+Manual TrueNAS validation is performed after the related implementation slices are ready and includes persistence, sessions, credentials, isolation and recreation. Windows/SMB testing remains separate under #71.
 
 ## Non-goals
 
@@ -270,8 +187,7 @@ This architecture does not include:
 - a virtual-machine distribution;
 - several agents in one agent container;
 - one manually maintained TrueNAS App per agent;
-- shared OAuth/token or web-password files between services;
+- shared OAuth/token, web-password, GitHub, Git, SSH or workspace state between agents;
 - dynamic privileged child containers;
-- concurrent writes by several agents to one checkout by default;
 - weakening TrueNAS/Docker security to force an inner sandbox;
-- shipping Claude before dedicated implementation and validation.
+- shipping Antigravity or Claude before dedicated legal, installation and isolation validation.
