@@ -30,7 +30,7 @@ case "$role" in
     pgrep -x ttyd >/dev/null
     codex --version >/dev/null
     ;;
-  shell)
+  antigravity|shell)
     pgrep -x ttyd >/dev/null
     ;;
   *)
