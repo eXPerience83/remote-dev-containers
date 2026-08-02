@@ -108,6 +108,11 @@ sed \
   "$menu_source" > "$fixture_menu"
 chmod 0755 "$fixture_menu"
 
+if ! grep -Fxq "runtime_lib=$runtime_lib" "$fixture_menu"; then
+  echo "ERROR: failed to redirect runtime_lib to the test fixture" >&2
+  exit 1
+fi
+
 assert_file_lines() {
   local label="$1"
   shift
@@ -156,13 +161,13 @@ run_menu() {
 }
 
 assert_hardening_count() {
-  local expected="$1"
-  local actual=0
+  local expected_count="$1"
+  local actual_count=0
   if [[ -f "$hardening_calls" ]]; then
-    actual="$(wc -l < "$hardening_calls")"
+    actual_count="$(wc -l < "$hardening_calls")"
   fi
-  if (( actual != expected )); then
-    echo "ERROR: persistent-state hardening ran $actual times, expected $expected" >&2
+  if (( actual_count != expected_count )); then
+    echo "ERROR: persistent-state hardening ran $actual_count times, expected $expected_count" >&2
     exit 1
   fi
 }
