@@ -25,11 +25,13 @@ TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
 
 
 def require(condition: bool, message: str) -> None:
+    """Raise a readable assertion when a contract condition is not met."""
     if not condition:
         raise AssertionError(message)
 
 
 def compose_environment() -> dict[str, str]:
+    """Return the minimal host environment required to invoke Docker Compose."""
     return {
         key: os.environ[key]
         for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
@@ -38,6 +40,7 @@ def compose_environment() -> dict[str, str]:
 
 
 def compose_config(path: Path) -> dict[str, object]:
+    """Render one Compose file with deterministic empty user configuration."""
     with tempfile.NamedTemporaryFile() as empty_env:
         completed = subprocess.run(
             [
@@ -64,6 +67,7 @@ def compose_config(path: Path) -> dict[str, object]:
 
 
 def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Index rendered long-syntax volume entries by their container target."""
     result: dict[str, dict[str, object]] = {}
     for mount in service.get("volumes", []):
         require(isinstance(mount, dict), "rendered volume must use long syntax")
@@ -75,6 +79,7 @@ def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:
 
 
 def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> None:
+    """Validate one narrow bind mount and its expected canonical source suffix."""
     source = mount.get("source")
     require(isinstance(source, str), f"{path}: bind mount source is missing")
     require(source.endswith(suffix), f"{path}: unexpected source {source} for {suffix}")
@@ -90,6 +95,7 @@ def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> No
 
 
 def validate_compose(path: Path, *, truenas: bool) -> None:
+    """Validate service topology, exact mounts and secret boundaries for one stack."""
     config = compose_config(path)
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
@@ -152,6 +158,7 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
 
 
 def tracked_repository_files() -> list[Path]:
+    """Return only Git-tracked repository files, excluding ignored workspaces."""
     completed = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=ROOT,
@@ -172,6 +179,7 @@ def tracked_repository_files() -> list[Path]:
 
 
 def validate_repository_has_no_legacy_data_root() -> None:
+    """Reject legacy data-root names and paths in version-controlled sources."""
     legacy_variable = "CODEX" + "_DATA_ROOT"
     legacy_path = "/mnt/Pool1/" + "codex"
     ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
@@ -188,6 +196,7 @@ def validate_repository_has_no_legacy_data_root() -> None:
 
 
 def validate_sources() -> None:
+    """Check canonical defaults and fail-closed bind options in source YAML."""
     env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
     require(
         "REMOTE_DEV_DATA_ROOT=../data" in env_text,
@@ -210,6 +219,7 @@ def validate_sources() -> None:
 
 
 def main() -> int:
+    """Run all canonical data-layout validations."""
     validate_sources()
     validate_compose(GENERIC_COMPOSE, truenas=False)
     validate_compose(TRUENAS_COMPOSE, truenas=True)
