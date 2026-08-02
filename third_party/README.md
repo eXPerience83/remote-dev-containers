@@ -27,6 +27,8 @@ The current upstream full archives reference but omit the zlib-ng 2.2.4 and zstd
 
 CI remains offline for this evidence: `scripts/validate-standalone-artifact-inspection.py` compares the committed report's component versions, asset URLs and SHA-256 values with `versions.env` and `mise.lock`. An update PR cannot pass validation with stale evidence, while ordinary builds do not redownload release assets.
 
+`antigravity-cli-inspection.md` and its JSON companion record the separate pre-implementation inspection of Google's optional proprietary CLI. The dedicated read-only workflow downloads the current official installer into an ephemeral credential-free home, records bounded metadata for the installer and resulting executable, and uploads no vendor bytes. This evidence supports the no-redistribution and explicit vendor-install decision in `optional-agents.md`; Antigravity remains outside the image inventory and image SBOM because it is not bundled.
+
 The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change.
 
 ## Maintenance contract
