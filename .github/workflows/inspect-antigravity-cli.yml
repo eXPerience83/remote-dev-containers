@@ -1,0 +1,64 @@
+name: Inspect Antigravity CLI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/inspect-antigravity-cli.yml"
+      - "scripts/inspect-antigravity-cli.py"
+      - "scripts/test_inspect_antigravity_cli.py"
+      - "scripts/fixtures/antigravity-install.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate inspection implementation
+        run: |
+          python3 -m py_compile \
+            scripts/inspect-antigravity-cli.py \
+            scripts/test_inspect_antigravity_cli.py
+          python3 scripts/test_inspect_antigravity_cli.py
+
+      - name: Inspect official installer and installed package
+        env:
+          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
+        run: |
+          python3 scripts/inspect-antigravity-cli.py --output "$REPORT_PATH"
+
+      - name: Verify report contains metadata only
+        env:
+          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_PATH"])
+          report = json.loads(path.read_text(encoding="utf-8"))
+          assert report["blocking_findings"] == []
+          assert report["expected_binary_present"] is True
+          assert "content" not in json.dumps(report).lower()
+          assert path.stat().st_size < 2 * 1024 * 1024
+          print("Antigravity evidence is bounded metadata only")
+          PY
+
+      - name: Upload bounded inspection evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: antigravity-cli-inspection
+          path: ${{ runner.temp }}/antigravity-cli-inspection.json
+          if-no-files-found: error
+          retention-days: 14
