@@ -139,7 +139,7 @@ REMOTE_DEV_DATA_ROOT/
 
 The Codex service mounts only the corresponding child paths. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-All persistent bind mounts use `create_host_path: false`. Create every required directory deliberately before starting the stack; a typo fails instead of silently producing a new host directory.
+Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
 There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`.
 
@@ -184,8 +184,11 @@ mkdir -p \
   data/secrets/codex
 printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
+make preflight
 ./scripts/build-local.sh
 ```
+
+For a custom root, run `make preflight DATA_ROOT=/absolute/host/path` before deployment.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
