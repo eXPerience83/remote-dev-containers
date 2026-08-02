@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "inspection_date_utc": "2026-08-02",
   "workflow": {
     "run_id": 30757966945,
@@ -12,13 +12,12 @@
     "content_type": "application/x-sh",
     "size": 7354,
     "sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
-    "bash_syntax_valid": true,
     "advertised_options": {
       "custom_directory": true,
       "skip_aliases": false,
       "skip_path": false
     },
-    "selected_strategy": "--dir ~/.local/bin",
+    "selected_strategy": "custom-directory",
     "referenced_https_hosts": [
       "antigravity-cli-auto-updater-974169037036.us-central1.run.app"
     ]
@@ -28,8 +27,14 @@
     "version": "1.1.9",
     "size": 193233344,
     "sha256": "2e44783f64b231bc1437e84bb1b93c99c48163cb818210f0d2d48295ec78d3ce",
-    "format": "ELF 64-bit LSB PIE executable, x86-64, dynamically linked, stripped",
-    "interpreter": "/lib64/ld-linux-x86-64.so.2",
+    "format": {
+      "elf_64_bit": true,
+      "x86_64": true,
+      "pie": true,
+      "dynamically_linked": true,
+      "stripped": true,
+      "interpreter": "/lib64/ld-linux-x86-64.so.2"
+    },
     "dynamic_dependencies": [
       "libc.so.6",
       "libdl.so.2",
@@ -43,8 +48,11 @@
   },
   "filesystem": {
     "created_relative_paths": [
-      ".cache/antigravity/",
-      ".cache/antigravity/staging/",
+      ".cache",
+      ".cache/antigravity",
+      ".cache/antigravity/staging",
+      ".local",
+      ".local/bin",
       ".local/bin/agy"
     ],
     "shell_profiles_changed": false,
