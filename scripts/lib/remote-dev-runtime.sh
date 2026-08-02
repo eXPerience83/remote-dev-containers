@@ -44,7 +44,20 @@ remote_dev_resolve_start_mode() {
   else
     case "${START_MODE:-menu}" in
       menu) raw_mode=menu ;;
-      codex|antigravity) raw_mode=agent ;;
+      codex)
+        [[ "$role" == codex ]] || {
+          remote_dev_runtime_error "START_MODE=codex requires REMOTE_DEV_ROLE=codex"
+          return 2
+        }
+        raw_mode=agent
+        ;;
+      antigravity)
+        [[ "$role" == antigravity ]] || {
+          remote_dev_runtime_error "START_MODE=antigravity requires REMOTE_DEV_ROLE=antigravity"
+          return 2
+        }
+        raw_mode=agent
+        ;;
       shell) raw_mode=shell ;;
       *)
         remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|antigravity|shell)"
