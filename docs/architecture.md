@@ -12,7 +12,7 @@ Implemented:
 - one primary launcher URL;
 - one image reference reused by both services;
 - navigation from the stateless launcher to the independently authenticated Codex endpoint;
-- optional launcher Basic authentication and required Codex terminal authentication;
+- optional file-backed launcher Basic authentication and required Codex terminal authentication;
 - no agent-state mounts, agent credentials or Docker socket in the launcher.
 
 Still pending under issues #25 and #31:
@@ -68,7 +68,7 @@ The implemented launcher:
 - is a project-owned Python standard-library HTTP service bundled in the final image;
 - reads an optional launcher password during startup when configured and then clears supplementary groups and drops permanently to UID/GID `65532` before binding or serving;
 - requires no password by default in the localhost/LAN/Tailscale examples;
-- supports optional HTTP Basic authentication through fixed deployment variables;
+- supports optional HTTP Basic authentication through the separate file-backed generic Compose override;
 - does not mount or know the Codex terminal password;
 - validates DNS names and IPv4/IPv6 literals and rejects an embedded destination port because the port has its own setting;
 - validates its fixed destination scheme, port and path settings;
@@ -133,7 +133,7 @@ A missing optional agent is reported as unavailable. It is never downloaded duri
 
 ## Persistence boundaries
 
-The launcher service is stateless. It receives no agent data mounts and requires no password file or dataset by default. A deployment that explicitly enables launcher Basic authentication may provide `LAUNCHER_PASSWORD` through its own configuration mechanism, but that value must never be reused as an agent password.
+The launcher service is stateless. It receives no agent data mounts and requires no password file, secret or dataset by default. An advanced generic Compose deployment may explicitly add `compose/launcher-auth.yml`, which mounts one separate file-backed launcher password as a Compose secret. That value must never be reused as an agent password and is not rendered into the service environment.
 
 The Codex service temporarily retains the existing layout:
 
@@ -177,7 +177,7 @@ The parent data directory is never mounted wholesale. Agent services receive onl
 | Workspace or worktree | No | No by default | Agent only |
 | Agent authentication/configuration | No | No | Agent only |
 | Agent web password | No | No | Agent only |
-| Optional launcher password | No | No | Not required by default |
+| Optional launcher password | No | No | Only when advanced override is enabled |
 | GitHub CLI configuration | Executable only | No | Agent only |
 | Git global configuration | Executable only | No | Agent only |
 | SSH keys/configuration | Client only | No | Agent only |
@@ -219,7 +219,7 @@ A broken optional agent must not make the launcher or Codex unhealthy. Healthche
 
 The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data and the Codex terminal password are not copied, renamed or exposed to the launcher.
 
-The launcher introduces no required dataset or password file. Existing deployments created from the first launcher example may remove the obsolete launcher password mount and set `LAUNCHER_ALLOW_INSECURE_WEB=1`, or retain optional launcher Basic authentication by supplying `LAUNCHER_PASSWORD` and setting `LAUNCHER_ALLOW_INSECURE_WEB=0`.
+The launcher introduces no required dataset or password file. Existing deployments created from the first launcher example may remove the obsolete launcher password mount and use the current password-free base Compose. Operators who deliberately retain launcher Basic authentication must use the separate `compose/launcher-auth.yml` file-backed secret override rather than an inline environment value.
 
 The later data-migration slice must:
 
@@ -243,7 +243,9 @@ Automated tests now cover:
 - structural DNS/IP validation and rejection of an embedded route port;
 - rejection of unsafe configured URL paths;
 - absence of a required launcher password source and preservation of the Codex password source;
-- separate launcher and Codex authentication overrides;
+- one file-backed launcher password source only when the optional override is enabled;
+- absence of the launcher password value from rendered Compose configuration;
+- separation of launcher and Codex authentication sources;
 - rejection of host networking, added capabilities, privileged mode and Docker/Podman socket mounts for both services;
 - role-aware healthchecks;
 - launcher diagnostics without agent-state access;
