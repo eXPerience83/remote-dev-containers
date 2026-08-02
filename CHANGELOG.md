@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Removed the system Bubblewrap package and executable from the default image because they cannot provide a nested namespace sandbox on the supported TrueNAS profile and must not be mistaken for an active security boundary. Codex's own packaged fallback is not used by the supported launcher.
 - Changed Codex startup to disable the unsupported inner sandbox explicitly with `--sandbox danger-full-access` and use autonomous `never` approvals by default, while retaining guarded `untrusted` approvals as a validated option.
 - Changed diagnostics to report the fixed sandbox, project approval mode, exact upstream approval policy and selection source explicitly.
+- Simplified the Codex menu to fixed start/resume actions plus a next-launch approval selector whose autonomous/guarded override is consumed once and then resets to the configured deployment mode.
 - Bound displayed image identity to metadata embedded during the image build rather than runtime environment overrides.
 - Changed upstream automation to update release versions and their architecture-specific SHA-256 pins together.
 - Extended upstream automation to follow final Codex, GitHub CLI, ttyd, mise and uv releases, plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines; major runtime-line changes remain manual decisions.
