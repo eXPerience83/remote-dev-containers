@@ -22,7 +22,7 @@
 - Generic and TrueNAS Compose start a `launcher` service on primary port 7680 and the isolated `codex` terminal service on port 7681 from the same image reference.
 - The launcher uses fixed validated navigation, no password by default, origin checking and CSP; it does not proxy terminal traffic or mount agent state.
 - Persistent data uses one canonical `REMOTE_DEV_DATA_ROOT` contract with separate `workspaces`, per-role `state` and `secrets` boundaries. The launcher remains mount-free.
-- Bind mounts use `create_host_path: false`, so a missing host directory fails clearly instead of creating an unintended path.
+- A host-side preflight validates every canonical directory and password file before deployment. Bind mounts also request `create_host_path: false` as defense-in-depth because some Compose implementations may ignore that option at runtime.
 - Implemented runtime roles are `launcher`, `codex` and `shell`; `antigravity` and `claude` remain reserved and unavailable.
 - The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as a deployment or one-launch option.
 
@@ -36,6 +36,7 @@
 - ttyd authentication, origin checking and tmux reconnection through the navigated Codex endpoint
 - Both services using the exact published image digest on TrueNAS
 - Autonomous and guarded Codex behavior under the documented outer-container isolation model
+- Canonical host-path preflight on the target TrueNAS system
 - Canonical data layout persistence across stop/start and container recreation
 - Device-code login persistence
 - GH login, credential helper, clone/push/PR
