@@ -50,11 +50,15 @@ assert_mode() {
 assert_eq codex "$(env -u REMOTE_DEV_ROLE bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "default role"
 assert_eq launcher "$(env REMOTE_DEV_ROLE=launcher bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "launcher role"
 assert_eq shell "$(env REMOTE_DEV_ROLE=shell bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "shell role"
-assert_fails_with 2 "reserved but not implemented" env REMOTE_DEV_ROLE=antigravity bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
+assert_eq antigravity "$(env REMOTE_DEV_ROLE=antigravity bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "Antigravity role"
+assert_fails_with 2 "reserved but not implemented" env REMOTE_DEV_ROLE=claude bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
 assert_fails_with 2 "unsupported REMOTE_DEV_ROLE" env REMOTE_DEV_ROLE='codex;id' bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
 
 assert_eq menu "$(env -u REMOTE_DEV_START_MODE START_MODE=menu bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "legacy menu mode"
-assert_eq agent "$(env -u REMOTE_DEV_START_MODE START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "legacy codex mode"
+assert_eq agent "$(env -u REMOTE_DEV_START_MODE START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "legacy Codex mode"
+assert_eq agent "$(env -u REMOTE_DEV_START_MODE START_MODE=antigravity bash -c 'source "$1"; remote_dev_resolve_start_mode antigravity' _ "$runtime_lib")" "legacy Antigravity mode"
+assert_fails_with 2 "requires REMOTE_DEV_ROLE=codex" env -u REMOTE_DEV_START_MODE REMOTE_DEV_ROLE=antigravity START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode antigravity' _ "$runtime_lib"
+assert_fails_with 2 "requires REMOTE_DEV_ROLE=antigravity" env -u REMOTE_DEV_START_MODE REMOTE_DEV_ROLE=codex START_MODE=antigravity bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib"
 assert_eq shell "$(env REMOTE_DEV_START_MODE=shell START_MODE=codex bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib")" "neutral mode precedence"
 assert_eq menu "$(env -u REMOTE_DEV_START_MODE START_MODE=menu bash -c 'source "$1"; remote_dev_resolve_start_mode launcher' _ "$runtime_lib")" "launcher menu mode"
 assert_fails_with 2 "supports only" env REMOTE_DEV_START_MODE=agent bash -c 'source "$1"; remote_dev_resolve_start_mode launcher' _ "$runtime_lib"
@@ -64,7 +68,8 @@ assert_fails_with 2 "unsupported START_MODE=agent" env -u REMOTE_DEV_START_MODE 
 assert_fails_with 2 "unsupported START_MODE=codex;id" env -u REMOTE_DEV_START_MODE START_MODE='codex;id' bash -c 'source "$1"; remote_dev_resolve_start_mode codex' _ "$runtime_lib"
 assert_fails_with 2 "not available" env REMOTE_DEV_START_MODE=agent bash -c 'source "$1"; remote_dev_resolve_start_mode shell' _ "$runtime_lib"
 
-assert_eq codex "$(remote_dev_default_tmux_session codex)" "codex compatibility session"
+assert_eq codex "$(remote_dev_default_tmux_session codex)" "Codex compatibility session"
+assert_eq antigravity "$(remote_dev_default_tmux_session antigravity)" "Antigravity role session"
 assert_eq remote-dev-shell "$(remote_dev_default_tmux_session shell)" "shell role session"
 assert_fails_with 2 "does not use tmux" remote_dev_default_tmux_session launcher
 
