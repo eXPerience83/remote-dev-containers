@@ -14,6 +14,8 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 usage() {
   cat <<'EOF'
@@ -21,7 +23,7 @@ Usage: remote-dev-antigravity <install|update|status|path> [--yes] [--menu]
 
 Commands:
   install   Install the reviewed official Antigravity CLI package.
-  update    Atomically replace a trusted older installation.
+  update    Replace a trusted older installation with the reviewed package.
   status    Report whether the reviewed executable is installed and valid.
   path      Print the canonical executable path.
 
@@ -32,6 +34,10 @@ EOF
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+recovery_hint() {
+  printf 'Remove %s and %s, then run remote-dev-install-antigravity.\n' "$binary" "$manifest" >&2
 }
 
 is_testing() {
@@ -57,9 +63,9 @@ resolve_paths() {
 require_absolute_safe_path() {
   local label="$1"
   local value="$2"
-  [[ "$value" == /* ]] || fail "$label must be an absolute path"
+  [[ "$value" == /* && "$value" != //* ]] || fail "$label must be a normalized absolute path"
   case "$value" in
-    /|/root|/root/.local|/root/.gemini|/workspace)
+    /|/root|/root/.local|/root/.local/share|/root/.gemini|/workspace|/home|/opt|/usr|/usr/local|/etc|/var|/tmp)
       fail "$label is too broad: $value"
       ;;
   esac
@@ -68,14 +74,16 @@ require_absolute_safe_path() {
 }
 
 reject_symlink_components() {
-  local value="$1"
-  local current="$value"
-  while [[ "$current" != / ]]; do
+  local current="$1"
+  local previous=""
+  while [[ "$current" != / && "$current" != "$previous" ]]; do
     if [[ -L "$current" ]]; then
       fail "refusing symlinked Antigravity path component: $current"
     fi
+    previous="$current"
     current="$(dirname "$current")"
   done
+  [[ "$current" == / ]] || fail "could not safely resolve path ancestors"
 }
 
 validate_paths() {
@@ -106,15 +114,16 @@ require_supported_platform() {
 
 require_tools() {
   local tool
-  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed dirname env; do
+  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed dirname env timeout cp rm mkdir chmod; do
     command -v "$tool" >/dev/null 2>&1 || fail "required command is missing: $tool"
   done
 }
 
 load_evidence() {
   [[ -r "$evidence" ]] || fail "Antigravity inspection evidence is not readable: $evidence"
-  jq -e '.schema_version >= 2 and .blocking_findings == []' "$evidence" >/dev/null \
-    || fail "Antigravity inspection evidence is invalid"
+  jq -e '(.schema_version | type == "number") and .schema_version >= 2
+         and (.blocking_findings | type == "array") and .blocking_findings == []' \
+    "$evidence" >/dev/null || fail "Antigravity inspection evidence is invalid"
 
   expected_installer_url="$(jq -er '.installer.official_url' "$evidence")"
   expected_installer_sha="$(jq -er '.installer.sha256' "$evidence")"
@@ -146,23 +155,24 @@ verify_regular_file() {
 verify_file_identity() {
   local label="$1"
   local path="$2"
-  local expected_size_value="$3"
-  local expected_sha_value="$4"
+  local trusted_size="$3"
+  local trusted_sha="$4"
   local actual_size actual_sha
 
   verify_regular_file "$label" "$path"
   actual_size="$(stat -c '%s' "$path")"
-  [[ "$actual_size" == "$expected_size_value" ]] \
-    || fail "$label size differs from trusted metadata ($actual_size != $expected_size_value)"
+  [[ "$actual_size" == "$trusted_size" ]] \
+    || fail "$label size differs from trusted metadata ($actual_size != $trusted_size)"
   actual_sha="$(sha256_file "$path")"
-  [[ "$actual_sha" == "$expected_sha_value" ]] \
-    || fail "$label SHA-256 differs from trusted metadata"
+  [[ "$actual_sha" == "$trusted_sha" ]] || fail "$label SHA-256 differs from trusted metadata"
 }
 
 run_binary_no_update() {
   local candidate="$1"
   shift
-  env HOME="${HOME:-/root}" AGY_CLI_DISABLE_AUTO_UPDATE=true "$candidate" "$@"
+  timeout --signal=TERM --kill-after=5s 30s \
+    env HOME="${HOME:-/root}" AGY_CLI_DISABLE_AUTO_UPDATE=true "$candidate" "$@" \
+    </dev/null
 }
 
 read_version_with_identity() {
@@ -174,118 +184,25 @@ read_version_with_identity() {
 
   verify_file_identity "Antigravity executable" "$candidate" "$trusted_size" "$trusted_sha"
   output="$(run_binary_no_update "$candidate" --version 2>/dev/null)" \
-    || fail "trusted Antigravity executable failed its version check"
+    || fail "trusted Antigravity executable failed its bounded version check"
   version="$(printf '%s\n' "$output" | sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}')"
-  [[ "$version" == "$trusted_version" ]] \
-    || fail "Antigravity version output differs from trusted metadata"
+  [[ "$version" == "$trusted_version" ]] || fail "Antigravity version output differs from trusted metadata"
   printf '%s\n' "$version"
 }
 
-read_current_installation() {
-  verify_regular_file "existing Antigravity executable" "$binary"
-
-  local actual_sha actual_size
-  actual_sha="$(sha256_file "$binary")"
-  actual_size="$(stat -c '%s' "$binary")"
-
-  if [[ "$actual_sha" == "$expected_binary_sha" && "$actual_size" == "$expected_binary_size" ]]; then
-    current_version="$(read_version_with_identity "$binary" "$expected_binary_size" "$expected_binary_sha" "$expected_version")"
-    current_matches_target=1
-    return 0
-  fi
-
-  [[ -r "$manifest" ]] || fail "existing Antigravity executable does not match current evidence and has no trusted install manifest"
-  jq -e '.schema_version == 1 and .runtime_installed == true and .bundled_in_image == false' "$manifest" >/dev/null \
-    || fail "existing Antigravity install manifest is invalid"
-
-  local old_sha old_size old_version
-  old_sha="$(jq -er '.binary_sha256' "$manifest")"
-  old_size="$(jq -er '.binary_size' "$manifest")"
-  old_version="$(jq -er '.version' "$manifest")"
-  [[ "$old_sha" =~ ^[0-9a-f]{64}$ ]] || fail "existing install manifest has an invalid binary SHA-256"
-  [[ "$old_size" =~ ^[0-9]+$ ]] || fail "existing install manifest has an invalid binary size"
-  [[ "$old_version" =~ ^[0-9]+([.][0-9]+){1,3}([+-][A-Za-z0-9._-]+)?$ ]] \
-    || fail "existing install manifest has an invalid version"
-
-  current_version="$(read_version_with_identity "$binary" "$old_size" "$old_sha" "$old_version")"
-  current_matches_target=0
-}
-
-confirm_vendor_download() {
-  local action="$1"
-  local assume_yes="$2"
-  if [[ "$assume_yes" == 1 ]]; then
-    return 0
-  fi
-
-  local answer=""
-  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM:-}" ]]; then
-    answer="$REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM"
-  else
-    [[ -t 0 ]] || fail "$action requires an interactive confirmation or the explicit --yes option"
-    cat <<EOF
-Antigravity is a Google product and is not distributed by Remote Dev.
-The reviewed installer will be downloaded directly from:
-  $OFFICIAL_INSTALLER_URL
-Google's separate terms and privacy disclosures apply.
-Remote Dev is not affiliated with or endorsed by Google.
-
-Target reviewed version: $expected_version
-EOF
-    read -r -p "Continue with $action? [y/N] " answer
-  fi
-
-  case "$answer" in
-    y|Y|yes|YES) ;;
-    *)
-      echo "Cancelled; no download or installation was performed."
-      exit 0
-      ;;
-  esac
-}
-
-download_installer() {
-  local destination="$1"
-  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE:-}" ]]; then
-    cp -- "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE}" "$destination"
-  else
-    curl \
-      --proto '=https' \
-      --tlsv1.2 \
-      --fail \
-      --silent \
-      --show-error \
-      --location \
-      --retry 3 \
-      --retry-all-errors \
-      --connect-timeout 10 \
-      --max-time 300 \
-      "$OFFICIAL_INSTALLER_URL" \
-      --output "$destination"
-  fi
-  chmod 0700 "$destination"
-  verify_file_identity "Antigravity installer" "$destination" "$expected_installer_size" "$expected_installer_sha"
-  /bin/bash -n "$destination" || fail "reviewed Antigravity installer is not valid Bash"
-}
-
-run_installer_isolated() {
-  local installer_path="$1"
-  local isolated_home="$2"
-  local stage_bin="$3"
-  env -i \
-    HOME="$isolated_home" \
-    USER=root \
-    LOGNAME=root \
-    SHELL=/bin/bash \
-    PATH=/usr/local/bin:/usr/bin:/bin \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
-    TERM=xterm-256color \
-    XDG_CACHE_HOME="$isolated_home/.cache" \
-    XDG_CONFIG_HOME="$isolated_home/.config" \
-    XDG_DATA_HOME="$isolated_home/.local/share" \
-    CI=1 \
-    /bin/bash "$installer_path" --dir "$stage_bin"
+manifest_matches_target() {
+  [[ -r "$manifest" ]] || return 1
+  jq -e \
+    --arg version "$expected_version" \
+    --arg binary_sha "$expected_binary_sha" \
+    --argjson binary_size "$expected_binary_size" \
+    '.schema_version == 1
+     and .runtime_installed == true
+     and .bundled_in_image == false
+     and .version == $version
+     and .binary_sha256 == $binary_sha
+     and .binary_size == $binary_size' \
+    "$manifest" >/dev/null 2>&1
 }
 
 write_manifest() {
@@ -311,6 +228,196 @@ write_manifest() {
       bundled_in_image: false
     }' >"$destination"
   chmod 0600 "$destination"
+}
+
+repair_target_manifest() {
+  umask 077
+  install -d -m 0700 "$state_dir"
+  local repaired="$state_dir/.install.json.repair.$$"
+  write_manifest "$repaired"
+  mv -f -- "$repaired" "$manifest"
+}
+
+read_current_installation() {
+  verify_regular_file "existing Antigravity executable" "$binary"
+
+  local actual_sha actual_size
+  actual_sha="$(sha256_file "$binary")"
+  actual_size="$(stat -c '%s' "$binary")"
+
+  if [[ "$actual_sha" == "$expected_binary_sha" && "$actual_size" == "$expected_binary_size" ]]; then
+    current_version="$(read_version_with_identity "$binary" "$expected_binary_size" "$expected_binary_sha" "$expected_version")"
+    current_matches_target=1
+    if ! manifest_matches_target; then
+      repair_target_manifest || {
+        echo "ERROR: reviewed executable is valid but its local install manifest could not be repaired" >&2
+        recovery_hint
+        exit 1
+      }
+    fi
+    return 0
+  fi
+
+  if [[ ! -r "$manifest" ]]; then
+    echo "ERROR: existing Antigravity executable does not match current evidence and has no trusted install manifest" >&2
+    recovery_hint
+    exit 1
+  fi
+  jq -e '.schema_version == 1 and .runtime_installed == true and .bundled_in_image == false' "$manifest" >/dev/null \
+    || {
+      echo "ERROR: existing Antigravity install manifest is invalid" >&2
+      recovery_hint
+      exit 1
+    }
+
+  local old_sha old_size old_version
+  old_sha="$(jq -er '.binary_sha256' "$manifest")"
+  old_size="$(jq -er '.binary_size' "$manifest")"
+  old_version="$(jq -er '.version' "$manifest")"
+  [[ "$old_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: existing manifest has an invalid SHA-256" >&2; recovery_hint; exit 1; }
+  [[ "$old_size" =~ ^[0-9]+$ ]] || { echo "ERROR: existing manifest has an invalid binary size" >&2; recovery_hint; exit 1; }
+  [[ "$old_version" =~ ^[0-9]+([.][0-9]+){1,3}([+-][A-Za-z0-9._-]+)?$ ]] \
+    || { echo "ERROR: existing manifest has an invalid version" >&2; recovery_hint; exit 1; }
+
+  if ! current_version="$(read_version_with_identity "$binary" "$old_size" "$old_sha" "$old_version")"; then
+    recovery_hint
+    exit 1
+  fi
+  current_matches_target=0
+}
+
+show_vendor_disclosure() {
+  cat <<EOF
+Antigravity is a Google product and is not distributed by Remote Dev.
+The reviewed installer will be downloaded directly from:
+  $OFFICIAL_INSTALLER_URL
+A Google account is required for authenticated use.
+Google's separate terms and privacy policy apply:
+  https://antigravity.google/terms
+  https://policies.google.com/privacy
+Remote Dev is not affiliated with or endorsed by Google.
+Target reviewed version: $expected_version
+EOF
+}
+
+confirm_vendor_download() {
+  local action="$1"
+  local assume_yes="$2"
+  show_vendor_disclosure
+  if [[ "$assume_yes" == 1 ]]; then
+    return 0
+  fi
+
+  local answer=""
+  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM:-}" ]]; then
+    answer="$REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM"
+  else
+    [[ -t 0 ]] || fail "$action requires an interactive confirmation or the explicit --yes option"
+    read -r -p "Continue with $action? [y/N] " answer
+  fi
+
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *) echo "Cancelled; no download or installation was performed."; exit 0 ;;
+  esac
+}
+
+download_installer() {
+  local destination="$1"
+  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE:-}" ]]; then
+    cp -- "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE}" "$destination"
+  else
+    curl \
+      --proto '=https' \
+      --proto-redir '=https' \
+      --tlsv1.2 \
+      --fail \
+      --silent \
+      --show-error \
+      --location \
+      --retry 3 \
+      --retry-all-errors \
+      --connect-timeout 10 \
+      --max-time 300 \
+      "$OFFICIAL_INSTALLER_URL" \
+      --output "$destination"
+  fi
+  chmod 0700 "$destination"
+  verify_file_identity "Antigravity installer" "$destination" "$expected_installer_size" "$expected_installer_sha"
+  /bin/bash -n "$destination" || fail "reviewed Antigravity installer is not valid Bash"
+}
+
+run_installer_isolated() {
+  local installer_path="$1"
+  local isolated_home="$2"
+  local stage_bin="$3"
+  timeout --signal=TERM --kill-after=10s 900s \
+    env -i \
+      HOME="$isolated_home" \
+      USER=root \
+      LOGNAME=root \
+      SHELL=/bin/bash \
+      PATH=/usr/local/bin:/usr/bin:/bin \
+      LANG=C.UTF-8 \
+      LC_ALL=C.UTF-8 \
+      TERM=xterm-256color \
+      XDG_CACHE_HOME="$isolated_home/.cache" \
+      XDG_CONFIG_HOME="$isolated_home/.config" \
+      XDG_DATA_HOME="$isolated_home/.local/share" \
+      CI=1 \
+      /bin/bash "$installer_path" --dir "$stage_bin" \
+    </dev/null
+}
+
+restore_previous_installation() {
+  local had_old_binary="$1"
+  local old_binary_backup="$2"
+  local had_old_manifest="$3"
+  local old_manifest_backup="$4"
+  local restore_status=0
+
+  if [[ "$had_old_binary" == 1 ]]; then
+    install -m 0700 "$old_binary_backup" "$binary" || restore_status=1
+  else
+    rm -f -- "$binary" || restore_status=1
+  fi
+  if [[ "$had_old_manifest" == 1 ]]; then
+    install -m 0600 "$old_manifest_backup" "$manifest" || restore_status=1
+  else
+    rm -f -- "$manifest" || restore_status=1
+  fi
+  return "$restore_status"
+}
+
+publish_verified_install() {
+  local staged_binary="$1"
+  local staged_manifest="$2"
+  local final_new="$bin_dir/.agy.new.$$"
+  local manifest_new="$state_dir/.install.json.new.$$"
+  local old_binary_backup="$cleanup_root/previous-agy"
+  local old_manifest_backup="$cleanup_root/previous-install.json"
+  local had_old_binary=0 had_old_manifest=0
+
+  if [[ -f "$binary" && ! -L "$binary" ]]; then
+    install -m 0700 "$binary" "$old_binary_backup"
+    had_old_binary=1
+  fi
+  if [[ -f "$manifest" && ! -L "$manifest" ]]; then
+    install -m 0600 "$manifest" "$old_manifest_backup"
+    had_old_manifest=1
+  fi
+
+  install -m 0700 "$staged_binary" "$final_new"
+  install -m 0600 "$staged_manifest" "$manifest_new"
+  mv -f -- "$final_new" "$binary"
+  if ! mv -f -- "$manifest_new" "$manifest"; then
+    if ! restore_previous_installation "$had_old_binary" "$old_binary_backup" "$had_old_manifest" "$old_manifest_backup"; then
+      echo "ERROR: publishing the manifest failed and the previous installation could not be fully restored" >&2
+      recovery_hint
+      exit 1
+    fi
+    fail "publishing the Antigravity manifest failed; the previous installation was restored"
+  fi
 }
 
 install_or_update() {
@@ -355,24 +462,19 @@ install_or_update() {
 
   download_installer "$installer_path"
   run_installer_isolated "$installer_path" "$isolated_home" "$stage_bin" \
-    || fail "reviewed Antigravity installer failed"
+    || fail "reviewed Antigravity installer failed or exceeded its time limit"
 
   verify_file_identity "installed Antigravity payload" "$staged_binary" "$expected_binary_size" "$expected_binary_sha"
-  chmod 0755 "$staged_binary"
+  chmod 0700 "$staged_binary"
   read_version_with_identity "$staged_binary" "$expected_binary_size" "$expected_binary_sha" "$expected_version" >/dev/null
   write_manifest "$staged_manifest"
 
   umask 077
   install -d -m 0700 "$bin_dir" "$state_dir" "$vendor_state_dir"
-  local final_new="$bin_dir/.agy.new.$$"
-  local manifest_new="$state_dir/.install.json.new.$$"
-  install -m 0700 "$staged_binary" "$final_new"
-  install -m 0600 "$staged_manifest" "$manifest_new"
-  mv -f -- "$final_new" "$binary"
-  mv -f -- "$manifest_new" "$manifest"
+  publish_verified_install "$staged_binary" "$staged_manifest"
 
   if [[ "$action" == update ]]; then
-    echo "Antigravity updated atomically: $current_version -> $expected_version"
+    echo "Antigravity updated: $current_version -> $expected_version"
   else
     echo "Antigravity $expected_version installed from the reviewed Google package."
   fi
