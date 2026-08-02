@@ -27,7 +27,7 @@ The current stack instantiates the same image reference twice:
 - `launcher`, the stateless primary browser entry on port 7680, unauthenticated by default on localhost/LAN/Tailscale deployments;
 - `codex`, the independently authenticated ttyd endpoint on port 7681.
 
-The launcher navigates to Codex and does not proxy terminal traffic. Its service receives no agent workspace or credential mounts. Optional launcher Basic authentication may be enabled with `LAUNCHER_PASSWORD` and `LAUNCHER_ALLOW_INSECURE_WEB=0`. The Codex service retains the existing `CODEX_DATA_ROOT` layout until the later migration slice.
+The launcher navigates to Codex and does not proxy terminal traffic. Its normal service receives no password, agent workspace or credential mounts. Advanced generic Compose deployments may enable optional launcher Basic authentication with the separate file-backed `compose/launcher-auth.yml` override; the secret value is not rendered into the service environment. The Codex service retains the existing `CODEX_DATA_ROOT` layout until the later migration slice.
 
 The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set. A deprecation notice must appear in release notes before removal.
 
@@ -73,7 +73,7 @@ Before creating a stable version tag:
 5. Docker reports launcher and Codex using the same image digest.
 6. The TrueNAS portal opens the launcher on port 7680.
 7. The default launcher opens without a second authentication challenge on a trusted LAN/Tailscale deployment, preserves origin/CSP behavior and survives refresh.
-8. Optional launcher Basic authentication works when `LAUNCHER_PASSWORD` is set and `LAUNCHER_ALLOW_INSECURE_WEB=0`.
+8. Optional launcher Basic authentication works through `compose/launcher-auth.yml`, uses exactly one file-backed launcher secret and does not expose its value in rendered Compose configuration.
 9. Selecting Codex navigates to the independent authenticated endpoint on port 7681 without exposing credentials in the URL.
 10. The launcher has no Codex workspace, agent, GitHub, Git or SSH mounts and no Docker/Podman socket.
 11. Neither service uses host networking, privileged mode or added capabilities.
