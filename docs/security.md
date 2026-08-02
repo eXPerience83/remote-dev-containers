@@ -20,14 +20,14 @@ The launcher:
 - serves only a fixed navigation page for reviewed, declared services;
 - does not relay or proxy the Codex terminal's HTTP or WebSocket traffic;
 - requires no password by default on localhost/LAN/Tailscale deployments;
-- supports optional HTTP Basic authentication when `LAUNCHER_PASSWORD` is configured and `LAUNCHER_ALLOW_INSECURE_WEB=0`;
+- supports optional HTTP Basic authentication only through the separate file-backed `compose/launcher-auth.yml` override in the generic Compose deployment;
 - validates DNS names and IP literals and rejects a destination host containing an embedded port;
 - restricts configured paths to safe RFC 3986 URL-path characters before embedding them into the page;
 - checks that an `Origin` header, when present, matches the request host;
 - sends a restrictive Content Security Policy and rejects state-changing HTTP methods;
 - exposes an unauthenticated, secret-free health endpoint.
 
-The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The Codex endpoint uses its own mounted password secret and authenticates independently.
+The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The optional launcher password is exposed to the container only as `/run/secrets/launcher_password`; it is not copied into the rendered service environment. The Codex endpoint uses its own mounted password secret and authenticates independently.
 
 Port `7680` is the normal launcher entry point. Port `7681` remains the direct Codex endpoint used after navigation and for troubleshooting. Neither port should be exposed directly to the public Internet. An unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale/WireGuard address.
 
@@ -46,8 +46,8 @@ Separate future agent services must receive separate narrow mounts and separate 
 - Do not expose ports 7680 or 7681 directly to the public Internet.
 - Bind the default unauthenticated launcher only to localhost, a trusted LAN address, Tailscale or WireGuard.
 - Keep the Codex terminal independently authenticated with a strong password.
-- Optional launcher authentication must use a password different from every agent password.
-- Never place credentials in navigation URLs.
+- Optional launcher authentication must use a password different from every agent password and the file-backed Compose override rather than a plaintext service environment value.
+- Never place credentials in navigation URLs or rendered Compose environment output.
 - Never mount an agent password, state or workspace into the launcher.
 - Never mount Docker or Podman sockets, including `/var/run/docker.sock` or `/run/docker.sock`.
 - Never use `privileged: true`, host PID, host networking or added capabilities.
