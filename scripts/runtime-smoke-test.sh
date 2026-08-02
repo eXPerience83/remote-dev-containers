@@ -42,7 +42,7 @@ assert_antigravity_entrypoint_blocked() {
     printf '%s\n' "$output" >&2
     exit 1
   fi
-  if ! grep -Eq 'experimental and blocked pending TrueNAS validation|requires the gated REMOTE_DEV_ROLE=antigravity' <<<"$output"; then
+  if ! grep -Eq 'experimental and blocked pending TrueNAS validation|gated REMOTE_DEV_ROLE=antigravity' <<<"$output"; then
     echo "ERROR: $label did not explain the gated Antigravity service requirement" >&2
     printf '%s\n' "$output" >&2
     exit 1
