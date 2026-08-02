@@ -122,7 +122,7 @@ REMOTE_DEV_DATA_ROOT/
 
 El servicio Codex monta exclusivamente esos directorios hijo. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-Todos los bind mounts persistentes utilizan `create_host_path: false`. Debes crear deliberadamente todos los directorios necesarios antes de iniciar el stack; una ruta incorrecta falla en lugar de generar silenciosamente una carpeta nueva.
+Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
 No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`.
 
@@ -148,8 +148,11 @@ mkdir -p \
   data/secrets/codex
 printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
+make preflight
 ./scripts/build-local.sh
 ```
+
+Para una raíz personalizada, ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar.
 
 Define `REMOTE_DEV_IMAGE=remote-dev:local` y el modo de aprobación deseado, y ejecuta:
 
