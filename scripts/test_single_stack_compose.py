@@ -26,6 +26,8 @@ FORBIDDEN_LAUNCHER_TEXT = (
     "podman.sock",
     "/mnt/Pool1/codex/secrets/web_password.txt",
     "/run/secrets/web_password",
+    "/run/secrets/launcher_password",
+    "launcher_password",
     "OPENAI_API_KEY",
     "CODEX_HOME",
     "GH_CONFIG_DIR",
@@ -172,20 +174,20 @@ def validate(path: Path, config: dict[str, object]) -> None:
         f"{path}: launcher start mode",
     )
     require(
-        launcher_env.get("WEB_PASSWORD_FILE") == "/run/secrets/launcher_password",
-        f"{path}: launcher password target",
+        "WEB_PASSWORD_FILE" not in launcher_env,
+        f"{path}: launcher unexpectedly requires a password file",
+    )
+    require(
+        launcher_env.get("WEB_PASSWORD", "") in ("", None),
+        f"{path}: launcher should be unauthenticated by default",
     )
     require(
         codex_env.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password",
         f"{path}: Codex password target",
     )
     require(
-        launcher_env.get("WEB_PASSWORD_FILE") != codex_env.get("WEB_PASSWORD_FILE"),
-        f"{path}: launcher and Codex share a credential target",
-    )
-    require(
-        str(launcher_env.get("ALLOW_INSECURE_WEB")) == "0",
-        f"{path}: launcher insecure default",
+        str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1",
+        f"{path}: launcher should be unauthenticated by default",
     )
     require(
         str(codex_env.get("ALLOW_INSECURE_WEB")) == "0",
@@ -204,16 +206,12 @@ def validate(path: Path, config: dict[str, object]) -> None:
     )
     codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
     require(
-        len(launcher_credentials) == 1,
-        f"{path}: launcher must have exactly one password source, got {launcher_credentials}",
+        launcher_credentials == [],
+        f"{path}: launcher must not require a credential source, got {launcher_credentials}",
     )
     require(
         len(codex_credentials) == 1,
         f"{path}: Codex must have exactly one password source, got {codex_credentials}",
-    )
-    require(
-        launcher_credentials[0] != codex_credentials[0],
-        f"{path}: launcher and Codex password sources must be independent",
     )
 
     require(
@@ -244,34 +242,42 @@ def validate(path: Path, config: dict[str, object]) -> None:
     )
 
 
-def validate_insecure_override_separation(env_path: Path) -> None:
+def validate_auth_override_separation(env_path: Path) -> None:
     codex_relaxed = compose_config(
         GENERIC_COMPOSE,
         env_path,
         {"ALLOW_INSECURE_WEB": "1"},
     )["services"]
     require(
-        str(codex_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "0",
-        "generic Compose: Codex insecure override leaked into launcher",
+        str(codex_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
+        "generic Compose: Codex insecure override changed launcher default",
     )
     require(
         str(codex_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
         "generic Compose: Codex insecure override was not applied",
     )
 
-    launcher_relaxed = compose_config(
+    launcher_hardened = compose_config(
         GENERIC_COMPOSE,
         env_path,
-        {"LAUNCHER_ALLOW_INSECURE_WEB": "1"},
+        {
+            "LAUNCHER_ALLOW_INSECURE_WEB": "0",
+            "LAUNCHER_PASSWORD": "synthetic-launcher-password",
+        },
     )["services"]
+    launcher_env = launcher_hardened["launcher"]["environment"]
+    codex_env = launcher_hardened["codex"]["environment"]
     require(
-        str(launcher_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"])
-        == "1",
-        "generic Compose: launcher insecure override was not applied",
+        str(launcher_env["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: launcher auth override was not applied",
     )
     require(
-        str(launcher_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "0",
-        "generic Compose: launcher insecure override leaked into Codex",
+        launcher_env["WEB_PASSWORD"] == "synthetic-launcher-password",
+        "generic Compose: launcher password override was not applied",
+    )
+    require(
+        str(codex_env["ALLOW_INSECURE_WEB"]) == "0",
+        "generic Compose: launcher auth override leaked into Codex",
     )
 
 
@@ -280,8 +286,8 @@ def main() -> int:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
             validate(path, compose_config(path, env_path))
-        validate_insecure_override_separation(env_path)
-    print("Single-stack image, socket, credential and override boundaries: OK")
+        validate_auth_override_separation(env_path)
+    print("Single-stack image, socket, launcher and credential boundaries: OK")
     return 0
 
 
