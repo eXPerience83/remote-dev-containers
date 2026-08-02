@@ -1,0 +1,13 @@
+services:
+  launcher:
+    environment:
+      WEB_USERNAME: ${LAUNCHER_USERNAME:-remote-dev}
+      WEB_PASSWORD_FILE: /run/secrets/launcher_password
+      ALLOW_INSECURE_WEB: "0"
+
+    secrets:
+      - launcher_password
+
+secrets:
+  launcher_password:
+    file: ${LAUNCHER_PASSWORD_PATH:-./secrets/launcher_password.txt}
