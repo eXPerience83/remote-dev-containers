@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,8 @@ def run(
             cwd=cwd,
             env=env,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
             timeout=timeout,
@@ -224,8 +227,38 @@ def normalize_dynamic_libraries(ldd_text: str) -> dict[str, Any]:
     }
 
 
-def inspect_binary(binary: Path, env: dict[str, str], cwd: Path) -> dict[str, Any]:
-    """Inspect the executable without authentication or persistent interaction."""
+def verify_binary_before_execution(
+    binary: Path,
+    *,
+    expected_sha256: str | None,
+    fixture: bool,
+) -> str:
+    """Reject a changed vendor payload before invoking the installed executable."""
+    actual_sha256 = sha256_file(binary)
+    if not fixture and expected_sha256 is None:
+        raise RuntimeError("official inspection requires --expected-binary-sha256")
+    if expected_sha256 is not None and actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            "installed binary SHA-256 differs from the reviewed value: "
+            f"{actual_sha256} != {expected_sha256}"
+        )
+    return actual_sha256
+
+
+def inspect_binary(
+    binary: Path,
+    env: dict[str, str],
+    cwd: Path,
+    *,
+    expected_sha256: str | None,
+    fixture: bool,
+) -> dict[str, Any]:
+    """Verify and inspect the executable without authentication."""
+    binary_sha256 = verify_binary_before_execution(
+        binary,
+        expected_sha256=expected_sha256,
+        fixture=fixture,
+    )
     version = run([str(binary), "--version"], env=env, cwd=cwd, timeout=30)
     help_result = run([str(binary), "--help"], env=env, cwd=cwd, timeout=30)
     help_text = f"{help_result.stdout}\n{help_result.stderr}"
@@ -235,7 +268,7 @@ def inspect_binary(binary: Path, env: dict[str, str], cwd: Path) -> dict[str, An
     return {
         "path": EXPECTED_BINARY.as_posix(),
         "size": binary.stat().st_size,
-        "sha256": sha256_file(binary),
+        "sha256": binary_sha256,
         "version": {
             **command_metadata(version),
             "reported_version": extract_reported_version(version),
@@ -288,7 +321,8 @@ def inspection_environment(home: Path) -> dict[str, str]:
 
 
 def download_installer(destination: Path) -> tuple[bytes, str | None, str]:
-    """Download at most 2 MiB from the fixed official HTTPS endpoint."""
+    """Download at most 2 MiB from the fixed official HTTPS origin."""
+    expected = urllib.parse.urlparse(OFFICIAL_INSTALLER_URL)
     request = urllib.request.Request(
         OFFICIAL_INSTALLER_URL,
         headers={"User-Agent": "remote-dev-containers-antigravity-inspection"},
@@ -296,6 +330,13 @@ def download_installer(destination: Path) -> tuple[bytes, str | None, str]:
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             final_url = response.geturl()
+            final = urllib.parse.urlparse(final_url)
+            if (
+                final.scheme != "https"
+                or final.hostname != expected.hostname
+                or final.port not in {None, 443}
+            ):
+                raise RuntimeError("installer redirect left the official HTTPS origin")
             data = response.read(2 * 1024 * 1024 + 1)
             if len(data) > 2 * 1024 * 1024:
                 raise RuntimeError("installer exceeds the 2 MiB inspection limit")
@@ -329,7 +370,7 @@ def verify_installer_before_execution(
             f"{actual_sha256} != {expected_sha256}"
         )
     if not fixture and final_url != OFFICIAL_INSTALLER_URL:
-        raise RuntimeError(f"official installer redirected unexpectedly: {final_url}")
+        raise RuntimeError("official installer redirected unexpectedly")
     return actual_sha256
 
 
@@ -361,7 +402,11 @@ def install_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any
     }
 
 
-def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict[str, Any]:
+def inspect(
+    installer_fixture: Path | None,
+    expected_installer_sha256: str | None,
+    expected_binary_sha256: str | None,
+) -> dict[str, Any]:
     """Perform one approved installation and repeated-install inspection."""
     with tempfile.TemporaryDirectory(prefix="antigravity-inspection-") as temporary:
         root = Path(temporary)
@@ -375,15 +420,17 @@ def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict
             )
             installer_source = final_url
         else:
-            if expected_sha256 is None:
+            if expected_installer_sha256 is None:
                 raise RuntimeError("official inspection requires --expected-installer-sha256")
+            if expected_binary_sha256 is None:
+                raise RuntimeError("official inspection requires --expected-binary-sha256")
             installer_data, content_type, final_url = download_installer(installer)
             installer_source = OFFICIAL_INSTALLER_URL
 
-        approved_sha256 = expected_sha256 or sha256_bytes(installer_data)
+        approved_installer_sha256 = expected_installer_sha256 or sha256_bytes(installer_data)
         installer_sha256 = verify_installer_before_execution(
             installer_data,
-            expected_sha256=approved_sha256,
+            expected_sha256=approved_installer_sha256,
             final_url=final_url,
             fixture=fixture,
         )
@@ -412,16 +459,38 @@ def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict
         after_first_profiles = profile_snapshot(home)
 
         binary = home / EXPECTED_BINARY
-        binary_after_first = inspect_binary(binary, env, root) if binary.is_file() else None
+        binary_after_first = (
+            inspect_binary(
+                binary,
+                env,
+                root,
+                expected_sha256=expected_binary_sha256,
+                fixture=fixture,
+            )
+            if binary.is_file()
+            else None
+        )
 
         second_install_process = run(install_command, env=env, cwd=root, timeout=300)
         after_second = snapshot(home)
         after_second_profiles = profile_snapshot(home)
-        binary_after_second = inspect_binary(binary, env, root) if binary.is_file() else None
+        binary_after_second = (
+            inspect_binary(
+                binary,
+                env,
+                root,
+                expected_sha256=expected_binary_sha256,
+                fixture=fixture,
+            )
+            if binary.is_file()
+            else None
+        )
 
         return {
             "schema_version": 2,
-            "inspected_at_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
+            "inspected_at_utc": dt.datetime.now(dt.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat(),
             "platform": {
                 "system": platform.system(),
                 "machine": platform.machine(),
@@ -507,7 +576,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         errors.append("installed executable is not the expected Linux AMD64 format")
     if binary["dynamic_libraries"]["unrecognized_count"] != 0:
         errors.append("installed executable introduced unreviewed dynamic libraries")
-    if not report["binary_stable_across_second_install"]:
+    if report["expected_binary_present"] and not report["binary_stable_across_second_install"]:
         errors.append("repeated installer run changed the executable unexpectedly")
     if not report["environment_controls"]["auto_update_disabled"]:
         errors.append("inspection did not disable background auto-update")
@@ -527,10 +596,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--expected-installer-sha256", type=parse_sha256)
+    parser.add_argument("--expected-binary-sha256", type=parse_sha256)
     parser.add_argument(
         "--installer-fixture",
         type=Path,
-        help="Local test fixture only; official mode requires an approved digest",
+        help="Local test fixture only; official mode requires approved digests",
     )
     return parser.parse_args(argv)
 
@@ -539,7 +609,11 @@ def main(argv: list[str] | None = None) -> int:
     """Write normalized evidence and fail on blocking findings."""
     args = parse_args(argv)
     try:
-        report = inspect(args.installer_fixture, args.expected_installer_sha256)
+        report = inspect(
+            args.installer_fixture,
+            args.expected_installer_sha256,
+            args.expected_binary_sha256,
+        )
         errors = validate_report(report)
     except (OSError, RuntimeError) as error:
         print(f"Antigravity inspection rejected before evidence generation: {error}", file=sys.stderr)
