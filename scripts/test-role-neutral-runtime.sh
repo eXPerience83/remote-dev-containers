@@ -50,7 +50,11 @@ assert_mode() {
 assert_eq codex "$(env -u REMOTE_DEV_ROLE bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "default role"
 assert_eq launcher "$(env REMOTE_DEV_ROLE=launcher bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "launcher role"
 assert_eq shell "$(env REMOTE_DEV_ROLE=shell bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "shell role"
-assert_eq antigravity "$(env REMOTE_DEV_ROLE=antigravity bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "Antigravity role"
+assert_fails_with 2 "experimental and blocked pending TrueNAS validation" \
+  env REMOTE_DEV_ROLE=antigravity bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
+assert_eq antigravity "$(env REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib")" "explicit experimental Antigravity role"
+assert_fails_with 2 "experimental and blocked pending TrueNAS validation" \
+  env REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=yes bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
 assert_fails_with 2 "reserved but not implemented" env REMOTE_DEV_ROLE=claude bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
 assert_fails_with 2 "unsupported REMOTE_DEV_ROLE" env REMOTE_DEV_ROLE='codex;id' bash -c 'source "$1"; remote_dev_resolve_role' _ "$runtime_lib"
 
