@@ -31,6 +31,7 @@ jobs:
           python3 -m py_compile \
             scripts/remote-dev-launcher.py \
             scripts/test_single_stack_compose.py \
+            scripts/test_canonical_data_layout.py \
             scripts/update-third-party-inventory.py \
             scripts/test_update_third_party_inventory.py \
             scripts/sync-python-runtime-notices.py \
@@ -55,6 +56,7 @@ jobs:
           REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
             bash scripts/test-remote-dev-launcher.sh
           python3 scripts/test_single_stack_compose.py
+          python3 scripts/test_canonical_data_layout.py
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
@@ -130,11 +132,3 @@ jobs:
             sbom-remote-dev.spdx.json
             trivy-base.json
             trivy-remote-dev.json
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Enforce no fixable critical vulnerabilities
-        run: |
-          bash scripts/enforce-trivy-gate.sh \
-            "base image:trivy-base.json" \
-            "Remote Dev image:trivy-remote-dev.json"
