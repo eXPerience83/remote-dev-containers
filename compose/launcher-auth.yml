@@ -14,4 +14,4 @@ services:
 
 secrets:
   launcher_password:
-    file: ${LAUNCHER_PASSWORD_PATH:-./secrets/launcher_password.txt}
+    file: ${LAUNCHER_PASSWORD_PATH:-../secrets/launcher_password.txt}
