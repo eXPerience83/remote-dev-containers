@@ -1,5 +1,9 @@
+x-remote-dev-image: &remote-dev-image ${REMOTE_DEV_IMAGE:-${CODEX_IMAGE:-ghcr.io/experience83/remote-dev:edge-amd64}}
+
 services:
   launcher:
+    image: *remote-dev-image
+
     environment:
       WEB_USERNAME: ${LAUNCHER_USERNAME:-remote-dev}
       WEB_PASSWORD_FILE: /run/secrets/launcher_password
