@@ -88,7 +88,9 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` is the default and maps to `--ask-for-approval never`.
 - `guarded` maps to `--ask-for-approval untrusted`.
 
-The menu starts or resumes Codex with the configured deployment mode and also offers a one-time selection that does not rewrite the permanent setting. The equivalent command-line interface is:
+The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. That selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
+
+The equivalent command-line interface is:
 
 ```bash
 run-codex --approval-mode autonomous
@@ -97,6 +99,8 @@ run-codex --print-policy
 ```
 
 A per-launch selection overrides the deployment value only for that process. Unknown values and raw Codex sandbox/approval overrides are rejected before Codex starts. Arguments after `--` remain literal Codex/prompt arguments.
+
+The upstream Codex TUI also exposes `/permissions`. That command changes the active upstream permission profile inside the running Codex process; it does not set `REMOTE_DEV_CODEX_APPROVAL_MODE` and does not replace Remote Dev's validated autonomous/guarded resolver. Use the Remote Dev menu or deployment variable for the supported default and next-launch behavior.
 
 ### Isolation on TrueNAS
 
@@ -157,10 +161,10 @@ docker compose -f compose/docker-compose.yml up -d
 
 Open the launcher at published port `7680` and select Codex. The browser then opens the independently authenticated terminal on published port `7681`. Inside the Codex menu you can:
 
-1. use Codex device-code login;
-2. use GitHub CLI login;
-3. start or resume with the configured mode;
-4. choose an autonomous or guarded mode for one launch;
+1. start Codex or resume a saved session with the configured deployment mode;
+2. select autonomous or guarded for the next start/resume only;
+3. use Codex device-code login;
+4. use GitHub CLI login;
 5. run diagnostics.
 
 To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
