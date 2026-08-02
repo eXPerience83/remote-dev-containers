@@ -15,10 +15,8 @@ services:
       WEB_BIND: 0.0.0.0
       WEB_PORT: "7680"
       WEB_BASE_PATH: /
-      WEB_USERNAME: remote-dev
-      WEB_PASSWORD_FILE: /run/secrets/launcher_password
       WEB_CHECK_ORIGIN: "1"
-      ALLOW_INSECURE_WEB: "0"
+      ALLOW_INSECURE_WEB: "1"
 
       # Leave host/scheme empty to reuse the browser hostname and scheme.
       REMOTE_DEV_LAUNCHER_CODEX_HOST: ""
@@ -32,9 +30,6 @@ services:
     ports:
       # Replace with the LAN or Tailscale IP of TrueNAS.
       - "192.168.1.10:7680:7680"
-
-    volumes:
-      - /mnt/Pool1/remote-dev/launcher/secrets/launcher_password.txt:/run/secrets/launcher_password:ro
 
     tmpfs:
       - /tmp:size=64m,mode=1777
