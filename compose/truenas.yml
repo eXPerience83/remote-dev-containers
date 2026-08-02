@@ -80,6 +80,9 @@ services:
       # Retained as the independently authenticated Codex endpoint.
       - "192.168.1.10:7681:7681"
 
+    # Before saving this YAML, run scripts/preflight-data-layout.py on the
+    # TrueNAS host with --root /mnt/Pool1/remote-dev. create_host_path is only
+    # defense-in-depth because not every Compose release enforces it reliably.
     volumes:
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/codex
