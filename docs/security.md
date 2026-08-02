@@ -69,7 +69,9 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 # or: guarded
 ```
 
-The menu can select either mode for one new start or resume operation without rewriting the deployment setting. The equivalent validated CLI is:
+The menu exposes fixed start and resume actions plus an approval-mode selector for the next launch. Choosing autonomous or guarded there affects only the next start/resume, is consumed before that process is invoked and then resets to the configured deployment mode. Choosing the configured entry clears a pending override. None of these menu actions rewrite deployment or persistent Codex configuration.
+
+The equivalent validated CLI is:
 
 ```bash
 run-codex --approval-mode autonomous
@@ -83,6 +85,8 @@ Precedence is:
 3. the built-in `autonomous` default.
 
 `run-codex --print-policy`, the menu and diagnostics report the selected project mode, exact upstream approval policy and selection source. Invalid values fail before Codex starts.
+
+The upstream Codex `/permissions` command changes the active upstream permission profile in an already running process. It does not update `REMOTE_DEV_CODEX_APPROVAL_MODE`, does not establish the deployment default and is not a replacement for Remote Dev's fixed autonomous/guarded mappings. Supported new-process policy changes should use the menu selector, deployment variable or validated `run-codex --approval-mode` option.
 
 The command launcher continues to reject raw Codex sandbox/approval flags, shortcut aliases and relevant `config.toml` overrides. Arguments after `--` are passed literally and are not interpreted as project policy controls. Users can still invoke the raw Codex binary manually from a shell, but doing so is outside the supported launcher contract.
 

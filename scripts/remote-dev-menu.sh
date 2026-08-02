@@ -78,22 +78,44 @@ run_diagnostics() {
   read -r -p "Press Enter to continue..." _
 }
 
-selected_codex_mode=""
-choose_codex_mode() {
-  selected_codex_mode=""
+codex_policy_summary() {
+  /usr/local/bin/run-codex --print-policy \
+    | grep -E '^(Codex approval mode|Codex approval policy|Mode source):'
+}
+
+configured_codex_mode=""
+policy_summary=""
+refresh_codex_policy() {
+  policy_summary="$(codex_policy_summary)"
+  configured_codex_mode="$(
+    sed -n 's/^Codex approval mode: //p' <<<"$policy_summary"
+  )"
+  case "$configured_codex_mode" in
+    autonomous|guarded) ;;
+    *)
+      echo "ERROR: unable to resolve the configured Codex approval mode" >&2
+      exit 1
+      ;;
+  esac
+}
+
+next_codex_mode=""
+choose_next_codex_mode() {
   clear
-  cat <<'MENU'
-Select a one-time Codex approval mode
-=====================================
-1) Autonomous — no command confirmations
-2) Guarded — asks for confirmations
-3) Back
+  cat <<MENU
+Approval mode for next launch
+=============================
+1) Use configured mode — ${configured_codex_mode}
+2) Autonomous — no confirmations
+3) Guarded — asks for confirmations
+4) Back
 MENU
   read -r -p "> " choice
   case "$choice" in
-    1) selected_codex_mode=autonomous ;;
-    2) selected_codex_mode=guarded ;;
-    3) return 1 ;;
+    1) next_codex_mode="" ;;
+    2) next_codex_mode=autonomous ;;
+    3) next_codex_mode=guarded ;;
+    4) return 1 ;;
     *)
       sleep 1
       return 1
@@ -101,9 +123,28 @@ MENU
   esac
 }
 
-codex_policy_summary() {
-  /usr/local/bin/run-codex --print-policy \
-    | grep -E '^(Codex approval mode|Codex approval policy|Mode source):'
+next_codex_mode_summary() {
+  if [[ -n "$next_codex_mode" ]]; then
+    printf 'Next launch mode: %s (one launch)\n' "$next_codex_mode"
+  else
+    printf 'Next launch mode: configured (%s)\n' "$configured_codex_mode"
+  fi
+}
+
+run_codex_action() {
+  local label="$1"
+  shift
+  local launch_mode="$next_codex_mode"
+  local -a command=(/usr/local/bin/run-codex)
+
+  next_codex_mode=""
+  if [[ -n "$launch_mode" ]]; then
+    command+=(--approval-mode "$launch_mode")
+    label+=" ($launch_mode)"
+  fi
+  command+=("$@")
+
+  run_interactive_and_harden "$label" "${command[@]}"
 }
 
 if remote-dev-version --check >/dev/null 2>&1; then
@@ -113,61 +154,51 @@ else
 fi
 
 show_codex_menu() {
-  local policy_summary=""
+  local next_mode_summary=""
 
   while true; do
-    policy_summary="$(codex_policy_summary)"
+    refresh_codex_policy
+    next_mode_summary="$(next_codex_mode_summary)"
     clear
     cat <<MENU
 Remote Dev — Codex
 ${version_summary}
 ${policy_summary}
+${next_mode_summary}
 ==================
-1) Start Codex with configured mode
-2) Resume a Codex session with configured mode
-3) Start Codex with a one-time mode
-4) Resume a Codex session with a one-time mode
-5) Sign in to Codex with device code
-6) Sign in to GitHub CLI
-7) Run diagnostics
-8) Open a login shell
-9) Exit this tmux session
+1) Start Codex
+2) Resume a Codex session
+3) Approval mode for next launch...
+4) Sign in to Codex with device code
+5) Sign in to GitHub CLI
+6) Run diagnostics
+7) Open a login shell
+8) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Codex" /usr/local/bin/run-codex; then :; fi
+        if run_codex_action "Codex"; then :; fi
         ;;
       2)
-        if run_interactive_and_harden "Codex resume" /usr/local/bin/run-codex resume; then :; fi
+        if run_codex_action "Codex resume" resume; then :; fi
         ;;
       3)
-        if choose_codex_mode; then
-          if run_interactive_and_harden \
-            "Codex ($selected_codex_mode)" \
-            /usr/local/bin/run-codex --approval-mode "$selected_codex_mode"; then :; fi
-        fi
+        if choose_next_codex_mode; then :; fi
         ;;
       4)
-        if choose_codex_mode; then
-          if run_interactive_and_harden \
-            "Codex resume ($selected_codex_mode)" \
-            /usr/local/bin/run-codex --approval-mode "$selected_codex_mode" resume; then :; fi
-        fi
-        ;;
-      5)
         if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
         ;;
-      6)
+      5)
         if run_github_login; then :; fi
         ;;
-      7)
+      6)
         run_diagnostics
         ;;
-      8)
+      7)
         if run_interactive_and_harden "Login shell" bash --login; then :; fi
         ;;
-      9)
+      8)
         exit 0
         ;;
       *)
