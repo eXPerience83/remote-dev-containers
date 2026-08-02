@@ -76,6 +76,8 @@ The launcher:
 - exposes a secret-free health endpoint;
 - receives no agent workspace, state, OAuth token, GitHub configuration, SSH key or Docker/Podman socket.
 
+The base launcher has no mounts. The optional authentication overlay adds only its dedicated read-only launcher password secret; it never receives an agent password or agent state.
+
 The Codex endpoint uses its own password source and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher.
 
 ## Shared immutable image
@@ -138,9 +140,9 @@ The Codex service receives only these child paths:
 | `state/codex/ssh` | `/root/.ssh` |
 | `secrets/codex/web_password.txt` | `/run/secrets/web_password` |
 
-The launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The base launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-Compose bind mounts set `create_host_path: false`. Required host directories must be created deliberately; an incorrect path fails instead of creating an ambiguous directory.
+Before deployment, `scripts/preflight-data-layout.py` validates that every canonical directory exists, that none is a symlink, and that the password path is a non-empty regular file with restrictive permissions. This host-side preflight is authoritative. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
 
 There is no data-layout compatibility alias, automatic migration, copying, symlink or deletion. Existing experimental directories must be recreated or moved manually before deploying the new stack.
 
@@ -170,15 +172,16 @@ Automated tests cover:
 
 - fixed role/start-mode validation;
 - launcher optional authentication, origin policy, CSP and fixed navigation;
-- launcher absence of mounts and container-engine sockets;
+- launcher absence of agent mounts and container-engine sockets;
 - one image reference across launcher and Codex;
 - exact role-scoped Codex mount targets and canonical source suffixes;
-- failure to create missing bind paths silently;
+- host-side rejection of missing, symlinked or malformed canonical paths;
+- restrictive file-password permissions;
 - absence of legacy data-root names and paths;
 - role-aware health checks;
 - existing Codex start, resume, policy, diagnostics, ttyd and tmux behavior.
 
-Manual TrueNAS validation is performed after the related implementation slices are ready and includes persistence, sessions, credentials, isolation and recreation. Windows/SMB testing remains separate under #71.
+Manual TrueNAS validation is performed after the related implementation slices are ready and includes the host preflight, persistence, sessions, credentials, isolation and recreation. Windows/SMB testing remains separate under #71.
 
 ## Non-goals
 
