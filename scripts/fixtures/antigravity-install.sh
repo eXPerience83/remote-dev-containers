@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-skip_aliases=0
-skip_path=0
-for argument in "$@"; do
-  case "$argument" in
-    --skip-aliases) skip_aliases=1 ;;
-    --skip-path) skip_path=1 ;;
-    *) printf 'unexpected argument: %s\n' "$argument" >&2; exit 2 ;;
+if [[ "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+Usage: install.sh [options]
+Options:
+  -d, --dir <path>    Specify a custom directory to install the binary
+  -h, --help          Display this help menu
+EOF
+  exit 0
+fi
+
+install_dir=""
+while (($#)); do
+  case "$1" in
+    -d|--dir)
+      [[ $# -ge 2 ]] || { printf 'missing directory argument\n' >&2; exit 2; }
+      install_dir="$2"
+      shift 2
+      ;;
+    *)
+      printf 'unexpected argument: %s\n' "$1" >&2
+      exit 2
+      ;;
   esac
 done
 
-if [[ "$skip_aliases" != 1 || "$skip_path" != 1 ]]; then
-  printf 'required safety flags were not supplied\n' >&2
-  exit 3
-fi
-
-install_dir="${HOME}/.local/bin"
+[[ -n "$install_dir" ]] || { printf 'custom install directory required\n' >&2; exit 3; }
 mkdir -p "$install_dir"
 cat >"${install_dir}/agy" <<'EOF'
 #!/usr/bin/env bash
