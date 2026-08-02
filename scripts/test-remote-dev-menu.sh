@@ -65,6 +65,11 @@ fi
   done
   printf ']\n'
 } >> "$REMOTE_DEV_MENU_INVOCATIONS"
+
+if [[ -n "${REMOTE_DEV_MENU_FAIL_ONCE_FILE:-}" && ! -e "$REMOTE_DEV_MENU_FAIL_ONCE_FILE" ]]; then
+  : > "$REMOTE_DEV_MENU_FAIL_ONCE_FILE"
+  exit 42
+fi
 RUN_CODEX
 chmod 0755 "$run_codex"
 
@@ -139,14 +144,14 @@ run_menu() {
       WORKSPACE="$workdir/workspace" \
       REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
       REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-      "$fixture_menu" > "$output_file"
+      "$fixture_menu" > "$output_file" 2>&1
   else
     printf '%s' "$input" | env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" \
       PATH="$bin_dir:$PATH" \
       WORKSPACE="$workdir/workspace" \
       REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
       REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-      "$fixture_menu" > "$output_file"
+      "$fixture_menu" > "$output_file" 2>&1
   fi
 }
 
@@ -204,3 +209,16 @@ assert_file_lines 'configured-mode reset before launch' '[]'
 assert_hardening_count 1
 
 echo 'Configured-mode reset: OK'
+
+fail_once="$workdir/fail-once"
+rm -f "$fail_once"
+export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
+run_menu __unset__ $'3\n3\n1\n\n1\n8\n' "$output"
+unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
+assert_file_lines 'failed override then configured retry' \
+  '[--approval-mode][guarded]' \
+  '[]'
+assert_hardening_count 2
+grep -Fq 'ERROR: Codex (guarded) exited with status 42' "$output"
+
+echo 'Failed one-launch override consumption: OK'
