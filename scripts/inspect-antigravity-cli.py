@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Inspect the official Antigravity CLI installer in an ephemeral home directory.
 
-The script intentionally records only metadata, hashes, paths and bounded command
-output. It never copies the installer or installed Antigravity binary into the
-repository or the generated report.
+The script records only metadata, hashes, paths and bounded command output. It
+never copies the installer or installed Antigravity binary into the repository
+or generated report.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def snapshot(root: Path) -> list[dict[str, Any]]:
 
 
 def profile_snapshot(home: Path) -> dict[str, dict[str, Any] | None]:
-    """Fingerprint the shell profiles the vendor flags promise not to modify."""
+    """Fingerprint shell profiles that the installer must not modify."""
     result: dict[str, dict[str, Any] | None] = {}
     for relative in PROFILE_FILES:
         path = home / relative
@@ -131,7 +131,7 @@ def bounded_lines(text: str, limit: int = 40) -> list[str]:
     return lines
 
 
-def download_installer(destination: Path) -> tuple[bytes, str | None]:
+def download_installer(destination: Path) -> tuple[bytes, str | None, str]:
     """Download the installer from the fixed official HTTPS endpoint."""
     request = urllib.request.Request(
         OFFICIAL_INSTALLER_URL,
@@ -146,18 +146,18 @@ def download_installer(destination: Path) -> tuple[bytes, str | None]:
             if len(data) > 2 * 1024 * 1024:
                 raise RuntimeError("installer exceeds the 2 MiB inspection limit")
             destination.write_bytes(data)
-            return data, response.headers.get_content_type()
+            return data, response.headers.get_content_type(), final_url
     except (OSError, urllib.error.URLError) as error:
         raise RuntimeError(f"cannot download official installer: {error}") from error
 
 
-def load_local_installer(source: Path, destination: Path) -> tuple[bytes, str | None]:
+def load_local_installer(source: Path, destination: Path) -> tuple[bytes, str | None, str]:
     """Copy a local fixture for offline regression tests only."""
     data = source.read_bytes()
     if len(data) > 2 * 1024 * 1024:
         raise RuntimeError("local installer fixture exceeds the 2 MiB limit")
     destination.write_bytes(data)
-    return data, mimetypes.guess_type(source.name)[0]
+    return data, mimetypes.guess_type(source.name)[0], f"fixture:{source.name}"
 
 
 def command_metadata(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
@@ -234,6 +234,37 @@ def inspection_environment(home: Path) -> dict[str, str]:
     }
 
 
+def choose_install_command(
+    installer: Path,
+    installer_help: subprocess.CompletedProcess[str],
+    home: Path,
+) -> tuple[str, list[str], dict[str, bool]]:
+    """Choose only a vendor-advertised installation strategy."""
+    help_text = f"{installer_help.stdout}\n{installer_help.stderr}"
+    supported = {
+        "custom_directory": "--dir" in help_text,
+        "skip_aliases": "--skip-aliases" in help_text,
+        "skip_path": "--skip-path" in help_text,
+    }
+    base = ["/bin/bash", str(installer)]
+    if supported["custom_directory"]:
+        return (
+            "custom-directory",
+            [*base, "--dir", str(home / EXPECTED_BINARY.parent)],
+            supported,
+        )
+    if supported["skip_aliases"] and supported["skip_path"]:
+        return (
+            "skip-shell-modification-flags",
+            [*base, "--skip-aliases", "--skip-path"],
+            supported,
+        )
+    raise RuntimeError(
+        "installer help exposes neither --dir nor the documented pair "
+        "--skip-aliases/--skip-path"
+    )
+
+
 def inspect(installer_fixture: Path | None) -> dict[str, Any]:
     """Perform one complete installation and idempotent-update inspection."""
     with tempfile.TemporaryDirectory(prefix="antigravity-inspection-") as temporary:
@@ -242,11 +273,13 @@ def inspect(installer_fixture: Path | None) -> dict[str, Any]:
         home.mkdir(mode=0o700)
         installer = root / "install.sh"
         if installer_fixture is None:
-            installer_data, content_type = download_installer(installer)
+            installer_data, content_type, final_url = download_installer(installer)
             installer_source = OFFICIAL_INSTALLER_URL
         else:
-            installer_data, content_type = load_local_installer(installer_fixture, installer)
-            installer_source = f"fixture:{installer_fixture.name}"
+            installer_data, content_type, final_url = load_local_installer(
+                installer_fixture, installer
+            )
+            installer_source = final_url
         installer.chmod(0o700)
 
         installer_text = installer_data.decode("utf-8", errors="replace")
@@ -255,14 +288,17 @@ def inspect(installer_fixture: Path | None) -> dict[str, Any]:
         if syntax.returncode != 0:
             raise RuntimeError(f"installer is not valid Bash: {syntax.stderr}")
 
+        installer_help = run(
+            ["/bin/bash", str(installer), "--help"], env=env, cwd=root, timeout=30
+        )
+        if installer_help.returncode != 0:
+            raise RuntimeError("installer --help failed")
+        strategy, install_command, supported_options = choose_install_command(
+            installer, installer_help, home
+        )
+
         before_profiles = profile_snapshot(home)
         before = snapshot(home)
-        install_command = [
-            "/bin/bash",
-            str(installer),
-            "--skip-aliases",
-            "--skip-path",
-        ]
         first_install = run(install_command, env=env, cwd=root, timeout=300)
         after_first = snapshot(home)
         after_first_profiles = profile_snapshot(home)
@@ -285,12 +321,18 @@ def inspect(installer_fixture: Path | None) -> dict[str, Any]:
             },
             "installer": {
                 "source": installer_source,
+                "final_url": final_url,
                 "content_type": content_type,
                 "size": len(installer_data),
                 "sha256": sha256_bytes(installer_data),
                 "bash_syntax": command_metadata(syntax),
-                "mentions_skip_aliases": "--skip-aliases" in installer_text,
-                "mentions_skip_path": "--skip-path" in installer_text,
+                "help": command_metadata(installer_help),
+                "supported_options": supported_options,
+                "selected_strategy": strategy,
+                "selected_arguments": install_command[2:],
+                "text_mentions_skip_aliases": "--skip-aliases" in installer_text,
+                "text_mentions_skip_path": "--skip-path" in installer_text,
+                "text_mentions_custom_directory": "--dir" in installer_text,
                 "referenced_https_hosts": referenced_hosts(installer_text),
             },
             "first_install": command_metadata(first_install),
@@ -325,6 +367,15 @@ def validate_report(report: dict[str, Any], *, fixture: bool) -> list[str]:
     installer = report["installer"]
     if not fixture and installer["source"] != OFFICIAL_INSTALLER_URL:
         errors.append("inspection did not use the fixed official installer URL")
+    if not fixture and not str(installer["final_url"]).startswith("https://"):
+        errors.append("official installer resolved to a non-HTTPS URL")
+    if installer["help"]["exit_code"] != 0:
+        errors.append("installer --help failed")
+    if installer["selected_strategy"] not in {
+        "custom-directory",
+        "skip-shell-modification-flags",
+    }:
+        errors.append("no supported safe installation strategy was selected")
     if report["first_install"]["exit_code"] != 0:
         errors.append("first installer execution failed")
     if report["second_install"]["exit_code"] != 0:
@@ -332,13 +383,9 @@ def validate_report(report: dict[str, Any], *, fixture: bool) -> list[str]:
     if not report["expected_binary_present"]:
         errors.append(f"expected executable was not installed at ~/{EXPECTED_BINARY}")
     if not report["profiles"]["unchanged_after_first"]:
-        errors.append("shell profiles changed despite --skip-aliases and --skip-path")
+        errors.append("shell profiles changed during first installation")
     if not report["profiles"]["unchanged_after_second"]:
         errors.append("shell profiles changed during the second installer run")
-    if not installer["mentions_skip_aliases"]:
-        errors.append("installer text does not expose --skip-aliases")
-    if not installer["mentions_skip_path"]:
-        errors.append("installer text does not expose --skip-path")
     binary = report["binary_after_second"]
     if isinstance(binary, dict) and binary["version"]["exit_code"] != 0:
         errors.append("installed executable does not support a successful --version check")
