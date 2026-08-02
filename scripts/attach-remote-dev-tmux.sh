@@ -29,12 +29,12 @@ case "$start_mode" in
     printf -v quoted_workspace '%q' "$workspace"
     case "$role" in
       codex)
-        printf -v quoted_agent_binary '%q' "$run_codex_binary"
-        session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_agent_binary"
+        printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
+        session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
         ;;
       antigravity)
-        printf -v quoted_agent_binary '%q' "$run_antigravity_binary"
-        session_command="cd $quoted_workspace && exec $quoted_agent_binary"
+        printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
+        session_command="cd $quoted_workspace && exec $quoted_run_antigravity_binary"
         ;;
       *)
         echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2
