@@ -2,8 +2,8 @@
 set -euo pipefail
 
 readonly OFFICIAL_INSTALLER_URL="https://antigravity.google/cli/install.sh"
-readonly ANTIGRAVITY_PATHS_LIB=/usr/local/lib/remote-dev/antigravity-paths.sh
-readonly ANTIGRAVITY_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
+readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
 cleanup_root=""
 cleanup() {
@@ -38,19 +38,11 @@ recovery_hint() {
   printf 'Remove %s and %s, then run remote-dev-install-antigravity.\n' "$binary" "$manifest" >&2
 }
 
-is_testing() {
-  [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]
-}
-
 require_antigravity_role() {
-  if is_testing; then
-    return 0
-  fi
-
-  [[ -f "$ANTIGRAVITY_RUNTIME_LIB" && -r "$ANTIGRAVITY_RUNTIME_LIB" && ! -L "$ANTIGRAVITY_RUNTIME_LIB" ]] \
-    || fail "Remote Dev role definitions are unavailable: $ANTIGRAVITY_RUNTIME_LIB"
+  [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
+    || fail "Remote Dev role definitions are unavailable: $runtime_lib"
   # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
-  source "$ANTIGRAVITY_RUNTIME_LIB"
+  source "$runtime_lib"
 
   local resolved_role=""
   resolved_role="$(remote_dev_resolve_role)" || exit $?
@@ -62,29 +54,20 @@ require_antigravity_role() {
 }
 
 load_canonical_paths() {
-  [[ -f "$ANTIGRAVITY_PATHS_LIB" && -r "$ANTIGRAVITY_PATHS_LIB" && ! -L "$ANTIGRAVITY_PATHS_LIB" ]] \
-    || fail "canonical Antigravity path definitions are unavailable: $ANTIGRAVITY_PATHS_LIB"
+  [[ -f "$paths_lib" && -r "$paths_lib" && ! -L "$paths_lib" ]] \
+    || fail "canonical Antigravity path definitions are unavailable: $paths_lib"
   # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
-  source "$ANTIGRAVITY_PATHS_LIB"
+  source "$paths_lib"
 }
 
 resolve_paths() {
-  if is_testing; then
-    evidence="${REMOTE_DEV_ANTIGRAVITY_EVIDENCE:?test evidence path is required}"
-    bin_dir="${REMOTE_DEV_ANTIGRAVITY_BIN_DIR:?test binary directory is required}"
-    state_dir="${REMOTE_DEV_ANTIGRAVITY_STATE_DIR:?test state directory is required}"
-    vendor_state_dir="${REMOTE_DEV_ANTIGRAVITY_VENDOR_STATE_DIR:?test vendor state directory is required}"
-    binary="$bin_dir/agy"
-    manifest="$state_dir/install.json"
-  else
-    load_canonical_paths
-    evidence="$ANTIGRAVITY_EVIDENCE"
-    bin_dir="$ANTIGRAVITY_BIN_DIR"
-    state_dir="$ANTIGRAVITY_STATE_DIR"
-    vendor_state_dir="$ANTIGRAVITY_VENDOR_STATE_DIR"
-    binary="$ANTIGRAVITY_BINARY"
-    manifest="$ANTIGRAVITY_MANIFEST"
-  fi
+  load_canonical_paths
+  evidence="$ANTIGRAVITY_EVIDENCE"
+  bin_dir="$ANTIGRAVITY_BIN_DIR"
+  state_dir="$ANTIGRAVITY_STATE_DIR"
+  vendor_state_dir="$ANTIGRAVITY_VENDOR_STATE_DIR"
+  binary="$ANTIGRAVITY_BINARY"
+  manifest="$ANTIGRAVITY_MANIFEST"
 }
 
 require_absolute_safe_path() {
@@ -121,14 +104,12 @@ validate_paths() {
   require_absolute_safe_path "binary path" "$binary"
   require_absolute_safe_path "manifest path" "$manifest"
 
-  if ! is_testing; then
-    [[ "$evidence" == "$ANTIGRAVITY_EVIDENCE" ]] || fail "production evidence path changed"
-    [[ "$bin_dir" == "$ANTIGRAVITY_BIN_DIR" ]] || fail "production binary directory changed"
-    [[ "$state_dir" == "$ANTIGRAVITY_STATE_DIR" ]] || fail "production state directory changed"
-    [[ "$vendor_state_dir" == "$ANTIGRAVITY_VENDOR_STATE_DIR" ]] || fail "production vendor state directory changed"
-    [[ "$binary" == "$ANTIGRAVITY_BINARY" ]] || fail "production binary path changed"
-    [[ "$manifest" == "$ANTIGRAVITY_MANIFEST" ]] || fail "production manifest path changed"
-  fi
+  [[ "$evidence" == "$ANTIGRAVITY_EVIDENCE" ]] || fail "production evidence path changed"
+  [[ "$bin_dir" == "$ANTIGRAVITY_BIN_DIR" ]] || fail "production binary directory changed"
+  [[ "$state_dir" == "$ANTIGRAVITY_STATE_DIR" ]] || fail "production state directory changed"
+  [[ "$vendor_state_dir" == "$ANTIGRAVITY_VENDOR_STATE_DIR" ]] || fail "production vendor state directory changed"
+  [[ "$binary" == "$ANTIGRAVITY_BINARY" ]] || fail "production binary path changed"
+  [[ "$manifest" == "$ANTIGRAVITY_MANIFEST" ]] || fail "production manifest path changed"
 
   reject_symlink_components "$bin_dir"
   reject_symlink_components "$state_dir"
@@ -340,12 +321,8 @@ confirm_vendor_download() {
   fi
 
   local answer=""
-  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM:-}" ]]; then
-    answer="$REMOTE_DEV_ANTIGRAVITY_TEST_CONFIRM"
-  else
-    [[ -t 0 ]] || fail "$action requires an interactive confirmation or the explicit --yes option"
-    read -r -p "Continue with $action? [y/N] " answer
-  fi
+  [[ -t 0 ]] || fail "$action requires an interactive confirmation or the explicit --yes option"
+  read -r -p "Continue with $action? [y/N] " answer
 
   case "$answer" in
     y|Y|yes|YES) ;;
@@ -355,24 +332,20 @@ confirm_vendor_download() {
 
 download_installer() {
   local destination="$1"
-  if is_testing && [[ -n "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE:-}" ]]; then
-    cp -- "${REMOTE_DEV_ANTIGRAVITY_INSTALLER_FIXTURE}" "$destination"
-  else
-    curl \
-      --proto '=https' \
-      --proto-redir '=https' \
-      --tlsv1.2 \
-      --fail \
-      --silent \
-      --show-error \
-      --location \
-      --retry 3 \
-      --retry-all-errors \
-      --connect-timeout 10 \
-      --max-time 300 \
-      "$OFFICIAL_INSTALLER_URL" \
-      --output "$destination"
-  fi
+  curl \
+    --proto '=https' \
+    --proto-redir '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --retry 3 \
+    --retry-all-errors \
+    --connect-timeout 10 \
+    --max-time 300 \
+    "$OFFICIAL_INSTALLER_URL" \
+    --output "$destination"
   chmod 0700 "$destination"
   verify_file_identity "Antigravity installer" "$destination" "$expected_installer_size" "$expected_installer_sha"
   /bin/bash -n "$destination" || fail "reviewed Antigravity installer is not valid Bash"
