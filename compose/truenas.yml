@@ -81,12 +81,37 @@ services:
       - "192.168.1.10:7681:7681"
 
     volumes:
-      - /mnt/Pool1/codex/workspace:/workspace
-      - /mnt/Pool1/codex/config:/root/.codex
-      - /mnt/Pool1/codex/gh:/root/.config/gh
-      - /mnt/Pool1/codex/git:/root/.config/git
-      - /mnt/Pool1/codex/ssh:/root/.ssh
-      - /mnt/Pool1/codex/secrets/web_password.txt:/run/secrets/web_password:ro
+      - type: bind
+        source: /mnt/Pool1/remote-dev/workspaces/codex
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/agent
+        target: /root/.codex
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
+        target: /run/secrets/web_password
+        read_only: true
+        bind:
+          create_host_path: false
 
     tmpfs:
       - /tmp:size=512m,mode=1777
