@@ -58,7 +58,7 @@ Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El laun
 
 El terminal Codex se autentica de manera independiente mediante su propio secreto. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
 
-La autenticación Basic del launcher sigue siendo opcional en el Compose genérico mediante `LAUNCHER_PASSWORD` y `LAUNCHER_ALLOW_INSECURE_WEB=0`. No es necesaria para el ejemplo doméstico de TrueNAS en una LAN o a través de Tailscale.
+La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante el override separado y respaldado por secreto `compose/launcher-auth.yml`. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña, secreto, mount ni dataset del launcher.
 
 Las rutas configuradas se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Esta fase todavía no cambia las rutas persistentes actuales, no migra `CODEX_DATA_ROOT`, no añade Antigravity/Claude y no incorpora un proxy de origen único.
 
@@ -122,6 +122,19 @@ docker compose -f compose/docker-compose.yml up -d
 2. Pulsa Codex.
 3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
 4. Desde el menú realiza el login de Codex/GitHub, inicia o reanuda sesiones y ejecuta diagnósticos.
+
+Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
+
+```bash
+printf '%s\n' 'contraseña-distinta-del-launcher' > secrets/launcher_password.txt
+chmod 600 secrets/launcher_password.txt
+docker compose \
+  -f compose/docker-compose.yml \
+  -f compose/launcher-auth.yml \
+  up -d
+```
+
+El override monta el valor como secreto Compose en `/run/secrets/launcher_password`; no incluye la contraseña en el entorno renderizado y no sustituye ni reutiliza la contraseña del terminal Codex.
 
 ## Prueba pública de la imagen edge
 
