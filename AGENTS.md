@@ -52,15 +52,15 @@ The supported TrueNAS isolation boundary is the outer container. Approval prompt
 - Keep product-specific variables such as `CODEX_HOME` inside the Codex role.
 - Keep one canonical implementation. Compatibility commands must be thin wrappers around the canonical command, not copied implementations.
 - Preserve command exit status and run persistent-state hardening after supported interactive sessions.
-- Preserve ttyd authentication, origin checking, tmux reconnect behavior, image identity checks, and existing Codex login/start/resume behavior.
+- Preserve mandatory ttyd authentication for agent terminals, origin checking for all web endpoints, tmux reconnect behavior, image identity checks, and existing Codex login/start/resume behavior.
 
 ### Launcher rules
 
 - `REMOTE_DEV_ROLE=launcher` is navigation only. It must not execute an agent or relay/proxy agent terminal HTTP or WebSocket traffic unless a later PR has an explicit threat-model review.
 - The launcher may link only to fixed, validated services declared by the stack.
-- Keep launcher authentication, origin checks, CSP, method restrictions and secret-free health behavior covered by tests.
+- Keep the unauthenticated private-network default, optional launcher authentication, origin checks, CSP, method restrictions and secret-free health behavior covered by tests.
 - Never embed credentials in launcher URLs, HTML, JavaScript, logs or diagnostics.
-- The launcher service may receive only its web-auth/routing configuration and web-password secret. It must not receive agent workspaces, agent state, GitHub/Git/SSH mounts or the Docker socket.
+- By default the launcher service receives only its web/routing configuration and no password secret. A deployment may explicitly enable optional launcher authentication, but the launcher must never receive agent workspaces, agent state, GitHub/Git/SSH mounts, agent secrets or the Docker socket.
 - Launcher and agent services must use the same final image reference/digest while retaining separate container roles and state boundaries.
 
 ## Boundaries for issue #25
@@ -82,14 +82,14 @@ Run the narrowest relevant tests during development and the repository's complet
 
 - role and start-mode validation;
 - compatibility-wrapper equivalence;
-- launcher authentication, origin policy, CSP and fixed navigation;
+- launcher unauthenticated-default behavior, optional authentication, origin policy, CSP and fixed navigation;
 - launcher absence of agent mounts and Docker socket;
 - launcher and Codex same-image reference/ID;
 - role-aware health checks;
 - Codex version and fixed launch policy;
 - start, resume, device-code login paths, and direct-session exit status;
 - post-session credential hardening;
-- ttyd authentication and origin checking;
+- mandatory ttyd authentication for agent terminals and origin checking;
 - persistent and concurrent tmux attachment;
 - embedded image version and source revision;
 - bundled notices, SBOM generation, Trivy, and the no-fixable-critical gate.
