@@ -14,9 +14,8 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 The current edge stack is the Codex reference implementation:
 
 - one Remote Dev image reused by the launcher and Codex services;
-- one authenticated launcher as the normal browser entry point;
-- one isolated Codex terminal service with its existing private mounts;
-- separate web credentials for the launcher and Codex terminal;
+- one stateless launcher as the normal browser entry point, without authentication by default;
+- one isolated, independently authenticated Codex terminal service with its existing private mounts;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset;
@@ -67,11 +66,13 @@ Remote Dev stack
 └── codex     → authenticated terminal port 7681
 ```
 
-The launcher page is protected with HTTP Basic authentication, checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
+The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
 
 Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts or Codex terminal password.
 
-The Codex endpoint authenticates independently with a different mounted secret. In a normal browser session this can produce a second authentication challenge after entering the launcher. That is deliberate in the redirect-based design: credentials are not embedded in the link, passed through the launcher or shared between services.
+The Codex endpoint authenticates independently with its own mounted secret. Credentials are not embedded in the link, passed through the launcher or shared between services.
+
+Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
 
 Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
 
@@ -143,13 +144,10 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 ```bash
 cp .env.example .env
 mkdir -p secrets data/{workspace,codex,gh,git,ssh}
-printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
-printf '%s\n' 'replace-with-a-different-codex-password' > secrets/web_password.txt
-chmod 600 secrets/launcher_password.txt secrets/web_password.txt
+printf '%s\n' 'replace-with-a-codex-password' > secrets/web_password.txt
+chmod 600 secrets/web_password.txt
 ./scripts/build-local.sh
 ```
-
-Use distinct passwords. The launcher must not be able to authenticate to the Codex terminal by reading its own secret.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
@@ -157,7 +155,7 @@ Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REM
 docker compose -f compose/docker-compose.yml up -d
 ```
 
-Open the launcher at the published port `7680`, authenticate with `LAUNCHER_USERNAME`, and select Codex. The browser then opens the independently authenticated terminal on published port `7681`. Inside the Codex menu you can:
+Open the launcher at published port `7680` and select Codex. The browser then opens the independently authenticated terminal on published port `7681`. Inside the Codex menu you can:
 
 1. use Codex device-code login;
 2. use GitHub CLI login;
@@ -165,7 +163,18 @@ Open the launcher at the published port `7680`, authenticate with `LAUNCHER_USER
 4. choose an autonomous or guarded mode for one launch;
 5. run diagnostics.
 
-The default usernames differ (`remote-dev` for the launcher and `codex` for the terminal), and the two services mount different password files.
+To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
+
+```bash
+printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
+chmod 600 secrets/launcher_password.txt
+docker compose \
+  -f compose/docker-compose.yml \
+  -f compose/launcher-auth.yml \
+  up -d
+```
+
+The override mounts that value as a Compose secret at `/run/secrets/launcher_password`; it does not place the password in the rendered service environment and it does not replace or reuse the Codex terminal password.
 
 ## Public edge testing
 
@@ -216,7 +225,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 ## Important warnings
 
 - Do not publish ports 7680 or 7681 directly to the Internet.
-- The launcher and Codex terminal authenticate independently with different mounted secrets.
+- The unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale address.
+- The Codex terminal remains independently authenticated.
 - The launcher never embeds, forwards or mounts the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces or credentials into the launcher.

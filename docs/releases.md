@@ -24,10 +24,10 @@ The canonical `remote-dev` package is public and is the deployment default. Gene
 
 The current stack instantiates the same image reference twice:
 
-- `launcher`, the primary authenticated browser entry on port 7680;
+- `launcher`, the stateless primary browser entry on port 7680, unauthenticated by default on localhost/LAN/Tailscale deployments;
 - `codex`, the independently authenticated ttyd endpoint on port 7681.
 
-The launcher navigates to Codex and does not proxy terminal traffic. Its service receives no agent workspace or credential mounts. The Codex service retains the existing `CODEX_DATA_ROOT` layout until the later migration slice.
+The launcher navigates to Codex and does not proxy terminal traffic. Its normal service receives no password, agent workspace or credential mounts. Advanced generic Compose deployments may enable optional launcher Basic authentication with the separate file-backed `compose/launcher-auth.yml` override; the secret value is not rendered into the service environment. The Codex service retains the existing `CODEX_DATA_ROOT` layout until the later migration slice.
 
 The `codex-remote-dev` compatibility package and `CODEX_IMAGE` variable remain supported throughout `v0.1.x` and will not be removed before `v0.2.0`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set. A deprecation notice must appear in release notes before removal.
 
@@ -72,17 +72,19 @@ Before creating a stable version tag:
 4. The stack has been deployed on TrueNAS from an exact published digest.
 5. Docker reports launcher and Codex using the same image digest.
 6. The TrueNAS portal opens the launcher on port 7680.
-7. Launcher authentication, origin behavior, CSP and refresh have been verified in a real browser.
-8. Selecting Codex navigates to the independent authenticated endpoint on port 7681 without exposing credentials in the URL.
-9. The launcher has no Codex workspace, agent, GitHub, Git or SSH mounts and no Docker socket.
-10. Codex browser access, authentication and tmux reconnection have been verified.
-11. Codex device-code login persists across recreation.
-12. GitHub CLI login, clone, push and pull-request creation have been verified.
-13. The fixed sandbox and both Codex approval modes have been tested on the target TrueNAS host.
-14. Changing the permanent approval setting affects subsequent sessions without silently changing an already running Codex process; a one-launch selection affects only that launch.
-15. The changelog has a dated release section.
-16. Third-party licenses and notices are complete.
-17. The repository contains no credentials, personal paths or private infrastructure details.
+7. The default launcher opens without a second authentication challenge on a trusted LAN/Tailscale deployment, preserves origin/CSP behavior and survives refresh.
+8. Optional launcher Basic authentication works through `compose/launcher-auth.yml`, uses exactly one file-backed launcher secret and does not expose its value in rendered Compose configuration.
+9. Selecting Codex navigates to the independent authenticated endpoint on port 7681 without exposing credentials in the URL.
+10. The launcher has no Codex workspace, agent, GitHub, Git or SSH mounts and no Docker/Podman socket.
+11. Neither service uses host networking, privileged mode or added capabilities.
+12. Codex browser access, authentication and tmux reconnection have been verified.
+13. Codex device-code login persists across recreation.
+14. GitHub CLI login, clone, push and pull-request creation have been verified.
+15. The fixed sandbox and both Codex approval modes have been tested on the target TrueNAS host.
+16. Changing the permanent approval setting affects subsequent sessions without silently changing an already running Codex process; a one-launch selection affects only that launch.
+17. The changelog has a dated release section.
+18. Third-party licenses and notices are complete.
+19. The repository contains no credentials, personal paths or private infrastructure details.
 
 The persistent-data migration and later cross-service hardening/canary work remain separate release gates before the architecture is described as complete.
 

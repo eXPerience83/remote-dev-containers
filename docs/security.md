@@ -6,11 +6,11 @@ This is a single-user development appliance, not a multi-tenant service.
 
 The Codex container intentionally runs as root. Root is constrained to that container and to the paths mounted into it. Any person who reaches the Codex terminal can operate everything accessible to that service.
 
-The launcher container starts with UID 0 only long enough to read its root-readable password secret. Before binding its HTTP server or accepting requests, the launcher clears supplementary groups and drops permanently to UID/GID `65532`. Automated tests verify the effective serving UID. The launcher has no agent-state mounts, so this startup step does not grant access to Codex data.
+The launcher container starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server or accepting requests, the launcher clears supplementary groups and drops permanently to UID/GID `65532`. Automated tests verify the effective serving UID. The launcher has no agent-state mounts, so this startup step does not grant access to Codex data.
 
 ## Launcher boundary
 
-The supported stack starts an authenticated launcher service and an independently authenticated Codex service from the same immutable image. Sharing image layers does not share mutable state or credentials.
+The supported stack starts a stateless launcher service and an independently authenticated Codex service from the same immutable image. Sharing image layers does not share mutable state or credentials.
 
 The launcher:
 
@@ -19,16 +19,17 @@ The launcher:
 - receives no Docker or Podman socket and performs no container-management operation;
 - serves only a fixed navigation page for reviewed, declared services;
 - does not relay or proxy the Codex terminal's HTTP or WebSocket traffic;
-- uses HTTP Basic authentication from its own mounted launcher-password secret;
+- requires no password by default on localhost/LAN/Tailscale deployments;
+- supports optional HTTP Basic authentication only through the separate file-backed `compose/launcher-auth.yml` override in the generic Compose deployment;
 - validates DNS names and IP literals and rejects a destination host containing an embedded port;
 - restricts configured paths to safe RFC 3986 URL-path characters before embedding them into the page;
 - checks that an `Origin` header, when present, matches the request host;
 - sends a restrictive Content Security Policy and rejects state-changing HTTP methods;
 - exposes an unauthenticated, secret-free health endpoint.
 
-The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The Codex endpoint uses a separate mounted password secret, authenticates independently and may produce a second browser challenge.
+The launcher calculates the Codex URL from validated fixed routing values and, by default, the browser's current hostname and scheme. It never embeds a password or forwards an Authorization header. The optional launcher password is exposed to the container only as `/run/secrets/launcher_password`; it is not copied into the rendered service environment. The Codex endpoint uses its own mounted password secret and authenticates independently.
 
-Port `7680` is the normal launcher entry point. Port `7681` remains the direct Codex endpoint used after navigation and for troubleshooting. Neither port should be exposed directly to the public Internet.
+Port `7680` is the normal launcher entry point. Port `7681` remains the direct Codex endpoint used after navigation and for troubleshooting. Neither port should be exposed directly to the public Internet. An unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale/WireGuard address.
 
 ## Supported Codex isolation boundary
 
@@ -43,12 +44,13 @@ Separate future agent services must receive separate narrow mounts and separate 
 ## Required controls
 
 - Do not expose ports 7680 or 7681 directly to the public Internet.
-- Use LAN, Tailscale, WireGuard, or an explicitly reviewed authenticated HTTPS design.
-- Configure different strong passwords for launcher and Codex through their separate mounted secret files.
-- Keep launcher and agent authentication independent; never place credentials in navigation URLs.
+- Bind the default unauthenticated launcher only to localhost, a trusted LAN address, Tailscale or WireGuard.
+- Keep the Codex terminal independently authenticated with a strong password.
+- Optional launcher authentication must use a password different from every agent password and the file-backed Compose override rather than a plaintext service environment value.
+- Never place credentials in navigation URLs or rendered Compose environment output.
 - Never mount an agent password, state or workspace into the launcher.
 - Never mount Docker or Podman sockets, including `/var/run/docker.sock` or `/run/docker.sock`.
-- Never use `privileged: true`, host PID, or host networking.
+- Never use `privileged: true`, host PID, host networking or added capabilities.
 - Mount only the documented persistent directories into the Codex service.
 - Treat `/root/.codex/auth.json`, GitHub credentials and SSH keys as secrets.
 - Keep `no-new-privileges:true` enabled on both services.
