@@ -37,7 +37,8 @@ Codex route host: ${REMOTE_DEV_LAUNCHER_CODEX_HOST:-browser hostname}
 Codex route port: ${REMOTE_DEV_LAUNCHER_CODEX_PORT:-7681}
 Codex route scheme: ${REMOTE_DEV_LAUNCHER_CODEX_SCHEME:-browser scheme}
 Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
-Available roles: launcher, codex, antigravity, shell
+Available roles: launcher, codex, shell
+Experimental gated role: antigravity (requires REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1)
 EOF_LAUNCHER
 else
   cat <<EOF_AGENT
@@ -137,12 +138,13 @@ if [[ "$role" == codex ]]; then
   fi
 elif [[ "$role" == antigravity ]]; then
   echo
-  antigravity_status="$(remote-dev-antigravity status --menu 2>&1)"
-  antigravity_status_code=$?
+  antigravity_status_code=0
+  antigravity_status="$(remote-dev-antigravity status --menu 2>&1)" || antigravity_status_code=$?
   echo "$antigravity_status"
   if (( antigravity_status_code != 0 && antigravity_status_code != 3 )); then
     status=1
   fi
+  echo 'Antigravity support status: experimental validation only; not yet a supported integration.'
   echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
   echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'
   echo 'Antigravity authentication: managed only by the official Google client.'
