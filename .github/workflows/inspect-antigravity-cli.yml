@@ -34,10 +34,16 @@ jobs:
       - name: Inspect official installer and installed package
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
+          STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
         run: |
+          set +e
           python3 scripts/inspect-antigravity-cli.py --output "$REPORT_PATH"
+          status=$?
+          printf '%s\n' "$status" > "$STATUS_PATH"
+          exit 0
 
       - name: Verify report contains metadata only
+        if: always()
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
         run: |
@@ -48,17 +54,36 @@ jobs:
 
           path = Path(os.environ["REPORT_PATH"])
           report = json.loads(path.read_text(encoding="utf-8"))
-          assert report["blocking_findings"] == []
-          assert report["expected_binary_present"] is True
+          assert report["schema_version"] == 1
           assert "content" not in json.dumps(report).lower()
           assert path.stat().st_size < 2 * 1024 * 1024
           print("Antigravity evidence is bounded metadata only")
           PY
 
       - name: Upload bounded inspection evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: antigravity-cli-inspection
-          path: ${{ runner.temp }}/antigravity-cli-inspection.json
+          path: |
+            ${{ runner.temp }}/antigravity-cli-inspection.json
+            ${{ runner.temp }}/antigravity-cli-inspection.status
           if-no-files-found: error
           retention-days: 14
+
+      - name: Enforce successful inspection
+        env:
+          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
+          STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
+        run: |
+          test "$(cat "$STATUS_PATH")" = "0"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["REPORT_PATH"]).read_text(encoding="utf-8"))
+          assert report["blocking_findings"] == [], report["blocking_findings"]
+          assert report["expected_binary_present"] is True
+          print("Official Antigravity installer inspection passed")
+          PY
