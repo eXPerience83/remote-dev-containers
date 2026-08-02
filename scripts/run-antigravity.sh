@@ -4,7 +4,9 @@ set -euo pipefail
 readonly DEFAULT_MANAGER=/usr/local/bin/remote-dev-antigravity
 readonly DEFAULT_SECURE_STATE=/usr/local/bin/secure-persistent-state
 
+testing=0
 if [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]; then
+  testing=1
   manager="${REMOTE_DEV_ANTIGRAVITY_MANAGER:-$DEFAULT_MANAGER}"
   secure_state="${REMOTE_DEV_SECURE_STATE:-$DEFAULT_SECURE_STATE}"
 else
@@ -46,7 +48,11 @@ case "$workspace" in
     exit 2
     ;;
 esac
-[[ -d "$workspace" ]] || { echo "ERROR: WORKSPACE does not exist: $workspace" >&2; exit 2; }
+if (( testing == 1 )); then
+  mkdir -p "$workspace"
+else
+  [[ -d "$workspace" ]] || { echo "ERROR: WORKSPACE does not exist: $workspace" >&2; exit 2; }
+fi
 
 current="$workspace"
 previous=""
