@@ -28,21 +28,30 @@ done
 
 [[ -n "$install_dir" ]] || { printf 'custom install directory required\n' >&2; exit 3; }
 mkdir -p "$install_dir"
-cat >"${install_dir}/agy" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-case "${1:-}" in
-  --version)
-    printf 'Antigravity CLI 0.0.0-fixture\n'
-    ;;
-  --help)
-    printf 'Usage: agy [options]\n'
-    ;;
-  *)
-    printf 'fixture does not authenticate\n' >&2
-    exit 4
-    ;;
-esac
+
+if [[ -x "${install_dir}/agy" ]]; then
+  printf 'already installed; self-updates in the background\n'
+  exit 0
+fi
+
+source_file="${install_dir}/agy-fixture.c"
+cat >"$source_file" <<'EOF'
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        puts("Antigravity CLI 0.0.0-fixture");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        fputs("Usage of agy:\n  update\n  install\n  --sandbox\n  --dangerously-skip-permissions\n", stderr);
+        return 0;
+    }
+    return 4;
+}
 EOF
-chmod 0755 "${install_dir}/agy"
-printf 'fixture installation complete\n'
+cc -O2 -s -o "${install_dir}/agy" "$source_file"
+rm -f "$source_file"
+printf 'linux_amd64 download complete and checksum verified\n'
+printf 'UNTRUSTED_VENDOR_OUTPUT_SHOULD_NOT_APPEAR\n' >&2
