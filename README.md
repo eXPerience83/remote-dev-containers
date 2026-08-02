@@ -72,7 +72,7 @@ Selecting Codex navigates the browser to the Codex service. The launcher does **
 
 The Codex endpoint authenticates independently with its own mounted secret. Credentials are not embedded in the link, passed through the launcher or shared between services.
 
-Launcher Basic authentication remains optional in the generic Compose deployment through `LAUNCHER_PASSWORD` together with `LAUNCHER_ALLOW_INSECURE_WEB=0`. The TrueNAS home/LAN example does not require a second password or launcher dataset.
+Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
 
 Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
 
@@ -163,7 +163,18 @@ Open the launcher at published port `7680` and select Codex. The browser then op
 4. choose an autonomous or guarded mode for one launch;
 5. run diagnostics.
 
-To protect the launcher itself, set `LAUNCHER_PASSWORD` and `LAUNCHER_ALLOW_INSECURE_WEB=0`. This is optional and does not replace the Codex terminal password.
+To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
+
+```bash
+printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
+chmod 600 secrets/launcher_password.txt
+docker compose \
+  -f compose/docker-compose.yml \
+  -f compose/launcher-auth.yml \
+  up -d
+```
+
+The override mounts that value as a Compose secret at `/run/secrets/launcher_password`; it does not place the password in the rendered service environment and it does not replace or reuse the Codex terminal password.
 
 ## Public edge testing
 
