@@ -15,7 +15,7 @@ fi
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
 [[ -x "$secure_state" ]] || { echo "ERROR: persistent-state hardening command is unavailable" >&2; exit 1; }
 
-binary="$($manager path)"
+binary="$("$manager" path)"
 if [[ ! -f "$binary" || -L "$binary" || ! -x "$binary" ]]; then
   cat >&2 <<EOF
 ERROR: Antigravity is not installed at the canonical path:
@@ -27,7 +27,7 @@ fi
 
 # This verifies the reviewed hash and version before the executable is invoked
 # for a real session. It never downloads or updates anything.
-$manager status >/dev/null
+"$manager" status >/dev/null
 
 workspace="${WORKSPACE:-/workspace}"
 [[ "$workspace" == /* && "$workspace" != *$'\n'* ]] \
