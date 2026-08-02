@@ -15,8 +15,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   inspect:
+    name: inspect approved installer and payload
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -39,11 +44,13 @@ jobs:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
           STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
         run: |
-          expected_sha256="$(jq -r '.installer.sha256' third_party/antigravity-cli-inspection.json)"
+          expected_installer_sha256="$(jq -r '.installer.sha256' third_party/antigravity-cli-inspection.json)"
+          expected_binary_sha256="$(jq -r '.installed_binary.sha256' third_party/antigravity-cli-inspection.json)"
           set +e
           python3 scripts/inspect-antigravity-cli.py \
             --output "$REPORT_PATH" \
-            --expected-installer-sha256 "$expected_sha256"
+            --expected-installer-sha256 "$expected_installer_sha256" \
+            --expected-binary-sha256 "$expected_binary_sha256"
           status=$?
           printf '%s\n' "$status" > "$STATUS_PATH"
           exit 0
