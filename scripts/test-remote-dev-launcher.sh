@@ -6,28 +6,36 @@ workdir="$(mktemp -d)"
 log_file="$workdir/launcher.log"
 password_file="$workdir/password"
 starting_uid="$(id -u)"
-port="$(python - <<'PY'
+launcher_pid=''
+
+free_port() {
+  python - <<'PY'
 import socket
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0))
     print(sock.getsockname()[1])
 PY
-)"
-base_url="http://127.0.0.1:${port}"
-secret='synthetic-launcher-secret'
-launcher_pid=''
+}
 
-cleanup() {
+stop_launcher() {
   if [[ -n "$launcher_pid" ]]; then
     kill "$launcher_pid" >/dev/null 2>&1 || true
     wait "$launcher_pid" >/dev/null 2>&1 || true
+    launcher_pid=''
   fi
+}
+
+cleanup() {
+  stop_launcher
   rm -rf "$workdir"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+port="$(free_port)"
+base_url="http://127.0.0.1:${port}"
+secret='synthetic-launcher-secret'
 printf '%s\n' "$secret" > "$password_file"
 
 WEB_BIND=127.0.0.1 \
@@ -129,6 +137,40 @@ status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   exit 1
 }
 
+stop_launcher
+insecure_port="$(free_port)"
+insecure_url="http://127.0.0.1:${insecure_port}"
+insecure_log="$workdir/launcher-no-auth.log"
+WEB_BIND=127.0.0.1 \
+WEB_PORT="$insecure_port" \
+WEB_BASE_PATH=/ \
+WEB_CHECK_ORIGIN=1 \
+ALLOW_INSECURE_WEB=1 \
+REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \
+  python "$launcher" >"$insecure_log" 2>&1 &
+launcher_pid=$!
+
+for _ in $(seq 1 50); do
+  if curl --fail --silent --show-error "$insecure_url/healthz" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "$launcher_pid" 2>/dev/null; then
+    echo 'ERROR: unauthenticated launcher exited before becoming ready' >&2
+    cat "$insecure_log" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+status="$(curl --silent --output "$workdir/no-auth-page.html" --write-out '%{http_code}' \
+  "$insecure_url/")"
+[[ "$status" == 200 ]] || {
+  echo "ERROR: optional unauthenticated launcher returned $status instead of 200" >&2
+  cat "$insecure_log" >&2
+  exit 1
+}
+grep -Fq 'Open Codex' "$workdir/no-auth-page.html"
+stop_launcher
+
 invalid_log="$workdir/invalid.log"
 invalid_status=0
 ALLOW_INSECURE_WEB=1 WEB_PORT=70000 python "$launcher" \
@@ -164,4 +206,4 @@ REMOTE_DEV_LAUNCHER_CODEX_HOST='codex.example.com:8443' \
 }
 grep -Fq 'must not include a port' "$embedded_port_log"
 
-echo 'Authenticated launcher, privilege drop and fixed routing tests: OK'
+echo 'Optional and authenticated launcher, privilege drop and fixed routing tests: OK'
