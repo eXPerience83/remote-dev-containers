@@ -30,6 +30,25 @@ assert_output_lines() {
   done
 }
 
+assert_antigravity_entrypoint_blocked() {
+  local label="$1"
+  shift
+  local output=""
+  local command_status=0
+
+  output="$(docker exec "$name" "$@" 2>&1)" || command_status=$?
+  if (( command_status != 2 )); then
+    echo "ERROR: $label returned $command_status outside the Antigravity service, expected 2" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+  if ! grep -Eq 'experimental and blocked pending TrueNAS validation|requires the gated REMOTE_DEV_ROLE=antigravity' <<<"$output"; then
+    echo "ERROR: $label did not explain the gated Antigravity service requirement" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+}
+
 # Secure by default: startup without a password must fail unless explicitly overridden.
 guard_status=0
 if timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1; then
@@ -113,20 +132,23 @@ for _ in $(seq 1 30); do
       'Codex approval policy: never' \
       'Mode source: default'
 
-    antigravity_gate_status=0
-    antigravity_gate_output="$(
-      docker exec \
-        --env REMOTE_DEV_ROLE=antigravity \
-        "$name" remote-dev-doctor 2>&1
-    )" || antigravity_gate_status=$?
-    if (( antigravity_gate_status != 2 )); then
-      echo "ERROR: the default Antigravity role gate returned $antigravity_gate_status, expected 2" >&2
-      printf '%s\n' "$antigravity_gate_output" >&2
-      exit 1
-    fi
-    if ! grep -Fq 'experimental and blocked pending TrueNAS validation' <<<"$antigravity_gate_output"; then
-      echo "ERROR: the default Antigravity role gate did not explain the validation requirement" >&2
-      printf '%s\n' "$antigravity_gate_output" >&2
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity role diagnostics' \
+      env REMOTE_DEV_ROLE=antigravity remote-dev-doctor
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity runtime manager' \
+      remote-dev-antigravity status --menu
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity installer wrapper' \
+      remote-dev-install-antigravity --yes
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity updater wrapper' \
+      remote-dev-update-antigravity --yes
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity launcher' \
+      run-antigravity
+    if docker exec "$name" test -e /root/.local/bin/agy; then
+      echo "ERROR: a blocked Antigravity entry point created the vendor executable in the Codex service" >&2
       exit 1
     fi
 
@@ -219,7 +241,7 @@ for _ in $(seq 1 30); do
     echo "Pinned Codex launcher and resume compatibility: OK"
     echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
-    echo "Experimental Antigravity gate and optional doctor status: OK"
+    echo "Experimental Antigravity gate, entry-point isolation and optional doctor status: OK"
     echo "Authenticated isolated launcher role: OK"
     echo "Launcher base-path normalization: OK"
     echo "Launcher and Codex same-image reuse: OK"
