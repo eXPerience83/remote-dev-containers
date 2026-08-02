@@ -9,11 +9,22 @@ remote_dev_runtime_error() {
   printf 'ERROR: %s\n' "$*" >&2
 }
 
+remote_dev_antigravity_experimental_enabled() {
+  [[ "${REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY:-0}" == 1 ]]
+}
+
 remote_dev_resolve_role() {
   local role="${REMOTE_DEV_ROLE:-codex}"
 
   case "$role" in
-    launcher|codex|shell|antigravity)
+    launcher|codex|shell)
+      printf '%s\n' "$role"
+      ;;
+    antigravity)
+      if ! remote_dev_antigravity_experimental_enabled; then
+        remote_dev_runtime_error "REMOTE_DEV_ROLE=antigravity is experimental and blocked pending TrueNAS validation; set REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 only for the controlled validation deployment"
+        return 2
+      fi
       printf '%s\n' "$role"
       ;;
     claude)
@@ -21,7 +32,7 @@ remote_dev_resolve_role() {
       return 2
       ;;
     *)
-      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell|antigravity; reserved: claude)"
+      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; experimental gated: antigravity; reserved: claude)"
       return 2
       ;;
   esac
