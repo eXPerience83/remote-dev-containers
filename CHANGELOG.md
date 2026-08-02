@@ -38,7 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Separate `compose/launcher-auth.yml` override for optional file-backed launcher Basic authentication without rendering the password into the service environment.
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 - Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces`, per-role `state` and `secrets` boundaries.
-- Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior, missing-path failure and removal of the earlier experimental data-root names.
+- Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed paths and unsafe password-file permissions.
+- Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
 
 ### Changed
 
@@ -73,7 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
 - Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available through a separate file-backed generic Compose override without affecting the independently authenticated Codex terminal.
 - Replaced the Codex-specific persistent directory contract with one clean role-neutral administrative root. No data-path alias, migration script, automatic copy, deletion or compatibility symlink is provided.
-- Changed all persistent bind mounts to long syntax with `create_host_path: false`, so missing or mistyped host paths fail instead of being created silently.
+- Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
 
@@ -101,5 +102,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical and compatibility edge/stable tag resolves to that digest.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
-- Missing persistent directories fail deployment instead of creating ambiguous root-owned paths.
+- The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
