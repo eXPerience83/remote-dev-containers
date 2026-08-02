@@ -2,9 +2,10 @@
   "schema_version": 2,
   "inspection_date_utc": "2026-08-02",
   "workflow": {
-    "run_id": 30757966945,
-    "artifact_id": 8836530407,
-    "artifact_digest": "sha256:1343db016948bbe754ac0af1dde23a823b87934da01c7c0c0d4c410d76030884"
+    "name": "Inspect Antigravity CLI",
+    "path": ".github/workflows/inspect-antigravity-cli.yml",
+    "artifact_name": "antigravity-cli-inspection",
+    "retention_days": 14
   },
   "installer": {
     "official_url": "https://antigravity.google/cli/install.sh",
