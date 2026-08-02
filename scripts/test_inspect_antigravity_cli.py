@@ -144,21 +144,23 @@ def main() -> int:
         )
         require(mismatch.returncode == 1, "unapproved installer hash must fail")
         require(not mismatch_report.exists(), "hash mismatch must produce no evidence file")
-        require(UNTRUSTED_MARKER not in mismatch.stdout + mismatch.stderr, "fixture ran before hash rejection")
+        require(
+            UNTRUSTED_MARKER not in mismatch.stdout + mismatch.stderr,
+            "fixture ran before hash rejection",
+        )
 
         mutating_fixture = temporary_path / "mutating-install.sh"
         write_profile_mutating_fixture(mutating_fixture)
         mutation_report = temporary_path / "mutation.json"
         mutation = run_inspection(mutation_report, mutating_fixture)
         require(mutation.returncode == 1, "help profile mutation must fail")
-        mutation_data = json.loads(mutation_report.read_text(encoding="utf-8"))
         require(
-            "installer --help changed the isolated home" in mutation_data["blocking_findings"],
-            "help filesystem mutation was not detected",
+            not mutation_report.exists(),
+            "help mutation must abort before evidence generation",
         )
         require(
-            "installer --help changed a shell profile" in mutation_data["blocking_findings"],
-            "help profile mutation was not detected",
+            "help changed the isolated home" in mutation.stderr,
+            "help-side-effect rejection was not reported",
         )
 
     print("Fail-closed Antigravity installer inspection regressions: OK")
