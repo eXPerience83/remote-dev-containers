@@ -163,7 +163,7 @@ for _ in $(seq 1 30); do
     launcher_doctor="$(docker exec "$launcher_name" remote-dev-doctor)"
     assert_output_lines 'Launcher diagnostics' "$launcher_doctor" \
       'Role: launcher' \
-      'Available roles: launcher, codex' \
+      'Available roles: launcher, codex, antigravity, shell' \
       'Launcher state boundary: no agent workspace or credential mounts are required.'
 
     codex_image_id="$(docker inspect -f '{{.Image}}' "$name")"
