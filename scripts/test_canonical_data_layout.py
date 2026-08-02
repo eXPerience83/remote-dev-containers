@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
 TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
+PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
 
 EXPECTED_TARGET_SUFFIXES = {
     "/workspace": "/workspaces/codex",
@@ -57,8 +58,7 @@ def compose_config(path: Path) -> dict[str, object]:
             cwd=ROOT,
             env=compose_environment(),
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
     if completed.returncode != 0:
@@ -86,11 +86,12 @@ def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> No
     require(mount.get("type") == "bind", f"{path}: {source} is not a bind mount")
     bind = mount.get("bind")
     require(isinstance(bind, dict), f"{path}: {source} has no bind options")
-    # Compose v2 omits an explicitly false create_host_path value from rendered JSON.
-    # The source-level validation below requires the literal false setting in both files.
+    # Compose may omit an explicitly false value from rendered JSON and some
+    # releases may not enforce it at runtime. Source YAML and the authoritative
+    # host preflight are checked separately below.
     require(
         bind.get("create_host_path") is not True,
-        f"{path}: {source} may silently create a missing host path",
+        f"{path}: {source} explicitly enables automatic host-path creation",
     )
 
 
@@ -162,8 +163,7 @@ def tracked_repository_files() -> list[Path]:
     completed = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if completed.returncode != 0:
@@ -196,26 +196,44 @@ def validate_repository_has_no_legacy_data_root() -> None:
 
 
 def validate_sources() -> None:
-    """Check canonical defaults and fail-closed bind options in source YAML."""
+    """Check one canonical root, source-level bind defenses and host preflight."""
     env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
+    generic_text = GENERIC_COMPOSE.read_text(encoding="utf-8")
+    truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
+    preflight_text = PREFLIGHT.read_text(encoding="utf-8")
+
     require(
         "REMOTE_DEV_DATA_ROOT=../data" in env_text,
         ".env.example must define the canonical data root",
     )
-    generic_text = GENERIC_COMPOSE.read_text(encoding="utf-8")
-    truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
+    require("WEB_PASSWORD_PATH" not in env_text, ".env.example defines a second data-path variable")
+    require("WEB_PASSWORD_PATH" not in generic_text, "generic Compose defines a second data-path variable")
     require(
-        "${REMOTE_DEV_DATA_ROOT:-../data}" in generic_text,
-        "generic Compose must derive role mounts from REMOTE_DEV_DATA_ROOT",
+        generic_text.count("${REMOTE_DEV_DATA_ROOT:-../data}") == 6,
+        "all generic persistent paths must derive from REMOTE_DEV_DATA_ROOT",
+    )
+    require(
+        "file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt"
+        in generic_text,
+        "generic password secret must derive from REMOTE_DEV_DATA_ROOT",
     )
     require(
         generic_text.count("create_host_path: false") == 5,
-        "generic Compose must disable host-path creation on every persistent bind",
+        "generic Compose must request no host-path creation on every persistent bind",
     )
     require(
         truenas_text.count("create_host_path: false") == 6,
-        "TrueNAS Compose must disable host-path creation on every persistent bind",
+        "TrueNAS Compose must request no host-path creation on every persistent bind",
     )
+    for marker in (
+        "workspaces/codex",
+        "state/codex/agent",
+        "state/codex/gh",
+        "state/codex/git",
+        "state/codex/ssh",
+        "secrets/codex/web_password.txt",
+    ):
+        require(marker in preflight_text, f"host preflight does not cover {marker}")
 
 
 def main() -> int:
