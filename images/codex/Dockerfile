@@ -10,13 +10,13 @@ ARG PROJECT_VERSION=0.1.0-dev
 ARG SOURCE_REVISION=local-untracked
 
 LABEL org.opencontainers.image.title="Remote Dev" \
-      org.opencontainers.image.description="Community browser-hosted remote development runtime with a built-in Codex reference role" \
+      org.opencontainers.image.description="Community browser-hosted remote development runtime with built-in Codex and optional vendor-installed agent roles" \
       org.opencontainers.image.version="${PROJECT_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md" \
-      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI" \
+      org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI or Google" \
       io.github.experience83.remote-dev.project-license="Apache-2.0" \
-      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled components retain upstream terms" \
+      io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled and runtime-installed components retain separate upstream terms" \
       io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
 
 ENV HOME=/root \
@@ -57,6 +57,10 @@ COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
+COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
+COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
+COPY scripts/run-antigravity.sh /usr/local/bin/run-antigravity
 COPY scripts/remote-dev-launcher.py /usr/local/bin/remote-dev-launcher
 COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
@@ -65,6 +69,7 @@ COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-healthcheck.sh /usr/local/bin/remote-dev-healthcheck
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
 COPY scripts/lib/remote-dev-runtime.sh /usr/local/lib/remote-dev/remote-dev-runtime.sh
+COPY scripts/lib/antigravity-paths.sh /usr/local/lib/remote-dev/antigravity-paths.sh
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
@@ -79,6 +84,10 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/run-direct-session \
       /usr/local/bin/run-codex \
+      /usr/local/bin/remote-dev-antigravity \
+      /usr/local/bin/remote-dev-install-antigravity \
+      /usr/local/bin/remote-dev-update-antigravity \
+      /usr/local/bin/run-antigravity \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-menu \
       /usr/local/bin/codex-menu \
@@ -91,6 +100,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && chmod 0644 \
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
+    && chmod 0444 /usr/local/lib/remote-dev/antigravity-paths.sh \
     && python -m py_compile /usr/local/bin/remote-dev-launcher \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
@@ -107,6 +117,8 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
     && run-codex --print-policy | grep -Fx 'Mode source: default' \
+    && remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
+    && test ! -e /root/.local/bin/agy \
     && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
     && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \
     && ln -sfn ../remote-dev/third_party /usr/share/doc/codex-remote-dev/third_party \
@@ -131,9 +143,14 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /root/.config/gh \
       /root/.config/git \
       /root/.ssh \
+      /root/.local/bin \
+      /root/.local/share/remote-dev/antigravity \
+      /root/.gemini/antigravity-cli \
     && /usr/local/bin/secure-persistent-state \
+    && REMOTE_DEV_ROLE=antigravity /usr/local/bin/secure-persistent-state \
     && REMOTE_DEV_ROLE=launcher remote-dev-doctor | grep -Fx 'Role: launcher' \
     && REMOTE_DEV_ROLE=shell remote-dev-doctor | grep -Fx 'Role: shell' \
+    && REMOTE_DEV_ROLE=antigravity remote-dev-doctor | grep -Fx 'Role: antigravity' \
     && REMOTE_DEV_SKIP_TMUX_SMOKE=1 codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
