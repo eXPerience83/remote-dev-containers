@@ -112,6 +112,8 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'exec /usr/local/bin/remote-dev-menu "$@"' /usr/local/bin/codex-menu \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
+    && grep -Fx 'readonly ANTIGRAVITY_PATHS_LIB=/usr/local/lib/remote-dev/antigravity-paths.sh' /usr/local/bin/remote-dev-antigravity \
+    && grep -Fx '  source "$ANTIGRAVITY_PATHS_LIB"' /usr/local/bin/remote-dev-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
@@ -150,7 +152,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && REMOTE_DEV_ROLE=antigravity /usr/local/bin/secure-persistent-state \
     && REMOTE_DEV_ROLE=launcher remote-dev-doctor | grep -Fx 'Role: launcher' \
     && REMOTE_DEV_ROLE=shell remote-dev-doctor | grep -Fx 'Role: shell' \
-    && REMOTE_DEV_ROLE=antigravity remote-dev-doctor | grep -Fx 'Role: antigravity' \
+    && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 remote-dev-doctor | grep -Fx 'Role: antigravity' \
     && REMOTE_DEV_SKIP_TMUX_SMOKE=1 codex-smoke-test "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 WORKDIR /workspace
