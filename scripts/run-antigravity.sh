@@ -65,6 +65,7 @@ cd "$workspace"
 
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
 
+child_pid=""
 harden_on_exit() {
   local session_status=$?
   trap - EXIT INT TERM
@@ -74,8 +75,25 @@ harden_on_exit() {
   fi
   exit "$session_status"
 }
-trap harden_on_exit EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
-"$binary" "$@"
+forward_signal() {
+  local signal_name="$1"
+  local signal_status="$2"
+  if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
+    kill -s "$signal_name" "$child_pid" 2>/dev/null || true
+    wait "$child_pid" 2>/dev/null || true
+  fi
+  child_pid=""
+  exit "$signal_status"
+}
+
+trap harden_on_exit EXIT
+trap 'forward_signal INT 130' INT
+trap 'forward_signal TERM 143' TERM
+
+"$binary" "$@" &
+child_pid=$!
+session_status=0
+wait "$child_pid" || session_status=$?
+child_pid=""
+exit "$session_status"
