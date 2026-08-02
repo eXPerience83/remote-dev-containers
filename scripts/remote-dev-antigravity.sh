@@ -2,10 +2,7 @@
 set -euo pipefail
 
 readonly OFFICIAL_INSTALLER_URL="https://antigravity.google/cli/install.sh"
-readonly DEFAULT_EVIDENCE=/usr/share/doc/remote-dev/third_party/antigravity-cli-inspection.json
-readonly DEFAULT_BIN_DIR=/root/.local/bin
-readonly DEFAULT_STATE_DIR=/root/.local/share/remote-dev/antigravity
-readonly DEFAULT_VENDOR_STATE_DIR=/root/.gemini/antigravity-cli
+readonly ANTIGRAVITY_PATHS_LIB=/usr/local/lib/remote-dev/antigravity-paths.sh
 
 cleanup_root=""
 cleanup() {
@@ -44,20 +41,30 @@ is_testing() {
   [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]
 }
 
+load_canonical_paths() {
+  [[ -f "$ANTIGRAVITY_PATHS_LIB" && -r "$ANTIGRAVITY_PATHS_LIB" && ! -L "$ANTIGRAVITY_PATHS_LIB" ]] \
+    || fail "canonical Antigravity path definitions are unavailable: $ANTIGRAVITY_PATHS_LIB"
+  # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
+  source "$ANTIGRAVITY_PATHS_LIB"
+}
+
 resolve_paths() {
   if is_testing; then
     evidence="${REMOTE_DEV_ANTIGRAVITY_EVIDENCE:?test evidence path is required}"
     bin_dir="${REMOTE_DEV_ANTIGRAVITY_BIN_DIR:?test binary directory is required}"
     state_dir="${REMOTE_DEV_ANTIGRAVITY_STATE_DIR:?test state directory is required}"
     vendor_state_dir="${REMOTE_DEV_ANTIGRAVITY_VENDOR_STATE_DIR:?test vendor state directory is required}"
+    binary="$bin_dir/agy"
+    manifest="$state_dir/install.json"
   else
-    evidence="$DEFAULT_EVIDENCE"
-    bin_dir="$DEFAULT_BIN_DIR"
-    state_dir="$DEFAULT_STATE_DIR"
-    vendor_state_dir="$DEFAULT_VENDOR_STATE_DIR"
+    load_canonical_paths
+    evidence="$ANTIGRAVITY_EVIDENCE"
+    bin_dir="$ANTIGRAVITY_BIN_DIR"
+    state_dir="$ANTIGRAVITY_STATE_DIR"
+    vendor_state_dir="$ANTIGRAVITY_VENDOR_STATE_DIR"
+    binary="$ANTIGRAVITY_BINARY"
+    manifest="$ANTIGRAVITY_MANIFEST"
   fi
-  binary="$bin_dir/agy"
-  manifest="$state_dir/install.json"
 }
 
 require_absolute_safe_path() {
@@ -91,12 +98,16 @@ validate_paths() {
   require_absolute_safe_path "binary directory" "$bin_dir"
   require_absolute_safe_path "state directory" "$state_dir"
   require_absolute_safe_path "vendor state directory" "$vendor_state_dir"
+  require_absolute_safe_path "binary path" "$binary"
+  require_absolute_safe_path "manifest path" "$manifest"
 
   if ! is_testing; then
-    [[ "$evidence" == "$DEFAULT_EVIDENCE" ]] || fail "production evidence path changed"
-    [[ "$bin_dir" == "$DEFAULT_BIN_DIR" ]] || fail "production binary directory changed"
-    [[ "$state_dir" == "$DEFAULT_STATE_DIR" ]] || fail "production state directory changed"
-    [[ "$vendor_state_dir" == "$DEFAULT_VENDOR_STATE_DIR" ]] || fail "production vendor state directory changed"
+    [[ "$evidence" == "$ANTIGRAVITY_EVIDENCE" ]] || fail "production evidence path changed"
+    [[ "$bin_dir" == "$ANTIGRAVITY_BIN_DIR" ]] || fail "production binary directory changed"
+    [[ "$state_dir" == "$ANTIGRAVITY_STATE_DIR" ]] || fail "production state directory changed"
+    [[ "$vendor_state_dir" == "$ANTIGRAVITY_VENDOR_STATE_DIR" ]] || fail "production vendor state directory changed"
+    [[ "$binary" == "$ANTIGRAVITY_BINARY" ]] || fail "production binary path changed"
+    [[ "$manifest" == "$ANTIGRAVITY_MANIFEST" ]] || fail "production manifest path changed"
   fi
 
   reject_symlink_components "$bin_dir"
