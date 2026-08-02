@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,7 +48,7 @@ def require(condition: bool, message: str) -> None:
 
 
 def main() -> int:
-    """Validate missing paths, password safety and the successful layout."""
+    """Validate missing paths, password safety and symlink ancestry."""
     with tempfile.TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory) / "remote-dev"
 
@@ -61,6 +62,20 @@ def main() -> int:
         require("password file is missing" in missing_password.stderr, missing_password.stderr)
 
         password_file = root / PASSWORD_SUFFIX
+        password_file.write_bytes(b"\n\n")
+        password_file.chmod(0o600)
+        newline_only = run_preflight(root)
+        require(newline_only.returncode == 1, "newline-only password must fail")
+        require(
+            "empty after trailing newline removal" in newline_only.stderr,
+            newline_only.stderr,
+        )
+
+        password_file.write_bytes(b"first-line\nsecond-line\n")
+        multiline = run_preflight(root)
+        require(multiline.returncode == 1, "multiline password must fail")
+        require("must be a single LF-terminated line" in multiline.stderr, multiline.stderr)
+
         password_file.write_text("test-only-password\n", encoding="utf-8")
         if os.name == "posix":
             password_file.chmod(0o644)
@@ -73,12 +88,30 @@ def main() -> int:
         require(valid.returncode == 0, valid.stderr)
         require("data-layout preflight: OK" in valid.stdout, valid.stdout)
 
-        marker = root / "state/codex/git"
-        marker.rmdir()
-        marker.symlink_to(root / "state/codex/gh", target_is_directory=True)
-        symlinked = run_preflight(root)
-        require(symlinked.returncode == 1, "symlinked state directory must fail")
-        require("must not be a symlink" in symlinked.stderr, symlinked.stderr)
+        final_marker = root / "state/codex/git"
+        final_marker.rmdir()
+        final_marker.symlink_to(root / "state/codex/gh", target_is_directory=True)
+        final_symlink = run_preflight(root)
+        require(final_symlink.returncode == 1, "symlinked final directory must fail")
+        require("must not be a symlink" in final_symlink.stderr, final_symlink.stderr)
+        final_marker.unlink()
+        final_marker.mkdir()
+
+        outside_state = Path(temporary_directory) / "outside-state"
+        for child in ("agent", "gh", "git", "ssh"):
+            (outside_state / child).mkdir(parents=True, exist_ok=True)
+        state_codex = root / "state/codex"
+        shutil.rmtree(state_codex)
+        state_codex.symlink_to(outside_state, target_is_directory=True)
+        intermediate_symlink = run_preflight(root)
+        require(
+            intermediate_symlink.returncode == 1,
+            "symlinked intermediate directory must fail",
+        )
+        require(
+            f"must not be a symlink: {state_codex}" in intermediate_symlink.stderr,
+            intermediate_symlink.stderr,
+        )
 
     print("Host data-layout preflight regressions: OK")
     return 0
