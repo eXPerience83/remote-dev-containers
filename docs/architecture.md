@@ -219,7 +219,7 @@ A broken optional agent must not make the launcher or Codex unhealthy. Healthche
 
 The launcher slice preserves the existing Codex service name, container name, `CODEX_DATA_ROOT` variable and mount paths. Existing data and the Codex terminal password are not copied, renamed or exposed to the launcher.
 
-The launcher introduces no required dataset or password file. Existing deployments created from the first launcher example may remove the obsolete launcher password mount and set `ALLOW_INSECURE_WEB=1`, or retain optional launcher Basic authentication by supplying `LAUNCHER_PASSWORD` and setting `LAUNCHER_ALLOW_INSECURE_WEB=0`.
+The launcher introduces no required dataset or password file. Existing deployments created from the first launcher example may remove the obsolete launcher password mount and set `LAUNCHER_ALLOW_INSECURE_WEB=1`, or retain optional launcher Basic authentication by supplying `LAUNCHER_PASSWORD` and setting `LAUNCHER_ALLOW_INSECURE_WEB=0`.
 
 The later data-migration slice must:
 
