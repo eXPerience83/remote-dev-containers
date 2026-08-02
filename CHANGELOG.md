@@ -33,9 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
 - Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge and stable tags are promoted from the same scanned digest as their `codex-remote-dev` compatibility tags, while PR candidates are canonical-only.
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.
-- Authenticated `remote-dev-launcher` page with fixed Codex navigation, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
+- Stateless `remote-dev-launcher` page with fixed Codex navigation, optional Basic authentication, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
 - Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
-- Automated launcher authentication/routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
+- Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 
 ### Changed
 
@@ -67,10 +67,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed PR candidate publication to use the canonical `remote-dev` package; edge and stable publication retain legacy package tags without rebuilding.
 - Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
+- Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available without affecting the independently authenticated Codex terminal.
 
 ### Security
 
-- Web authentication is required by default for both launcher and Codex services.
+- Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
 - The launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration or SSH mounts and does not receive the Docker socket.
 - The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
 - The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
