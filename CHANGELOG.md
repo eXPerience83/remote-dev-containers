@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Separate persistent paths for workspaces and Codex, GitHub, Git and SSH configuration.
 - AMD64 build, configuration validation and runtime smoke tests.
 - Verification that the effective Ubuntu and Codex release pins match their Dockerfile defaults.
-- Secure-by-default web startup guard requiring authentication unless explicitly overridden.
+- Secure-by-default agent-terminal web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates and immutable GitHub Action pins.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
@@ -37,6 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
 - Separate `compose/launcher-auth.yml` override for optional file-backed launcher Basic authentication without rendering the password into the service environment.
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
+- Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces`, per-role `state` and `secrets` boundaries.
+- Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed paths and unsafe password-file permissions.
+- Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
 
 ### Changed
 
@@ -70,12 +73,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
 - Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available through a separate file-backed generic Compose override without affecting the independently authenticated Codex terminal.
+- Replaced the Codex-specific persistent directory contract with one clean role-neutral administrative root. No data-path alias, migration script, automatic copy, deletion or compatibility symlink is provided.
+- Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
+- Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
+- Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
 
 ### Security
 
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
 - Optional launcher authentication uses a file-backed Compose secret and is tested not to expose the password value in rendered Compose configuration.
-- The launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration or SSH mounts and does not receive the Docker socket.
+- The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds only its dedicated file-backed launcher password secret.
 - The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
 - The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
@@ -94,3 +101,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical and compatibility edge/stable tag resolves to that digest.
+- The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
+- The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
+- Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.

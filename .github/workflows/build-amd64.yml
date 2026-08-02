@@ -30,7 +30,10 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
             scripts/remote-dev-launcher.py \
+            scripts/preflight-data-layout.py \
             scripts/test_single_stack_compose.py \
+            scripts/test_canonical_data_layout.py \
+            scripts/test_preflight_data_layout.py \
             scripts/update-third-party-inventory.py \
             scripts/test_update_third_party_inventory.py \
             scripts/sync-python-runtime-notices.py \
@@ -55,6 +58,8 @@ jobs:
           REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
             bash scripts/test-remote-dev-launcher.sh
           python3 scripts/test_single_stack_compose.py
+          python3 scripts/test_canonical_data_layout.py
+          python3 scripts/test_preflight_data_layout.py
           bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh

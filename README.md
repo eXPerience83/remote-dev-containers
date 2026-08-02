@@ -1,9 +1,9 @@
 # Remote Dev Containers — starter v0.1
 
-Community-maintained, browser-accessible Codex CLI development environment for Docker, NAS and homelab systems.
+Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose either web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI.
+> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose either web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
 
 ## Goal
 
@@ -15,7 +15,7 @@ The current edge stack is the Codex reference implementation:
 
 - one Remote Dev image reused by the launcher and Codex services;
 - one stateless launcher as the normal browser entry point, without authentication by default;
-- one isolated, independently authenticated Codex terminal service with its existing private mounts;
+- one isolated, independently authenticated Codex terminal service with private role-scoped mounts;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset;
@@ -23,12 +23,12 @@ The current edge stack is the Codex reference implementation:
 - Python 3.14, Node 24, uv and mise;
 - browser terminal through ttyd;
 - persistent sessions through tmux;
-- separate persistent paths for the Codex workspace and credentials;
+- one canonical role-neutral persistent-data contract;
 - AMD64 first.
 
 ### Role-neutral entrypoints
 
-The migration toward the accepted single-stack architecture uses one canonical runtime implementation:
+The accepted single-stack architecture uses one canonical runtime implementation:
 
 - `start-remote-dev-web`;
 - `remote-dev-launcher`;
@@ -70,11 +70,11 @@ The launcher is navigation only and has no authentication by default. It checks 
 
 Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts or Codex terminal password.
 
-The Codex endpoint authenticates independently with its own mounted secret. Credentials are not embedded in the link, passed through the launcher or shared between services.
+The Codex endpoint authenticates independently with its own password source. Credentials are not embedded in the link, passed through the launcher or shared between services.
 
 Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
 
-Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. This phase does not yet introduce the neutral persistent-data layout, migration of existing paths, Antigravity/Claude services or a one-origin reverse proxy.
+Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. Antigravity/Claude services and a one-origin reverse proxy remain outside the current implementation.
 
 ### Codex approval modes
 
@@ -112,6 +112,37 @@ Autonomous mode means Codex may read, modify or delete anything mounted into its
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
+## Canonical persistent-data layout
+
+Generic Compose uses one administrative root:
+
+```dotenv
+REMOTE_DEV_DATA_ROOT=../data
+```
+
+Paths are resolved relative to `compose/docker-compose.yml`. The canonical layout is:
+
+```text
+REMOTE_DEV_DATA_ROOT/
+├── workspaces/
+│   └── codex/
+├── state/
+│   └── codex/
+│       ├── agent/
+│       ├── gh/
+│       ├── git/
+│       └── ssh/
+└── secrets/
+    └── codex/
+        └── web_password.txt
+```
+
+The Codex service mounts only the corresponding child paths. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+
+Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
+
+There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`.
+
 ## Licenses and optional vendor software
 
 Remote Dev project code is Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv and their dependencies retain their respective upstream licenses and notices. The image preserves package-provided copyright files and copies the license files supplied by the exact installed runtime artifacts.
@@ -139,7 +170,7 @@ The target architecture is:
 - Claude Code preserved as a future path only;
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
-The current implementation now delivers the launcher and Codex portion of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. Optional agent services, persistent-data migration and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
+The current implementation delivers the launcher, Codex and canonical persistence portions of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. Optional agent services and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
 
 The default launcher navigates to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
@@ -147,11 +178,17 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 
 ```bash
 cp .env.example .env
-mkdir -p secrets data/{workspace,codex,gh,git,ssh}
-printf '%s\n' 'replace-with-a-codex-password' > secrets/web_password.txt
-chmod 600 secrets/web_password.txt
+mkdir -p \
+  data/workspaces/codex \
+  data/state/codex/{agent,gh,git,ssh} \
+  data/secrets/codex
+printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
+chmod 600 data/secrets/codex/web_password.txt
+make preflight
 ./scripts/build-local.sh
 ```
+
+For a custom root, run `make preflight DATA_ROOT=/absolute/host/path` before deployment.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
@@ -170,6 +207,7 @@ Open the launcher at published port `7680` and select Codex. The browser then op
 To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
 
 ```bash
+mkdir -p secrets
 printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
 chmod 600 secrets/launcher_password.txt
 docker compose \
@@ -196,7 +234,7 @@ For the generic or TrueNAS Compose file, set:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Existing `v0.1.x` deployments may keep `CODEX_IMAGE` and `ghcr.io/experience83/codex-remote-dev`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set, and both package names identify the same promoted edge/stable digest. The compatibility names will not be removed before `v0.2.0`.
+Existing `v0.1.x` deployments may keep `CODEX_IMAGE` and `ghcr.io/experience83/codex-remote-dev`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set, and both package names identify the same promoted edge/stable digest. The compatibility names will not be removed before `v0.2.0`; they do not preserve the removed experimental data layout.
 
 For a source-commit-addressed deployment, use the `sha-...` tag shown by the edge workflow and package page:
 
@@ -231,7 +269,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Do not publish ports 7680 or 7681 directly to the Internet.
 - The unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale address.
 - The Codex terminal remains independently authenticated.
-- The launcher never embeds, forwards or mounts the terminal password.
+- The launcher never embeds or forwards the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces or credentials into the launcher.
 - Do not mount the Docker socket.
@@ -247,7 +285,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 ## Development and reviews
 
-Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, Python launcher code, GitHub Actions, Compose files and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
+Development happens through pull requests. CodeRabbit is configured in `.coderabbit.yaml` to review Dockerfiles, Bash scripts, Python launcher code, GitHub Actions, Compose and security-sensitive changes. Its comments are advisory during the current development phase; passing CI and manual validation remain required.
 
 Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests use the repository template, and GitHub requests review from the code owner when a non-draft pull request is ready for review.
 
