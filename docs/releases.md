@@ -28,7 +28,7 @@ REMOTE_DEV_DATA_ROOT/
 └── secrets/codex/web_password.txt
 ```
 
-The parent data root is never mounted wholesale. Required bind sources use `create_host_path: false`, so operators must create the intended paths before deploying.
+The parent data root is never mounted wholesale. Operators must run the host-side data-layout preflight before deployment. Bind mounts also request `create_host_path: false` as defense-in-depth, but release readiness does not assume that every Compose implementation enforces that option.
 
 The data layout has no compatibility alias or automatic migration because no stable release or external installed base exists yet. Image-name compatibility remains separate: `CODEX_IMAGE` and the `codex-remote-dev` package continue throughout `v0.1.x`, with `REMOTE_DEV_IMAGE` taking precedence.
 
@@ -68,7 +68,7 @@ Before creating a stable version tag:
 7. Selecting Codex navigates to the independent authenticated endpoint without exposing credentials.
 8. The base launcher has no mounts and no Docker/Podman socket; when `compose/launcher-auth.yml` is enabled, its only additional input is the dedicated read-only launcher password secret.
 9. Neither service uses host networking, privileged mode or added capabilities.
-10. The canonical data directories were created deliberately and no unexpected host directory was generated.
+10. The canonical host-path preflight passes on the target system before deployment, and no unexpected host directory was generated.
 11. Workspace, agent state, GitHub CLI state, Git configuration and SSH state persist across stop/start and recreation.
 12. Codex device-code login persists across recreation.
 13. GitHub CLI login, clone, push and pull-request creation have been verified.
