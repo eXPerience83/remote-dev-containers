@@ -25,7 +25,7 @@ validate:
 	python3 scripts/test_inspect_antigravity_cli.py
 	bash scripts/validate-version-pins.sh
 	jq -e . renovate.json >/dev/null
-	jq -e '.schema_version == 1 and .blocking_findings == []' third_party/antigravity-cli-inspection.json >/dev/null
+	jq -e '.schema_version == 2 and .blocking_findings == []' third_party/antigravity-cli-inspection.json >/dev/null
 	@for file in compose/*.yml; do docker compose -f "$$file" config --quiet; echo "OK $$file"; done
 
 package:
