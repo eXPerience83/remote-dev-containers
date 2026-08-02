@@ -26,7 +26,7 @@ The launcher:
 - rejects state-changing HTTP methods;
 - exposes a secret-free health endpoint.
 
-The launcher never embeds a password or forwards an Authorization header. Each agent endpoint authenticates independently.
+The base launcher has no mounts. The optional authentication overlay adds only its dedicated read-only launcher password secret. The launcher never embeds a password or forwards an Authorization header, and each agent endpoint authenticates independently.
 
 ## Outer-container isolation
 
@@ -43,17 +43,17 @@ All generic Compose persistence is derived from one administrative root, `REMOTE
 The Codex service receives only:
 
 ```text
-workspaces/codex              -> /workspace
-state/codex/agent             -> /root/.codex
-state/codex/gh                -> /root/.config/gh
-state/codex/git               -> /root/.config/git
-state/codex/ssh               -> /root/.ssh
+workspaces/codex               -> /workspace
+state/codex/agent              -> /root/.codex
+state/codex/gh                 -> /root/.config/gh
+state/codex/git                -> /root/.config/git
+state/codex/ssh                -> /root/.ssh
 secrets/codex/web_password.txt -> /run/secrets/web_password
 ```
 
-The launcher remains mount-free. Future agent services must receive their own separate child paths and credentials.
+The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
-Bind mounts use `create_host_path: false`. Missing host directories cause startup failure instead of silently creating an unexpected location. Operators must create and review each required path deliberately.
+The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths, symlinks, a missing or empty password file, and password permissions broader than `0600` on POSIX hosts before deployment. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
 
 The project does not automatically copy, migrate, delete or symlink experimental data. Automatic migration would risk credential exposure or ambiguous ownership. Existing experimental state must be moved or recreated manually after backup.
 
@@ -64,15 +64,16 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 - Do not expose ports 7680 or 7681 directly to the public Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard.
 - Keep every agent terminal independently authenticated with a strong password.
-- Never reuse a launcher password as an agent password.
-- Never place credentials in navigation URLs, diagnostics, logs, tests or rendered environment output.
-- Never mount agent data or credentials into the launcher.
-- Never mount Docker or Podman sockets.
-- Never use `privileged: true`, host PID, host networking or added capabilities.
-- Never mount the parent data root, host root, `/root`, `/home`, `/mnt`, `/opt` or `/usr/local` wholesale.
+- Use a distinct launcher password when the optional authentication overlay is enabled.
+- Keep credentials out of navigation URLs, diagnostics, logs, tests and rendered environment output.
+- Keep agent data and credentials out of the launcher.
+- Do not mount Docker or Podman sockets.
+- Do not use `privileged: true`, host PID, host networking or added capabilities.
+- Do not mount the parent data root, host root, `/root`, `/home`, `/mnt`, `/opt` or `/usr/local` wholesale.
 - Treat Codex authentication, GitHub credentials and SSH keys as secrets.
 - Keep `no-new-privileges:true` enabled on every service.
 - Keep writable workspaces and credentials private per agent service.
+- Run the canonical host-path preflight before every first deployment or path change.
 
 ## Codex approval modes
 
