@@ -13,15 +13,15 @@ remote_dev_resolve_role() {
   local role="${REMOTE_DEV_ROLE:-codex}"
 
   case "$role" in
-    launcher|codex|shell)
+    launcher|codex|shell|antigravity)
       printf '%s\n' "$role"
       ;;
-    antigravity|claude)
+    claude)
       remote_dev_runtime_error "REMOTE_DEV_ROLE=$role is reserved but not implemented"
       return 2
       ;;
     *)
-      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; reserved: antigravity|claude)"
+      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell|antigravity; reserved: claude)"
       return 2
       ;;
   esac
@@ -44,10 +44,10 @@ remote_dev_resolve_start_mode() {
   else
     case "${START_MODE:-menu}" in
       menu) raw_mode=menu ;;
-      codex) raw_mode=agent ;;
+      codex|antigravity) raw_mode=agent ;;
       shell) raw_mode=shell ;;
       *)
-        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|shell)"
+        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|antigravity|shell)"
         return 2
         ;;
     esac
@@ -70,6 +70,7 @@ remote_dev_default_tmux_session() {
 
   case "$role" in
     codex) printf 'codex\n' ;;
+    antigravity) printf 'antigravity\n' ;;
     shell) printf 'remote-dev-shell\n' ;;
     launcher)
       remote_dev_runtime_error "the launcher role does not use tmux"
