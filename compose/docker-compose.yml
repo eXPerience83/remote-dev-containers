@@ -80,6 +80,8 @@ services:
     ports:
       - "${WEB_PUBLISH_IP:-127.0.0.1}:${WEB_PUBLISH_PORT:-7681}:7681"
 
+    # Run scripts/preflight-data-layout.py before deployment. The explicit
+    # create_host_path setting is defense-in-depth for Compose implementations.
     volumes:
       - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/workspaces/codex
@@ -118,4 +120,4 @@ services:
 
 secrets:
   web_password:
-    file: ${WEB_PASSWORD_PATH:-../data/secrets/codex/web_password.txt}
+    file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt
