@@ -113,13 +113,15 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
     && grep -Fx 'readonly ANTIGRAVITY_PATHS_LIB=/usr/local/lib/remote-dev/antigravity-paths.sh' /usr/local/bin/remote-dev-antigravity \
+    && grep -Fx 'readonly ANTIGRAVITY_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/remote-dev-antigravity \
     && grep -Fx '  source "$ANTIGRAVITY_PATHS_LIB"' /usr/local/bin/remote-dev-antigravity \
+    && grep -Fx 'readonly DEFAULT_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
     && run-codex --print-policy | grep -Fx 'Mode source: default' \
-    && remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
+    && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
     && test ! -e /root/.local/bin/agy \
     && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
     && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \
