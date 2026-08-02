@@ -7,6 +7,9 @@ on:
       - "scripts/inspect-antigravity-cli.py"
       - "scripts/test_inspect_antigravity_cli.py"
       - "scripts/fixtures/antigravity-install.sh"
+      - "third_party/antigravity-cli-inspection.json"
+      - "third_party/antigravity-cli-inspection.md"
+      - "third_party/optional-agents.md"
   workflow_dispatch:
 
 permissions:
@@ -88,7 +91,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Enforce successful inspection
+      - name: Enforce successful and current inspection
         env:
           REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
           STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
@@ -99,8 +102,57 @@ jobs:
           import os
           from pathlib import Path
 
-          report = json.loads(Path(os.environ["REPORT_PATH"]).read_text(encoding="utf-8"))
-          assert report["blocking_findings"] == [], report["blocking_findings"]
-          assert report["expected_binary_present"] is True
-          print("Official Antigravity installer inspection passed")
+          live = json.loads(Path(os.environ["REPORT_PATH"]).read_text(encoding="utf-8"))
+          expected = json.loads(
+              Path("third_party/antigravity-cli-inspection.json").read_text(encoding="utf-8")
+          )
+
+          assert live["blocking_findings"] == [], live["blocking_findings"]
+          assert live["expected_binary_present"] is True
+
+          comparisons = {
+              "installer URL": (
+                  live["installer"]["final_url"],
+                  expected["installer"]["final_url"],
+              ),
+              "installer size": (
+                  live["installer"]["size"],
+                  expected["installer"]["size"],
+              ),
+              "installer SHA-256": (
+                  live["installer"]["sha256"],
+                  expected["installer"]["sha256"],
+              ),
+              "installer options": (
+                  live["installer"]["supported_options"],
+                  expected["installer"]["advertised_options"],
+              ),
+              "installation strategy": (
+                  live["installer"]["selected_strategy"],
+                  "custom-directory",
+              ),
+              "binary version": (
+                  live["binary_after_second"]["version"]["stdout_lines"],
+                  [expected["installed_binary"]["version"]],
+              ),
+              "binary size": (
+                  live["binary_after_second"]["size"],
+                  expected["installed_binary"]["size"],
+              ),
+              "binary SHA-256": (
+                  live["binary_after_second"]["sha256"],
+                  expected["installed_binary"]["sha256"],
+              ),
+              "installed legal files": (
+                  live["installed_legal_files"],
+                  expected["filesystem"]["installed_license_or_notice_files"],
+              ),
+          }
+          for label, (actual, recorded) in comparisons.items():
+              assert actual == recorded, f"stale {label}: {actual!r} != {recorded!r}"
+
+          assert live["profiles"]["unchanged_after_first"] is True
+          assert live["profiles"]["unchanged_after_second"] is True
+          assert live["binary_stable_across_second_install"] is True
+          print("Official Antigravity installer inspection matches committed evidence")
           PY
