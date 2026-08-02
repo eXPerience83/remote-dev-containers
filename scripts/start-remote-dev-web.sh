@@ -27,6 +27,15 @@ umask 077
 mkdir -p "$workspace" "$gh_config_dir" "$(dirname "$git_config_global")" /root/.ssh
 if [[ "$role" == codex ]]; then
   mkdir -p "${CODEX_HOME:-/root/.codex}"
+elif [[ "$role" == antigravity ]]; then
+  readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
+  [[ -r "$paths_lib" && ! -L "$paths_lib" ]] || {
+    echo "ERROR: immutable Antigravity path definitions are unavailable" >&2
+    exit 1
+  }
+  # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
+  source "$paths_lib"
+  mkdir -p "$ANTIGRAVITY_BIN_DIR" "$ANTIGRAVITY_STATE_DIR" "$ANTIGRAVITY_VENDOR_STATE_DIR"
 fi
 /usr/local/bin/secure-persistent-state
 
