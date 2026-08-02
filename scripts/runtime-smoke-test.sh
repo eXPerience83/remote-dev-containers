@@ -113,6 +113,43 @@ for _ in $(seq 1 30); do
       'Codex approval policy: never' \
       'Mode source: default'
 
+    antigravity_gate_status=0
+    antigravity_gate_output="$(
+      docker exec \
+        --env REMOTE_DEV_ROLE=antigravity \
+        "$name" remote-dev-doctor 2>&1
+    )" || antigravity_gate_status=$?
+    if (( antigravity_gate_status != 2 )); then
+      echo "ERROR: the default Antigravity role gate returned $antigravity_gate_status, expected 2" >&2
+      printf '%s\n' "$antigravity_gate_output" >&2
+      exit 1
+    fi
+    if ! grep -Fq 'experimental and blocked pending TrueNAS validation' <<<"$antigravity_gate_output"; then
+      echo "ERROR: the default Antigravity role gate did not explain the validation requirement" >&2
+      printf '%s\n' "$antigravity_gate_output" >&2
+      exit 1
+    fi
+
+    docker exec "$name" sh -c '
+      install -d -m 0755 /tmp/remote-dev-doctor-fixture
+      printf "%s\n" \
+        "#!/usr/bin/env bash" \
+        "echo \"Antigravity: 1.1.8 (update to reviewed 1.1.9 required)\"" \
+        "exit 3" \
+        > /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+      chmod 0755 /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+    '
+    antigravity_doctor_output="$(
+      docker exec \
+        --env REMOTE_DEV_ROLE=antigravity \
+        --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+        "$name" sh -c 'PATH=/tmp/remote-dev-doctor-fixture:$PATH exec remote-dev-doctor'
+    )"
+    assert_output_lines 'experimental Antigravity diagnostics' "$antigravity_doctor_output" \
+      'Role: antigravity' \
+      'Antigravity: 1.1.8 (update to reviewed 1.1.9 required)' \
+      'Antigravity support status: experimental validation only; not yet a supported integration.'
+
     docker run -d \
       --name "$launcher_name" \
       --security-opt no-new-privileges:true \
@@ -163,7 +200,8 @@ for _ in $(seq 1 30); do
     launcher_doctor="$(docker exec "$launcher_name" remote-dev-doctor)"
     assert_output_lines 'Launcher diagnostics' "$launcher_doctor" \
       'Role: launcher' \
-      'Available roles: launcher, codex, antigravity, shell' \
+      'Available roles: launcher, codex, shell' \
+      'Experimental gated role: antigravity (requires REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1)' \
       'Launcher state boundary: no agent workspace or credential mounts are required.'
 
     codex_image_id="$(docker inspect -f '{{.Image}}' "$name")"
@@ -181,6 +219,7 @@ for _ in $(seq 1 30); do
     echo "Pinned Codex launcher and resume compatibility: OK"
     echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
+    echo "Experimental Antigravity gate and optional doctor status: OK"
     echo "Authenticated isolated launcher role: OK"
     echo "Launcher base-path normalization: OK"
     echo "Launcher and Codex same-image reuse: OK"
