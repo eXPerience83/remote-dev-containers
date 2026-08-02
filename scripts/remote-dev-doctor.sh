@@ -11,7 +11,7 @@ export REMOTE_DEV_ROLE="$role"
 status=0
 check_cmd() {
   local cmd="$1"
-  printf '%-24s ' "$cmd"
+  printf '%-32s ' "$cmd"
   if command -v "$cmd" >/dev/null 2>&1; then
     command -v "$cmd"
   else
@@ -37,7 +37,7 @@ Codex route host: ${REMOTE_DEV_LAUNCHER_CODEX_HOST:-browser hostname}
 Codex route port: ${REMOTE_DEV_LAUNCHER_CODEX_PORT:-7681}
 Codex route scheme: ${REMOTE_DEV_LAUNCHER_CODEX_SCHEME:-browser scheme}
 Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
-Available roles: launcher, codex
+Available roles: launcher, codex, antigravity, shell
 EOF_LAUNCHER
 else
   cat <<EOF_AGENT
@@ -46,6 +46,18 @@ GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_AGENT
   if [[ "$role" == codex ]]; then
     echo "Codex home: ${CODEX_HOME:-unset}"
+  elif [[ "$role" == antigravity ]]; then
+    readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
+    if [[ -r "$paths_lib" && ! -L "$paths_lib" ]]; then
+      # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
+      source "$paths_lib"
+      echo "Antigravity executable: $ANTIGRAVITY_BINARY"
+      echo "Antigravity local state: $ANTIGRAVITY_STATE_DIR"
+      echo "Antigravity vendor state: $ANTIGRAVITY_VENDOR_STATE_DIR"
+    else
+      echo "Antigravity path definitions: MISSING"
+      status=1
+    fi
   fi
 fi
 
@@ -76,6 +88,11 @@ done
 if [[ "$role" == codex ]]; then
   check_cmd codex
   check_cmd run-codex
+elif [[ "$role" == antigravity ]]; then
+  check_cmd remote-dev-antigravity
+  check_cmd remote-dev-install-antigravity
+  check_cmd remote-dev-update-antigravity
+  check_cmd run-antigravity
 fi
 
 echo
@@ -118,6 +135,17 @@ if [[ "$role" == codex ]]; then
   else
     echo 'not authenticated or unavailable'
   fi
+elif [[ "$role" == antigravity ]]; then
+  echo
+  antigravity_status="$(remote-dev-antigravity status --menu 2>&1)"
+  antigravity_status_code=$?
+  echo "$antigravity_status"
+  if (( antigravity_status_code != 0 && antigravity_status_code != 3 )); then
+    status=1
+  fi
+  echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
+  echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'
+  echo 'Antigravity authentication: managed only by the official Google client.'
 fi
 
 if [[ "$role" != launcher ]]; then
@@ -159,6 +187,13 @@ if [[ "$role" == codex && -f "${CODEX_HOME:-/root/.codex}/auth.json" ]]; then
   echo "Codex auth.json permissions: ${mode:-unknown}"
   if [[ "$mode" != 600 && "$mode" != 400 ]]; then
     echo 'WARNING: auth.json should normally be readable only by root.'
+    status=1
+  fi
+elif [[ "$role" == antigravity && -n "${ANTIGRAVITY_BINARY:-}" && -f "$ANTIGRAVITY_BINARY" ]]; then
+  mode="$(stat -c '%a' "$ANTIGRAVITY_BINARY" 2>/dev/null || true)"
+  echo "Antigravity executable permissions: ${mode:-unknown}"
+  if [[ "$mode" != 700 ]]; then
+    echo 'WARNING: the runtime-installed Antigravity executable should be accessible only by root.'
     status=1
   fi
 fi
