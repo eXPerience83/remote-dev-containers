@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Separate persistent paths for workspaces and Codex, GitHub, Git and SSH configuration.
 - AMD64 build, configuration validation and runtime smoke tests.
 - Verification that the effective Ubuntu and Codex release pins match their Dockerfile defaults.
-- Secure-by-default web startup guard requiring authentication unless explicitly overridden.
+- Secure-by-default agent-terminal web startup guard requiring authentication unless explicitly overridden.
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates and immutable GitHub Action pins.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
@@ -81,7 +81,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
 - Optional launcher authentication uses a file-backed Compose secret and is tested not to expose the password value in rendered Compose configuration.
-- The launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration or SSH mounts and does not receive the Docker socket.
+- The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds only its dedicated file-backed launcher password secret.
 - The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
 - The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
