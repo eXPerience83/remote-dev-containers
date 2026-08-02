@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Inspect the official Antigravity CLI installer in an ephemeral home directory.
+"""Inspect approved Antigravity CLI installer bytes in an ephemeral home.
 
-The script records only metadata, hashes, paths and bounded command output. It
-never copies the installer or installed Antigravity binary into the repository
-or generated report.
+The report contains only a fixed normalized schema of hashes, exit codes,
+allowlisted booleans and safe filesystem metadata. Vendor stdout/stderr is never
+stored, printed or uploaded.
 """
 
 from __future__ import annotations
@@ -40,7 +40,19 @@ LEGAL_NAME_RE = re.compile(
     r"COPYRIGHT(?:[._-].*)?|AUTHORS(?:[._-].*)?)$",
     re.IGNORECASE,
 )
-URL_RE = re.compile(r"https://[^\s'\"<>]+")
+SAFE_RELATIVE_PATH_RE = re.compile(r"[A-Za-z0-9._+/@=-]{1,300}")
+SAFE_VERSION_RE = re.compile(
+    r"(?<![0-9A-Za-z])([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)(?![0-9A-Za-z])"
+)
+SAFE_LIBRARY_RE = re.compile(r"[A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*")
+KNOWN_SYSTEM_LIBRARIES = {
+    "libc.so.6",
+    "libdl.so.2",
+    "libm.so.6",
+    "libpthread.so.0",
+    "libresolv.so.2",
+    "librt.so.1",
+}
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -48,26 +60,55 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def file_record(path: Path, root: Path) -> dict[str, Any]:
-    """Return bounded metadata for one filesystem object without its contents."""
+def sha256_file(path: Path) -> str:
+    """Hash a file without loading a large vendor binary into memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def safe_path_identity(path: Path, root: Path) -> dict[str, Any]:
+    """Return a safe path or only its hash when a name is not allowlisted."""
     relative = path.relative_to(root).as_posix()
+    parts = relative.split("/")
+    if (
+        relative
+        and all(part not in {"", ".", ".."} for part in parts)
+        and all(SAFE_RELATIVE_PATH_RE.fullmatch(part) for part in parts)
+    ):
+        return {"path": relative, "path_redacted": False}
+    return {
+        "path_sha256": sha256_bytes(relative.encode("utf-8", errors="surrogateescape")),
+        "path_redacted": True,
+    }
+
+
+def file_record(path: Path, root: Path) -> dict[str, Any]:
+    """Return normalized metadata for one filesystem object, never its content."""
     metadata = path.lstat()
     record: dict[str, Any] = {
-        "path": relative,
+        **safe_path_identity(path, root),
         "mode": f"{stat.S_IMODE(metadata.st_mode):04o}",
     }
     if path.is_symlink():
-        record["type"] = "symlink"
-        record["target"] = os.readlink(path)
+        target = os.readlink(path)
+        record.update(
+            {
+                "type": "symlink",
+                "target_sha256": sha256_bytes(target.encode(errors="surrogateescape")),
+                "target_is_absolute": os.path.isabs(target),
+            }
+        )
     elif path.is_dir():
         record["type"] = "directory"
     elif path.is_file():
-        data = path.read_bytes()
         record.update(
             {
                 "type": "file",
-                "size": len(data),
-                "sha256": sha256_bytes(data),
+                "size": metadata.st_size,
+                "sha256": sha256_file(path),
             }
         )
     else:
@@ -86,7 +127,7 @@ def snapshot(root: Path) -> list[dict[str, Any]]:
 
 
 def profile_snapshot(home: Path) -> dict[str, dict[str, Any] | None]:
-    """Fingerprint shell profiles that the installer must not modify."""
+    """Fingerprint the fixed shell-profile set without preserving contents."""
     result: dict[str, dict[str, Any] | None] = {}
     for relative in PROFILE_FILES:
         path = home / relative
@@ -101,7 +142,7 @@ def run(
     cwd: Path,
     timeout: int = 120,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a bounded command without a shell and capture textual output."""
+    """Run a bounded command without a shell and capture output transiently."""
     try:
         return subprocess.run(
             command,
@@ -115,24 +156,139 @@ def run(
     except subprocess.TimeoutExpired as error:
         stdout = error.stdout if isinstance(error.stdout, str) else ""
         stderr = error.stderr if isinstance(error.stderr, str) else ""
-        return subprocess.CompletedProcess(command, 124, stdout, stderr + "\nTIMEOUT")
+        return subprocess.CompletedProcess(command, 124, stdout, stderr)
 
 
-def bounded_lines(text: str, limit: int = 40) -> list[str]:
-    """Return a small printable excerpt suitable for review evidence."""
-    lines = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        lines.append(line[:500])
-        if len(lines) >= limit:
-            break
-    return lines
+def command_metadata(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    """Record only exit status and output hashes, never vendor-controlled text."""
+    return {
+        "exit_code": completed.returncode,
+        "stdout_sha256": sha256_bytes(completed.stdout.encode()),
+        "stderr_sha256": sha256_bytes(completed.stderr.encode()),
+    }
+
+
+def extract_reported_version(completed: subprocess.CompletedProcess[str]) -> str | None:
+    """Extract one conservative semantic version from transient process output."""
+    versions = sorted(set(SAFE_VERSION_RE.findall(f"{completed.stdout}\n{completed.stderr}")))
+    return versions[0] if len(versions) == 1 else None
+
+
+def installer_options(completed: subprocess.CompletedProcess[str]) -> dict[str, bool]:
+    """Detect only the reviewed option names from transient installer help."""
+    help_text = f"{completed.stdout}\n{completed.stderr}"
+    return {
+        "custom_directory": bool(
+            re.search(r"(?m)^\s*(?:-d\s*,\s*)?--dir(?:\s|=|<|$)", help_text)
+        ),
+        "skip_aliases": bool(
+            re.search(r"(?m)^\s*--skip-aliases(?:\s|=|$)", help_text)
+        ),
+        "skip_path": bool(re.search(r"(?m)^\s*--skip-path(?:\s|=|$)", help_text)),
+    }
+
+
+def tool_result(command: list[str], env: dict[str, str], cwd: Path) -> tuple[dict[str, Any], str]:
+    """Run an optional local inspection tool and retain text only in memory."""
+    executable = shutil.which(command[0], path=env["PATH"])
+    if executable is None:
+        return {"available": False}, ""
+    completed = run([executable, *command[1:]], env=env, cwd=cwd)
+    return {"available": True, **command_metadata(completed)}, f"{completed.stdout}\n{completed.stderr}"
+
+
+def normalize_binary_format(file_text: str, readelf_text: str) -> dict[str, Any]:
+    """Convert file/readelf output into fixed booleans and a safe interpreter."""
+    lowered = file_text.lower()
+    interpreter_match = re.search(
+        r"Requesting program interpreter:\s*([/A-Za-z0-9._+-]{1,200})",
+        readelf_text,
+    )
+    return {
+        "elf_64_bit": "elf 64-bit" in lowered,
+        "x86_64": "x86-64" in lowered or "advanced micro devices x86-64" in readelf_text.lower(),
+        "pie": "pie executable" in lowered,
+        "dynamically_linked": "dynamically linked" in lowered,
+        "stripped": "stripped" in lowered and "not stripped" not in lowered,
+        "interpreter": interpreter_match.group(1) if interpreter_match else None,
+    }
+
+
+def normalize_dynamic_libraries(ldd_text: str) -> dict[str, Any]:
+    """Expose only known system-library names and a count of unknown entries."""
+    discovered = set(SAFE_LIBRARY_RE.findall(ldd_text))
+    recognized = sorted(discovered & KNOWN_SYSTEM_LIBRARIES)
+    return {
+        "recognized": recognized,
+        "unrecognized_count": len(discovered - KNOWN_SYSTEM_LIBRARIES),
+    }
+
+
+def inspect_binary(binary: Path, env: dict[str, str], cwd: Path) -> dict[str, Any]:
+    """Inspect the executable without authentication or persistent interaction."""
+    version = run([str(binary), "--version"], env=env, cwd=cwd, timeout=30)
+    help_result = run([str(binary), "--help"], env=env, cwd=cwd, timeout=30)
+    help_text = f"{help_result.stdout}\n{help_result.stderr}"
+    file_meta, file_text = tool_result(["file", "-b", str(binary)], env, cwd)
+    readelf_meta, readelf_text = tool_result(["readelf", "-l", str(binary)], env, cwd)
+    ldd_meta, ldd_text = tool_result(["ldd", str(binary)], env, cwd)
+    return {
+        "path": EXPECTED_BINARY.as_posix(),
+        "size": binary.stat().st_size,
+        "sha256": sha256_file(binary),
+        "version": {
+            **command_metadata(version),
+            "reported_version": extract_reported_version(version),
+        },
+        "help": {
+            **command_metadata(help_result),
+            "mentions_update_subcommand": bool(
+                re.search(r"(?m)^\s*update(?:\s|$)", help_text)
+            ),
+            "mentions_install_subcommand": bool(
+                re.search(r"(?m)^\s*install(?:\s|$)", help_text)
+            ),
+            "mentions_sandbox_flag": "--sandbox" in help_text,
+            "mentions_skip_permissions_flag": "--dangerously-skip-permissions" in help_text,
+        },
+        "file_tool": file_meta,
+        "readelf_tool": readelf_meta,
+        "ldd_tool": ldd_meta,
+        "format": normalize_binary_format(file_text, readelf_text),
+        "dynamic_libraries": normalize_dynamic_libraries(ldd_text),
+    }
+
+
+def legal_files(home: Path) -> list[dict[str, Any]]:
+    """List license-like installed files using only normalized file metadata."""
+    records = []
+    for path in home.rglob("*"):
+        if path.is_file() and LEGAL_NAME_RE.fullmatch(path.name):
+            records.append(file_record(path, home))
+    return sorted(records, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def inspection_environment(home: Path) -> dict[str, str]:
+    """Construct a minimal credential-free environment for vendor processes."""
+    return {
+        "HOME": str(home),
+        "USER": "inspector",
+        "LOGNAME": "inspector",
+        "SHELL": "/bin/bash",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TERM": "xterm-256color",
+        "XDG_CACHE_HOME": str(home / ".cache"),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_DATA_HOME": str(home / ".local/share"),
+        "AGY_CLI_DISABLE_AUTO_UPDATE": "true",
+        "CI": "1",
+    }
 
 
 def download_installer(destination: Path) -> tuple[bytes, str | None, str]:
-    """Download the installer from the fixed official HTTPS endpoint."""
+    """Download at most 2 MiB from the fixed official HTTPS endpoint."""
     request = urllib.request.Request(
         OFFICIAL_INSTALLER_URL,
         headers={"User-Agent": "remote-dev-containers-antigravity-inspection"},
@@ -140,8 +296,6 @@ def download_installer(destination: Path) -> tuple[bytes, str | None, str]:
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             final_url = response.geturl()
-            if not final_url.startswith("https://"):
-                raise RuntimeError(f"installer redirected to a non-HTTPS URL: {final_url}")
             data = response.read(2 * 1024 * 1024 + 1)
             if len(data) > 2 * 1024 * 1024:
                 raise RuntimeError("installer exceeds the 2 MiB inspection limit")
@@ -160,187 +314,141 @@ def load_local_installer(source: Path, destination: Path) -> tuple[bytes, str | 
     return data, mimetypes.guess_type(source.name)[0], f"fixture:{source.name}"
 
 
-def command_metadata(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
-    """Convert process output into bounded non-secret review metadata."""
-    return {
-        "exit_code": completed.returncode,
-        "stdout_sha256": sha256_bytes(completed.stdout.encode()),
-        "stderr_sha256": sha256_bytes(completed.stderr.encode()),
-        "stdout_lines": bounded_lines(completed.stdout),
-        "stderr_lines": bounded_lines(completed.stderr),
-    }
-
-
-def tool_output(command: list[str], env: dict[str, str], cwd: Path) -> dict[str, Any]:
-    """Run an optional local inspection utility and return bounded output."""
-    executable = shutil.which(command[0], path=env["PATH"])
-    if executable is None:
-        return {"available": False}
-    completed = run([executable, *command[1:]], env=env, cwd=cwd)
-    return {"available": True, **command_metadata(completed)}
-
-
-def inspect_binary(binary: Path, env: dict[str, str], cwd: Path) -> dict[str, Any]:
-    """Inspect the installed executable without starting authentication."""
-    data = binary.read_bytes()
-    version = run([str(binary), "--version"], env=env, cwd=cwd, timeout=30)
-    help_result = run([str(binary), "--help"], env=env, cwd=cwd, timeout=30)
-    return {
-        "path": str(binary),
-        "size": len(data),
-        "sha256": sha256_bytes(data),
-        "version": command_metadata(version),
-        "help": command_metadata(help_result),
-        "file": tool_output(["file", "-b", str(binary)], env, cwd),
-        "readelf_header": tool_output(["readelf", "-h", str(binary)], env, cwd),
-        "dynamic_dependencies": tool_output(["ldd", str(binary)], env, cwd),
-    }
-
-
-def legal_files(home: Path) -> list[dict[str, Any]]:
-    """List license-like files installed under the isolated home directory."""
-    records = []
-    for path in home.rglob("*"):
-        if path.is_file() and LEGAL_NAME_RE.fullmatch(path.name):
-            records.append(file_record(path, home))
-    return sorted(records, key=lambda item: item["path"])
-
-
-def referenced_hosts(installer_text: str) -> list[str]:
-    """Return unique HTTPS hostnames visibly embedded in the installer text."""
-    hosts: set[str] = set()
-    for url in URL_RE.findall(installer_text):
-        match = re.match(r"https://([^/:?#]+)", url)
-        if match:
-            hosts.add(match.group(1).lower())
-    return sorted(hosts)
-
-
-def inspection_environment(home: Path) -> dict[str, str]:
-    """Construct a minimal environment that contains no repository credentials."""
-    return {
-        "HOME": str(home),
-        "USER": "inspector",
-        "LOGNAME": "inspector",
-        "SHELL": "/bin/bash",
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "TERM": "xterm-256color",
-        "XDG_CACHE_HOME": str(home / ".cache"),
-        "XDG_CONFIG_HOME": str(home / ".config"),
-        "XDG_DATA_HOME": str(home / ".local/share"),
-        "CI": "1",
-    }
+def verify_installer_before_execution(
+    data: bytes,
+    *,
+    expected_sha256: str,
+    final_url: str,
+    fixture: bool,
+) -> str:
+    """Reject changed bytes or redirects before any vendor code is invoked."""
+    actual_sha256 = sha256_bytes(data)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            "installer SHA-256 differs from the reviewed value: "
+            f"{actual_sha256} != {expected_sha256}"
+        )
+    if not fixture and final_url != OFFICIAL_INSTALLER_URL:
+        raise RuntimeError(
+            f"official installer redirected unexpectedly: {final_url}"
+        )
+    return actual_sha256
 
 
 def choose_install_command(
     installer: Path,
-    installer_help: subprocess.CompletedProcess[str],
+    options: dict[str, bool],
     home: Path,
-) -> tuple[str, list[str], dict[str, bool]]:
-    """Choose only a vendor-advertised installation strategy."""
-    help_text = f"{installer_help.stdout}\n{installer_help.stderr}"
-    supported = {
-        "custom_directory": "--dir" in help_text,
-        "skip_aliases": "--skip-aliases" in help_text,
-        "skip_path": "--skip-path" in help_text,
-    }
+) -> tuple[str, list[str]]:
+    """Choose only one reviewed installation strategy from normalized options."""
     base = ["/bin/bash", str(installer)]
-    if supported["custom_directory"]:
-        return (
-            "custom-directory",
-            [*base, "--dir", str(home / EXPECTED_BINARY.parent)],
-            supported,
-        )
-    if supported["skip_aliases"] and supported["skip_path"]:
-        return (
-            "skip-shell-modification-flags",
-            [*base, "--skip-aliases", "--skip-path"],
-            supported,
-        )
+    if options["custom_directory"]:
+        return "custom-directory", [*base, "--dir", str(home / EXPECTED_BINARY.parent)]
+    if options["skip_aliases"] and options["skip_path"]:
+        return "skip-shell-modification-flags", [*base, "--skip-aliases", "--skip-path"]
     raise RuntimeError(
-        "installer help exposes neither --dir nor the documented pair "
-        "--skip-aliases/--skip-path"
+        "installer exposes neither --dir nor the reviewed skip-aliases/skip-path pair"
     )
 
 
-def inspect(installer_fixture: Path | None) -> dict[str, Any]:
-    """Perform one complete installation and idempotent-update inspection."""
+def install_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    """Normalize installer output into a small fixed set of reviewed booleans."""
+    output = f"{completed.stdout}\n{completed.stderr}".lower()
+    return {
+        **command_metadata(completed),
+        "reports_linux_amd64": "linux_amd64" in output,
+        "reports_checksum_verified": "checksum verified" in output,
+        "reports_existing_install": "already installed" in output,
+        "reports_background_self_update": "self-updates in the background" in output,
+    }
+
+
+def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict[str, Any]:
+    """Perform one approved installation and repeated-install inspection."""
     with tempfile.TemporaryDirectory(prefix="antigravity-inspection-") as temporary:
         root = Path(temporary)
         home = root / "home"
         home.mkdir(mode=0o700)
         installer = root / "install.sh"
-        if installer_fixture is None:
-            installer_data, content_type, final_url = download_installer(installer)
-            installer_source = OFFICIAL_INSTALLER_URL
-        else:
+        fixture = installer_fixture is not None
+        if fixture:
             installer_data, content_type, final_url = load_local_installer(
                 installer_fixture, installer
             )
             installer_source = final_url
+        else:
+            if expected_sha256 is None:
+                raise RuntimeError(
+                    "official inspection requires --expected-installer-sha256"
+                )
+            installer_data, content_type, final_url = download_installer(installer)
+            installer_source = OFFICIAL_INSTALLER_URL
+
+        approved_sha256 = expected_sha256 or sha256_bytes(installer_data)
+        installer_sha256 = verify_installer_before_execution(
+            installer_data,
+            expected_sha256=approved_sha256,
+            final_url=final_url,
+            fixture=fixture,
+        )
         installer.chmod(0o700)
 
-        installer_text = installer_data.decode("utf-8", errors="replace")
         env = inspection_environment(home)
+        before_profiles = profile_snapshot(home)
+        before = snapshot(home)
+
         syntax = run(["/bin/bash", "-n", str(installer)], env=env, cwd=root)
         if syntax.returncode != 0:
-            raise RuntimeError(f"installer is not valid Bash: {syntax.stderr}")
+            raise RuntimeError("approved installer is not valid Bash")
 
         installer_help = run(
             ["/bin/bash", str(installer), "--help"], env=env, cwd=root, timeout=30
         )
-        if installer_help.returncode != 0:
-            raise RuntimeError("installer --help failed")
-        strategy, install_command, supported_options = choose_install_command(
-            installer, installer_help, home
-        )
+        options = installer_options(installer_help)
+        after_help_profiles = profile_snapshot(home)
+        after_help = snapshot(home)
+        strategy, install_command = choose_install_command(installer, options, home)
 
-        before_profiles = profile_snapshot(home)
-        before = snapshot(home)
-        first_install = run(install_command, env=env, cwd=root, timeout=300)
+        first_install_process = run(install_command, env=env, cwd=root, timeout=300)
         after_first = snapshot(home)
         after_first_profiles = profile_snapshot(home)
 
         binary = home / EXPECTED_BINARY
         binary_after_first = inspect_binary(binary, env, root) if binary.is_file() else None
 
-        second_install = run(install_command, env=env, cwd=root, timeout=300)
+        second_install_process = run(install_command, env=env, cwd=root, timeout=300)
         after_second = snapshot(home)
         after_second_profiles = profile_snapshot(home)
         binary_after_second = inspect_binary(binary, env, root) if binary.is_file() else None
 
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "inspected_at_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
             "platform": {
                 "system": platform.system(),
                 "machine": platform.machine(),
-                "release": platform.release(),
+            },
+            "environment_controls": {
+                "auto_update_disabled": env["AGY_CLI_DISABLE_AUTO_UPDATE"] == "true"
             },
             "installer": {
                 "source": installer_source,
                 "final_url": final_url,
                 "content_type": content_type,
                 "size": len(installer_data),
-                "sha256": sha256_bytes(installer_data),
+                "sha256": installer_sha256,
                 "bash_syntax": command_metadata(syntax),
                 "help": command_metadata(installer_help),
-                "supported_options": supported_options,
+                "supported_options": options,
                 "selected_strategy": strategy,
-                "selected_arguments": install_command[2:],
-                "text_mentions_skip_aliases": "--skip-aliases" in installer_text,
-                "text_mentions_skip_path": "--skip-path" in installer_text,
-                "text_mentions_custom_directory": "--dir" in installer_text,
-                "referenced_https_hosts": referenced_hosts(installer_text),
             },
-            "first_install": command_metadata(first_install),
-            "second_install": command_metadata(second_install),
+            "home_unchanged_after_help": before == after_help,
             "profiles": {
                 "before": before_profiles,
+                "after_help": after_help_profiles,
                 "after_first": after_first_profiles,
                 "after_second": after_second_profiles,
+                "unchanged_after_help": before_profiles == after_help_profiles,
                 "unchanged_after_first": before_profiles == after_first_profiles,
                 "unchanged_after_second": before_profiles == after_second_profiles,
             },
@@ -349,6 +457,8 @@ def inspect(installer_fixture: Path | None) -> dict[str, Any]:
                 "after_first": after_first,
                 "after_second": after_second,
             },
+            "first_install": install_result(first_install_process),
+            "second_install": install_result(second_install_process),
             "binary_after_first": binary_after_first,
             "binary_after_second": binary_after_second,
             "expected_binary_present": binary.is_file(),
@@ -361,67 +471,89 @@ def inspect(installer_fixture: Path | None) -> dict[str, Any]:
         }
 
 
-def validate_report(report: dict[str, Any], *, fixture: bool) -> list[str]:
-    """Return blocking inspection findings that prevent implementation."""
+def validate_report(report: dict[str, Any]) -> list[str]:
+    """Return every blocking inspection finding."""
     errors: list[str] = []
     installer = report["installer"]
-    if not fixture and installer["source"] != OFFICIAL_INSTALLER_URL:
-        errors.append("inspection did not use the fixed official installer URL")
-    if not fixture and not str(installer["final_url"]).startswith("https://"):
-        errors.append("official installer resolved to a non-HTTPS URL")
     if installer["help"]["exit_code"] != 0:
         errors.append("installer --help failed")
+    if not report["home_unchanged_after_help"]:
+        errors.append("installer --help changed the isolated home")
+    if not report["profiles"]["unchanged_after_help"]:
+        errors.append("installer --help changed a shell profile")
     if installer["selected_strategy"] not in {
         "custom-directory",
         "skip-shell-modification-flags",
     }:
-        errors.append("no supported safe installation strategy was selected")
+        errors.append("no reviewed installation strategy was selected")
     if report["first_install"]["exit_code"] != 0:
         errors.append("first installer execution failed")
     if report["second_install"]["exit_code"] != 0:
         errors.append("second installer execution failed")
     if not report["expected_binary_present"]:
         errors.append(f"expected executable was not installed at ~/{EXPECTED_BINARY}")
-    if not report["profiles"]["unchanged_after_first"]:
-        errors.append("shell profiles changed during first installation")
-    if not report["profiles"]["unchanged_after_second"]:
-        errors.append("shell profiles changed during the second installer run")
+    for stage in ("after_first", "after_second"):
+        if not report["profiles"][f"unchanged_{stage}"]:
+            errors.append(f"shell profiles changed {stage.replace('_', ' ')}")
     binary = report["binary_after_second"]
-    if isinstance(binary, dict) and binary["version"]["exit_code"] != 0:
-        errors.append("installed executable does not support a successful --version check")
+    if not isinstance(binary, dict):
+        errors.append("installed executable could not be inspected")
+        return errors
+    if binary["version"]["exit_code"] != 0:
+        errors.append("installed executable --version failed")
+    if binary["version"]["reported_version"] is None:
+        errors.append("installed executable reported no unambiguous version")
+    if binary["help"]["exit_code"] != 0:
+        errors.append("installed executable --help failed")
+    if not binary["format"]["elf_64_bit"] or not binary["format"]["x86_64"]:
+        errors.append("installed executable is not the expected Linux AMD64 format")
+    if binary["dynamic_libraries"]["unrecognized_count"] != 0:
+        errors.append("installed executable introduced unreviewed dynamic libraries")
+    if not report["binary_stable_across_second_install"]:
+        errors.append("repeated installer run changed the executable unexpectedly")
+    if not report["environment_controls"]["auto_update_disabled"]:
+        errors.append("inspection did not disable background auto-update")
     return errors
 
 
+def parse_sha256(value: str) -> str:
+    """Validate a lowercase or uppercase hexadecimal SHA-256 value."""
+    normalized = value.lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+        raise argparse.ArgumentTypeError("expected a 64-character SHA-256 value")
+    return normalized
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse inspection and local-fixture arguments."""
+    """Parse official-inspection and local-fixture arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--expected-installer-sha256", type=parse_sha256)
     parser.add_argument(
         "--installer-fixture",
         type=Path,
-        help="Local test fixture only; production inspection always uses the official URL",
+        help="Local test fixture only; official mode requires an approved digest",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the inspection, write JSON evidence and fail on blocking findings."""
+    """Write normalized evidence and fail on blocking findings."""
     args = parse_args(argv)
     try:
-        report = inspect(args.installer_fixture)
-        errors = validate_report(report, fixture=args.installer_fixture is not None)
+        report = inspect(args.installer_fixture, args.expected_installer_sha256)
+        errors = validate_report(report)
     except (OSError, RuntimeError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
+        print(f"Antigravity inspection rejected before evidence generation: {error}", file=sys.stderr)
         return 1
 
     report["blocking_findings"] = errors
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2, sort_keys=True))
     if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
+        print(f"Antigravity inspection found {len(errors)} blocking issue(s).", file=sys.stderr)
         return 1
+    print("Antigravity inspection: OK")
     return 0
 
 
