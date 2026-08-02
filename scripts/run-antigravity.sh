@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly DEFAULT_MANAGER=/usr/local/bin/remote-dev-antigravity
 readonly DEFAULT_SECURE_STATE=/usr/local/bin/secure-persistent-state
+readonly DEFAULT_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
 testing=0
 if [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]; then
@@ -12,6 +13,16 @@ if [[ "${REMOTE_DEV_ANTIGRAVITY_TESTING:-0}" == "1" ]]; then
 else
   manager="$DEFAULT_MANAGER"
   secure_state="$DEFAULT_SECURE_STATE"
+  [[ -f "$DEFAULT_RUNTIME_LIB" && -r "$DEFAULT_RUNTIME_LIB" && ! -L "$DEFAULT_RUNTIME_LIB" ]] \
+    || { echo "ERROR: Remote Dev role definitions are unavailable" >&2; exit 1; }
+  # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+  source "$DEFAULT_RUNTIME_LIB"
+  resolved_role="$(remote_dev_resolve_role)" || exit $?
+  if [[ "$resolved_role" != antigravity ]]; then
+    echo "ERROR: run-antigravity requires the gated REMOTE_DEV_ROLE=antigravity service" >&2
+    exit 2
+  fi
+  export REMOTE_DEV_ROLE="$resolved_role"
 fi
 
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
