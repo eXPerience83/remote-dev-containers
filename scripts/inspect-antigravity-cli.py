@@ -44,7 +44,7 @@ SAFE_RELATIVE_PATH_RE = re.compile(r"[A-Za-z0-9._+/@=-]{1,300}")
 SAFE_VERSION_RE = re.compile(
     r"(?<![0-9A-Za-z])([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)(?![0-9A-Za-z])"
 )
-SAFE_LIBRARY_RE = re.compile(r"[A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*")
+SAFE_LIBRARY_RE = re.compile(r"lib[A-Za-z0-9_.+-]*\.so(?:\.[0-9]+)*")
 KNOWN_SYSTEM_LIBRARIES = {
     "libc.so.6",
     "libdl.so.2",
@@ -329,9 +329,7 @@ def verify_installer_before_execution(
             f"{actual_sha256} != {expected_sha256}"
         )
     if not fixture and final_url != OFFICIAL_INSTALLER_URL:
-        raise RuntimeError(
-            f"official installer redirected unexpectedly: {final_url}"
-        )
+        raise RuntimeError(f"official installer redirected unexpectedly: {final_url}")
     return actual_sha256
 
 
@@ -378,9 +376,7 @@ def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict
             installer_source = final_url
         else:
             if expected_sha256 is None:
-                raise RuntimeError(
-                    "official inspection requires --expected-installer-sha256"
-                )
+                raise RuntimeError("official inspection requires --expected-installer-sha256")
             installer_data, content_type, final_url = download_installer(installer)
             installer_source = OFFICIAL_INSTALLER_URL
 
@@ -407,6 +403,8 @@ def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict
         options = installer_options(installer_help)
         after_help_profiles = profile_snapshot(home)
         after_help = snapshot(home)
+        if before != after_help or before_profiles != after_help_profiles:
+            raise RuntimeError("approved installer --help changed the isolated home")
         strategy, install_command = choose_install_command(installer, options, home)
 
         first_install_process = run(install_command, env=env, cwd=root, timeout=300)
@@ -442,13 +440,13 @@ def inspect(installer_fixture: Path | None, expected_sha256: str | None) -> dict
                 "supported_options": options,
                 "selected_strategy": strategy,
             },
-            "home_unchanged_after_help": before == after_help,
+            "home_unchanged_after_help": True,
             "profiles": {
                 "before": before_profiles,
                 "after_help": after_help_profiles,
                 "after_first": after_first_profiles,
                 "after_second": after_second_profiles,
-                "unchanged_after_help": before_profiles == after_help_profiles,
+                "unchanged_after_help": True,
                 "unchanged_after_first": before_profiles == after_first_profiles,
                 "unchanged_after_second": before_profiles == after_second_profiles,
             },
