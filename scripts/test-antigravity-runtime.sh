@@ -37,7 +37,7 @@ for forbidden in \
   REMOTE_DEV_ANTIGRAVITY_VENDOR_STATE_DIR \
   REMOTE_DEV_ANTIGRAVITY_MANAGER \
   REMOTE_DEV_SECURE_STATE; do
-  if grep -Fq "$forbidden" "$MANAGER_SOURCE" "$RUNNER_SOURCE"; then
+  if grep -Fq "$forbidden" "$MANAGER_SOURCE" "$RUNNER_SOURCE" "$RUNTIME_SOURCE"; then
     fail "production Antigravity scripts still expose test override: $forbidden"
   fi
 done
@@ -280,13 +280,33 @@ cancel_install_in_pty() {
   python3 - "$MANAGER" <<'PY'
 import os
 import pty
+import select
+import signal
 import sys
+import time
 
+timeout_seconds = 60.0
 pid, fd = pty.fork()
 if pid == 0:
-    os.execv("/bin/bash", ["bash", sys.argv[1], "install"])
+    try:
+        os.execv("/bin/bash", ["bash", sys.argv[1], "install"])
+    finally:
+        os._exit(127)
+
 os.write(fd, b"n\n")
+deadline = time.monotonic() + timeout_seconds
 while True:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        os.waitpid(pid, 0)
+        raise SystemExit("timed out waiting for the cancelled installation")
+    readable, _, _ = select.select([fd], [], [], remaining)
+    if not readable:
+        continue
     try:
         chunk = os.read(fd, 4096)
     except OSError:

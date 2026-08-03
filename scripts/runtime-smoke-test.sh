@@ -149,7 +149,11 @@ for _ in $(seq 1 30); do
     assert_antigravity_entrypoint_blocked \
       'Antigravity launcher' \
       run-antigravity
-    if docker exec "$name" test -e /root/.local/bin/agy; then
+    antigravity_binary="$(
+      docker exec "$name" bash -c \
+        '. /usr/local/lib/remote-dev/antigravity-paths.sh; printf "%s" "$ANTIGRAVITY_BINARY"'
+    )"
+    if docker exec "$name" test -e "$antigravity_binary"; then
       echo "ERROR: a blocked Antigravity entry point created the vendor executable in the Codex service" >&2
       exit 1
     fi
