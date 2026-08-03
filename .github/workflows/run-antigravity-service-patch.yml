@@ -1,0 +1,86 @@
+name: Run isolated-service patch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-antigravity-service.yml
+      - .github/workflows/run-antigravity-service-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825a76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/antigravity-isolated-service
+          fetch-depth: 0
+
+      - name: Execute the reviewed patch payload
+        run: |
+          python3 - <<'BOOT'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/apply-antigravity-service.yml').read_text(encoding='utf-8')
+          start = "          python3 - <<'PY'\n"
+          end = "\n          PY\n\n      - name: Validate focused implementation"
+          if workflow.count(start) != 1 or workflow.count(end) != 1:
+              raise SystemExit('could not locate the isolated-service patch payload exactly once')
+          payload = workflow.split(start, 1)[1].split(end, 1)[0]
+          lines = payload.splitlines()
+          if any(line and not line.startswith('          ') for line in lines):
+              raise SystemExit('unexpected indentation in patch payload')
+          payload = '\n'.join(line[10:] if line else '' for line in lines) + '\n'
+          exec(compile(payload, 'isolated-service-patch', 'exec'), {'__name__': '__main__'})
+          BOOT
+
+      - name: Validate focused implementation
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' -print0)
+          python3 -m py_compile \
+            scripts/remote-dev-launcher.py \
+            scripts/preflight-data-layout.py \
+            scripts/test_single_stack_compose.py \
+            scripts/test_canonical_data_layout.py \
+            scripts/test_preflight_data_layout.py
+          REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
+            bash scripts/test-remote-dev-launcher.sh
+          python3 scripts/test_single_stack_compose.py
+          python3 scripts/test_canonical_data_layout.py
+          python3 scripts/test_preflight_data_layout.py
+          for file in compose/*.yml; do
+            docker compose --profile antigravity -f "$file" config --quiet
+          done
+          git diff --check
+
+      - name: Commit implementation and remove patch helpers
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm \
+            .github/workflows/apply-antigravity-service.yml \
+            .github/workflows/run-antigravity-service-patch.yml
+          git add \
+            .env.example \
+            compose/docker-compose.yml \
+            compose/truenas.yml \
+            scripts/preflight-data-layout.py \
+            scripts/remote-dev-doctor.sh \
+            scripts/remote-dev-launcher.py \
+            scripts/runtime-smoke-test.sh \
+            scripts/test-remote-dev-launcher.sh \
+            scripts/test_canonical_data_layout.py \
+            scripts/test_preflight_data_layout.py \
+            scripts/test_single_stack_compose.py
+          git commit -m "feat: add the isolated Antigravity service topology"
+          git push origin HEAD:feat/antigravity-isolated-service
