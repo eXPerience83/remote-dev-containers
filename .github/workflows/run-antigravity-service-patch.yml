@@ -24,21 +24,15 @@ jobs:
 
       - name: Execute the reviewed patch payload
         run: |
-          python3 - <<'BOOT'
-          from pathlib import Path
-
-          workflow = Path('.github/workflows/apply-antigravity-service.yml').read_text(encoding='utf-8')
-          start = "          python3 - <<'PY'\n"
-          end = "\n          PY\n\n      - name: Validate focused implementation"
-          if workflow.count(start) != 1 or workflow.count(end) != 1:
-              raise SystemExit('could not locate the isolated-service patch payload exactly once')
-          payload = workflow.split(start, 1)[1].split(end, 1)[0]
-          payload = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in payload.splitlines()
-          ) + '\n'
-          exec(compile(payload, 'isolated-service-patch', 'exec'), {'__name__': '__main__'})
-          BOOT
+          set -euo pipefail
+          ruby -ryaml -e '
+            workflow = YAML.safe_load(File.read(".github/workflows/apply-antigravity-service.yml"), aliases: true)
+            steps = workflow.fetch("jobs").fetch("apply").fetch("steps")
+            step = steps.find { |candidate| candidate["name"] == "Apply isolated service and validation changes" }
+            abort "reviewed patch step was not found exactly" unless step && step["run"].is_a?(String)
+            File.write("/tmp/apply-antigravity-service.sh", step.fetch("run"))
+          '
+          bash /tmp/apply-antigravity-service.sh
 
       - name: Validate focused implementation
         run: |
