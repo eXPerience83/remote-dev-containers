@@ -1,0 +1,144 @@
+name: Apply PR 75 review fixes
+
+on:
+  push:
+    branches:
+      - feat/antigravity-role-integration
+    paths:
+      - .github/workflows/apply-pr75-review-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/antigravity-role-integration
+          fetch-depth: 0
+
+      - name: Apply exact reviewed changes
+        run: |
+          python3 - <<'PATCH_PY'
+          from pathlib import Path
+
+          test_path = Path("scripts/test-antigravity-runtime.sh")
+          test_text = test_path.read_text(encoding="utf-8")
+
+          old_scan = 'if grep -Fq "$forbidden" "$MANAGER_SOURCE" "$RUNNER_SOURCE"; then'
+          new_scan = 'if grep -Fq "$forbidden" "$MANAGER_SOURCE" "$RUNNER_SOURCE" "$RUNTIME_SOURCE"; then'
+          if test_text.count(old_scan) != 1:
+              raise SystemExit("expected exactly one forbidden-override scan anchor")
+          test_text = test_text.replace(old_scan, new_scan)
+
+          old_pty = r'''cancel_install_in_pty() {
+            python3 - "$MANAGER" <<'PY'
+          import os
+          import pty
+          import sys
+
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execv("/bin/bash", ["bash", sys.argv[1], "install"])
+          os.write(fd, b"n\n")
+          while True:
+              try:
+                  chunk = os.read(fd, 4096)
+              except OSError:
+                  break
+              if not chunk:
+                  break
+          _, wait_status = os.waitpid(pid, 0)
+          raise SystemExit(os.waitstatus_to_exitcode(wait_status))
+          PY
+          }
+          '''
+          new_pty = r'''cancel_install_in_pty() {
+            python3 - "$MANAGER" <<'PY'
+          import os
+          import pty
+          import select
+          import signal
+          import sys
+          import time
+
+          timeout_seconds = 60.0
+          pid, fd = pty.fork()
+          if pid == 0:
+              try:
+                  os.execv("/bin/bash", ["bash", sys.argv[1], "install"])
+              finally:
+                  os._exit(127)
+
+          os.write(fd, b"n\n")
+          deadline = time.monotonic() + timeout_seconds
+          while True:
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  try:
+                      os.kill(pid, signal.SIGKILL)
+                  except ProcessLookupError:
+                      pass
+                  os.waitpid(pid, 0)
+                  raise SystemExit("timed out waiting for the cancelled installation")
+              readable, _, _ = select.select([fd], [], [], remaining)
+              if not readable:
+                  continue
+              try:
+                  chunk = os.read(fd, 4096)
+              except OSError:
+                  break
+              if not chunk:
+                  break
+          _, wait_status = os.waitpid(pid, 0)
+          raise SystemExit(os.waitstatus_to_exitcode(wait_status))
+          PY
+          }
+          '''
+          if test_text.count(old_pty) != 1:
+              raise SystemExit("expected exactly one PTY cancellation anchor")
+          test_path.write_text(test_text.replace(old_pty, new_pty), encoding="utf-8")
+
+          smoke_path = Path("scripts/runtime-smoke-test.sh")
+          smoke_text = smoke_path.read_text(encoding="utf-8")
+          old_path_check = r'''    if docker exec "$name" test -e /root/.local/bin/agy; then
+                echo "ERROR: a blocked Antigravity entry point created the vendor executable in the Codex service" >&2
+                exit 1
+              fi
+          '''
+          new_path_check = r'''    antigravity_binary="$(
+                docker exec "$name" bash -c \
+                  '. /usr/local/lib/remote-dev/antigravity-paths.sh; printf "%s" "$ANTIGRAVITY_BINARY"'
+              )"
+              if docker exec "$name" test -e "$antigravity_binary"; then
+                echo "ERROR: a blocked Antigravity entry point created the vendor executable in the Codex service" >&2
+                exit 1
+              fi
+          '''
+          if smoke_text.count(old_path_check) != 1:
+              raise SystemExit("expected exactly one canonical executable path anchor")
+          smoke_path.write_text(smoke_text.replace(old_path_check, new_path_check), encoding="utf-8")
+          PATCH_PY
+
+      - name: Validate changes
+        run: |
+          bash -n \
+            scripts/test-antigravity-runtime.sh \
+            scripts/runtime-smoke-test.sh
+          bash scripts/test-antigravity-runtime.sh
+          bash scripts/test-antigravity-security-regressions.sh
+          git diff --check
+
+      - name: Commit reviewed fixes and remove helper workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-pr75-review-fixes.yml
+          git add scripts/test-antigravity-runtime.sh scripts/runtime-smoke-test.sh
+          git commit -m "test: harden Antigravity review regressions"
+          git push origin HEAD:feat/antigravity-role-integration
