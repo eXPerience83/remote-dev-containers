@@ -24,6 +24,12 @@ services:
       REMOTE_DEV_LAUNCHER_CODEX_SCHEME: ""
       REMOTE_DEV_LAUNCHER_CODEX_PATH: /
 
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED: "1"
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST: ""
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT: "7682"
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME: ""
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH: /
+
     security_opt:
       - no-new-privileges:true
 
@@ -68,7 +74,6 @@ services:
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
       DO_NOT_TRACK: "1"
 
-      # Optional. Prefer ChatGPT device-code login instead of an API key.
       OPENAI_API_KEY: ""
       GIT_USER_NAME: ""
       GIT_USER_EMAIL: ""
@@ -77,12 +82,12 @@ services:
       - no-new-privileges:true
 
     ports:
-      # Retained as the independently authenticated Codex endpoint.
       - "192.168.1.10:7681:7681"
 
     # Before saving this YAML, run scripts/preflight-data-layout.py on the
-    # TrueNAS host with --root /mnt/Pool1/remote-dev. create_host_path is only
-    # defense-in-depth because not every Compose release enforces it reliably.
+    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity.
+    # create_host_path is only defense-in-depth because not every Compose
+    # release enforces it reliably.
     volumes:
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/codex
@@ -111,6 +116,94 @@ services:
           create_host_path: false
       - type: bind
         source: /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
+        target: /run/secrets/web_password
+        read_only: true
+        bind:
+          create_host_path: false
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+  antigravity:
+    image: *remote-dev-image
+    container_name: antigravity-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: antigravity
+      REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
+      WORKSPACE: /workspace
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7682"
+      WEB_BASE_PATH: /
+      WEB_USERNAME: antigravity
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: "1"
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "0"
+      START_MODE: menu
+      TMUX_SESSION: antigravity
+      AGY_CLI_DISABLE_AUTO_UPDATE: "true"
+
+      GH_HOST: github.com
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      GIT_USER_NAME: ""
+      GIT_USER_EMAIL: ""
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "192.168.1.10:7682:7682"
+
+    volumes:
+      - type: bind
+        source: /mnt/Pool1/remote-dev/workspaces/antigravity
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/bin
+        target: /root/.local/bin
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/runtime
+        target: /root/.local/share/remote-dev/antigravity
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/vendor
+        target: /root/.gemini/antigravity-cli
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
         target: /run/secrets/web_password
         read_only: true
         bind:

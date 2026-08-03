@@ -9,7 +9,7 @@ import stat
 import sys
 from pathlib import Path
 
-DIRECTORY_SUFFIXES = (
+CODEX_DIRECTORY_SUFFIXES = (
     "workspaces/codex",
     "state/codex/agent",
     "state/codex/gh",
@@ -17,14 +17,25 @@ DIRECTORY_SUFFIXES = (
     "state/codex/ssh",
     "secrets/codex",
 )
-PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
+ANTIGRAVITY_DIRECTORY_SUFFIXES = (
+    "workspaces/antigravity",
+    "state/antigravity/bin",
+    "state/antigravity/runtime",
+    "state/antigravity/vendor",
+    "state/antigravity/gh",
+    "state/antigravity/git",
+    "state/antigravity/ssh",
+    "secrets/antigravity",
+)
+CODEX_PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
+ANTIGRAVITY_PASSWORD_SUFFIX = "secrets/antigravity/web_password.txt"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the host-side canonical data-root preflight arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Verify that every canonical Remote Dev bind source exists before "
+            "Verify that every enabled Remote Dev bind source exists before "
             "Docker Compose or TrueNAS is allowed to deploy it."
         )
     )
@@ -33,6 +44,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         type=Path,
         help="Host path corresponding to REMOTE_DEV_DATA_ROOT",
+    )
+    parser.add_argument(
+        "--include-antigravity",
+        action="store_true",
+        help="Also require the optional isolated Antigravity service layout",
     )
     return parser.parse_args(argv)
 
@@ -80,7 +96,7 @@ def validate_directory(path: Path, errors: list[str]) -> None:
 
 
 def validate_password_file(path: Path, errors: list[str]) -> None:
-    """Validate the file exactly as the shell runtime will consume it."""
+    """Validate one terminal password exactly as the shell runtime consumes it."""
     if not path.exists():
         errors.append(f"password file is missing: {path}")
         return
@@ -97,14 +113,9 @@ def validate_password_file(path: Path, errors: list[str]) -> None:
     if not password_bytes:
         errors.append(f"password file is empty: {path}")
     else:
-        # start-remote-dev-web.sh reads through shell command substitution,
-        # which removes every trailing LF. Validate the resulting credential,
-        # not merely the on-disk byte count.
         effective_password = password_bytes.rstrip(b"\n")
         if not effective_password:
-            errors.append(
-                f"password is empty after trailing newline removal: {path}"
-            )
+            errors.append(f"password is empty after trailing newline removal: {path}")
         elif b"\x00" in effective_password:
             errors.append(f"password must not contain NUL bytes: {path}")
         elif b"\n" in effective_password or b"\r" in effective_password:
@@ -119,19 +130,25 @@ def validate_password_file(path: Path, errors: list[str]) -> None:
             )
 
 
-def validate_layout(root: Path) -> list[str]:
-    """Return every problem found in one canonical host data root."""
+def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
+    """Return every problem found for the enabled service layouts."""
     errors: list[str] = []
-    directories = tuple(root / suffix for suffix in DIRECTORY_SUFFIXES)
-    password_file = root / PASSWORD_SUFFIX
+    suffixes = list(CODEX_DIRECTORY_SUFFIXES)
+    passwords = [root / CODEX_PASSWORD_SUFFIX]
+    if include_antigravity:
+        suffixes.extend(ANTIGRAVITY_DIRECTORY_SUFFIXES)
+        passwords.append(root / ANTIGRAVITY_PASSWORD_SUFFIX)
+    directories = tuple(root / suffix for suffix in suffixes)
+    password_files = tuple(passwords)
 
-    if validate_no_symlink_components(root, (*directories, password_file), errors):
+    if validate_no_symlink_components(root, (*directories, *password_files), errors):
         return errors
 
     validate_directory(root, errors)
     for directory in directories:
         validate_directory(directory, errors)
-    validate_password_file(password_file, errors)
+    for password_file in password_files:
+        validate_password_file(password_file, errors)
     return errors
 
 
@@ -139,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run the preflight and print only paths and permission metadata."""
     args = parse_args(argv)
     root = canonical_path(args.root)
-    errors = validate_layout(root)
+    errors = validate_layout(root, include_antigravity=args.include_antigravity)
     if errors:
         print("Remote Dev data-layout preflight failed:", file=sys.stderr)
         for error in errors:
@@ -151,7 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    print(f"Remote Dev data-layout preflight: OK ({root})")
+    roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
+    print(f"Remote Dev data-layout preflight: OK ({root}; {roles})")
     return 0
 
 

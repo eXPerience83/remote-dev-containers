@@ -37,6 +37,11 @@ Codex route host: ${REMOTE_DEV_LAUNCHER_CODEX_HOST:-browser hostname}
 Codex route port: ${REMOTE_DEV_LAUNCHER_CODEX_PORT:-7681}
 Codex route scheme: ${REMOTE_DEV_LAUNCHER_CODEX_SCHEME:-browser scheme}
 Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
+Antigravity route enabled: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED:-0}
+Antigravity route host: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST:-browser hostname}
+Antigravity route port: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT:-7682}
+Antigravity route scheme: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME:-browser scheme}
+Antigravity route path: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH:-/}
 Available roles: launcher, codex, shell
 Experimental gated role: antigravity (requires REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1)
 EOF_LAUNCHER
@@ -164,6 +169,12 @@ if [[ "$role" != launcher ]]; then
   )
   if [[ "$role" == codex ]]; then
     writable_paths+=("${CODEX_HOME:-/root/.codex}")
+  elif [[ "$role" == antigravity ]]; then
+    writable_paths+=(
+      "$ANTIGRAVITY_BIN_DIR"
+      "$ANTIGRAVITY_STATE_DIR"
+      "$ANTIGRAVITY_VENDOR_STATE_DIR"
+    )
   fi
   for path in "${writable_paths[@]}"; do
     printf 'Writable %-38s ' "$path"

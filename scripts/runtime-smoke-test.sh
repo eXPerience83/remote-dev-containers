@@ -190,6 +190,8 @@ for _ in $(seq 1 30); do
       --env WEB_PASSWORD="$launcher_secret" \
       --env WEB_CHECK_ORIGIN=1 \
       --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \
+      --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \
+      --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=7682 \
       "$image" >/dev/null
 
     for _ in $(seq 1 30); do
@@ -220,6 +222,8 @@ for _ in $(seq 1 30); do
       http://127.0.0.1:7680/launcher/)"
     grep -Fq 'Open Codex' <<<"$launcher_page"
     grep -Fq '"port":7681' <<<"$launcher_page"
+    grep -Fq 'Open Antigravity (experimental)' <<<"$launcher_page"
+    grep -Fq '"port":7682' <<<"$launcher_page"
     if grep -Fq "$launcher_secret" <<<"$launcher_page"; then
       echo "ERROR: launcher page exposed its web password" >&2
       exit 1

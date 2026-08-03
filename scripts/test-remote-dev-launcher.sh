@@ -47,6 +47,9 @@ WEB_CHECK_ORIGIN=1 \
 ALLOW_INSECURE_WEB=0 \
 REMOTE_DEV_LAUNCHER_CODEX_PORT=8765 \
 REMOTE_DEV_LAUNCHER_CODEX_PATH=/codex \
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=8766 \
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH=/antigravity \
   python "$launcher" >"$log_file" 2>&1 &
 launcher_pid=$!
 
@@ -123,6 +126,10 @@ curl --fail --silent --show-error \
 grep -Fq '"port":8765' "$page"
 grep -Fq '"path":"/codex"' "$page"
 grep -Fq 'authenticates independently' "$page"
+grep -Fq 'Open Antigravity (experimental)' "$page"
+grep -Fq '"port":8766' "$page"
+grep -Fq '"path":"/antigravity"' "$page"
+grep -Fq 'separate authentication, workspace and credentials' "$page"
 if grep -Fq "$secret" "$page"; then
   echo 'ERROR: launcher page exposed the web password' >&2
   exit 1
@@ -169,6 +176,10 @@ status="$(curl --silent --output "$workdir/no-auth-page.html" --write-out '%{htt
   exit 1
 }
 grep -Fq 'Open Codex' "$workdir/no-auth-page.html"
+if grep -Fq 'Open Antigravity' "$workdir/no-auth-page.html"; then
+  echo 'ERROR: disabled Antigravity route was advertised' >&2
+  exit 1
+fi
 stop_launcher
 
 invalid_log="$workdir/invalid.log"
@@ -206,4 +217,16 @@ REMOTE_DEV_LAUNCHER_CODEX_HOST='codex.example.com:8443' \
 }
 grep -Fq 'must not include a port' "$embedded_port_log"
 
-echo 'Optional and authenticated launcher, privilege drop and fixed routing tests: OK'
+invalid_agent_flag_log="$workdir/invalid-agent-flag.log"
+invalid_agent_flag_status=0
+ALLOW_INSECURE_WEB=1 \
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=yes \
+  python "$launcher" > /dev/null 2>"$invalid_agent_flag_log" || invalid_agent_flag_status=$?
+[[ "$invalid_agent_flag_status" == 2 ]] || {
+  echo "ERROR: invalid Antigravity route flag returned $invalid_agent_flag_status instead of 2" >&2
+  cat "$invalid_agent_flag_log" >&2
+  exit 1
+}
+grep -Fq 'REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED must be 0 or 1' "$invalid_agent_flag_log"
+
+echo 'Optional and authenticated launcher, privilege drop and isolated fixed routing tests: OK'
