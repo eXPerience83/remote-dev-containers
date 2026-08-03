@@ -117,7 +117,7 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
         require(isinstance(service, dict), f"{path}: invalid {role} service")
         mounts = volume_map(service)
         expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
-        if truenas:
+        if truenas or role == "antigravity":
             expected_targets.add("/run/secrets/web_password")
         require(
             set(mounts) == expected_targets,
@@ -133,14 +133,15 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
             if truenas:
                 require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
 
-        if truenas:
+        if truenas or role == "antigravity":
             password_mount = mounts["/run/secrets/web_password"]
             validate_bind_mount(path, password_mount, PASSWORD_SUFFIXES[role])
             require(password_mount.get("read_only") is True, f"{path}: {role} password must be read-only")
-            require(
-                password_mount.get("source") == f"{TRUENAS_ROOT}{PASSWORD_SUFFIXES[role]}",
-                f"{path}: unexpected {role} password source",
-            )
+            if truenas:
+                require(
+                    password_mount.get("source") == f"{TRUENAS_ROOT}{PASSWORD_SUFFIXES[role]}",
+                    f"{path}: unexpected {role} password source",
+                )
             sources.add(str(password_mount["source"]))
         all_sources[role] = sources
 
@@ -152,16 +153,18 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     if not truenas:
         secrets = config.get("secrets")
         require(isinstance(secrets, dict), f"{path}: top-level secrets missing")
-        expected_secret_files = {
-            "web_password": "/data/secrets/codex/web_password.txt",
-            "antigravity_web_password": "/data/secrets/antigravity/web_password.txt",
-        }
-        for name, suffix in expected_secret_files.items():
-            definition = secrets.get(name)
-            require(isinstance(definition, dict), f"{path}: secret {name} missing")
-            secret_file = definition.get("file")
-            require(isinstance(secret_file, str), f"{path}: secret {name} file missing")
-            require(secret_file.endswith(suffix), f"{path}: secret {name} outside canonical root")
+        require(
+            set(secrets) == {"web_password"},
+            f"{path}: optional Antigravity secret leaked into the default model",
+        )
+        definition = secrets.get("web_password")
+        require(isinstance(definition, dict), f"{path}: secret web_password missing")
+        secret_file = definition.get("file")
+        require(isinstance(secret_file, str), f"{path}: secret web_password file missing")
+        require(
+            secret_file.endswith("/data/secrets/codex/web_password.txt"),
+            f"{path}: secret web_password outside canonical root",
+        )
 
     for role in ("codex", "antigravity"):
         for mount in volume_map(services[role]).values():
@@ -204,7 +207,7 @@ def validate_sources() -> None:
     require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
     require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
-    require(generic_text.count("create_host_path: false") == 12, "generic bind protection count")
+    require(generic_text.count("create_host_path: false") == 13, "generic bind protection count")
     require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     for marker in (
