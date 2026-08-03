@@ -89,7 +89,10 @@ trap harden_on_exit EXIT
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
 
-"$binary" "$@" &
+# Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
+# when job control is disabled. Preserve fd 0 explicitly and reset those signal
+# dispositions before execing the interactive vendor CLI.
+env --default-signal=INT,TERM,QUIT -- "$binary" "$@" <&0 &
 child_pid=$!
 session_status=0
 wait "$child_pid" || session_status=$?
