@@ -56,6 +56,18 @@ jobs:
 
           payload = '\n'.join(output) + '\n'
           exec(compile(payload, 'isolated-service-patch', 'exec'), {'__name__': '__main__'})
+
+          generated_python = (
+              Path('scripts/remote-dev-launcher.py'),
+              Path('scripts/preflight-data-layout.py'),
+              Path('scripts/test_single_stack_compose.py'),
+              Path('scripts/test_canonical_data_layout.py'),
+              Path('scripts/test_preflight_data_layout.py'),
+          )
+          for path in generated_python:
+              source = path.read_bytes()
+              if b'\x00' in source:
+                  path.write_bytes(source.replace(b'\x00', b'\\x00'))
           BOOT
 
       - name: Validate focused implementation
