@@ -14,6 +14,7 @@ session="${TMUX_SESSION:-$(remote_dev_default_tmux_session "$role")}"
 window_name=remote-dev
 workspace="${WORKSPACE:-/workspace}"
 readonly run_codex_binary=/usr/local/bin/run-codex
+readonly run_antigravity_binary=/usr/local/bin/run-antigravity
 
 if [[ -z "$session" ]]; then
   echo "ERROR: TMUX_SESSION must not be empty" >&2
@@ -25,11 +26,15 @@ case "$start_mode" in
     session_command=/usr/local/bin/remote-dev-menu
     ;;
   agent)
+    printf -v quoted_workspace '%q' "$workspace"
     case "$role" in
       codex)
-        printf -v quoted_workspace '%q' "$workspace"
         printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
         session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
+        ;;
+      antigravity)
+        printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
+        session_command="cd $quoted_workspace && exec $quoted_run_antigravity_binary"
         ;;
       *)
         echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2

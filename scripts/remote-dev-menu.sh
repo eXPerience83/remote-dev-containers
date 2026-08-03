@@ -147,6 +147,16 @@ run_codex_action() {
   run_interactive_and_harden "$label" "${command[@]}"
 }
 
+antigravity_status_summary() {
+  local summary="" status=0
+  summary="$(/usr/local/bin/remote-dev-antigravity status --menu 2>&1)" || status=$?
+  if [[ -n "$summary" ]]; then
+    printf '%s\n' "$summary"
+  else
+    printf 'Antigravity: status unavailable (exit %s)\n' "$status"
+  fi
+}
+
 if remote-dev-version --check >/dev/null 2>&1; then
   version_summary="$(remote-dev-version --menu)"
 else
@@ -208,6 +218,55 @@ MENU
   done
 }
 
+show_antigravity_menu() {
+  local status_summary=""
+
+  while true; do
+    status_summary="$(antigravity_status_summary)"
+    clear
+    cat <<MENU
+Remote Dev — Antigravity
+${version_summary}
+${status_summary}
+========================
+1) Start Antigravity
+2) Install Antigravity from Google
+3) Update to the reviewed Antigravity version
+4) Sign in to GitHub CLI
+5) Run diagnostics
+6) Open a login shell
+7) Exit this tmux session
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if run_interactive_and_harden "Antigravity" /usr/local/bin/run-antigravity; then :; fi
+        ;;
+      2)
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        ;;
+      3)
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        ;;
+      4)
+        if run_github_login; then :; fi
+        ;;
+      5)
+        run_diagnostics
+        ;;
+      6)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      7)
+        exit 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
 show_shell_menu() {
   while true; do
     clear
@@ -243,6 +302,7 @@ MENU
 
 case "$role" in
   codex) show_codex_menu ;;
+  antigravity) show_antigravity_menu ;;
   shell) show_shell_menu ;;
   *)
     echo "ERROR: internal unsupported menu role: $role" >&2

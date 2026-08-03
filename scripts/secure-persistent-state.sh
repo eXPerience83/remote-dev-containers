@@ -3,7 +3,7 @@ set -euo pipefail
 
 role="${REMOTE_DEV_ROLE:-codex}"
 case "$role" in
-  codex|shell) ;;
+  codex|shell|antigravity) ;;
   *)
     echo "ERROR: unsupported REMOTE_DEV_ROLE=$role while securing persistent state" >&2
     exit 2
@@ -30,6 +30,19 @@ secure_file() {
   fi
 }
 
+secure_private_tree() {
+  local root="$1"
+  [[ -d "$root" ]] || return 0
+  find "$root" -type d -exec chmod 700 {} +
+  while IFS= read -r -d '' file; do
+    if [[ -x "$file" ]]; then
+      chmod 700 "$file"
+    else
+      chmod 600 "$file"
+    fi
+  done < <(find "$root" -type f -print0)
+}
+
 if [[ "$role" == codex ]]; then
   secure_dir "$codex_home"
   secure_file "$codex_home/auth.json"
@@ -52,4 +65,21 @@ done
 
 if [[ -f "$ssh_dir/known_hosts" ]]; then
   chmod 644 "$ssh_dir/known_hosts"
+fi
+
+if [[ "$role" == antigravity ]]; then
+  readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
+  [[ -r "$paths_lib" && ! -L "$paths_lib" ]] || {
+    echo "ERROR: immutable Antigravity path definitions are unavailable" >&2
+    exit 1
+  }
+  # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
+  source "$paths_lib"
+
+  secure_dir "$ANTIGRAVITY_BIN_DIR"
+  if [[ -f "$ANTIGRAVITY_BINARY" && ! -L "$ANTIGRAVITY_BINARY" ]]; then
+    chmod 700 "$ANTIGRAVITY_BINARY"
+  fi
+  secure_private_tree "$ANTIGRAVITY_STATE_DIR"
+  secure_private_tree "$ANTIGRAVITY_VENDOR_STATE_DIR"
 fi

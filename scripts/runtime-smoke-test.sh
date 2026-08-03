@@ -30,6 +30,27 @@ assert_output_lines() {
   done
 }
 
+assert_antigravity_entrypoint_blocked() {
+  local label="$1"
+  shift
+  local output=""
+  local command_status=0
+
+  output="$(docker exec \
+    --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=0 \
+    "$name" "$@" 2>&1)" || command_status=$?
+  if (( command_status != 2 )); then
+    echo "ERROR: $label returned $command_status outside the Antigravity service, expected 2" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+  if ! grep -Eq 'experimental and blocked pending TrueNAS validation|gated REMOTE_DEV_ROLE=antigravity' <<<"$output"; then
+    echo "ERROR: $label did not explain the gated Antigravity service requirement" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+}
+
 # Secure by default: startup without a password must fail unless explicitly overridden.
 guard_status=0
 if timeout 15 docker run --rm --name "$guard_name" "$image" >"$log_file" 2>&1; then
@@ -113,6 +134,50 @@ for _ in $(seq 1 30); do
       'Codex approval policy: never' \
       'Mode source: default'
 
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity role diagnostics' \
+      env REMOTE_DEV_ROLE=antigravity remote-dev-doctor
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity runtime manager' \
+      remote-dev-antigravity status --menu
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity installer wrapper' \
+      remote-dev-install-antigravity --yes
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity updater wrapper' \
+      remote-dev-update-antigravity --yes
+    assert_antigravity_entrypoint_blocked \
+      'Antigravity launcher' \
+      run-antigravity
+    antigravity_binary="$(
+      docker exec "$name" bash -c \
+        '. /usr/local/lib/remote-dev/antigravity-paths.sh; printf "%s" "$ANTIGRAVITY_BINARY"'
+    )"
+    if docker exec "$name" test -e "$antigravity_binary"; then
+      echo "ERROR: a blocked Antigravity entry point created the vendor executable in the Codex service" >&2
+      exit 1
+    fi
+
+    docker exec "$name" sh -c '
+      install -d -m 0755 /tmp/remote-dev-doctor-fixture
+      printf "%s\n" \
+        "#!/usr/bin/env bash" \
+        "echo \"Antigravity: 1.1.8 (update to reviewed 1.1.9 required)\"" \
+        "exit 3" \
+        > /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+      chmod 0755 /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+    '
+    antigravity_doctor_output="$(
+      docker exec \
+        --env REMOTE_DEV_ROLE=antigravity \
+        --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+        "$name" sh -c 'PATH=/tmp/remote-dev-doctor-fixture:$PATH exec remote-dev-doctor'
+    )"
+    assert_output_lines 'experimental Antigravity diagnostics' "$antigravity_doctor_output" \
+      'Role: antigravity' \
+      'Antigravity: 1.1.8 (update to reviewed 1.1.9 required)' \
+      'Antigravity support status: experimental validation only; not yet a supported integration.'
+
     docker run -d \
       --name "$launcher_name" \
       --security-opt no-new-privileges:true \
@@ -163,7 +228,8 @@ for _ in $(seq 1 30); do
     launcher_doctor="$(docker exec "$launcher_name" remote-dev-doctor)"
     assert_output_lines 'Launcher diagnostics' "$launcher_doctor" \
       'Role: launcher' \
-      'Available roles: launcher, codex' \
+      'Available roles: launcher, codex, shell' \
+      'Experimental gated role: antigravity (requires REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1)' \
       'Launcher state boundary: no agent workspace or credential mounts are required.'
 
     codex_image_id="$(docker inspect -f '{{.Image}}' "$name")"
@@ -181,6 +247,7 @@ for _ in $(seq 1 30); do
     echo "Pinned Codex launcher and resume compatibility: OK"
     echo "Configurable Codex approval modes: OK"
     echo "Explicit outer-isolation policy: OK"
+    echo "Experimental Antigravity gate, entry-point isolation and optional doctor status: OK"
     echo "Authenticated isolated launcher role: OK"
     echo "Launcher base-path normalization: OK"
     echo "Launcher and Codex same-image reuse: OK"

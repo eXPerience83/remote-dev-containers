@@ -9,6 +9,10 @@ remote_dev_runtime_error() {
   printf 'ERROR: %s\n' "$*" >&2
 }
 
+remote_dev_antigravity_experimental_enabled() {
+  [[ "${REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY:-0}" == 1 ]]
+}
+
 remote_dev_resolve_role() {
   local role="${REMOTE_DEV_ROLE:-codex}"
 
@@ -16,12 +20,19 @@ remote_dev_resolve_role() {
     launcher|codex|shell)
       printf '%s\n' "$role"
       ;;
-    antigravity|claude)
+    antigravity)
+      if ! remote_dev_antigravity_experimental_enabled; then
+        remote_dev_runtime_error "REMOTE_DEV_ROLE=antigravity is experimental and blocked pending TrueNAS validation; set REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 only for the controlled validation deployment"
+        return 2
+      fi
+      printf '%s\n' "$role"
+      ;;
+    claude)
       remote_dev_runtime_error "REMOTE_DEV_ROLE=$role is reserved but not implemented"
       return 2
       ;;
     *)
-      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; reserved: antigravity|claude)"
+      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; experimental gated: antigravity; reserved: claude)"
       return 2
       ;;
   esac
@@ -44,10 +55,23 @@ remote_dev_resolve_start_mode() {
   else
     case "${START_MODE:-menu}" in
       menu) raw_mode=menu ;;
-      codex) raw_mode=agent ;;
+      codex)
+        [[ "$role" == codex ]] || {
+          remote_dev_runtime_error "START_MODE=codex requires REMOTE_DEV_ROLE=codex"
+          return 2
+        }
+        raw_mode=agent
+        ;;
+      antigravity)
+        [[ "$role" == antigravity ]] || {
+          remote_dev_runtime_error "START_MODE=antigravity requires REMOTE_DEV_ROLE=antigravity"
+          return 2
+        }
+        raw_mode=agent
+        ;;
       shell) raw_mode=shell ;;
       *)
-        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|shell)"
+        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|antigravity|shell)"
         return 2
         ;;
     esac
@@ -70,6 +94,7 @@ remote_dev_default_tmux_session() {
 
   case "$role" in
     codex) printf 'codex\n' ;;
+    antigravity) printf 'antigravity\n' ;;
     shell) printf 'remote-dev-shell\n' ;;
     launcher)
       remote_dev_runtime_error "the launcher role does not use tmux"
