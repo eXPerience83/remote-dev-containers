@@ -21,7 +21,7 @@ Usage: remote-dev-antigravity <install|update|status|path> [--yes] [--menu]
 
 Commands:
   install   Install the reviewed official Antigravity CLI package.
-  update    Replace a trusted older installation with the reviewed package.
+  update    Replace an older or unverified installation with the reviewed package.
   status    Report whether the reviewed executable is installed and valid.
   path      Print the canonical executable path.
 
@@ -126,7 +126,7 @@ require_supported_platform() {
 
 require_tools() {
   local tool
-  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed dirname env timeout cp rm mkdir chmod; do
+  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed grep dirname env timeout cp rm mkdir chmod; do
     command -v "$tool" >/dev/null 2>&1 || fail "required command is missing: $tool"
   done
 }
@@ -270,31 +270,10 @@ read_current_installation() {
     return 0
   fi
 
-  if [[ ! -r "$manifest" ]]; then
-    echo "ERROR: existing Antigravity executable does not match current evidence and has no trusted install manifest" >&2
-    recovery_hint
-    exit 1
-  fi
-  jq -e '.schema_version == 1 and .runtime_installed == true and .bundled_in_image == false' "$manifest" >/dev/null \
-    || {
-      echo "ERROR: existing Antigravity install manifest is invalid" >&2
-      recovery_hint
-      exit 1
-    }
-
-  local old_sha old_size old_version
-  old_sha="$(jq -er '.binary_sha256' "$manifest")"
-  old_size="$(jq -er '.binary_size' "$manifest")"
-  old_version="$(jq -er '.version' "$manifest")"
-  [[ "$old_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: existing manifest has an invalid SHA-256" >&2; recovery_hint; exit 1; }
-  [[ "$old_size" =~ ^[0-9]+$ ]] || { echo "ERROR: existing manifest has an invalid binary size" >&2; recovery_hint; exit 1; }
-  [[ "$old_version" =~ ^[0-9]+([.][0-9]+){1,3}([+-][A-Za-z0-9._-]+)?$ ]] \
-    || { echo "ERROR: existing manifest has an invalid version" >&2; recovery_hint; exit 1; }
-
-  if ! current_version="$(read_version_with_identity "$binary" "$old_size" "$old_sha" "$old_version")"; then
-    recovery_hint
-    exit 1
-  fi
+  # A writable local manifest is useful for recovery metadata, but it is never
+  # an executable trust anchor. Do not invoke a binary that is absent from the
+  # immutable inspection evidence bundled in the image.
+  current_version="unverified installation"
   current_matches_target=0
 }
 
@@ -349,6 +328,33 @@ download_installer() {
   chmod 0700 "$destination"
   verify_file_identity "Antigravity installer" "$destination" "$expected_installer_size" "$expected_installer_sha"
   /bin/bash -n "$destination" || fail "reviewed Antigravity installer is not valid Bash"
+}
+
+verify_installer_contract() {
+  local installer_path="$1"
+  local isolated_home="$2"
+  local help_output="" help_status=0
+
+  help_output="$(
+    timeout --signal=TERM --kill-after=5s 30s \
+      env -i \
+        HOME="$isolated_home" \
+        USER=root \
+        LOGNAME=root \
+        SHELL=/bin/bash \
+        PATH=/usr/local/bin:/usr/bin:/bin \
+        LANG=C.UTF-8 \
+        LC_ALL=C.UTF-8 \
+        TERM=xterm-256color \
+        CI=1 \
+        /bin/bash "$installer_path" --help \
+      </dev/null 2>&1
+  )" || help_status=$?
+
+  (( help_status == 0 )) \
+    || fail "reviewed Antigravity installer --help failed or exceeded its time limit"
+  grep -Eq '(^|[[:space:]])--dir[[:space:]]+<path>([[:space:]]|$)' <<<"$help_output" \
+    || fail "reviewed Antigravity installer no longer advertises the required --dir <path> contract"
 }
 
 run_installer_isolated() {
@@ -465,6 +471,7 @@ install_or_update() {
   mkdir -m 0700 -p "$isolated_home" "$stage_bin"
 
   download_installer "$installer_path"
+  verify_installer_contract "$installer_path" "$isolated_home"
   run_installer_isolated "$installer_path" "$isolated_home" "$stage_bin" \
     || fail "reviewed Antigravity installer failed or exceeded its time limit"
 
@@ -505,7 +512,7 @@ status_command() {
     if [[ "$menu" == 1 ]]; then
       echo "Antigravity: $current_version (update to reviewed $expected_version required)"
     else
-      echo "installed version $current_version requires update to reviewed $expected_version"
+      echo "$current_version requires update to reviewed $expected_version"
     fi
     return 3
   fi

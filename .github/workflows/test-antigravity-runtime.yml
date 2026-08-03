@@ -10,6 +10,7 @@ on:
       - "scripts/run-antigravity.sh"
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
+      - "scripts/test-antigravity-security-regressions.sh"
   workflow_dispatch:
 
 permissions:
@@ -39,7 +40,8 @@ jobs:
             scripts/remote-dev-update-antigravity.sh \
             scripts/run-antigravity.sh \
             scripts/secure-persistent-state.sh \
-            scripts/test-antigravity-runtime.sh
+            scripts/test-antigravity-runtime.sh \
+            scripts/test-antigravity-security-regressions.sh
 
       - name: Run controlled fixture lifecycle
         run: |
@@ -47,3 +49,4 @@ jobs:
             scripts/remote-dev-antigravity.sh \
             scripts/run-antigravity.sh
           bash scripts/test-antigravity-runtime.sh
+          bash scripts/test-antigravity-security-regressions.sh
