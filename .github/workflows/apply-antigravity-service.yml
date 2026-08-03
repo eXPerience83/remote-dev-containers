@@ -1,0 +1,1726 @@
+name: Apply isolated Antigravity service
+
+on:
+  push:
+    branches:
+      - feat/antigravity-isolated-service
+    paths:
+      - .github/workflows/apply-antigravity-service.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/antigravity-isolated-service
+          fetch-depth: 0
+
+      - name: Apply isolated service and validation changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+
+          def write(path: str, content: str) -> None:
+              (ROOT / path).write_text(content, encoding="utf-8")
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = ROOT / path
+              text = target.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one replacement anchor in {path}: {old[:80]!r}")
+              target.write_text(text.replace(old, new), encoding="utf-8")
+
+          def replace_between(path: str, start: str, end: str, replacement: str) -> None:
+              target = ROOT / path
+              text = target.read_text(encoding="utf-8")
+              start_index = text.find(start)
+              if start_index < 0:
+                  raise SystemExit(f"missing start anchor in {path}: {start!r}")
+              end_index = text.find(end, start_index)
+              if end_index < 0:
+                  raise SystemExit(f"missing end anchor in {path}: {end!r}")
+              target.write_text(
+                  text[:start_index] + replacement + text[end_index:],
+                  encoding="utf-8",
+              )
+
+          write(
+              "compose/docker-compose.yml",
+              '''x-remote-dev-image: &remote-dev-image ${REMOTE_DEV_IMAGE:-${CODEX_IMAGE:-ghcr.io/experience83/remote-dev:edge-amd64}}
+
+services:
+  launcher:
+    image: *remote-dev-image
+    container_name: remote-dev-launcher
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      REMOTE_DEV_ROLE: launcher
+      REMOTE_DEV_START_MODE: menu
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7680"
+      WEB_BASE_PATH: ${LAUNCHER_BASE_PATH:-/}
+      WEB_CHECK_ORIGIN: ${LAUNCHER_CHECK_ORIGIN:-1}
+      ALLOW_INSECURE_WEB: "1"
+
+      REMOTE_DEV_LAUNCHER_CODEX_HOST: ${REMOTE_DEV_CODEX_PUBLIC_HOST:-}
+      REMOTE_DEV_LAUNCHER_CODEX_PORT: ${WEB_PUBLISH_PORT:-7681}
+      REMOTE_DEV_LAUNCHER_CODEX_SCHEME: ${REMOTE_DEV_CODEX_PUBLIC_SCHEME:-}
+      REMOTE_DEV_LAUNCHER_CODEX_PATH: ${WEB_BASE_PATH:-/}
+
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED: ${REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE:-0}
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST: ${REMOTE_DEV_ANTIGRAVITY_PUBLIC_HOST:-}
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT: ${ANTIGRAVITY_WEB_PUBLISH_PORT:-7682}
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME: ${REMOTE_DEV_ANTIGRAVITY_PUBLIC_SCHEME:-}
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH: ${ANTIGRAVITY_WEB_BASE_PATH:-/}
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "${LAUNCHER_PUBLISH_IP:-${WEB_PUBLISH_IP:-127.0.0.1}}:${LAUNCHER_PUBLISH_PORT:-7680}:7680"
+
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    stop_grace_period: 10s
+
+  codex:
+    image: *remote-dev-image
+    container_name: codex-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      REMOTE_DEV_ROLE: codex
+      WORKSPACE: /workspace
+      CODEX_HOME: /root/.codex
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7681"
+      WEB_BASE_PATH: ${WEB_BASE_PATH:-/}
+      WEB_USERNAME: ${WEB_USERNAME:-codex}
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: ${WEB_MAX_CLIENTS:-1}
+      WEB_CHECK_ORIGIN: ${WEB_CHECK_ORIGIN:-1}
+      ALLOW_INSECURE_WEB: ${ALLOW_INSECURE_WEB:-0}
+      START_MODE: ${START_MODE:-menu}
+      TMUX_SESSION: ${TMUX_SESSION:-codex}
+      REMOTE_DEV_CODEX_APPROVAL_MODE: ${REMOTE_DEV_CODEX_APPROVAL_MODE:-autonomous}
+
+      GIT_USER_NAME: ${GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
+      GH_HOST: ${GH_HOST:-github.com}
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      DO_NOT_TRACK: "1"
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CODEX_CA_CERTIFICATE: ${CODEX_CA_CERTIFICATE:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "${WEB_PUBLISH_IP:-127.0.0.1}:${WEB_PUBLISH_PORT:-7681}:7681"
+
+    # Run scripts/preflight-data-layout.py before deployment. The explicit
+    # create_host_path setting is defense-in-depth for Compose implementations.
+    volumes:
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/workspaces/codex
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/agent
+        target: /root/.codex
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+
+    secrets:
+      - web_password
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+  antigravity:
+    profiles: ["antigravity"]
+    image: *remote-dev-image
+    container_name: antigravity-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      REMOTE_DEV_ROLE: antigravity
+      REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
+      WORKSPACE: /workspace
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7682"
+      WEB_BASE_PATH: ${ANTIGRAVITY_WEB_BASE_PATH:-/}
+      WEB_USERNAME: ${ANTIGRAVITY_WEB_USERNAME:-antigravity}
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: ${ANTIGRAVITY_WEB_MAX_CLIENTS:-1}
+      WEB_CHECK_ORIGIN: ${ANTIGRAVITY_WEB_CHECK_ORIGIN:-1}
+      ALLOW_INSECURE_WEB: ${ANTIGRAVITY_ALLOW_INSECURE_WEB:-0}
+      START_MODE: ${ANTIGRAVITY_START_MODE:-menu}
+      TMUX_SESSION: ${ANTIGRAVITY_TMUX_SESSION:-antigravity}
+      AGY_CLI_DISABLE_AUTO_UPDATE: "true"
+
+      GIT_USER_NAME: ${ANTIGRAVITY_GIT_USER_NAME:-${GIT_USER_NAME:-}}
+      GIT_USER_EMAIL: ${ANTIGRAVITY_GIT_USER_EMAIL:-${GIT_USER_EMAIL:-}}
+      GH_HOST: ${GH_HOST:-github.com}
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "${ANTIGRAVITY_WEB_PUBLISH_IP:-127.0.0.1}:${ANTIGRAVITY_WEB_PUBLISH_PORT:-7682}:7682"
+
+    volumes:
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/workspaces/antigravity
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/bin
+        target: /root/.local/bin
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/runtime
+        target: /root/.local/share/remote-dev/antigravity
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/vendor
+        target: /root/.gemini/antigravity-cli
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+
+    secrets:
+      - source: antigravity_web_password
+        target: web_password
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+secrets:
+  web_password:
+    file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt
+  antigravity_web_password:
+    file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/antigravity/web_password.txt
+''',
+          )
+
+          write(
+              "compose/truenas.yml",
+              '''x-remote-dev-image: &remote-dev-image ${REMOTE_DEV_IMAGE:-${CODEX_IMAGE:-ghcr.io/experience83/remote-dev:edge-amd64}}
+
+services:
+  launcher:
+    image: *remote-dev-image
+    container_name: remote-dev-launcher
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: launcher
+      REMOTE_DEV_START_MODE: menu
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7680"
+      WEB_BASE_PATH: /
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "1"
+
+      # Leave host/scheme empty to reuse the browser hostname and scheme.
+      REMOTE_DEV_LAUNCHER_CODEX_HOST: ""
+      REMOTE_DEV_LAUNCHER_CODEX_PORT: "7681"
+      REMOTE_DEV_LAUNCHER_CODEX_SCHEME: ""
+      REMOTE_DEV_LAUNCHER_CODEX_PATH: /
+
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED: "1"
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST: ""
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT: "7682"
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME: ""
+      REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH: /
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      # Replace with the LAN or Tailscale IP of TrueNAS.
+      - "192.168.1.10:7680:7680"
+
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    stop_grace_period: 10s
+
+  codex:
+    image: *remote-dev-image
+    container_name: codex-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: codex
+      WORKSPACE: /workspace
+      CODEX_HOME: /root/.codex
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7681"
+      WEB_BASE_PATH: /
+      WEB_USERNAME: codex
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: "1"
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "0"
+      START_MODE: menu
+      TMUX_SESSION: codex
+      REMOTE_DEV_CODEX_APPROVAL_MODE: autonomous
+
+      GH_HOST: github.com
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      DO_NOT_TRACK: "1"
+
+      OPENAI_API_KEY: ""
+      GIT_USER_NAME: ""
+      GIT_USER_EMAIL: ""
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "192.168.1.10:7681:7681"
+
+    # Before saving this YAML, run scripts/preflight-data-layout.py on the
+    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity.
+    # create_host_path is only defense-in-depth because not every Compose
+    # release enforces it reliably.
+    volumes:
+      - type: bind
+        source: /mnt/Pool1/remote-dev/workspaces/codex
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/agent
+        target: /root/.codex
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/codex/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
+        target: /run/secrets/web_password
+        read_only: true
+        bind:
+          create_host_path: false
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+  antigravity:
+    image: *remote-dev-image
+    container_name: antigravity-remote-dev
+    restart: unless-stopped
+    user: "0:0"
+
+    environment:
+      TZ: Europe/Madrid
+      REMOTE_DEV_ROLE: antigravity
+      REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
+      WORKSPACE: /workspace
+      GH_CONFIG_DIR: /root/.config/gh
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+
+      WEB_BIND: 0.0.0.0
+      WEB_PORT: "7682"
+      WEB_BASE_PATH: /
+      WEB_USERNAME: antigravity
+      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_MAX_CLIENTS: "1"
+      WEB_CHECK_ORIGIN: "1"
+      ALLOW_INSECURE_WEB: "0"
+      START_MODE: menu
+      TMUX_SESSION: antigravity
+      AGY_CLI_DISABLE_AUTO_UPDATE: "true"
+
+      GH_HOST: github.com
+      GH_PAGER: cat
+      GH_NO_UPDATE_NOTIFIER: "1"
+      GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      GIT_USER_NAME: ""
+      GIT_USER_EMAIL: ""
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "192.168.1.10:7682:7682"
+
+    volumes:
+      - type: bind
+        source: /mnt/Pool1/remote-dev/workspaces/antigravity
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/bin
+        target: /root/.local/bin
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/runtime
+        target: /root/.local/share/remote-dev/antigravity
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/vendor
+        target: /root/.gemini/antigravity-cli
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/gh
+        target: /root/.config/gh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/git
+        target: /root/.config/git
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/ssh
+        target: /root/.ssh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
+        target: /run/secrets/web_password
+        read_only: true
+        bind:
+          create_host_path: false
+
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    shm_size: 256m
+    stop_grace_period: 30s
+
+x-portals:
+  - host: truenas
+    name: "Remote Dev Launcher"
+    path: /
+    port: 7680
+    scheme: http
+''',
+          )
+
+          write(
+              ".env.example",
+              '''# Image and host paths
+REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
+# Existing v0.1.x deployments may keep CODEX_IMAGE instead when REMOTE_DEV_IMAGE is unset.
+# Host paths are resolved relative to compose/docker-compose.yml.
+REMOTE_DEV_DATA_ROOT=../data
+
+# Primary launcher endpoint. It contains no agent state and is unauthenticated by default.
+# Optional file-backed Basic authentication uses compose/launcher-auth.yml.
+LAUNCHER_BASE_PATH=/
+LAUNCHER_CHECK_ORIGIN=1
+LAUNCHER_PUBLISH_IP=127.0.0.1
+LAUNCHER_PUBLISH_PORT=7680
+
+# Independently authenticated Codex terminal endpoint.
+WEB_PUBLISH_IP=127.0.0.1
+WEB_PUBLISH_PORT=7681
+WEB_BASE_PATH=/
+WEB_USERNAME=codex
+WEB_MAX_CLIENTS=1
+WEB_CHECK_ORIGIN=1
+ALLOW_INSECURE_WEB=0
+START_MODE=menu
+TMUX_SESSION=codex
+
+# Usually left empty: Compose maps these public values to the launcher's route.
+REMOTE_DEV_CODEX_PUBLIC_HOST=
+REMOTE_DEV_CODEX_PUBLIC_SCHEME=
+
+# autonomous: no command confirmations. guarded: asks for confirmations.
+REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
+
+# Optional isolated Antigravity service. Start Compose with --profile antigravity
+# and set this to 1 only when the service and its password/data paths are ready.
+REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0
+ANTIGRAVITY_WEB_PUBLISH_IP=127.0.0.1
+ANTIGRAVITY_WEB_PUBLISH_PORT=7682
+ANTIGRAVITY_WEB_BASE_PATH=/
+ANTIGRAVITY_WEB_USERNAME=antigravity
+ANTIGRAVITY_WEB_MAX_CLIENTS=1
+ANTIGRAVITY_WEB_CHECK_ORIGIN=1
+ANTIGRAVITY_ALLOW_INSECURE_WEB=0
+ANTIGRAVITY_START_MODE=menu
+ANTIGRAVITY_TMUX_SESSION=antigravity
+REMOTE_DEV_ANTIGRAVITY_PUBLIC_HOST=
+REMOTE_DEV_ANTIGRAVITY_PUBLIC_SCHEME=
+ANTIGRAVITY_GIT_USER_NAME=
+ANTIGRAVITY_GIT_USER_EMAIL=
+
+TZ=Europe/Madrid
+GH_HOST=github.com
+GIT_USER_NAME=
+GIT_USER_EMAIL=
+
+# Recommended authentication: leave this empty and use `codex login --device-auth`.
+OPENAI_API_KEY=
+CODEX_CA_CERTIFICATE=
+
+HTTP_PROXY=
+HTTPS_PROXY=
+NO_PROXY=
+''',
+          )
+
+          write(
+              "scripts/preflight-data-layout.py",
+              '''#!/usr/bin/env python3
+"""Fail fast unless a canonical Remote Dev host data layout already exists."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import stat
+import sys
+from pathlib import Path
+
+CODEX_DIRECTORY_SUFFIXES = (
+    "workspaces/codex",
+    "state/codex/agent",
+    "state/codex/gh",
+    "state/codex/git",
+    "state/codex/ssh",
+    "secrets/codex",
+)
+ANTIGRAVITY_DIRECTORY_SUFFIXES = (
+    "workspaces/antigravity",
+    "state/antigravity/bin",
+    "state/antigravity/runtime",
+    "state/antigravity/vendor",
+    "state/antigravity/gh",
+    "state/antigravity/git",
+    "state/antigravity/ssh",
+    "secrets/antigravity",
+)
+CODEX_PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
+ANTIGRAVITY_PASSWORD_SUFFIX = "secrets/antigravity/web_password.txt"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the host-side canonical data-root preflight arguments."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify that every enabled Remote Dev bind source exists before "
+            "Docker Compose or TrueNAS is allowed to deploy it."
+        )
+    )
+    parser.add_argument(
+        "--root",
+        required=True,
+        type=Path,
+        help="Host path corresponding to REMOTE_DEV_DATA_ROOT",
+    )
+    parser.add_argument(
+        "--include-antigravity",
+        action="store_true",
+        help="Also require the optional isolated Antigravity service layout",
+    )
+    return parser.parse_args(argv)
+
+
+def canonical_path(path: Path) -> Path:
+    """Expand a user path and make it absolute without following symlinks."""
+    return Path(os.path.abspath(os.path.expanduser(os.fspath(path))))
+
+
+def validate_no_symlink_components(
+    root: Path, paths: tuple[Path, ...], errors: list[str]
+) -> bool:
+    """Reject symlinks at the root or at any component below the root."""
+    checked: set[Path] = set()
+    found_symlink = False
+    for path in paths:
+        try:
+            relative_parts = path.relative_to(root).parts
+        except ValueError:
+            errors.append(f"required path escapes the configured root: {path}")
+            continue
+
+        current = root
+        for part in (None, *relative_parts):
+            if part is not None:
+                current /= part
+            if current in checked:
+                if current.is_symlink():
+                    break
+                continue
+            checked.add(current)
+            if current.is_symlink():
+                errors.append(f"persistent path component must not be a symlink: {current}")
+                found_symlink = True
+                break
+    return found_symlink
+
+
+def validate_directory(path: Path, errors: list[str]) -> None:
+    """Record an error unless a required host path is a real directory."""
+    if not path.exists():
+        errors.append(f"required directory is missing: {path}")
+    elif not path.is_dir():
+        errors.append(f"required directory is not a directory: {path}")
+
+
+def validate_password_file(path: Path, errors: list[str]) -> None:
+    """Validate one terminal password exactly as the shell runtime consumes it."""
+    if not path.exists():
+        errors.append(f"password file is missing: {path}")
+        return
+    if not path.is_file():
+        errors.append(f"password path is not a regular file: {path}")
+        return
+
+    try:
+        password_bytes = path.read_bytes()
+    except OSError as error:
+        errors.append(f"password file cannot be read: {path} ({error})")
+        return
+
+    if not password_bytes:
+        errors.append(f"password file is empty: {path}")
+    else:
+        effective_password = password_bytes.rstrip(b"\n")
+        if not effective_password:
+            errors.append(f"password is empty after trailing newline removal: {path}")
+        elif b"\x00" in effective_password:
+            errors.append(f"password must not contain NUL bytes: {path}")
+        elif b"\n" in effective_password or b"\r" in effective_password:
+            errors.append(f"password must be a single LF-terminated line: {path}")
+
+    if os.name == "posix":
+        mode = stat.S_IMODE(path.stat().st_mode)
+        if mode & 0o077:
+            errors.append(
+                f"password file permissions are too broad: {path} "
+                f"(mode {mode:04o}; expected 0600 or stricter)"
+            )
+
+
+def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
+    """Return every problem found for the enabled service layouts."""
+    errors: list[str] = []
+    suffixes = list(CODEX_DIRECTORY_SUFFIXES)
+    passwords = [root / CODEX_PASSWORD_SUFFIX]
+    if include_antigravity:
+        suffixes.extend(ANTIGRAVITY_DIRECTORY_SUFFIXES)
+        passwords.append(root / ANTIGRAVITY_PASSWORD_SUFFIX)
+    directories = tuple(root / suffix for suffix in suffixes)
+    password_files = tuple(passwords)
+
+    if validate_no_symlink_components(root, (*directories, *password_files), errors):
+        return errors
+
+    validate_directory(root, errors)
+    for directory in directories:
+        validate_directory(directory, errors)
+    for password_file in password_files:
+        validate_password_file(password_file, errors)
+    return errors
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the preflight and print only paths and permission metadata."""
+    args = parse_args(argv)
+    root = canonical_path(args.root)
+    errors = validate_layout(root, include_antigravity=args.include_antigravity)
+    if errors:
+        print("Remote Dev data-layout preflight failed:", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        print(
+            "Create or correct these host paths before deploying; Compose must "
+            "not be relied upon to create them safely.",
+            file=sys.stderr,
+        )
+        return 1
+
+    roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
+    print(f"Remote Dev data-layout preflight: OK ({root}; {roles})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+          )
+
+          write(
+              "scripts/test_preflight_data_layout.py",
+              '''#!/usr/bin/env python3
+"""Exercise the host-side Remote Dev data-layout preflight."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
+CODEX_DIRECTORY_SUFFIXES = (
+    "workspaces/codex",
+    "state/codex/agent",
+    "state/codex/gh",
+    "state/codex/git",
+    "state/codex/ssh",
+    "secrets/codex",
+)
+ANTIGRAVITY_DIRECTORY_SUFFIXES = (
+    "workspaces/antigravity",
+    "state/antigravity/bin",
+    "state/antigravity/runtime",
+    "state/antigravity/vendor",
+    "state/antigravity/gh",
+    "state/antigravity/git",
+    "state/antigravity/ssh",
+    "secrets/antigravity",
+)
+CODEX_PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
+ANTIGRAVITY_PASSWORD_SUFFIX = "secrets/antigravity/web_password.txt"
+
+
+def run_preflight(
+    root: Path, *, include_antigravity: bool = False
+) -> subprocess.CompletedProcess[str]:
+    """Run the preflight against one temporary host layout."""
+    command = [sys.executable, str(PREFLIGHT), "--root", str(root)]
+    if include_antigravity:
+        command.append("--include-antigravity")
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def create_directories(root: Path, suffixes: tuple[str, ...]) -> None:
+    """Create one role's canonical directories without its password file."""
+    root.mkdir(parents=True, exist_ok=True)
+    for suffix in suffixes:
+        (root / suffix).mkdir(parents=True, exist_ok=True)
+
+
+def write_password(root: Path, suffix: str, value: str) -> Path:
+    """Create one synthetic restrictive terminal-password file."""
+    path = root / suffix
+    path.write_text(f"{value}\n", encoding="utf-8")
+    path.chmod(0o600)
+    return path
+
+
+def require(condition: bool, message: str) -> None:
+    """Raise a readable assertion for a failed regression expectation."""
+    if not condition:
+        raise AssertionError(message)
+
+
+def main() -> int:
+    """Validate optional roles, password safety and symlink ancestry."""
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory) / "remote-dev"
+
+        missing = run_preflight(root)
+        require(missing.returncode == 1, "missing root must fail")
+        require("required directory is missing" in missing.stderr, missing.stderr)
+
+        create_directories(root, CODEX_DIRECTORY_SUFFIXES)
+        missing_password = run_preflight(root)
+        require(missing_password.returncode == 1, "missing Codex password must fail")
+        require("password file is missing" in missing_password.stderr, missing_password.stderr)
+
+        codex_password = root / CODEX_PASSWORD_SUFFIX
+        codex_password.write_bytes(b"\n\n")
+        codex_password.chmod(0o600)
+        newline_only = run_preflight(root)
+        require(newline_only.returncode == 1, "newline-only password must fail")
+        require("empty after trailing newline removal" in newline_only.stderr, newline_only.stderr)
+
+        codex_password.write_bytes(b"first-line\nsecond-line\n")
+        multiline = run_preflight(root)
+        require(multiline.returncode == 1, "multiline password must fail")
+        require("must be a single LF-terminated line" in multiline.stderr, multiline.stderr)
+
+        codex_password = write_password(root, CODEX_PASSWORD_SUFFIX, "test-codex-password")
+        if os.name == "posix":
+            codex_password.chmod(0o644)
+            broad = run_preflight(root)
+            require(broad.returncode == 1, "broad password mode must fail")
+            require("permissions are too broad" in broad.stderr, broad.stderr)
+            codex_password.chmod(0o600)
+
+        codex_only = run_preflight(root)
+        require(codex_only.returncode == 0, codex_only.stderr)
+        require("Codex)" in codex_only.stdout, codex_only.stdout)
+
+        missing_antigravity = run_preflight(root, include_antigravity=True)
+        require(missing_antigravity.returncode == 1, "enabled Antigravity layout must exist")
+        require("workspaces/antigravity" in missing_antigravity.stderr, missing_antigravity.stderr)
+
+        create_directories(root, ANTIGRAVITY_DIRECTORY_SUFFIXES)
+        missing_antigravity_password = run_preflight(root, include_antigravity=True)
+        require(missing_antigravity_password.returncode == 1, "missing Antigravity password must fail")
+        require(
+            ANTIGRAVITY_PASSWORD_SUFFIX in missing_antigravity_password.stderr,
+            missing_antigravity_password.stderr,
+        )
+        write_password(root, ANTIGRAVITY_PASSWORD_SUFFIX, "test-antigravity-password")
+
+        complete = run_preflight(root, include_antigravity=True)
+        require(complete.returncode == 0, complete.stderr)
+        require("Codex + Antigravity" in complete.stdout, complete.stdout)
+
+        antigravity_vendor = root / "state/antigravity/vendor"
+        antigravity_vendor.rmdir()
+        antigravity_vendor.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
+        final_symlink = run_preflight(root, include_antigravity=True)
+        require(final_symlink.returncode == 1, "symlinked Antigravity directory must fail")
+        require("must not be a symlink" in final_symlink.stderr, final_symlink.stderr)
+        antigravity_vendor.unlink()
+        antigravity_vendor.mkdir()
+
+        outside_state = Path(temporary_directory) / "outside-state"
+        for child in ("agent", "gh", "git", "ssh"):
+            (outside_state / child).mkdir(parents=True, exist_ok=True)
+        state_codex = root / "state/codex"
+        shutil.rmtree(state_codex)
+        state_codex.symlink_to(outside_state, target_is_directory=True)
+        intermediate_symlink = run_preflight(root, include_antigravity=True)
+        require(intermediate_symlink.returncode == 1, "symlinked intermediate directory must fail")
+        require(
+            f"must not be a symlink: {state_codex}" in intermediate_symlink.stderr,
+            intermediate_symlink.stderr,
+        )
+
+    print("Host data-layout preflight regressions: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+          )
+
+          write(
+              "scripts/test_canonical_data_layout.py",
+              '''#!/usr/bin/env python3
+"""Validate the canonical role-scoped Remote Dev persistent-data contract."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
+TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
+ENV_EXAMPLE = ROOT / ".env.example"
+PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
+TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
+
+EXPECTED_TARGET_SUFFIXES = {
+    "codex": {
+        "/workspace": "/workspaces/codex",
+        "/root/.codex": "/state/codex/agent",
+        "/root/.config/gh": "/state/codex/gh",
+        "/root/.config/git": "/state/codex/git",
+        "/root/.ssh": "/state/codex/ssh",
+    },
+    "antigravity": {
+        "/workspace": "/workspaces/antigravity",
+        "/root/.local/bin": "/state/antigravity/bin",
+        "/root/.local/share/remote-dev/antigravity": "/state/antigravity/runtime",
+        "/root/.gemini/antigravity-cli": "/state/antigravity/vendor",
+        "/root/.config/gh": "/state/antigravity/gh",
+        "/root/.config/git": "/state/antigravity/git",
+        "/root/.ssh": "/state/antigravity/ssh",
+    },
+}
+PASSWORD_SUFFIXES = {
+    "codex": "/secrets/codex/web_password.txt",
+    "antigravity": "/secrets/antigravity/web_password.txt",
+}
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def compose_environment() -> dict[str, str]:
+    return {
+        key: os.environ[key]
+        for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
+        if key in os.environ
+    }
+
+
+def compose_config(path: Path) -> dict[str, object]:
+    with tempfile.NamedTemporaryFile() as empty_env:
+        completed = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "--profile",
+                "antigravity",
+                "--env-file",
+                empty_env.name,
+                "-f",
+                str(path),
+                "config",
+                "--format",
+                "json",
+            ],
+            cwd=ROOT,
+            env=compose_environment(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    if completed.returncode != 0:
+        raise AssertionError(f"docker compose config failed for {path}:\n{completed.stderr}")
+    return json.loads(completed.stdout)
+
+
+def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:
+    result: dict[str, dict[str, object]] = {}
+    for mount in service.get("volumes", []):
+        require(isinstance(mount, dict), "rendered volume must use long syntax")
+        target = mount.get("target")
+        require(isinstance(target, str), "rendered volume is missing a target")
+        require(target not in result, f"duplicate mount target: {target}")
+        result[target] = mount
+    return result
+
+
+def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> None:
+    source = mount.get("source")
+    require(isinstance(source, str), f"{path}: bind mount source is missing")
+    require(source.endswith(suffix), f"{path}: unexpected source {source} for {suffix}")
+    require(mount.get("type") == "bind", f"{path}: {source} is not a bind mount")
+    bind = mount.get("bind")
+    require(isinstance(bind, dict), f"{path}: {source} has no bind options")
+    require(
+        bind.get("create_host_path") is not True,
+        f"{path}: {source} explicitly enables automatic host-path creation",
+    )
+
+
+def validate_compose(path: Path, *, truenas: bool) -> None:
+    config = compose_config(path)
+    services = config.get("services")
+    require(isinstance(services, dict), f"{path}: services missing")
+    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
+    require(volume_map(services["launcher"]) == {}, f"{path}: launcher must remain mount-free")
+
+    all_sources: dict[str, set[str]] = {}
+    for role in ("codex", "antigravity"):
+        service = services[role]
+        require(isinstance(service, dict), f"{path}: invalid {role} service")
+        mounts = volume_map(service)
+        expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
+        if truenas:
+            expected_targets.add("/run/secrets/web_password")
+        require(
+            set(mounts) == expected_targets,
+            f"{path}: unexpected {role} mount targets: {sorted(mounts)}",
+        )
+
+        sources: set[str] = set()
+        for target, suffix in EXPECTED_TARGET_SUFFIXES[role].items():
+            mount = mounts[target]
+            validate_bind_mount(path, mount, suffix)
+            source = str(mount["source"])
+            sources.add(source)
+            if truenas:
+                require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
+
+        if truenas:
+            password_mount = mounts["/run/secrets/web_password"]
+            validate_bind_mount(path, password_mount, PASSWORD_SUFFIXES[role])
+            require(password_mount.get("read_only") is True, f"{path}: {role} password must be read-only")
+            require(
+                password_mount.get("source") == f"{TRUENAS_ROOT}{PASSWORD_SUFFIXES[role]}",
+                f"{path}: unexpected {role} password source",
+            )
+            sources.add(str(password_mount["source"]))
+        all_sources[role] = sources
+
+    require(
+        all_sources["codex"].isdisjoint(all_sources["antigravity"]),
+        f"{path}: agent services share persistent sources",
+    )
+
+    if not truenas:
+        secrets = config.get("secrets")
+        require(isinstance(secrets, dict), f"{path}: top-level secrets missing")
+        expected_secret_files = {
+            "web_password": "/data/secrets/codex/web_password.txt",
+            "antigravity_web_password": "/data/secrets/antigravity/web_password.txt",
+        }
+        for name, suffix in expected_secret_files.items():
+            definition = secrets.get(name)
+            require(isinstance(definition, dict), f"{path}: secret {name} missing")
+            secret_file = definition.get("file")
+            require(isinstance(secret_file, str), f"{path}: secret {name} file missing")
+            require(secret_file.endswith(suffix), f"{path}: secret {name} outside canonical root")
+
+    for role in ("codex", "antigravity"):
+        for mount in volume_map(services[role]).values():
+            source = str(mount.get("source", ""))
+            require(source not in {"/", "/root", "/home", "/mnt"}, f"{path}: broad mount {source}")
+            require("docker.sock" not in source.lower(), f"{path}: Docker socket mount {source}")
+            require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
+
+
+def tracked_repository_files() -> list[Path]:
+    completed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
+    )
+    if completed.returncode != 0:
+        raise AssertionError("git ls-files failed: " + completed.stderr.decode(errors="replace"))
+    return [ROOT / os.fsdecode(path) for path in completed.stdout.split(b"\0") if path]
+
+
+def validate_repository_has_no_legacy_data_root() -> None:
+    legacy_variable = "CODEX" + "_DATA_ROOT"
+    legacy_path = "/mnt/Pool1/" + "codex"
+    ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
+    for path in tracked_repository_files():
+        if not path.is_file() or path.suffix.lower() in ignored_suffixes:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        require(legacy_variable not in text, f"legacy data-root variable remains in {path}")
+        require(legacy_path not in text, f"legacy TrueNAS data path remains in {path}")
+
+
+def validate_sources() -> None:
+    env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
+    generic_text = GENERIC_COMPOSE.read_text(encoding="utf-8")
+    truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
+    preflight_text = PREFLIGHT.read_text(encoding="utf-8")
+
+    require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
+    require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
+    require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
+    require(generic_text.count("create_host_path: false") == 12, "generic bind protection count")
+    require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
+    require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
+    for marker in (
+        "workspaces/codex",
+        "state/codex/agent",
+        "secrets/codex/web_password.txt",
+        "workspaces/antigravity",
+        "state/antigravity/bin",
+        "state/antigravity/runtime",
+        "state/antigravity/vendor",
+        "state/antigravity/gh",
+        "state/antigravity/git",
+        "state/antigravity/ssh",
+        "secrets/antigravity/web_password.txt",
+    ):
+        require(marker in preflight_text, f"host preflight does not cover {marker}")
+
+
+def main() -> int:
+    validate_sources()
+    validate_compose(GENERIC_COMPOSE, truenas=False)
+    validate_compose(TRUENAS_COMPOSE, truenas=True)
+    validate_repository_has_no_legacy_data_root()
+    print("Canonical Remote Dev data-root and isolated mount boundaries: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+          )
+
+          write(
+              "scripts/test_single_stack_compose.py",
+              '''#!/usr/bin/env python3
+"""Validate the bounded launcher/Codex/Antigravity Compose topology."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
+TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
+LAUNCHER_AUTH_OVERRIDE = ROOT / "compose/launcher-auth.yml"
+COMPOSE_FILES = (GENERIC_COMPOSE, TRUENAS_COMPOSE)
+AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
+CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
+SOCKET_MARKERS = ("docker.sock", "podman.sock")
+
+
+def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    environment = {
+        key: os.environ[key]
+        for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
+        if key in os.environ
+    }
+    if overrides:
+        environment.update(overrides)
+    return environment
+
+
+def compose_config(
+    paths: Path | tuple[Path, ...],
+    env_file: Path,
+    overrides: dict[str, str] | None = None,
+) -> dict[str, object]:
+    compose_paths = (paths,) if isinstance(paths, Path) else paths
+    command = [
+        "docker",
+        "compose",
+        "--profile",
+        "antigravity",
+        "--env-file",
+        str(env_file),
+    ]
+    for path in compose_paths:
+        command.extend(("-f", str(path)))
+    command.extend(("config", "--format", "json"))
+    completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        env=compose_environment(overrides),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        rendered_paths = ", ".join(str(path) for path in compose_paths)
+        raise AssertionError(f"docker compose config failed for {rendered_paths}:\n{completed.stderr}")
+    return json.loads(completed.stdout)
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def published_targets(service: dict[str, object]) -> set[int]:
+    return {
+        int(port["target"])
+        for port in service.get("ports", [])
+        if isinstance(port, dict)
+    }
+
+
+def mount_sources(service: dict[str, object], target: str | None = None) -> list[str]:
+    sources: list[str] = []
+    for mount in service.get("volumes", []):
+        if not isinstance(mount, dict):
+            continue
+        if target is not None and mount.get("target") != target:
+            continue
+        source = mount.get("source")
+        if source is not None:
+            sources.append(str(source))
+    return sources
+
+
+def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
+    sources: list[str] = []
+    expected_name = target.removeprefix("/run/secrets/")
+    for secret in service.get("secrets", []):
+        if isinstance(secret, str):
+            source = secret
+            secret_target = secret
+        elif isinstance(secret, dict):
+            source_value = secret.get("source")
+            if source_value is None:
+                continue
+            source = str(source_value)
+            secret_target = str(secret.get("target", source))
+        else:
+            continue
+        if secret_target.removeprefix("/run/secrets/") == expected_name:
+            sources.append(source)
+    return sources
+
+
+def credential_sources(
+    config: dict[str, object], service: dict[str, object], target: str
+) -> list[str]:
+    sources = [f"bind:{source}" for source in mount_sources(service, target)]
+    top_level = config.get("secrets")
+    for secret_name in service_secret_sources(service, target):
+        require(isinstance(top_level, dict), "service secret has no top-level definition")
+        definition = top_level.get(secret_name)
+        require(isinstance(definition, dict), f"top-level secret {secret_name} is missing")
+        secret_file = definition.get("file")
+        require(secret_file is not None, f"secret {secret_name} has no file source")
+        sources.append(f"secret:{secret_file}")
+    return sources
+
+
+def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
+    path = Path(path_value)
+    if not path.is_absolute():
+        path = base_file.parent / path
+    return path.resolve()
+
+
+def validate(path: Path, config: dict[str, object]) -> None:
+    services = config.get("services")
+    require(isinstance(services, dict), f"{path}: services missing")
+    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
+    launcher = services["launcher"]
+    codex = services["codex"]
+    antigravity = services["antigravity"]
+    for name, service in services.items():
+        require(isinstance(service, dict), f"{path}: invalid {name} service")
+        require(service.get("image") == CANONICAL_IMAGE, f"{path}: {name} image")
+    require(len({service["image"] for service in services.values()}) == 1, f"{path}: image mismatch")
+
+    launcher_env = launcher.get("environment")
+    codex_env = codex.get("environment")
+    antigravity_env = antigravity.get("environment")
+    require(isinstance(launcher_env, dict), f"{path}: launcher environment")
+    require(isinstance(codex_env, dict), f"{path}: Codex environment")
+    require(isinstance(antigravity_env, dict), f"{path}: Antigravity environment")
+    require(launcher_env.get("REMOTE_DEV_ROLE") == "launcher", f"{path}: launcher role")
+    require(codex_env.get("REMOTE_DEV_ROLE") == "codex", f"{path}: Codex role")
+    require(antigravity_env.get("REMOTE_DEV_ROLE") == "antigravity", f"{path}: Antigravity role")
+    require(str(antigravity_env.get("REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY")) == "1", f"{path}: Antigravity gate")
+    require(str(antigravity_env.get("AGY_CLI_DISABLE_AUTO_UPDATE")).lower() == "true", f"{path}: auto update")
+
+    for key in ("WEB_PASSWORD_FILE", "WEB_PASSWORD", "WEB_USERNAME"):
+        require(key not in launcher_env, f"{path}: launcher unexpectedly contains {key}")
+    for name, environment in (("Codex", codex_env), ("Antigravity", antigravity_env)):
+        require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
+        require(str(environment.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: {name} authentication")
+    require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
+
+    expected_enabled = "1" if path == TRUENAS_COMPOSE else "0"
+    require(
+        str(launcher_env.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED")) == expected_enabled,
+        f"{path}: Antigravity launcher opt-in",
+    )
+    require(int(launcher_env.get("REMOTE_DEV_LAUNCHER_CODEX_PORT")) == 7681, f"{path}: Codex route")
+    require(int(launcher_env.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT")) == 7682, f"{path}: Antigravity route")
+
+    launcher_text = json.dumps(launcher, sort_keys=True)
+    for forbidden in (
+        "/workspace",
+        "/root/.codex",
+        "/root/.config/gh",
+        "/root/.config/git",
+        "/root/.ssh",
+        "/root/.local/bin",
+        "/root/.gemini",
+        "docker.sock",
+        "podman.sock",
+        "/run/secrets/web_password",
+        "OPENAI_API_KEY",
+        "CODEX_HOME",
+        "GH_CONFIG_DIR",
+        "GIT_CONFIG_GLOBAL",
+    ):
+        require(forbidden not in launcher_text, f"{path}: launcher contains {forbidden}")
+
+    require(mount_sources(launcher) == [], f"{path}: launcher must remain mount-free")
+    codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
+    antigravity_credentials = credential_sources(config, antigravity, "/run/secrets/web_password")
+    require(len(codex_credentials) == 1, f"{path}: Codex credentials {codex_credentials}")
+    require(len(antigravity_credentials) == 1, f"{path}: Antigravity credentials {antigravity_credentials}")
+    require(codex_credentials != antigravity_credentials, f"{path}: shared terminal credential source")
+
+    require(published_targets(launcher) == {7680}, f"{path}: launcher ports")
+    require(published_targets(codex) == {7681}, f"{path}: Codex ports")
+    require(published_targets(antigravity) == {7682}, f"{path}: Antigravity ports")
+
+    codex_sources = set(mount_sources(codex))
+    antigravity_sources = set(mount_sources(antigravity))
+    require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
+
+    for name, service in services.items():
+        require(service.get("privileged") is not True, f"{path}: {name} privileged")
+        require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
+        require(service.get("network_mode") != "host", f"{path}: {name} host network")
+        require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
+        for source in mount_sources(service):
+            lowered = source.lower()
+            require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
+
+    require(launcher.get("container_name") == "remote-dev-launcher", f"{path}: launcher name")
+    require(codex.get("container_name") == "codex-remote-dev", f"{path}: Codex name")
+    require(antigravity.get("container_name") == "antigravity-remote-dev", f"{path}: Antigravity name")
+    if path == GENERIC_COMPOSE:
+        require(antigravity.get("profiles") == ["antigravity"], f"{path}: Antigravity profile")
+
+
+def validate_auth_override_separation(env_path: Path) -> None:
+    relaxed = compose_config(GENERIC_COMPOSE, env_path, {"ALLOW_INSECURE_WEB": "1"})["services"]
+    require(str(relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "launcher changed")
+    require(str(relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "Codex override missing")
+    require(str(relaxed["antigravity"]["environment"]["ALLOW_INSECURE_WEB"]) == "0", "Codex auth leaked")
+
+    default_auth = compose_config(AUTH_COMPOSE_FILES, env_path, {"LAUNCHER_USERNAME": "test-launcher"})
+    launcher = default_auth["services"]["launcher"]
+    sources = credential_sources(default_auth, launcher, "/run/secrets/launcher_password")
+    require(len(sources) == 1 and sources[0].startswith("secret:"), "launcher auth must be file-backed")
+    default_path = resolve_compose_file_path(sources[0].removeprefix("secret:"), GENERIC_COMPOSE)
+    require(default_path == (ROOT / "secrets/launcher_password.txt").resolve(), "launcher secret path")
+
+    synthetic = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as secret_file:
+        secret_file.write(f"{synthetic}\n")
+        secret_file.flush()
+        hardened = compose_config(
+            AUTH_COMPOSE_FILES,
+            env_path,
+            {"LAUNCHER_PASSWORD_PATH": secret_file.name, "LAUNCHER_USERNAME": "test-launcher"},
+        )
+    require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
+    launcher = hardened["services"]["launcher"]
+    require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
+    require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
+    require(mount_sources(launcher) == [], "launcher auth added a bind mount")
+
+
+def validate_truenas_password_free_source() -> None:
+    launcher_source = TRUENAS_COMPOSE.read_text(encoding="utf-8").split("\n  codex:", maxsplit=1)[0]
+    for marker in ("LAUNCHER_PASSWORD", "launcher_password", "WEB_PASSWORD", "WEB_USERNAME"):
+        require(marker not in launcher_source, f"TrueNAS launcher source contains {marker}")
+
+
+def main() -> int:
+    validate_truenas_password_free_source()
+    with tempfile.NamedTemporaryFile() as empty_env:
+        env_path = Path(empty_env.name)
+        for path in COMPOSE_FILES:
+            validate(path, compose_config(path, env_path))
+        validate_auth_override_separation(env_path)
+    print("Single-stack image, socket, launcher and credential boundaries: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+          )
+
+          replace_once(
+              "scripts/remote-dev-launcher.py",
+              'raise ValueError(\n                f"{name} must not include a port; use REMOTE_DEV_LAUNCHER_CODEX_PORT"\n            ) from exc',
+              'raise ValueError(\n                f"{name} must not include a port; configure the matching route port separately"\n            ) from exc',
+          )
+          replace_once(
+              "scripts/remote-dev-launcher.py",
+              '''    codex_path: str
+    image_version: str
+    source_revision: str
+''',
+              '''    codex_path: str
+    antigravity_enabled: bool
+    antigravity_host: str
+    antigravity_port: int
+    antigravity_scheme: str
+    antigravity_path: str
+    image_version: str
+    source_revision: str
+''',
+          )
+          replace_once(
+              "scripts/remote-dev-launcher.py",
+              '''        codex_path=_normalize_path(
+            "REMOTE_DEV_LAUNCHER_CODEX_PATH",
+            os.environ.get("REMOTE_DEV_LAUNCHER_CODEX_PATH", "/"),
+        ),
+        image_version=_read_metadata(
+''',
+              '''        codex_path=_normalize_path(
+            "REMOTE_DEV_LAUNCHER_CODEX_PATH",
+            os.environ.get("REMOTE_DEV_LAUNCHER_CODEX_PATH", "/"),
+        ),
+        antigravity_enabled=_env_bool(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED", False
+        ),
+        antigravity_host=_optional_host(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST", ""),
+        ),
+        antigravity_port=_env_port(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT", 7682
+        ),
+        antigravity_scheme=_optional_scheme(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME", ""),
+        ),
+        antigravity_path=_normalize_path(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH", "/"),
+        ),
+        image_version=_read_metadata(
+''',
+          )
+          replace_between(
+              "scripts/remote-dev-launcher.py",
+              "def build_page(config: LauncherConfig, nonce: str) -> bytes:\n",
+              "\n\nclass LauncherServer(ThreadingHTTPServer):",
+              '''def build_page(config: LauncherConfig, nonce: str) -> bytes:
+    routes: dict[str, dict[str, object]] = {
+        "codex": {
+            "host": config.codex_host,
+            "port": config.codex_port,
+            "scheme": config.codex_scheme,
+            "path": config.codex_path,
+        }
+    }
+    antigravity_markup = ""
+    antigravity_script = ""
+    if config.antigravity_enabled:
+        routes["antigravity"] = {
+            "host": config.antigravity_host,
+            "port": config.antigravity_port,
+            "scheme": config.antigravity_scheme,
+            "path": config.antigravity_path,
+        }
+        antigravity_markup = """
+<a id="antigravity-link" href="#">Open Antigravity (experimental)</a>
+<p>The Antigravity terminal has separate authentication, workspace and credentials.</p>
+"""
+        antigravity_script = (
+            "document.getElementById('antigravity-link').href = "
+            "routeUrl(routes.antigravity);"
+        )
+
+    route_config = json.dumps(routes, separators=(",", ":"))
+    version = html.escape(config.image_version)
+    revision = html.escape(config.source_revision)
+    document = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remote Dev</title>
+<style nonce="{nonce}">
+:root {{ color-scheme: light dark; font-family: system-ui, sans-serif; }}
+body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: Canvas; color: CanvasText; }}
+main {{ width: min(42rem, calc(100% - 2rem)); padding: 2rem; border: 1px solid GrayText; border-radius: 1rem; }}
+h1 {{ margin-top: 0; }}
+a {{ display: block; width: fit-content; margin-top: 1rem; padding: .8rem 1rem; border: 1px solid LinkText; border-radius: .6rem; font-weight: 700; }}
+small {{ display: block; margin-top: 1.5rem; opacity: .75; overflow-wrap: anywhere; }}
+</style>
+</head>
+<body>
+<main>
+<h1>Remote Dev</h1>
+<p>Select an available isolated agent service.</p>
+<a id="codex-link" href="#">Open Codex</a>
+<p>The Codex terminal authenticates independently and runs in a separate container.</p>
+{antigravity_markup}<small>Image {version} · Source {revision}</small>
+</main>
+<script nonce="{nonce}">
+const routes = {route_config};
+const routeUrl = (config) => {{
+  const host = config.host || window.location.hostname;
+  const scheme = config.scheme || window.location.protocol.replace(':', '');
+  const formattedHost = host.includes(':') && !host.startsWith('[') ? `[${{host}}]` : host;
+  return `${{scheme}}://${{formattedHost}}:${{config.port}}${{config.path}}`;
+}};
+document.getElementById('codex-link').href = routeUrl(routes.codex);
+{antigravity_script}
+</script>
+</body>
+</html>
+"""
+    return document.encode("utf-8")
+''',
+          )
+
+          replace_once(
+              "scripts/test-remote-dev-launcher.sh",
+              '''REMOTE_DEV_LAUNCHER_CODEX_PORT=8765 \\
+REMOTE_DEV_LAUNCHER_CODEX_PATH=/codex \\
+  python "$launcher" >"$log_file" 2>&1 &
+''',
+              '''REMOTE_DEV_LAUNCHER_CODEX_PORT=8765 \\
+REMOTE_DEV_LAUNCHER_CODEX_PATH=/codex \\
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \\
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=8766 \\
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH=/antigravity \\
+  python "$launcher" >"$log_file" 2>&1 &
+''',
+          )
+          replace_once(
+              "scripts/test-remote-dev-launcher.sh",
+              '''grep -Fq '\"port\":8765' "$page"
+grep -Fq '\"path\":\"/codex\"' "$page"
+grep -Fq 'authenticates independently' "$page"
+''',
+              '''grep -Fq '\"port\":8765' "$page"
+grep -Fq '\"path\":\"/codex\"' "$page"
+grep -Fq 'authenticates independently' "$page"
+grep -Fq 'Open Antigravity (experimental)' "$page"
+grep -Fq '\"port\":8766' "$page"
+grep -Fq '\"path\":\"/antigravity\"' "$page"
+grep -Fq 'separate authentication, workspace and credentials' "$page"
+''',
+          )
+          replace_once(
+              "scripts/test-remote-dev-launcher.sh",
+              '''grep -Fq 'Open Codex' "$workdir/no-auth-page.html"
+stop_launcher
+''',
+              '''grep -Fq 'Open Codex' "$workdir/no-auth-page.html"
+if grep -Fq 'Open Antigravity' "$workdir/no-auth-page.html"; then
+  echo 'ERROR: disabled Antigravity route was advertised' >&2
+  exit 1
+fi
+stop_launcher
+''',
+          )
+          replace_once(
+              "scripts/test-remote-dev-launcher.sh",
+              '''grep -Fq 'must not include a port' "$embedded_port_log"
+
+echo 'Optional and authenticated launcher, privilege drop and fixed routing tests: OK'
+''',
+              '''grep -Fq 'must not include a port' "$embedded_port_log"
+
+invalid_agent_flag_log="$workdir/invalid-agent-flag.log"
+invalid_agent_flag_status=0
+ALLOW_INSECURE_WEB=1 \\
+REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=yes \\
+  python "$launcher" > /dev/null 2>"$invalid_agent_flag_log" || invalid_agent_flag_status=$?
+[[ "$invalid_agent_flag_status" == 2 ]] || {
+  echo "ERROR: invalid Antigravity route flag returned $invalid_agent_flag_status instead of 2" >&2
+  cat "$invalid_agent_flag_log" >&2
+  exit 1
+}
+grep -Fq 'REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED must be 0 or 1' "$invalid_agent_flag_log"
+
+echo 'Optional and authenticated launcher, privilege drop and isolated fixed routing tests: OK'
+''',
+          )
+
+          replace_once(
+              "scripts/runtime-smoke-test.sh",
+              '''      --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \\
+      "$image" >/dev/null
+''',
+              '''      --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \\
+      --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \\
+      --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=7682 \\
+      "$image" >/dev/null
+''',
+          )
+          replace_once(
+              "scripts/runtime-smoke-test.sh",
+              '''    grep -Fq 'Open Codex' <<<"$launcher_page"
+    grep -Fq '\"port\":7681' <<<"$launcher_page"
+''',
+              '''    grep -Fq 'Open Codex' <<<"$launcher_page"
+    grep -Fq '\"port\":7681' <<<"$launcher_page"
+    grep -Fq 'Open Antigravity (experimental)' <<<"$launcher_page"
+    grep -Fq '\"port\":7682' <<<"$launcher_page"
+''',
+          )
+
+          replace_once(
+              "scripts/remote-dev-doctor.sh",
+              '''Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
+Available roles: launcher, codex, shell
+''',
+              '''Codex route path: ${REMOTE_DEV_LAUNCHER_CODEX_PATH:-/}
+Antigravity route enabled: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED:-0}
+Antigravity route host: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST:-browser hostname}
+Antigravity route port: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT:-7682}
+Antigravity route scheme: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME:-browser scheme}
+Antigravity route path: ${REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH:-/}
+Available roles: launcher, codex, shell
+''',
+          )
+          replace_once(
+              "scripts/remote-dev-doctor.sh",
+              '''  if [[ "$role" == codex ]]; then
+    writable_paths+=("${CODEX_HOME:-/root/.codex}")
+  fi
+''',
+              '''  if [[ "$role" == codex ]]; then
+    writable_paths+=("${CODEX_HOME:-/root/.codex}")
+  elif [[ "$role" == antigravity ]]; then
+    writable_paths+=(
+      "$ANTIGRAVITY_BIN_DIR"
+      "$ANTIGRAVITY_STATE_DIR"
+      "$ANTIGRAVITY_VENDOR_STATE_DIR"
+    )
+  fi
+''',
+          )
+          PY
+
+      - name: Validate focused implementation
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' -print0)
+          python3 -m py_compile \
+            scripts/remote-dev-launcher.py \
+            scripts/preflight-data-layout.py \
+            scripts/test_single_stack_compose.py \
+            scripts/test_canonical_data_layout.py \
+            scripts/test_preflight_data_layout.py
+          REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
+            bash scripts/test-remote-dev-launcher.sh
+          python3 scripts/test_single_stack_compose.py
+          python3 scripts/test_canonical_data_layout.py
+          python3 scripts/test_preflight_data_layout.py
+          for file in compose/*.yml; do
+            docker compose --profile antigravity -f "$file" config --quiet
+          done
+          git diff --check
+
+      - name: Commit implementation and remove helper
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-antigravity-service.yml
+          git add \
+            .env.example \
+            compose/docker-compose.yml \
+            compose/truenas.yml \
+            scripts/preflight-data-layout.py \
+            scripts/remote-dev-doctor.sh \
+            scripts/remote-dev-launcher.py \
+            scripts/runtime-smoke-test.sh \
+            scripts/test-remote-dev-launcher.sh \
+            scripts/test_canonical_data_layout.py \
+            scripts/test_preflight_data_layout.py \
+            scripts/test_single_stack_compose.py
+          git commit -m "feat: add the isolated Antigravity service topology"
+          git push origin HEAD:feat/antigravity-isolated-service
