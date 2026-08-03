@@ -205,10 +205,12 @@ services:
         target: /root/.ssh
         bind:
           create_host_path: false
-
-    secrets:
-      - source: antigravity_web_password
-        target: web_password
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/antigravity/web_password.txt
+        target: /run/secrets/web_password
+        read_only: true
+        bind:
+          create_host_path: false
 
     tmpfs:
       - /tmp:size=512m,mode=1777
@@ -219,5 +221,3 @@ services:
 secrets:
   web_password:
     file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt
-  antigravity_web_password:
-    file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/antigravity/web_password.txt
