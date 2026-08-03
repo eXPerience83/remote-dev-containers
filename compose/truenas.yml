@@ -157,6 +157,7 @@ services:
       GH_PAGER: cat
       GH_NO_UPDATE_NOTIFIER: "1"
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
+      DO_NOT_TRACK: "1"
       GIT_USER_NAME: ""
       GIT_USER_EMAIL: ""
 
