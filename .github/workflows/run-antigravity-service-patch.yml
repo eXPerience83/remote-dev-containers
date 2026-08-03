@@ -37,19 +37,25 @@ jobs:
           raw_payload = workflow.split(start, 1)[1].split(end, 1)[0]
           output: list[str] = []
           triple_quote: str | None = None
+          python_target = False
 
           for raw_line in raw_payload.splitlines():
               if triple_quote is None:
                   line = raw_line[10:] if raw_line.startswith('          ') else raw_line
+                  if '"scripts/' in line and '.py"' in line:
+                      python_target = True
                   for token in ("'''", '\"\"\"'):
                       if line.count(token) % 2 == 1:
-                          index = line.find(token)
-                          prefix = line[index - 1] if index > 0 else ''
-                          if prefix not in 'rRbBuUfF':
-                              line = line[:index] + 'r' + line[index:]
+                          if python_target:
+                              index = line.find(token)
+                              prefix = line[index - 1] if index > 0 else ''
+                              if prefix not in 'rRbBuUfF':
+                                  line = line[:index] + 'r' + line[index:]
                           triple_quote = token
                           break
                   output.append(line)
+                  if line.strip() == ')':
+                      python_target = False
               else:
                   output.append(raw_line)
                   if raw_line.count(triple_quote) % 2 == 1:
