@@ -33,10 +33,10 @@ jobs:
           if workflow.count(start) != 1 or workflow.count(end) != 1:
               raise SystemExit('could not locate the isolated-service patch payload exactly once')
           payload = workflow.split(start, 1)[1].split(end, 1)[0]
-          lines = payload.splitlines()
-          if any(line and not line.startswith('          ') for line in lines):
-              raise SystemExit('unexpected indentation in patch payload')
-          payload = '\n'.join(line[10:] if line else '' for line in lines) + '\n'
+          payload = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in payload.splitlines()
+          ) + '\n'
           exec(compile(payload, 'isolated-service-patch', 'exec'), {'__name__': '__main__'})
           BOOT
 
