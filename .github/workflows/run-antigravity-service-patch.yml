@@ -41,11 +41,15 @@ jobs:
           for raw_line in raw_payload.splitlines():
               if triple_quote is None:
                   line = raw_line[10:] if raw_line.startswith('          ') else raw_line
-                  output.append(line)
                   for token in ("'''", '\"\"\"'):
                       if line.count(token) % 2 == 1:
+                          index = line.find(token)
+                          prefix = line[index - 1] if index > 0 else ''
+                          if prefix not in 'rRbBuUfF':
+                              line = line[:index] + 'r' + line[index:]
                           triple_quote = token
                           break
+                  output.append(line)
               else:
                   output.append(raw_line)
                   if raw_line.count(triple_quote) % 2 == 1:
@@ -56,18 +60,6 @@ jobs:
 
           payload = '\n'.join(output) + '\n'
           exec(compile(payload, 'isolated-service-patch', 'exec'), {'__name__': '__main__'})
-
-          generated_python = (
-              Path('scripts/remote-dev-launcher.py'),
-              Path('scripts/preflight-data-layout.py'),
-              Path('scripts/test_single_stack_compose.py'),
-              Path('scripts/test_canonical_data_layout.py'),
-              Path('scripts/test_preflight_data_layout.py'),
-          )
-          for path in generated_python:
-              source = path.read_bytes()
-              if b'\x00' in source:
-                  path.write_bytes(source.replace(b'\x00', b'\\x00'))
           BOOT
 
       - name: Validate focused implementation
