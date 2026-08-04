@@ -1,9 +1,9 @@
 # TrueNAS experimental deployment and Antigravity validation
 
 This runbook prepares the real validation tracked by issues #28, #29 and #69.
-It applies to the first three-service TrueNAS implementation merged in commit
-`3044a8ce21ed7a1215db1530e9e9679ac6469f67` and to the current host-side
-Compose/preflight files on `main`.
+The image, `compose/truenas.yml` and `scripts/preflight-data-layout.py` must all
+come from the same immutable source revision. Never combine a pinned image with
+host-side files downloaded from a moving branch such as `main`.
 
 Antigravity remains experimental until the manual login, filesystem-discovery,
 persistence and recreation checks in #29 are complete. Do not expose ports
@@ -59,7 +59,7 @@ sudo docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
 
 Never print password environment values or credential-file contents.
 
-## Verify and pin the published image
+## Verify and pin one complete release unit
 
 Pull the public AMD64 edge tag:
 
@@ -67,28 +67,38 @@ Pull the public AMD64 edge tag:
 sudo docker pull ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Verify that the embedded revision is the implementation being validated:
+Read and validate the immutable source revision embedded in that exact image:
 
 ```bash
-expected_revision=3044a8ce21ed7a1215db1530e9e9679ac6469f67
-actual_revision="$(
+release_revision="$(
   sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
-printf 'expected=%s\nactual=%s\n' "$expected_revision" "$actual_revision"
-test "$actual_revision" = "$expected_revision"
+case "$release_revision" in
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+  *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
+esac
+printf 'release_revision=%s\n' "$release_revision"
 ```
 
-Record the immutable repository digest:
+Record the immutable repository digest and keep it in the same shell session:
 
 ```bash
-sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
-  --format '{{range .RepoDigests}}{{println .}}{{end}}'
+pinned_image="$(
+  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+    --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+  | sed -n '1p'
+)"
+case "$pinned_image" in
+  ghcr.io/experience83/remote-dev@sha256:[0-9a-f]*) ;;
+  *) echo "Invalid immutable image reference: $pinned_image" >&2; exit 1 ;;
+esac
+printf 'pinned_image=%s\n' "$pinned_image"
 ```
 
-Use the `ghcr.io/experience83/remote-dev@sha256:...` digest reference in the
-TrueNAS validation YAML. Do not validate this lifecycle against the mutable edge
-tag alone.
+Use that digest reference in the TrueNAS validation YAML. Download all host-side
+files from `$release_revision`; image and host files must be updated together as
+one release unit.
 
 ## Dataset boundary
 
@@ -149,13 +159,17 @@ The resulting host tree is:
         └── ssh/
 ```
 
-## Run the authoritative host preflight
+## Download and run the matching host preflight
 
-Download the current preflight and run it before saving the App YAML:
+Download the preflight from the image's embedded source revision, not `main`:
 
 ```bash
-curl --fail --silent --show-error --location \
-  https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/main/scripts/preflight-data-layout.py \
+: "${release_revision:?Run the release verification section first}"
+release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
+
+curl --proto '=https' --tlsv1.2 \
+  --fail --silent --show-error --location \
+  "${release_base}/scripts/preflight-data-layout.py" \
   --output /tmp/remote-dev-preflight-data-layout.py
 
 python3 /tmp/remote-dev-preflight-data-layout.py \
@@ -173,24 +187,28 @@ Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity
 Environment mode validates only persistent bind sources and symlink ancestry;
 the actual passwords are validated by the runtime when the containers start.
 
-## Prepare the TrueNAS YAML
+## Download the matching TrueNAS YAML
 
-Use the current `compose/truenas.yml` as the source:
+Use `compose/truenas.yml` from the same revision as the image and preflight:
 
 ```bash
-curl --fail --silent --show-error --location \
-  https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/main/compose/truenas.yml \
+: "${release_revision:?Run the release verification section first}"
+release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
+
+curl --proto '=https' --tlsv1.2 \
+  --fail --silent --show-error --location \
+  "${release_base}/compose/truenas.yml" \
   --output /tmp/remote-dev-truenas.yml
 ```
 
 Before pasting it into the TrueNAS Custom App editor:
 
-1. replace the image anchor with the immutable digest recorded above;
+1. replace the image anchor with `$pinned_image` recorded above;
 2. replace all three example `192.168.1.10` bindings with the trusted LAN or
    Tailscale address already used by the deployment;
 3. leave the launcher unauthenticated for the current trusted-network model;
-4. replace the Codex `WEB_PASSWORD` placeholder with a strong password;
-5. replace the Antigravity `WEB_PASSWORD` placeholder with a different strong
+4. replace the empty Codex `WEB_PASSWORD` value with a strong password;
+5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
    password;
 6. keep both values quoted and never commit the personalized YAML to Git;
 7. do not add privileged mode, capabilities, host networking, host-root mounts
@@ -208,12 +226,11 @@ antigravity-remote-dev   port 7682, Antigravity-only persistent mounts
 
 ## First deployment checks
 
-After stopping the old App and saving the replacement YAML, set `pinned_image`
-to the exact `ghcr.io/experience83/remote-dev@sha256:...` reference used in the
-YAML and run:
+After stopping the old App and saving the replacement YAML, verify that the
+shell still contains the exact immutable reference used in the YAML:
 
 ```bash
-pinned_image='ghcr.io/experience83/remote-dev@sha256:replace-with-recorded-digest'
+: "${pinned_image:?Run the release verification section first}"
 
 sudo docker ps --filter name=remote-dev --filter name=codex-remote-dev --filter name=antigravity-remote-dev
 sudo docker exec codex-remote-dev remote-dev-version
@@ -282,7 +299,7 @@ the same dataset:
 
 Use one non-empty single-line file per role, mode `0600`, mount each file
 read-only at `/run/secrets/web_password`, remove the corresponding
-`WEB_PASSWORD` variable and run:
+`WEB_PASSWORD` variable and run the already downloaded matching preflight:
 
 ```bash
 python3 /tmp/remote-dev-preflight-data-layout.py \
@@ -291,8 +308,8 @@ python3 /tmp/remote-dev-preflight-data-layout.py \
   --password-source file
 ```
 
-The generic `compose/docker-compose.yml` remains the repository example for
-file-backed credentials.
+The generic `compose/docker-compose.yml` from the same `$release_revision`
+remains the repository example for file-backed credentials.
 
 ## Rollback
 
@@ -313,6 +330,7 @@ Post sanitized results to #29 and #69:
 
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
+- confirmation that YAML and preflight came from that same revision;
 - password source (`environment` or `file`) without its value;
 - Antigravity CLI version;
 - browser/access method without account identity;
