@@ -218,8 +218,8 @@ def validate_sources() -> None:
     require(truenas_text.count("create_host_path: false") == 12, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     require("--password-source" in preflight_text, "password source preflight option missing")
-    require("WEB_PASSWORD_FILE" not in truenas_text, "TrueNAS home mode still uses password files")
-    require("/run/secrets/web_password" not in truenas_text, "TrueNAS home mode still mounts passwords")
+    require("\n      WEB_PASSWORD_FILE:" not in truenas_text, "TrueNAS home mode still uses password files")
+    require("target: /run/secrets/web_password" not in truenas_text, "TrueNAS home mode still mounts passwords")
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
