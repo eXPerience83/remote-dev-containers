@@ -141,8 +141,10 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
         require(isinstance(environment, dict), f"{path}: {role} environment missing")
         if truenas:
             require("WEB_PASSWORD_FILE" not in environment, f"{path}: {role} file password remains")
-            password = environment.get("WEB_PASSWORD")
-            require(isinstance(password, str) and password.strip(), f"{path}: {role} YAML password missing")
+            require(
+                environment.get("WEB_PASSWORD") == "",
+                f"{path}: {role} public YAML password must remain empty",
+            )
         else:
             require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {role} file target")
             require("WEB_PASSWORD" not in environment, f"{path}: {role} environment password leaked")
@@ -153,9 +155,6 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     )
 
     if truenas:
-        codex_password = services["codex"]["environment"]["WEB_PASSWORD"]
-        antigravity_password = services["antigravity"]["environment"]["WEB_PASSWORD"]
-        require(codex_password != antigravity_password, f"{path}: role passwords must differ")
         require("secrets" not in config, f"{path}: TrueNAS home mode retained top-level secrets")
     else:
         secrets = config.get("secrets")
@@ -220,6 +219,7 @@ def validate_sources() -> None:
     require("--password-source" in preflight_text, "password source preflight option missing")
     require("\n      WEB_PASSWORD_FILE:" not in truenas_text, "TrueNAS home mode still uses password files")
     require("target: /run/secrets/web_password" not in truenas_text, "TrueNAS home mode still mounts passwords")
+    require(truenas_text.count("WEB_PASSWORD: ''") == 2, "TrueNAS password placeholders must fail closed")
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
