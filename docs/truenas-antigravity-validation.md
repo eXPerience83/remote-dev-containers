@@ -29,7 +29,7 @@ Before changing the App:
 
 1. save a copy of the current custom-App YAML;
 2. record the current image ID and embedded source revision;
-3. leave the existing `/mnt/Pool1/codex` tree untouched;
+3. leave the currently deployed legacy data tree untouched;
 4. do not delete the old tree until the new deployment has passed recreation and
    rollback checks.
 
@@ -269,7 +269,7 @@ If the new stack fails:
 1. stop the new App;
 2. restore the saved old YAML;
 3. restore the previously recorded image reference if needed;
-4. continue using `/mnt/Pool1/codex`;
+4. continue using the previously recorded legacy data tree;
 5. leave `/mnt/Pool1/remote-dev` intact for diagnosis.
 
 Do not copy credential files between the old and new trees and do not delete
