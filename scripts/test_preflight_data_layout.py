@@ -38,17 +38,12 @@ def run_preflight(
     root: Path,
     *,
     include_antigravity: bool = False,
-    password_source: str = "environment",
+    password_source: str | None = "environment",
 ) -> subprocess.CompletedProcess[str]:
     """Run the preflight against one temporary host layout."""
-    command = [
-        sys.executable,
-        str(PREFLIGHT),
-        "--root",
-        str(root),
-        "--password-source",
-        password_source,
-    ]
+    command = [sys.executable, str(PREFLIGHT), "--root", str(root)]
+    if password_source is not None:
+        command.extend(("--password-source", password_source))
     if include_antigravity:
         command.append("--include-antigravity")
     return subprocess.run(
@@ -141,6 +136,10 @@ def validate_file_mode(root: Path) -> None:
     codex_only = run_preflight(root, password_source="file")
     require(codex_only.returncode == 0, codex_only.stderr)
     require("Codex; passwords=file" in codex_only.stdout, codex_only.stdout)
+
+    default_file = run_preflight(root, password_source=None)
+    require(default_file.returncode == 0, default_file.stderr)
+    require("Codex; passwords=file" in default_file.stdout, default_file.stdout)
 
     missing_antigravity_secret = run_preflight(
         root, include_antigravity=True, password_source="file"
