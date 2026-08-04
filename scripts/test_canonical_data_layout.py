@@ -14,25 +14,38 @@ GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
 TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
+TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
 
 EXPECTED_TARGET_SUFFIXES = {
-    "/workspace": "/workspaces/codex",
-    "/root/.codex": "/state/codex/agent",
-    "/root/.config/gh": "/state/codex/gh",
-    "/root/.config/git": "/state/codex/git",
-    "/root/.ssh": "/state/codex/ssh",
+    "codex": {
+        "/workspace": "/workspaces/codex",
+        "/root/.codex": "/state/codex/agent",
+        "/root/.config/gh": "/state/codex/gh",
+        "/root/.config/git": "/state/codex/git",
+        "/root/.ssh": "/state/codex/ssh",
+    },
+    "antigravity": {
+        "/workspace": "/workspaces/antigravity",
+        "/root/.local/bin": "/state/antigravity/bin",
+        "/root/.local/share/remote-dev/antigravity": "/state/antigravity/runtime",
+        "/root/.gemini/antigravity-cli": "/state/antigravity/vendor",
+        "/root/.config/gh": "/state/antigravity/gh",
+        "/root/.config/git": "/state/antigravity/git",
+        "/root/.ssh": "/state/antigravity/ssh",
+    },
 }
-TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
+PASSWORD_SUFFIXES = {
+    "codex": "/secrets/codex/web_password.txt",
+    "antigravity": "/secrets/antigravity/web_password.txt",
+}
 
 
 def require(condition: bool, message: str) -> None:
-    """Raise a readable assertion when a contract condition is not met."""
     if not condition:
         raise AssertionError(message)
 
 
 def compose_environment() -> dict[str, str]:
-    """Return the minimal host environment required to invoke Docker Compose."""
     return {
         key: os.environ[key]
         for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
@@ -41,12 +54,13 @@ def compose_environment() -> dict[str, str]:
 
 
 def compose_config(path: Path) -> dict[str, object]:
-    """Render one Compose file with deterministic empty user configuration."""
     with tempfile.NamedTemporaryFile() as empty_env:
         completed = subprocess.run(
             [
                 "docker",
                 "compose",
+                "--profile",
+                "antigravity",
                 "--env-file",
                 empty_env.name,
                 "-f",
@@ -67,7 +81,6 @@ def compose_config(path: Path) -> dict[str, object]:
 
 
 def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:
-    """Index rendered long-syntax volume entries by their container target."""
     result: dict[str, dict[str, object]] = {}
     for mount in service.get("volumes", []):
         require(isinstance(mount, dict), "rendered volume must use long syntax")
@@ -79,16 +92,12 @@ def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:
 
 
 def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> None:
-    """Validate one narrow bind mount and its expected canonical source suffix."""
     source = mount.get("source")
     require(isinstance(source, str), f"{path}: bind mount source is missing")
     require(source.endswith(suffix), f"{path}: unexpected source {source} for {suffix}")
     require(mount.get("type") == "bind", f"{path}: {source} is not a bind mount")
     bind = mount.get("bind")
     require(isinstance(bind, dict), f"{path}: {source} has no bind options")
-    # Compose may omit an explicitly false value from rendered JSON and some
-    # releases may not enforce it at runtime. Source YAML and the authoritative
-    # host preflight are checked separately below.
     require(
         bind.get("create_host_path") is not True,
         f"{path}: {source} explicitly enables automatic host-path creation",
@@ -96,94 +105,88 @@ def validate_bind_mount(path: Path, mount: dict[str, object], suffix: str) -> No
 
 
 def validate_compose(path: Path, *, truenas: bool) -> None:
-    """Validate service topology, exact mounts and secret boundaries for one stack."""
     config = compose_config(path)
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
-    require(set(services) == {"launcher", "codex"}, f"{path}: unexpected services")
+    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
+    require(volume_map(services["launcher"]) == {}, f"{path}: launcher must remain mount-free")
 
-    launcher = services["launcher"]
-    codex = services["codex"]
-    require(isinstance(launcher, dict), f"{path}: invalid launcher service")
-    require(isinstance(codex, dict), f"{path}: invalid Codex service")
-    require(volume_map(launcher) == {}, f"{path}: launcher must remain mount-free")
+    all_sources: dict[str, set[str]] = {}
+    for role in ("codex", "antigravity"):
+        service = services[role]
+        require(isinstance(service, dict), f"{path}: invalid {role} service")
+        mounts = volume_map(service)
+        expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
+        if truenas or role == "antigravity":
+            expected_targets.add("/run/secrets/web_password")
+        require(
+            set(mounts) == expected_targets,
+            f"{path}: unexpected {role} mount targets: {sorted(mounts)}",
+        )
 
-    codex_mounts = volume_map(codex)
-    expected_targets = set(EXPECTED_TARGET_SUFFIXES)
-    if truenas:
-        expected_targets.add("/run/secrets/web_password")
+        sources: set[str] = set()
+        for target, suffix in EXPECTED_TARGET_SUFFIXES[role].items():
+            mount = mounts[target]
+            validate_bind_mount(path, mount, suffix)
+            source = str(mount["source"])
+            sources.add(source)
+            if truenas:
+                require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
+
+        if truenas or role == "antigravity":
+            password_mount = mounts["/run/secrets/web_password"]
+            validate_bind_mount(path, password_mount, PASSWORD_SUFFIXES[role])
+            require(password_mount.get("read_only") is True, f"{path}: {role} password must be read-only")
+            if truenas:
+                require(
+                    password_mount.get("source") == f"{TRUENAS_ROOT}{PASSWORD_SUFFIXES[role]}",
+                    f"{path}: unexpected {role} password source",
+                )
+            sources.add(str(password_mount["source"]))
+        all_sources[role] = sources
+
     require(
-        set(codex_mounts) == expected_targets,
-        f"{path}: unexpected Codex mount targets: {sorted(codex_mounts)}",
+        all_sources["codex"].isdisjoint(all_sources["antigravity"]),
+        f"{path}: agent services share persistent sources",
     )
 
-    for target, suffix in EXPECTED_TARGET_SUFFIXES.items():
-        mount = codex_mounts[target]
-        validate_bind_mount(path, mount, suffix)
-        source = str(mount["source"])
-        if truenas:
-            require(
-                source == f"{TRUENAS_ROOT}{suffix}",
-                f"{path}: TrueNAS source must stay under {TRUENAS_ROOT}: {source}",
-            )
-
-    if truenas:
-        password_mount = codex_mounts["/run/secrets/web_password"]
-        validate_bind_mount(path, password_mount, "/secrets/codex/web_password.txt")
-        require(
-            password_mount.get("read_only") is True,
-            f"{path}: password bind must be read-only",
-        )
-        require(
-            password_mount.get("source")
-            == f"{TRUENAS_ROOT}/secrets/codex/web_password.txt",
-            f"{path}: unexpected TrueNAS password source",
-        )
-    else:
+    if not truenas:
         secrets = config.get("secrets")
         require(isinstance(secrets, dict), f"{path}: top-level secrets missing")
-        password = secrets.get("web_password")
-        require(isinstance(password, dict), f"{path}: web_password secret missing")
-        password_file = password.get("file")
-        require(isinstance(password_file, str), f"{path}: password file missing")
         require(
-            password_file.endswith("/data/secrets/codex/web_password.txt"),
-            f"{path}: password file is outside the canonical data layout: {password_file}",
+            set(secrets) == {"web_password"},
+            f"{path}: optional Antigravity secret leaked into the default model",
+        )
+        definition = secrets.get("web_password")
+        require(isinstance(definition, dict), f"{path}: secret web_password missing")
+        secret_file = definition.get("file")
+        require(isinstance(secret_file, str), f"{path}: secret web_password file missing")
+        require(
+            secret_file.endswith("/data/secrets/codex/web_password.txt"),
+            f"{path}: secret web_password outside canonical root",
         )
 
-    for mount in codex_mounts.values():
-        source = str(mount.get("source", ""))
-        require(source not in {"/", "/root", "/home", "/mnt"}, f"{path}: broad mount {source}")
-        require("docker.sock" not in source.lower(), f"{path}: Docker socket mount {source}")
-        require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
+    for role in ("codex", "antigravity"):
+        for mount in volume_map(services[role]).values():
+            source = str(mount.get("source", ""))
+            require(source not in {"/", "/root", "/home", "/mnt"}, f"{path}: broad mount {source}")
+            require("docker.sock" not in source.lower(), f"{path}: Docker socket mount {source}")
+            require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
 
 
 def tracked_repository_files() -> list[Path]:
-    """Return only Git-tracked repository files, excluding ignored workspaces."""
     completed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
     )
     if completed.returncode != 0:
-        raise AssertionError(
-            "git ls-files failed while enumerating repository-owned inputs:\n"
-            + completed.stderr.decode(errors="replace")
-        )
-    return [
-        ROOT / os.fsdecode(relative_path)
-        for relative_path in completed.stdout.split(b"\0")
-        if relative_path
-    ]
+        raise AssertionError("git ls-files failed: " + completed.stderr.decode(errors="replace"))
+    return [ROOT / os.fsdecode(path) for path in completed.stdout.split(b"\0") if path]
 
 
 def validate_repository_has_no_legacy_data_root() -> None:
-    """Reject legacy data-root names and paths in version-controlled sources."""
     legacy_variable = "CODEX" + "_DATA_ROOT"
     legacy_path = "/mnt/Pool1/" + "codex"
     ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
-
     for path in tracked_repository_files():
         if not path.is_file() or path.suffix.lower() in ignored_suffixes:
             continue
@@ -196,53 +199,39 @@ def validate_repository_has_no_legacy_data_root() -> None:
 
 
 def validate_sources() -> None:
-    """Check one canonical root, source-level bind defenses and host preflight."""
     env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
     generic_text = GENERIC_COMPOSE.read_text(encoding="utf-8")
     truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
     preflight_text = PREFLIGHT.read_text(encoding="utf-8")
 
-    require(
-        "REMOTE_DEV_DATA_ROOT=../data" in env_text,
-        ".env.example must define the canonical data root",
-    )
-    require("WEB_PASSWORD_PATH" not in env_text, ".env.example defines a second data-path variable")
-    require("WEB_PASSWORD_PATH" not in generic_text, "generic Compose defines a second data-path variable")
-    require(
-        generic_text.count("${REMOTE_DEV_DATA_ROOT:-../data}") == 6,
-        "all generic persistent paths must derive from REMOTE_DEV_DATA_ROOT",
-    )
-    require(
-        "file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt"
-        in generic_text,
-        "generic password secret must derive from REMOTE_DEV_DATA_ROOT",
-    )
-    require(
-        generic_text.count("create_host_path: false") == 5,
-        "generic Compose must request no host-path creation on every persistent bind",
-    )
-    require(
-        truenas_text.count("create_host_path: false") == 6,
-        "TrueNAS Compose must request no host-path creation on every persistent bind",
-    )
+    require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
+    require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
+    require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
+    require(generic_text.count("create_host_path: false") == 13, "generic bind protection count")
+    require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
+    require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
-        "state/codex/gh",
-        "state/codex/git",
-        "state/codex/ssh",
         "secrets/codex/web_password.txt",
+        "workspaces/antigravity",
+        "state/antigravity/bin",
+        "state/antigravity/runtime",
+        "state/antigravity/vendor",
+        "state/antigravity/gh",
+        "state/antigravity/git",
+        "state/antigravity/ssh",
+        "secrets/antigravity/web_password.txt",
     ):
         require(marker in preflight_text, f"host preflight does not cover {marker}")
 
 
 def main() -> int:
-    """Run all canonical data-layout validations."""
     validate_sources()
     validate_compose(GENERIC_COMPOSE, truenas=False)
     validate_compose(TRUENAS_COMPOSE, truenas=True)
     validate_repository_has_no_legacy_data_root()
-    print("Canonical Remote Dev data-root and mount boundaries: OK")
+    print("Canonical Remote Dev data-root and isolated mount boundaries: OK")
     return 0
 
 

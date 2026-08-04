@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the bounded launcher/Codex Compose topology."""
+"""Validate the bounded launcher/Codex/Antigravity Compose topology."""
 
 from __future__ import annotations
 
@@ -16,23 +16,6 @@ LAUNCHER_AUTH_OVERRIDE = ROOT / "compose/launcher-auth.yml"
 COMPOSE_FILES = (GENERIC_COMPOSE, TRUENAS_COMPOSE)
 AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
-FORBIDDEN_LAUNCHER_TEXT = (
-    "/workspace",
-    "/root/.codex",
-    "/root/.config/gh",
-    "/root/.config/git",
-    "/root/.ssh",
-    "docker.sock",
-    "podman.sock",
-    "/mnt/Pool1/remote-dev/secrets/codex/web_password.txt",
-    "/run/secrets/web_password",
-    "/run/secrets/launcher_password",
-    "launcher_password",
-    "OPENAI_API_KEY",
-    "CODEX_HOME",
-    "GH_CONFIG_DIR",
-    "GIT_CONFIG_GLOBAL",
-)
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
 
 
@@ -53,11 +36,17 @@ def compose_config(
     overrides: dict[str, str] | None = None,
 ) -> dict[str, object]:
     compose_paths = (paths,) if isinstance(paths, Path) else paths
-    command = ["docker", "compose", "--env-file", str(env_file)]
+    command = [
+        "docker",
+        "compose",
+        "--profile",
+        "antigravity",
+        "--env-file",
+        str(env_file),
+    ]
     for path in compose_paths:
         command.extend(("-f", str(path)))
     command.extend(("config", "--format", "json"))
-
     completed = subprocess.run(
         command,
         cwd=ROOT,
@@ -69,9 +58,7 @@ def compose_config(
     )
     if completed.returncode != 0:
         rendered_paths = ", ".join(str(path) for path in compose_paths)
-        raise AssertionError(
-            f"docker compose config failed for {rendered_paths}:\n{completed.stderr}"
-        )
+        raise AssertionError(f"docker compose config failed for {rendered_paths}:\n{completed.stderr}")
     return json.loads(completed.stdout)
 
 
@@ -146,96 +133,104 @@ def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
 def validate(path: Path, config: dict[str, object]) -> None:
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
-    require(set(services) == {"launcher", "codex"}, f"{path}: unexpected services")
-
+    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
     launcher = services["launcher"]
     codex = services["codex"]
-    require(isinstance(launcher, dict), f"{path}: invalid launcher service")
-    require(isinstance(codex, dict), f"{path}: invalid codex service")
-
-    require(launcher.get("image") == CANONICAL_IMAGE, f"{path}: launcher image")
-    require(codex.get("image") == CANONICAL_IMAGE, f"{path}: codex image")
-    require(launcher.get("image") == codex.get("image"), f"{path}: image mismatch")
+    antigravity = services["antigravity"]
+    for name, service in services.items():
+        require(isinstance(service, dict), f"{path}: invalid {name} service")
+        require(service.get("image") == CANONICAL_IMAGE, f"{path}: {name} image")
+    require(len({service["image"] for service in services.values()}) == 1, f"{path}: image mismatch")
 
     launcher_env = launcher.get("environment")
     codex_env = codex.get("environment")
+    antigravity_env = antigravity.get("environment")
     require(isinstance(launcher_env, dict), f"{path}: launcher environment")
-    require(isinstance(codex_env, dict), f"{path}: codex environment")
+    require(isinstance(codex_env, dict), f"{path}: Codex environment")
+    require(isinstance(antigravity_env, dict), f"{path}: Antigravity environment")
     require(launcher_env.get("REMOTE_DEV_ROLE") == "launcher", f"{path}: launcher role")
-    require(codex_env.get("REMOTE_DEV_ROLE") == "codex", f"{path}: codex role")
-    require(launcher_env.get("REMOTE_DEV_START_MODE") == "menu", f"{path}: launcher mode")
+    require(codex_env.get("REMOTE_DEV_ROLE") == "codex", f"{path}: Codex role")
+    require(antigravity_env.get("REMOTE_DEV_ROLE") == "antigravity", f"{path}: Antigravity role")
+    require(str(antigravity_env.get("REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY")) == "1", f"{path}: Antigravity gate")
+    require(str(antigravity_env.get("AGY_CLI_DISABLE_AUTO_UPDATE")).lower() == "true", f"{path}: auto update")
 
     for key in ("WEB_PASSWORD_FILE", "WEB_PASSWORD", "WEB_USERNAME"):
         require(key not in launcher_env, f"{path}: launcher unexpectedly contains {key}")
-    require(
-        codex_env.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password",
-        f"{path}: Codex password target",
-    )
+    for name, environment in (("Codex", codex_env), ("Antigravity", antigravity_env)):
+        require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
+        require(str(environment.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: {name} authentication")
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
-    require(str(codex_env.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: Codex auth")
+
+    expected_enabled = "1" if path == TRUENAS_COMPOSE else "0"
+    require(
+        str(launcher_env.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED")) == expected_enabled,
+        f"{path}: Antigravity launcher opt-in",
+    )
+    require(int(launcher_env.get("REMOTE_DEV_LAUNCHER_CODEX_PORT")) == 7681, f"{path}: Codex route")
+    require(int(launcher_env.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT")) == 7682, f"{path}: Antigravity route")
 
     launcher_text = json.dumps(launcher, sort_keys=True)
-    for forbidden in FORBIDDEN_LAUNCHER_TEXT:
+    for forbidden in (
+        "/workspace",
+        "/root/.codex",
+        "/root/.config/gh",
+        "/root/.config/git",
+        "/root/.ssh",
+        "/root/.local/bin",
+        "/root/.gemini",
+        "docker.sock",
+        "podman.sock",
+        "/run/secrets/web_password",
+        "OPENAI_API_KEY",
+        "CODEX_HOME",
+        "GH_CONFIG_DIR",
+        "GIT_CONFIG_GLOBAL",
+    ):
         require(forbidden not in launcher_text, f"{path}: launcher contains {forbidden}")
 
-    launcher_credentials = credential_sources(config, launcher, "/run/secrets/launcher_password")
+    require(mount_sources(launcher) == [], f"{path}: launcher must remain mount-free")
     codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
-    require(launcher_credentials == [], f"{path}: launcher credentials {launcher_credentials}")
+    antigravity_credentials = credential_sources(config, antigravity, "/run/secrets/web_password")
     require(len(codex_credentials) == 1, f"{path}: Codex credentials {codex_credentials}")
+    require(len(antigravity_credentials) == 1, f"{path}: Antigravity credentials {antigravity_credentials}")
+    require(codex_credentials != antigravity_credentials, f"{path}: shared terminal credential source")
 
     require(published_targets(launcher) == {7680}, f"{path}: launcher ports")
     require(published_targets(codex) == {7681}, f"{path}: Codex ports")
+    require(published_targets(antigravity) == {7682}, f"{path}: Antigravity ports")
 
-    for name, service in (("launcher", launcher), ("codex", codex)):
+    codex_sources = set(mount_sources(codex))
+    antigravity_sources = set(mount_sources(antigravity))
+    require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
+
+    for name, service in services.items():
         require(service.get("privileged") is not True, f"{path}: {name} privileged")
         require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
         require(service.get("network_mode") != "host", f"{path}: {name} host network")
-        require(
-            "no-new-privileges:true" in service.get("security_opt", []),
-            f"{path}: {name} lost no-new-privileges",
-        )
+        require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
         for source in mount_sources(service):
             lowered = source.lower()
-            require(
-                not any(marker in lowered for marker in SOCKET_MARKERS),
-                f"{path}: {name} mounts a container-engine socket: {source}",
-            )
+            require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
 
     require(launcher.get("container_name") == "remote-dev-launcher", f"{path}: launcher name")
     require(codex.get("container_name") == "codex-remote-dev", f"{path}: Codex name")
+    require(antigravity.get("container_name") == "antigravity-remote-dev", f"{path}: Antigravity name")
+    if path == GENERIC_COMPOSE:
+        require(antigravity.get("profiles") == ["antigravity"], f"{path}: Antigravity profile")
 
 
 def validate_auth_override_separation(env_path: Path) -> None:
-    codex_relaxed = compose_config(GENERIC_COMPOSE, env_path, {"ALLOW_INSECURE_WEB": "1"})[
-        "services"
-    ]
-    require(
-        str(codex_relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
-        "generic Compose: Codex override changed launcher",
-    )
-    require(
-        str(codex_relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1",
-        "generic Compose: Codex override missing",
-    )
+    relaxed = compose_config(GENERIC_COMPOSE, env_path, {"ALLOW_INSECURE_WEB": "1"})["services"]
+    require(str(relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "launcher changed")
+    require(str(relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "Codex override missing")
+    require(str(relaxed["antigravity"]["environment"]["ALLOW_INSECURE_WEB"]) == "0", "Codex auth leaked")
 
-    default_auth = compose_config(
-        AUTH_COMPOSE_FILES, env_path, {"LAUNCHER_USERNAME": "test-launcher"}
-    )
-    default_launcher = default_auth["services"]["launcher"]
-    default_sources = credential_sources(
-        default_auth, default_launcher, "/run/secrets/launcher_password"
-    )
-    require(
-        len(default_sources) == 1 and default_sources[0].startswith("secret:"),
-        "generic Compose: launcher auth must be file-backed",
-    )
-    default_path = resolve_compose_file_path(
-        default_sources[0].removeprefix("secret:"), GENERIC_COMPOSE
-    )
-    require(
-        default_path == (ROOT / "secrets/launcher_password.txt").resolve(),
-        "generic Compose: launcher secret path",
-    )
+    default_auth = compose_config(AUTH_COMPOSE_FILES, env_path, {"LAUNCHER_USERNAME": "test-launcher"})
+    launcher = default_auth["services"]["launcher"]
+    sources = credential_sources(default_auth, launcher, "/run/secrets/launcher_password")
+    require(len(sources) == 1 and sources[0].startswith("secret:"), "launcher auth must be file-backed")
+    default_path = resolve_compose_file_path(sources[0].removeprefix("secret:"), GENERIC_COMPOSE)
+    require(default_path == (ROOT / "secrets/launcher_password.txt").resolve(), "launcher secret path")
 
     synthetic = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as secret_file:
@@ -244,55 +239,17 @@ def validate_auth_override_separation(env_path: Path) -> None:
         hardened = compose_config(
             AUTH_COMPOSE_FILES,
             env_path,
-            {
-                "LAUNCHER_PASSWORD_PATH": secret_file.name,
-                "LAUNCHER_USERNAME": "test-launcher",
-            },
+            {"LAUNCHER_PASSWORD_PATH": secret_file.name, "LAUNCHER_USERNAME": "test-launcher"},
         )
-
     require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
     launcher = hardened["services"]["launcher"]
-    codex = hardened["services"]["codex"]
-    launcher_env = launcher["environment"]
-    codex_env = codex["environment"]
-    require(str(launcher_env["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
-    require(
-        launcher_env["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password",
-        "launcher password target",
-    )
-    require("WEB_PASSWORD" not in launcher_env, "launcher password rendered inline")
-    require(launcher_env["WEB_USERNAME"] == "test-launcher", "launcher username")
-    require(
-        len(credential_sources(hardened, launcher, "/run/secrets/launcher_password")) == 1,
-        "launcher credential source count",
-    )
-    require(str(codex_env["ALLOW_INSECURE_WEB"]) == "0", "launcher auth leaked to Codex")
-    require(
-        len(credential_sources(hardened, codex, "/run/secrets/web_password")) == 1,
-        "launcher auth changed Codex password source",
-    )
+    require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
+    require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
-
-    truenas_launcher = compose_config(
-        TRUENAS_COMPOSE,
-        env_path,
-        {
-            "LAUNCHER_PASSWORD_PATH": "/should/not/be/used",
-            "LAUNCHER_USERNAME": "test-launcher",
-        },
-    )["services"]["launcher"]["environment"]
-    for key in ("WEB_PASSWORD_FILE", "WEB_PASSWORD", "WEB_USERNAME"):
-        require(key not in truenas_launcher, f"TrueNAS launcher contains {key}")
-    require(
-        str(truenas_launcher["ALLOW_INSECURE_WEB"]) == "1",
-        "TrueNAS launcher must remain password-free",
-    )
 
 
 def validate_truenas_password_free_source() -> None:
-    launcher_source = TRUENAS_COMPOSE.read_text(encoding="utf-8").split(
-        "\n  codex:", maxsplit=1
-    )[0]
+    launcher_source = TRUENAS_COMPOSE.read_text(encoding="utf-8").split("\n  codex:", maxsplit=1)[0]
     for marker in ("LAUNCHER_PASSWORD", "launcher_password", "WEB_PASSWORD", "WEB_USERNAME"):
         require(marker not in launcher_source, f"TrueNAS launcher source contains {marker}")
 

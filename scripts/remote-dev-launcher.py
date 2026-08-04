@@ -85,7 +85,7 @@ def _optional_host(name: str, value: str) -> str:
             ipaddress.IPv6Address(value)
         except ipaddress.AddressValueError as exc:
             raise ValueError(
-                f"{name} must not include a port; use REMOTE_DEV_LAUNCHER_CODEX_PORT"
+                f"{name} must not include a port; configure the matching route port separately"
             ) from exc
         return value
 
@@ -152,6 +152,11 @@ class LauncherConfig:
     codex_port: int
     codex_scheme: str
     codex_path: str
+    antigravity_enabled: bool
+    antigravity_host: str
+    antigravity_port: int
+    antigravity_scheme: str
+    antigravity_path: str
     image_version: str
     source_revision: str
 
@@ -201,6 +206,24 @@ def load_config() -> LauncherConfig:
             "REMOTE_DEV_LAUNCHER_CODEX_PATH",
             os.environ.get("REMOTE_DEV_LAUNCHER_CODEX_PATH", "/"),
         ),
+        antigravity_enabled=_env_bool(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED", False
+        ),
+        antigravity_host=_optional_host(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST", ""),
+        ),
+        antigravity_port=_env_port(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT", 7682
+        ),
+        antigravity_scheme=_optional_scheme(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_SCHEME", ""),
+        ),
+        antigravity_path=_normalize_path(
+            "REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH",
+            os.environ.get("REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PATH", "/"),
+        ),
         image_version=_read_metadata(
             "/usr/share/remote-dev/image-version", "unavailable"
         ),
@@ -211,15 +234,33 @@ def load_config() -> LauncherConfig:
 
 
 def build_page(config: LauncherConfig, nonce: str) -> bytes:
-    route_config = json.dumps(
-        {
+    routes: dict[str, dict[str, object]] = {
+        "codex": {
             "host": config.codex_host,
             "port": config.codex_port,
             "scheme": config.codex_scheme,
             "path": config.codex_path,
-        },
-        separators=(",", ":"),
-    )
+        }
+    }
+    antigravity_markup = ""
+    antigravity_script = ""
+    if config.antigravity_enabled:
+        routes["antigravity"] = {
+            "host": config.antigravity_host,
+            "port": config.antigravity_port,
+            "scheme": config.antigravity_scheme,
+            "path": config.antigravity_path,
+        }
+        antigravity_markup = """
+<a id="antigravity-link" href="#">Open Antigravity (experimental)</a>
+<p>The Antigravity terminal has separate authentication, workspace and credentials.</p>
+"""
+        antigravity_script = (
+            "document.getElementById('antigravity-link').href = "
+            "routeUrl(routes.antigravity);"
+        )
+
+    route_config = json.dumps(routes, separators=(",", ":"))
     version = html.escape(config.image_version)
     revision = html.escape(config.source_revision)
     document = f"""<!doctype html>
@@ -233,7 +274,7 @@ def build_page(config: LauncherConfig, nonce: str) -> bytes:
 body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: Canvas; color: CanvasText; }}
 main {{ width: min(42rem, calc(100% - 2rem)); padding: 2rem; border: 1px solid GrayText; border-radius: 1rem; }}
 h1 {{ margin-top: 0; }}
-a {{ display: inline-block; margin-top: 1rem; padding: .8rem 1rem; border: 1px solid LinkText; border-radius: .6rem; font-weight: 700; }}
+a {{ display: block; width: fit-content; margin-top: 1rem; padding: .8rem 1rem; border: 1px solid LinkText; border-radius: .6rem; font-weight: 700; }}
 small {{ display: block; margin-top: 1.5rem; opacity: .75; overflow-wrap: anywhere; }}
 </style>
 </head>
@@ -243,14 +284,18 @@ small {{ display: block; margin-top: 1.5rem; opacity: .75; overflow-wrap: anywhe
 <p>Select an available isolated agent service.</p>
 <a id="codex-link" href="#">Open Codex</a>
 <p>The Codex terminal authenticates independently and runs in a separate container.</p>
-<small>Image {version} · Source {revision}</small>
+{antigravity_markup}<small>Image {version} · Source {revision}</small>
 </main>
 <script nonce="{nonce}">
-const config = {route_config};
-const host = config.host || window.location.hostname;
-const scheme = config.scheme || window.location.protocol.replace(':', '');
-const formattedHost = host.includes(':') && !host.startsWith('[') ? `[${{host}}]` : host;
-document.getElementById('codex-link').href = `${{scheme}}://${{formattedHost}}:${{config.port}}${{config.path}}`;
+const routes = {route_config};
+const routeUrl = (config) => {{
+  const host = config.host || window.location.hostname;
+  const scheme = config.scheme || window.location.protocol.replace(':', '');
+  const formattedHost = host.includes(':') && !host.startsWith('[') ? `[${{host}}]` : host;
+  return `${{scheme}}://${{formattedHost}}:${{config.port}}${{config.path}}`;
+}};
+document.getElementById('codex-link').href = routeUrl(routes.codex);
+{antigravity_script}
 </script>
 </body>
 </html>
