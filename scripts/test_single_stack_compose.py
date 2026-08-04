@@ -156,9 +156,19 @@ def validate(path: Path, config: dict[str, object]) -> None:
 
     for key in ("WEB_PASSWORD_FILE", "WEB_PASSWORD", "WEB_USERNAME"):
         require(key not in launcher_env, f"{path}: launcher unexpectedly contains {key}")
+
     for name, environment in (("Codex", codex_env), ("Antigravity", antigravity_env)):
-        require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
         require(str(environment.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: {name} authentication")
+        if path == TRUENAS_COMPOSE:
+            require("WEB_PASSWORD_FILE" not in environment, f"{path}: {name} still uses password file")
+            require(
+                environment.get("WEB_PASSWORD") == "",
+                f"{path}: {name} public YAML password must remain empty",
+            )
+        else:
+            require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
+            require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
+
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 
     expected_enabled = "1" if path == TRUENAS_COMPOSE else "0"
@@ -191,9 +201,13 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(mount_sources(launcher) == [], f"{path}: launcher must remain mount-free")
     codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
     antigravity_credentials = credential_sources(config, antigravity, "/run/secrets/web_password")
-    require(len(codex_credentials) == 1, f"{path}: Codex credentials {codex_credentials}")
-    require(len(antigravity_credentials) == 1, f"{path}: Antigravity credentials {antigravity_credentials}")
-    require(codex_credentials != antigravity_credentials, f"{path}: shared terminal credential source")
+    if path == TRUENAS_COMPOSE:
+        require(codex_credentials == [], f"{path}: Codex retained file credentials")
+        require(antigravity_credentials == [], f"{path}: Antigravity retained file credentials")
+    else:
+        require(len(codex_credentials) == 1, f"{path}: Codex credentials {codex_credentials}")
+        require(len(antigravity_credentials) == 1, f"{path}: Antigravity credentials {antigravity_credentials}")
+        require(codex_credentials != antigravity_credentials, f"{path}: shared terminal credential source")
 
     require(published_targets(launcher) == {7680}, f"{path}: launcher ports")
     require(published_targets(codex) == {7681}, f"{path}: Codex ports")
@@ -248,14 +262,14 @@ def validate_auth_override_separation(env_path: Path) -> None:
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
 
 
-def validate_truenas_password_free_source() -> None:
+def validate_truenas_launcher_password_free_source() -> None:
     launcher_source = TRUENAS_COMPOSE.read_text(encoding="utf-8").split("\n  codex:", maxsplit=1)[0]
     for marker in ("LAUNCHER_PASSWORD", "launcher_password", "WEB_PASSWORD", "WEB_USERNAME"):
         require(marker not in launcher_source, f"TrueNAS launcher source contains {marker}")
 
 
 def main() -> int:
-    validate_truenas_password_free_source()
+    validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:

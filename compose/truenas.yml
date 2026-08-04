@@ -60,7 +60,10 @@ services:
       WEB_PORT: "7681"
       WEB_BASE_PATH: /
       WEB_USERNAME: codex
-      WEB_PASSWORD_FILE: /run/secrets/web_password
+      # Home-mode convenience. TrueNAS administrators can read this value from
+      # the App YAML or docker inspect. Replace the empty value before saving.
+      # Use the file-backed mode instead for a shared or hardened deployment.
+      WEB_PASSWORD: ''
       WEB_MAX_CLIENTS: "1"
       WEB_CHECK_ORIGIN: "1"
       ALLOW_INSECURE_WEB: "0"
@@ -85,9 +88,9 @@ services:
       - "192.168.1.10:7681:7681"
 
     # Before saving this YAML, run scripts/preflight-data-layout.py on the
-    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity.
-    # create_host_path is only defense-in-depth because not every Compose
-    # release enforces it reliably.
+    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity
+    # --password-source environment. create_host_path is only defense-in-depth
+    # because not every Compose release enforces it reliably.
     volumes:
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/codex
@@ -112,12 +115,6 @@ services:
       - type: bind
         source: /mnt/Pool1/remote-dev/state/codex/ssh
         target: /root/.ssh
-        bind:
-          create_host_path: false
-      - type: bind
-        source: /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
-        target: /run/secrets/web_password
-        read_only: true
         bind:
           create_host_path: false
 
@@ -145,7 +142,9 @@ services:
       WEB_PORT: "7682"
       WEB_BASE_PATH: /
       WEB_USERNAME: antigravity
-      WEB_PASSWORD_FILE: /run/secrets/web_password
+      # Replace the empty value before saving and keep it independent from the
+      # Codex terminal password.
+      WEB_PASSWORD: ''
       WEB_MAX_CLIENTS: "1"
       WEB_CHECK_ORIGIN: "1"
       ALLOW_INSECURE_WEB: "0"
@@ -201,12 +200,6 @@ services:
       - type: bind
         source: /mnt/Pool1/remote-dev/state/antigravity/ssh
         target: /root/.ssh
-        bind:
-          create_host_path: false
-      - type: bind
-        source: /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
-        target: /run/secrets/web_password
-        read_only: true
         bind:
           create_host_path: false
 

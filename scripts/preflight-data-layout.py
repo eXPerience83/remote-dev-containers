@@ -15,7 +15,6 @@ CODEX_DIRECTORY_SUFFIXES = (
     "state/codex/gh",
     "state/codex/git",
     "state/codex/ssh",
-    "secrets/codex",
 )
 ANTIGRAVITY_DIRECTORY_SUFFIXES = (
     "workspaces/antigravity",
@@ -25,10 +24,12 @@ ANTIGRAVITY_DIRECTORY_SUFFIXES = (
     "state/antigravity/gh",
     "state/antigravity/git",
     "state/antigravity/ssh",
-    "secrets/antigravity",
 )
+CODEX_SECRET_DIRECTORY_SUFFIX = "secrets/codex"
+ANTIGRAVITY_SECRET_DIRECTORY_SUFFIX = "secrets/antigravity"
 CODEX_PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
 ANTIGRAVITY_PASSWORD_SUFFIX = "secrets/antigravity/web_password.txt"
+PASSWORD_SOURCES = ("environment", "file")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -49,6 +50,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--include-antigravity",
         action="store_true",
         help="Also require the optional isolated Antigravity service layout",
+    )
+    parser.add_argument(
+        "--password-source",
+        choices=PASSWORD_SOURCES,
+        default="file",
+        help=(
+            "Authentication source used by the deployment: environment checks "
+            "only persistent workspace/state paths; file also requires and "
+            "validates role-specific password files (default: file, matching "
+            "compose/docker-compose.yml)"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -130,24 +142,34 @@ def validate_password_file(path: Path, errors: list[str]) -> None:
             )
 
 
-def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
+def validate_layout(
+    root: Path, *, include_antigravity: bool, password_source: str
+) -> list[str]:
     """Return every problem found for the enabled service layouts."""
     errors: list[str] = []
     suffixes = list(CODEX_DIRECTORY_SUFFIXES)
-    passwords = [root / CODEX_PASSWORD_SUFFIX]
+    password_files: list[Path] = []
+
     if include_antigravity:
         suffixes.extend(ANTIGRAVITY_DIRECTORY_SUFFIXES)
-        passwords.append(root / ANTIGRAVITY_PASSWORD_SUFFIX)
-    directories = tuple(root / suffix for suffix in suffixes)
-    password_files = tuple(passwords)
 
-    if validate_no_symlink_components(root, (*directories, *password_files), errors):
+    if password_source == "file":
+        suffixes.append(CODEX_SECRET_DIRECTORY_SUFFIX)
+        password_files.append(root / CODEX_PASSWORD_SUFFIX)
+        if include_antigravity:
+            suffixes.append(ANTIGRAVITY_SECRET_DIRECTORY_SUFFIX)
+            password_files.append(root / ANTIGRAVITY_PASSWORD_SUFFIX)
+
+    directories = tuple(root / suffix for suffix in suffixes)
+    password_paths = tuple(password_files)
+
+    if validate_no_symlink_components(root, (*directories, *password_paths), errors):
         return errors
 
     validate_directory(root, errors)
     for directory in directories:
         validate_directory(directory, errors)
-    for password_file in password_files:
+    for password_file in password_paths:
         validate_password_file(password_file, errors)
     return errors
 
@@ -156,7 +178,11 @@ def main(argv: list[str] | None = None) -> int:
     """Run the preflight and print only paths and permission metadata."""
     args = parse_args(argv)
     root = canonical_path(args.root)
-    errors = validate_layout(root, include_antigravity=args.include_antigravity)
+    errors = validate_layout(
+        root,
+        include_antigravity=args.include_antigravity,
+        password_source=args.password_source,
+    )
     if errors:
         print("Remote Dev data-layout preflight failed:", file=sys.stderr)
         for error in errors:
@@ -169,7 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
-    print(f"Remote Dev data-layout preflight: OK ({root}; {roles})")
+    print(
+        f"Remote Dev data-layout preflight: OK "
+        f"({root}; {roles}; passwords={args.password_source})"
+    )
     return 0
 
 

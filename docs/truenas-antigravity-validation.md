@@ -1,12 +1,28 @@
 # TrueNAS experimental deployment and Antigravity validation
 
 This runbook prepares the real validation tracked by issues #28, #29 and #69.
-It applies to the first three-service TrueNAS implementation merged in commit
-`3044a8ce21ed7a1215db1530e9e9679ac6469f67`.
+The image, `compose/truenas.yml` and `scripts/preflight-data-layout.py` must all
+come from the same immutable source revision. Never combine a pinned image with
+host-side files downloaded from a moving branch such as `main`.
 
 Antigravity remains experimental until the manual login, filesystem-discovery,
 persistence and recreation checks in #29 are complete. Do not expose ports
 7680, 7681 or 7682 directly to the Internet.
+
+## Deployment modes
+
+Remote Dev supports both terminal-password sources:
+
+- **Home mode:** `WEB_PASSWORD` is written directly in the private TrueNAS App
+  YAML. This is the default in `compose/truenas.yml` and requires no persistent
+  secret directory.
+- **Hardened mode:** `WEB_PASSWORD_FILE` points to a role-specific read-only
+  file. This avoids placing the value in the container environment and remains
+  the recommended choice for shared or separately administered systems.
+
+`WEB_PASSWORD_FILE` takes precedence when both variables are present. A TrueNAS
+administrator can inspect environment-backed values through the App YAML or
+Docker metadata, so home mode is intended for a trusted domestic NAS.
 
 ## Scope and exclusions
 
@@ -15,13 +31,13 @@ This cycle validates:
 - the navigation-only launcher on port 7680;
 - Codex on independently authenticated port 7681;
 - experimental Antigravity on independently authenticated port 7682;
-- file-backed terminal passwords;
+- two independent home-mode terminal passwords;
 - the canonical role-scoped persistent-data layout;
 - install, login, stop/start and container recreation behavior;
 - isolation between launcher, Codex and Antigravity.
 
 SMB sharing, Windows access and TrueNAS ACL design are intentionally deferred to
-issue #71. Do not create an SMB share for `state` or `secrets`.
+issue #71. Do not create an SMB share for `state`.
 
 ## Preserve the current deployment
 
@@ -36,63 +52,70 @@ Before changing the App:
 Example read-only inventory commands:
 
 ```bash
-docker inspect codex-remote-dev --format 'container_image_id={{.Image}} configured_image={{.Config.Image}}'
-docker exec codex-remote-dev remote-dev-version || true
-docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
+sudo docker inspect codex-remote-dev --format 'container_image_id={{.Image}} configured_image={{.Config.Image}}'
+sudo docker exec codex-remote-dev remote-dev-version || true
+sudo docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
 ```
 
 Never print password environment values or credential-file contents.
 
-## Verify and pin the published image
+## Verify and pin one complete release unit
 
 Pull the public AMD64 edge tag:
 
 ```bash
-docker pull ghcr.io/experience83/remote-dev:edge-amd64
+sudo docker pull ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Verify that the embedded revision is the implementation being validated:
+Read and validate the immutable source revision embedded in that exact image:
 
 ```bash
-expected_revision=3044a8ce21ed7a1215db1530e9e9679ac6469f67
-actual_revision="$(
-  docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+release_revision="$(
+  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
-printf 'expected=%s\nactual=%s\n' "$expected_revision" "$actual_revision"
-test "$actual_revision" = "$expected_revision"
+case "$release_revision" in
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+  *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
+esac
+printf 'release_revision=%s\n' "$release_revision"
 ```
 
-Record the immutable repository digest:
+Record the immutable repository digest and keep it in the same shell session:
 
 ```bash
-docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
-  --format '{{range .RepoDigests}}{{println .}}{{end}}'
+pinned_image="$(
+  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+    --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+  | sed -n '1p'
+)"
+case "$pinned_image" in
+  ghcr.io/experience83/remote-dev@sha256:[0-9a-f]*) ;;
+  *) echo "Invalid immutable image reference: $pinned_image" >&2; exit 1 ;;
+esac
+printf 'pinned_image=%s\n' "$pinned_image"
 ```
 
-Use the `ghcr.io/experience83/remote-dev@sha256:...` digest reference in the
-TrueNAS validation YAML. Do not validate this lifecycle against the mutable edge
-tag alone.
+Use that digest reference in the TrueNAS validation YAML. Download all host-side
+files from `$release_revision`; image and host files must be updated together as
+one release unit.
 
 ## Dataset boundary
 
-Create these TrueNAS datasets with the **Generic** preset and no SMB share:
+Create one TrueNAS dataset with the **Generic** preset and no SMB share:
 
 ```text
 Pool1/remote-dev
-Pool1/remote-dev/workspaces
-Pool1/remote-dev/state
-Pool1/remote-dev/secrets
 ```
 
-Only the four dataset boundaries above are required. The service-specific paths
-below are ordinary directories inside them. Keeping `workspaces` separate makes
-a later, independently reviewed SMB/ACL design possible without exposing
-`state` or `secrets`.
+The directories below are ordinary persistent subdirectories inside that one
+ZFS dataset. Recreating the TrueNAS App or its containers does not remove them.
+Additional child datasets are unnecessary unless a future SMB, ACL, quota,
+snapshot or replication policy needs a separate boundary.
 
-## Create the canonical directories
+## Create the persistent directories
 
-Run from the TrueNAS shell after the datasets exist:
+Run from the TrueNAS shell after the single dataset exists:
 
 ```bash
 sudo install -d -m 0755 \
@@ -109,116 +132,110 @@ sudo install -d -m 0700 \
   /mnt/Pool1/remote-dev/state/antigravity/vendor \
   /mnt/Pool1/remote-dev/state/antigravity/gh \
   /mnt/Pool1/remote-dev/state/antigravity/git \
-  /mnt/Pool1/remote-dev/state/antigravity/ssh \
-  /mnt/Pool1/remote-dev/secrets/codex \
-  /mnt/Pool1/remote-dev/secrets/antigravity
+  /mnt/Pool1/remote-dev/state/antigravity/ssh
 ```
 
 Do not create symlinks anywhere inside `/mnt/Pool1/remote-dev`.
 
-## Create independent terminal passwords
+The resulting host tree is:
 
-Create two non-empty, single-line files. Their values may be changed later by
-replacing the file and recreating/restarting the corresponding container; no
-secret dataset must be deleted merely to rotate a password.
-
-```bash
-sudo bash -c '
-  set -euo pipefail
-  umask 077
-  IFS= read -r -s -p "Codex terminal password: " password
-  printf "\n"
-  test -n "$password"
-  printf "%s\n" "$password" > /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
-  unset password
-'
-
-sudo bash -c '
-  set -euo pipefail
-  umask 077
-  IFS= read -r -s -p "Antigravity terminal password: " password
-  printf "\n"
-  test -n "$password"
-  printf "%s\n" "$password" > /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
-  unset password
-'
-
-sudo chmod 0600 \
-  /mnt/Pool1/remote-dev/secrets/codex/web_password.txt \
-  /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
+```text
+/mnt/Pool1/remote-dev/
+├── workspaces/
+│   ├── codex/
+│   └── antigravity/
+└── state/
+    ├── codex/
+    │   ├── agent/
+    │   ├── gh/
+    │   ├── git/
+    │   └── ssh/
+    └── antigravity/
+        ├── bin/
+        ├── runtime/
+        ├── vendor/
+        ├── gh/
+        ├── git/
+        └── ssh/
 ```
 
-Do not display either file with `cat`, `head`, `sed`, `xxd` or diagnostic
-commands.
+## Download and run the matching host preflight
 
-## Run the authoritative host preflight
-
-Download the preflight from the exact implementation commit and run it before
-saving the App YAML:
+Download the preflight from the image's embedded source revision, not `main`:
 
 ```bash
-curl --fail --silent --show-error --location \
-  https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/3044a8ce21ed7a1215db1530e9e9679ac6469f67/scripts/preflight-data-layout.py \
+: "${release_revision:?Run the release verification section first}"
+release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
+
+curl --proto '=https' --tlsv1.2 \
+  --fail --silent --show-error --location \
+  "${release_base}/scripts/preflight-data-layout.py" \
   --output /tmp/remote-dev-preflight-data-layout.py
 
 python3 /tmp/remote-dev-preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
-  --include-antigravity
+  --include-antigravity \
+  --password-source environment
 ```
 
 Expected result:
 
 ```text
-Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
+Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity; passwords=environment)
 ```
 
-The preflight rejects missing paths, symlink components, empty/multiline/NUL
-passwords and password files with permissions broader than `0600`.
+Environment mode validates only persistent bind sources and symlink ancestry;
+the actual passwords are validated by the runtime when the containers start.
 
-## Prepare the TrueNAS YAML
+## Download the matching TrueNAS YAML
 
-Use `compose/truenas.yml` from the exact implementation commit as the source:
+Use `compose/truenas.yml` from the same revision as the image and preflight:
 
 ```bash
-curl --fail --silent --show-error --location \
-  https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/3044a8ce21ed7a1215db1530e9e9679ac6469f67/compose/truenas.yml \
+: "${release_revision:?Run the release verification section first}"
+release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
+
+curl --proto '=https' --tlsv1.2 \
+  --fail --silent --show-error --location \
+  "${release_base}/compose/truenas.yml" \
   --output /tmp/remote-dev-truenas.yml
 ```
 
 Before pasting it into the TrueNAS Custom App editor:
 
-1. replace the image anchor with the immutable digest recorded above;
+1. replace the image anchor with `$pinned_image` recorded above;
 2. replace all three example `192.168.1.10` bindings with the trusted LAN or
    Tailscale address already used by the deployment;
 3. leave the launcher unauthenticated for the current trusted-network model;
-4. leave `WEB_PASSWORD_FILE=/run/secrets/web_password` for both agents;
-5. do not add `WEB_PASSWORD` environment variables;
-6. do not add privileged mode, capabilities, host networking, host-root mounts
+4. replace the empty Codex `WEB_PASSWORD` value with a strong password;
+5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
+   password;
+6. keep both values quoted and never commit the personalized YAML to Git;
+7. do not add privileged mode, capabilities, host networking, host-root mounts
    or a Docker socket;
-7. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
+8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
    validation.
 
 The resulting stack must contain exactly:
 
 ```text
 remote-dev-launcher      port 7680, no mounts
-codex-remote-dev         port 7681, Codex-only mounts and password
-antigravity-remote-dev   port 7682, Antigravity-only mounts and password
+codex-remote-dev         port 7681, Codex-only persistent mounts
+antigravity-remote-dev   port 7682, Antigravity-only persistent mounts
 ```
 
 ## First deployment checks
 
-After stopping the old App and saving the replacement YAML, set `pinned_image`
-to the exact `ghcr.io/experience83/remote-dev@sha256:...` reference used in the
-YAML and run:
+After stopping the old App and saving the replacement YAML, verify that the
+shell still contains the exact immutable reference used in the YAML:
 
 ```bash
-pinned_image='ghcr.io/experience83/remote-dev@sha256:replace-with-recorded-digest'
+: "${pinned_image:?Run the release verification section first}"
 
-docker ps --filter name=remote-dev --filter name=codex-remote-dev --filter name=antigravity-remote-dev
-docker exec codex-remote-dev remote-dev-version
-docker exec antigravity-remote-dev remote-dev-version
-docker exec antigravity-remote-dev remote-dev-doctor
+sudo docker ps --filter name=remote-dev --filter name=codex-remote-dev --filter name=antigravity-remote-dev
+sudo docker exec codex-remote-dev remote-dev-version
+sudo docker exec antigravity-remote-dev remote-dev-version
+sudo docker exec antigravity-remote-dev remote-dev-doctor
 ```
 
 Confirm the embedded revision and digest match the pinned image. The
@@ -231,11 +248,11 @@ reference, not only the local content-addressable image ID:
 ```bash
 for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   echo "== $container =="
-  configured_image="$(docker inspect "$container" --format '{{.Config.Image}}')"
+  configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
   test "$configured_image" = "$pinned_image"
-  docker inspect "$container" --format \
+  sudo docker inspect "$container" --format \
     'configured_image={{.Config.Image}} image_id={{.Image}} privileged={{.HostConfig.Privileged}} network={{.HostConfig.NetworkMode}} cap_add={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}}'
-  docker inspect "$container" --format \
+  sudo docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
 ```
@@ -262,12 +279,37 @@ Starting from the Antigravity menu:
 5. record filesystem changes as path names and metadata only;
 6. run a disposable repository test;
 7. stop/start the App;
-8. recreate all three containers with the same datasets;
+8. recreate all three containers with the same dataset;
 9. confirm executable, login/settings behavior and workspace persistence;
 10. verify Codex and launcher remain isolated and functional.
 
 Do not run Codex and Antigravity concurrently against the same writable checkout.
 The default deployment gives them separate workspaces.
+
+## Hardened password-file alternative
+
+A deployment that must keep terminal passwords out of container environment
+metadata can use `WEB_PASSWORD_FILE` instead. Create ordinary directories inside
+the same dataset:
+
+```text
+/mnt/Pool1/remote-dev/secrets/codex/web_password.txt
+/mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
+```
+
+Use one non-empty single-line file per role, mode `0600`, mount each file
+read-only at `/run/secrets/web_password`, remove the corresponding
+`WEB_PASSWORD` variable and run the already downloaded matching preflight:
+
+```bash
+python3 /tmp/remote-dev-preflight-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity \
+  --password-source file
+```
+
+The generic `compose/docker-compose.yml` from the same `$release_revision`
+remains the repository example for file-backed credentials.
 
 ## Rollback
 
@@ -279,8 +321,8 @@ If the new stack fails:
 4. continue using the previously recorded legacy data tree;
 5. leave `/mnt/Pool1/remote-dev` intact for diagnosis.
 
-Do not copy credential files between the old and new trees and do not delete
-either tree during the validation cycle.
+Do not copy credentials between the old and new trees and do not delete either
+tree during the validation cycle.
 
 ## Completion evidence
 
@@ -288,13 +330,14 @@ Post sanitized results to #29 and #69:
 
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
+- confirmation that YAML and preflight came from that same revision;
+- password source (`environment` or `file`) without its value;
 - Antigravity CLI version;
 - browser/access method without account identity;
 - pass/fail for install, login, stop/start and recreation;
 - confirmed mount destinations and permission metadata;
 - confirmation that launcher has no mounts;
-- confirmation that `WEB_PASSWORD` is absent and both password files are
-  read-only mounts;
+- confirmation that Codex and Antigravity use independent credentials;
 - any safe error messages and follow-up issue links.
 
 Never post passwords, OAuth codes, tokens, cookies, account email, private
