@@ -161,14 +161,14 @@ def validate(path: Path, config: dict[str, object]) -> None:
         require(str(environment.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: {name} authentication")
         if path == TRUENAS_COMPOSE:
             require("WEB_PASSWORD_FILE" not in environment, f"{path}: {name} still uses password file")
-            password = environment.get("WEB_PASSWORD")
-            require(isinstance(password, str) and password.strip(), f"{path}: {name} YAML password missing")
+            require(
+                environment.get("WEB_PASSWORD") == "",
+                f"{path}: {name} public YAML password must remain empty",
+            )
         else:
             require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
             require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
 
-    if path == TRUENAS_COMPOSE:
-        require(codex_env["WEB_PASSWORD"] != antigravity_env["WEB_PASSWORD"], f"{path}: shared YAML password")
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 
     expected_enabled = "1" if path == TRUENAS_COMPOSE else "0"
