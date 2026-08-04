@@ -34,10 +34,7 @@ EXPECTED_TARGET_SUFFIXES = {
         "/root/.ssh": "/state/antigravity/ssh",
     },
 }
-PASSWORD_SUFFIXES = {
-    "codex": "/secrets/codex/web_password.txt",
-    "antigravity": "/secrets/antigravity/web_password.txt",
-}
+ANTIGRAVITY_PASSWORD_SUFFIX = "/secrets/antigravity/web_password.txt"
 
 
 def require(condition: bool, message: str) -> None:
@@ -117,7 +114,7 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
         require(isinstance(service, dict), f"{path}: invalid {role} service")
         mounts = volume_map(service)
         expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
-        if truenas or role == "antigravity":
+        if not truenas and role == "antigravity":
             expected_targets.add("/run/secrets/web_password")
         require(
             set(mounts) == expected_targets,
@@ -133,24 +130,34 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
             if truenas:
                 require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
 
-        if truenas or role == "antigravity":
+        if not truenas and role == "antigravity":
             password_mount = mounts["/run/secrets/web_password"]
-            validate_bind_mount(path, password_mount, PASSWORD_SUFFIXES[role])
-            require(password_mount.get("read_only") is True, f"{path}: {role} password must be read-only")
-            if truenas:
-                require(
-                    password_mount.get("source") == f"{TRUENAS_ROOT}{PASSWORD_SUFFIXES[role]}",
-                    f"{path}: unexpected {role} password source",
-                )
+            validate_bind_mount(path, password_mount, ANTIGRAVITY_PASSWORD_SUFFIX)
+            require(password_mount.get("read_only") is True, f"{path}: Antigravity password must be read-only")
             sources.add(str(password_mount["source"]))
         all_sources[role] = sources
+
+        environment = service.get("environment")
+        require(isinstance(environment, dict), f"{path}: {role} environment missing")
+        if truenas:
+            require("WEB_PASSWORD_FILE" not in environment, f"{path}: {role} file password remains")
+            password = environment.get("WEB_PASSWORD")
+            require(isinstance(password, str) and password.strip(), f"{path}: {role} YAML password missing")
+        else:
+            require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {role} file target")
+            require("WEB_PASSWORD" not in environment, f"{path}: {role} environment password leaked")
 
     require(
         all_sources["codex"].isdisjoint(all_sources["antigravity"]),
         f"{path}: agent services share persistent sources",
     )
 
-    if not truenas:
+    if truenas:
+        codex_password = services["codex"]["environment"]["WEB_PASSWORD"]
+        antigravity_password = services["antigravity"]["environment"]["WEB_PASSWORD"]
+        require(codex_password != antigravity_password, f"{path}: role passwords must differ")
+        require("secrets" not in config, f"{path}: TrueNAS home mode retained top-level secrets")
+    else:
         secrets = config.get("secrets")
         require(isinstance(secrets, dict), f"{path}: top-level secrets missing")
         require(
@@ -208,8 +215,11 @@ def validate_sources() -> None:
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
     require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
     require(generic_text.count("create_host_path: false") == 13, "generic bind protection count")
-    require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
+    require(truenas_text.count("create_host_path: false") == 12, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
+    require("--password-source" in preflight_text, "password source preflight option missing")
+    require("WEB_PASSWORD_FILE" not in truenas_text, "TrueNAS home mode still uses password files")
+    require("/run/secrets/web_password" not in truenas_text, "TrueNAS home mode still mounts passwords")
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
