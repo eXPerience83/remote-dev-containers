@@ -171,7 +171,7 @@ def validate_file_mode(root: Path) -> None:
 
 
 def validate_symlinks(root: Path, temporary_directory: str) -> None:
-    """Both final and intermediate persistent path symlinks must fail."""
+    """Reject symlinks in persistent state and file-backed credential paths."""
     antigravity_vendor = root / "state/antigravity/vendor"
     antigravity_vendor.rmdir()
     antigravity_vendor.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
@@ -180,6 +180,44 @@ def validate_symlinks(root: Path, temporary_directory: str) -> None:
     require("must not be a symlink" in final_symlink.stderr, final_symlink.stderr)
     antigravity_vendor.unlink()
     antigravity_vendor.mkdir()
+
+    outside_secret_directory = Path(temporary_directory) / "outside-secrets/codex"
+    outside_secret_directory.mkdir(parents=True)
+    outside_password = outside_secret_directory / "web_password.txt"
+    outside_password.write_text("outside-password\n", encoding="utf-8")
+    outside_password.chmod(0o600)
+
+    codex_secret_directory = root / CODEX_SECRET_DIRECTORY_SUFFIX
+    shutil.rmtree(codex_secret_directory)
+    codex_secret_directory.symlink_to(outside_secret_directory, target_is_directory=True)
+    secret_directory_symlink = run_preflight(
+        root, include_antigravity=True, password_source="file"
+    )
+    require(secret_directory_symlink.returncode == 1, "symlinked secret directory must fail")
+    require(
+        f"must not be a symlink: {codex_secret_directory}" in secret_directory_symlink.stderr,
+        secret_directory_symlink.stderr,
+    )
+    codex_secret_directory.unlink()
+    codex_secret_directory.mkdir()
+    write_password(root, CODEX_PASSWORD_SUFFIX, "test-codex-password")
+
+    codex_password = root / CODEX_PASSWORD_SUFFIX
+    outside_password_file = Path(temporary_directory) / "outside-password.txt"
+    outside_password_file.write_text("outside-password\n", encoding="utf-8")
+    outside_password_file.chmod(0o600)
+    codex_password.unlink()
+    codex_password.symlink_to(outside_password_file)
+    password_file_symlink = run_preflight(
+        root, include_antigravity=True, password_source="file"
+    )
+    require(password_file_symlink.returncode == 1, "symlinked password file must fail")
+    require(
+        f"must not be a symlink: {codex_password}" in password_file_symlink.stderr,
+        password_file_symlink.stderr,
+    )
+    codex_password.unlink()
+    write_password(root, CODEX_PASSWORD_SUFFIX, "test-codex-password")
 
     outside_state = Path(temporary_directory) / "outside-state"
     for child in ("agent", "gh", "git", "ssh"):
