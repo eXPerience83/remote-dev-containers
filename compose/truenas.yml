@@ -61,9 +61,9 @@ services:
       WEB_BASE_PATH: /
       WEB_USERNAME: codex
       # Home-mode convenience. TrueNAS administrators can read this value from
-      # the App YAML or docker inspect. Use WEB_PASSWORD_FILE instead for a
-      # shared or hardened deployment.
-      WEB_PASSWORD: 'replace-with-a-strong-codex-password'
+      # the App YAML or docker inspect. Replace the empty value before saving.
+      # Use the file-backed mode instead for a shared or hardened deployment.
+      WEB_PASSWORD: ''
       WEB_MAX_CLIENTS: "1"
       WEB_CHECK_ORIGIN: "1"
       ALLOW_INSECURE_WEB: "0"
@@ -142,8 +142,9 @@ services:
       WEB_PORT: "7682"
       WEB_BASE_PATH: /
       WEB_USERNAME: antigravity
-      # Keep this independent from the Codex terminal password.
-      WEB_PASSWORD: 'replace-with-a-strong-antigravity-password'
+      # Replace the empty value before saving and keep it independent from the
+      # Codex terminal password.
+      WEB_PASSWORD: ''
       WEB_MAX_CLIENTS: "1"
       WEB_CHECK_ORIGIN: "1"
       ALLOW_INSECURE_WEB: "0"
