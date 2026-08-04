@@ -36,7 +36,7 @@ Before changing the App:
 Example read-only inventory commands:
 
 ```bash
-docker inspect codex-remote-dev --format 'container_image_id={{.Image}}'
+docker inspect codex-remote-dev --format 'container_image_id={{.Image}} configured_image={{.Config.Image}}'
 docker exec codex-remote-dev remote-dev-version || true
 docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
 ```
@@ -126,7 +126,7 @@ secret dataset must be deleted merely to rotate a password.
 sudo bash -c '
   set -euo pipefail
   umask 077
-  read -rsp "Codex terminal password: " password
+  IFS= read -r -s -p "Codex terminal password: " password
   printf "\n"
   test -n "$password"
   printf "%s\n" "$password" > /mnt/Pool1/remote-dev/secrets/codex/web_password.txt
@@ -136,7 +136,7 @@ sudo bash -c '
 sudo bash -c '
   set -euo pipefail
   umask 077
-  read -rsp "Antigravity terminal password: " password
+  IFS= read -r -s -p "Antigravity terminal password: " password
   printf "\n"
   test -n "$password"
   printf "%s\n" "$password" > /mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
@@ -208,9 +208,13 @@ antigravity-remote-dev   port 7682, Antigravity-only mounts and password
 
 ## First deployment checks
 
-After stopping the old App and saving the replacement YAML:
+After stopping the old App and saving the replacement YAML, set `pinned_image`
+to the exact `ghcr.io/experience83/remote-dev@sha256:...` reference used in the
+YAML and run:
 
 ```bash
+pinned_image='ghcr.io/experience83/remote-dev@sha256:replace-with-recorded-digest'
+
 docker ps --filter name=remote-dev --filter name=codex-remote-dev --filter name=antigravity-remote-dev
 docker exec codex-remote-dev remote-dev-version
 docker exec antigravity-remote-dev remote-dev-version
@@ -221,13 +225,16 @@ Confirm the embedded revision and digest match the pinned image. The
 Antigravity diagnostic should report `not installed` without making the
 container unhealthy.
 
-Inspect only redacted configuration facts:
+Inspect only redacted configuration facts and assert the configured immutable
+reference, not only the local content-addressable image ID:
 
 ```bash
 for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   echo "== $container =="
+  configured_image="$(docker inspect "$container" --format '{{.Config.Image}}')"
+  test "$configured_image" = "$pinned_image"
   docker inspect "$container" --format \
-    'privileged={{.HostConfig.Privileged}} network={{.HostConfig.NetworkMode}} cap_add={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}} image={{.Image}}'
+    'configured_image={{.Config.Image}} image_id={{.Image}} privileged={{.HostConfig.Privileged}} network={{.HostConfig.NetworkMode}} cap_add={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}}'
   docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
