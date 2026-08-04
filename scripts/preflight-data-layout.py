@@ -54,11 +54,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--password-source",
         choices=PASSWORD_SOURCES,
-        default="environment",
+        default="file",
         help=(
             "Authentication source used by the deployment: environment checks "
             "only persistent workspace/state paths; file also requires and "
-            "validates role-specific password files (default: environment)"
+            "validates role-specific password files (default: file, matching "
+            "compose/docker-compose.yml)"
         ),
     )
     return parser.parse_args(argv)
