@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import shlex
@@ -14,16 +15,28 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 TMUX_BIN = "/usr/bin/tmux"
 OAUTH_PREFIX = "https://accounts.google.com/"
 OAUTH_END_MARKER = "If you aren't automatically redirected"
+ANTIGRAVITY_OAUTH_CLIENT_ID = (
+    "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
+)
+ANTIGRAVITY_OAUTH_REDIRECT_URI = "https://antigravity.google/oauth-callback"
 MAX_OAUTH_URL_BYTES = 16_384
 POLL_INTERVAL_SECONDS = 0.20
+POPUP_POLL_INTERVAL_SECONDS = 0.20
 READY_FILE_RE = re.compile(r"^\.remote-dev-antigravity-oauth-ready\.[0-9]+$")
 PANE_RE = re.compile(r"^%[0-9]+$")
 STOP_REQUESTED = False
+
+
+def single_query_value(query: dict[str, list[str]], name: str) -> str:
+    values = query.get(name)
+    if values is None or len(values) != 1 or not values[0]:
+        raise ValueError(f"OAuth URL requires exactly one non-empty {name}")
+    return values[0]
 
 
 def validate_oauth_url(url: str) -> str:
@@ -46,12 +59,35 @@ def validate_oauth_url(url: str) -> str:
         raise ValueError("OAuth URL must not contain user information")
     if port not in (None, 443):
         raise ValueError("OAuth URL uses an unexpected port")
-    if not parsed.path.startswith("/o/oauth2/"):
-        raise ValueError("OAuth URL uses an unexpected path")
+    if parsed.path != "/o/oauth2/auth":
+        raise ValueError("OAuth URL does not use the reviewed Antigravity path")
     if not parsed.query:
         raise ValueError("OAuth URL is missing its authorization query")
     if parsed.fragment:
         raise ValueError("OAuth URL must not contain a fragment")
+
+    try:
+        query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True)
+    except ValueError as exc:
+        raise ValueError("OAuth URL contains a malformed query") from exc
+
+    expected_values = {
+        "client_id": ANTIGRAVITY_OAUTH_CLIENT_ID,
+        "redirect_uri": ANTIGRAVITY_OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "access_type": "offline",
+        "code_challenge_method": "S256",
+        "prompt": "consent",
+    }
+    for name, expected in expected_values.items():
+        if single_query_value(query, name) != expected:
+            raise ValueError(f"OAuth URL contains an unexpected {name}")
+
+    single_query_value(query, "code_challenge")
+    single_query_value(query, "state")
+    scopes = set(single_query_value(query, "scope").split())
+    if "openid" not in scopes:
+        raise ValueError("OAuth URL is missing the expected OpenID scope")
 
     return url
 
@@ -176,10 +212,32 @@ def render_popup(url: str, *, wait_for_enter: bool) -> None:
     sys.stdout.write("Press Enter to return to Antigravity... ")
     sys.stdout.flush()
     if wait_for_enter:
-        try:
+        with contextlib.suppress(EOFError):
             input()
-        except EOFError:
-            pass
+
+
+def close_popup() -> None:
+    with contextlib.suppress(subprocess.SubprocessError, OSError):
+        subprocess.run(
+            [TMUX_BIN, "display-popup", "-C"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
+
+
+def stop_popup_client(popup: subprocess.Popen[bytes]) -> int:
+    close_popup()
+    if popup.poll() is not None:
+        return popup.returncode or 0
+
+    popup.terminate()
+    try:
+        return popup.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        popup.kill()
+        return popup.wait(timeout=1)
 
 
 def show_popup(url_file: Path) -> int:
@@ -191,7 +249,7 @@ def show_popup(url_file: Path) -> int:
             shlex.quote(str(url_file)),
         ]
     )
-    completed = subprocess.run(
+    popup = subprocess.Popen(
         [
             TMUX_BIN,
             "display-popup",
@@ -204,11 +262,17 @@ def show_popup(url_file: Path) -> int:
             "Google OAuth",
             command,
         ],
-        check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    return completed.returncode
+
+    while True:
+        if STOP_REQUESTED:
+            return stop_popup_client(popup)
+        try:
+            return popup.wait(timeout=POPUP_POLL_INTERVAL_SECONDS)
+        except subprocess.TimeoutExpired:
+            continue
 
 
 def request_stop(_signum: int, _frame: object) -> None:
@@ -230,10 +294,8 @@ def watch(pane: str, ready_file: Path) -> int:
             try:
                 return show_popup(url_file)
             finally:
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     url_file.unlink()
-                except FileNotFoundError:
-                    pass
         time.sleep(POLL_INTERVAL_SECONDS)
     return 0
 
