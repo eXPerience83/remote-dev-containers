@@ -103,6 +103,10 @@ It also documents updater state under:
 
 A Remote Dev integration must set the opt-out for normal agent sessions so that starting Antigravity never mutates the executable silently. Updating must be a separate explicit action that uses an upstream-supported command or reviewed installation flow and reports the before/after versions.
 
+## Runtime staging boundary
+
+Remote Dev performs the explicit installer run inside a uniquely named directory below the validated Antigravity-owned runtime state directory. The canonical manager selects this location itself and does not honor a caller-supplied `TMPDIR`, so menu, shell and automation invocations all avoid a non-executable system `/tmp` mount without weakening that mount's security options. Temporary installer, isolated home and candidate payload data are removed when the operation exits.
+
 ## Persistent state and credentials
 
 Official documentation places persistent CLI settings at:
