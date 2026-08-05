@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly manager=/usr/local/bin/remote-dev-antigravity
+readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth
 readonly secure_state=/usr/local/bin/secure-persistent-state
 readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
@@ -64,9 +65,72 @@ cd "$workspace"
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
 
 child_pid=""
+oauth_helper_pid=""
+oauth_ready_file=""
+
+stop_oauth_helper() {
+  if [[ -n "$oauth_helper_pid" ]] && kill -0 "$oauth_helper_pid" 2>/dev/null; then
+    kill "$oauth_helper_pid" 2>/dev/null || true
+    for _ in {1..20}; do
+      kill -0 "$oauth_helper_pid" 2>/dev/null || break
+      sleep 0.05
+    done
+    if kill -0 "$oauth_helper_pid" 2>/dev/null; then
+      kill -KILL "$oauth_helper_pid" 2>/dev/null || true
+    fi
+    wait "$oauth_helper_pid" 2>/dev/null || true
+  fi
+  oauth_helper_pid=""
+  if [[ -n "$oauth_ready_file" ]]; then
+    rm -f -- "$oauth_ready_file"
+  fi
+  oauth_ready_file=""
+}
+
+start_oauth_helper() {
+  if [[ "${REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER:-1}" != 1 ]]; then
+    return 0
+  fi
+  if [[ -z "${TMUX_PANE:-}" || ! "$TMUX_PANE" =~ ^%[0-9]+$ ]]; then
+    return 0
+  fi
+  if [[ ! -x "$oauth_helper" ]]; then
+    echo "WARNING: Antigravity OAuth link helper is unavailable" >&2
+    return 0
+  fi
+
+  oauth_ready_file="/tmp/.remote-dev-antigravity-oauth-ready.$$"
+  rm -f -- "$oauth_ready_file"
+  "$oauth_helper" watch \
+    --pane "$TMUX_PANE" \
+    --ready-file "$oauth_ready_file" &
+  oauth_helper_pid=$!
+
+  for _ in {1..40}; do
+    if [[ -f "$oauth_ready_file" ]]; then
+      rm -f -- "$oauth_ready_file"
+      oauth_ready_file=""
+      return 0
+    fi
+    if ! kill -0 "$oauth_helper_pid" 2>/dev/null; then
+      wait "$oauth_helper_pid" 2>/dev/null || true
+      oauth_helper_pid=""
+      rm -f -- "$oauth_ready_file"
+      oauth_ready_file=""
+      echo "WARNING: Antigravity OAuth link helper did not initialize" >&2
+      return 0
+    fi
+    sleep 0.05
+  done
+
+  echo "WARNING: Antigravity OAuth link helper timed out during initialization" >&2
+  stop_oauth_helper
+}
+
 harden_on_exit() {
   local session_status=$?
   trap - EXIT INT TERM
+  stop_oauth_helper
   if ! "$secure_state"; then
     echo "ERROR: failed to secure persistent state after Antigravity exited" >&2
     exit 1
@@ -77,6 +141,7 @@ harden_on_exit() {
 forward_signal() {
   local signal_name="$1"
   local signal_status="$2"
+  stop_oauth_helper
   if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
     kill -s "$signal_name" "$child_pid" 2>/dev/null || true
     wait "$child_pid" 2>/dev/null || true
@@ -89,6 +154,11 @@ trap harden_on_exit EXIT
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
 
+# Capture the current tmux scrollback before starting the vendor client. This
+# lets the helper ignore a stale authorization URL from an earlier login while
+# still detecting the new PKCE URL before it is visually wrapped by ttyd.
+start_oauth_helper
+
 # Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
 # when job control is disabled. Preserve fd 0 explicitly and reset those signal
 # dispositions before execing the interactive vendor CLI.
@@ -97,4 +167,5 @@ child_pid=$!
 session_status=0
 wait "$child_pid" || session_status=$?
 child_pid=""
+stop_oauth_helper
 exit "$session_status"
