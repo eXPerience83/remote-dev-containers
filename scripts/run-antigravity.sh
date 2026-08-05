@@ -101,12 +101,18 @@ start_oauth_helper() {
 
   oauth_ready_file="/tmp/.remote-dev-antigravity-oauth-ready.$$"
   rm -f -- "$oauth_ready_file"
-  "$oauth_helper" watch \
-    --pane "$TMUX_PANE" \
-    --ready-file "$oauth_ready_file" &
+  local -a oauth_command=(
+    "$oauth_helper"
+    watch
+    --pane "$TMUX_PANE"
+    --ready-file "$oauth_ready_file"
+  )
+  "${oauth_command[@]}" &
   oauth_helper_pid=$!
 
-  for _ in {1..40}; do
+  # capture_pane() has a three-second deadline. Allow that full interval plus
+  # one second of scheduler/startup margin before falling back to the vendor UI.
+  for _ in {1..80}; do
     if [[ -f "$oauth_ready_file" ]]; then
       rm -f -- "$oauth_ready_file"
       oauth_ready_file=""
