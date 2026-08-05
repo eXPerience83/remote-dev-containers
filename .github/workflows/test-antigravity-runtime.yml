@@ -7,11 +7,13 @@ on:
       - "scripts/remote-dev-antigravity.sh"
       - "scripts/remote-dev-install-antigravity.sh"
       - "scripts/remote-dev-update-antigravity.sh"
+      - "scripts/remote-dev-antigravity-oauth.py"
       - "scripts/run-antigravity.sh"
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
       - "scripts/test-antigravity-security-regressions.sh"
       - "scripts/test-antigravity-staging-wrappers.sh"
+      - "scripts/test-antigravity-oauth.py"
   workflow_dispatch:
 
 permissions:
@@ -44,12 +46,17 @@ jobs:
             scripts/test-antigravity-runtime.sh \
             scripts/test-antigravity-security-regressions.sh \
             scripts/test-antigravity-staging-wrappers.sh
+          python -m py_compile \
+            scripts/remote-dev-antigravity-oauth.py \
+            scripts/test-antigravity-oauth.py
 
       - name: Run controlled fixture lifecycle
         run: |
           chmod 0755 \
             scripts/remote-dev-antigravity.sh \
+            scripts/remote-dev-antigravity-oauth.py \
             scripts/run-antigravity.sh
           bash scripts/test-antigravity-runtime.sh
           bash scripts/test-antigravity-security-regressions.sh
           bash scripts/test-antigravity-staging-wrappers.sh
+          python scripts/test-antigravity-oauth.py
