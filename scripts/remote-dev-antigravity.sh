@@ -462,7 +462,9 @@ install_or_update() {
 
   confirm_vendor_download "$action" "$assume_yes"
 
-  cleanup_root="$(mktemp -d "${TMPDIR:-/tmp}/remote-dev-antigravity.XXXXXXXX")"
+  install -d -m 0700 "$state_dir"
+  reject_symlink_components "$state_dir"
+  cleanup_root="$(mktemp -d "$state_dir/remote-dev-antigravity.XXXXXXXX")"
   local installer_path="$cleanup_root/install.sh"
   local isolated_home="$cleanup_root/home"
   local stage_bin="$cleanup_root/bin"
