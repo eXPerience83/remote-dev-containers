@@ -2,7 +2,7 @@
 
 ## Status
 
-Inspection date: **2026-08-02 UTC**
+Inspection date: **2026-08-05 UTC**
 
 This report records bounded metadata from the installer and package currently served by Google. It does not contain or redistribute the installer or the Antigravity CLI binary.
 
@@ -62,13 +62,13 @@ The installer detected `linux_amd64`, reported that it verified the downloaded p
 | Field | Value |
 |---|---|
 | Relative path | `.local/bin/agy` |
-| Reported version | `1.1.9` |
-| Size | `193,233,344` bytes |
-| SHA-256 | `2e44783f64b231bc1437e84bb1b93c99c48163cb818210f0d2d48295ec78d3ce` |
+| Reported version | `1.1.10` |
+| Size | `193,835,456` bytes |
+| SHA-256 | `4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71` |
 | Format | ELF 64-bit x86-64 PIE, dynamically linked, stripped |
 | Interpreter | `/lib64/ld-linux-x86-64.so.2` |
 
-Observed dynamic libraries were `libc`, `libdl`, `libm`, `libpthread`, `libresolv` and `librt` from the runner operating system.
+Observed dynamic libraries were `libc`, `libdl`, `libm`, `libpthread`, `libresolv` and `librt` from the runner operating system. The inspection reported no unrecognized dynamic libraries and no blocking findings.
 
 The package created only these relevant paths under the isolated home:
 
@@ -102,6 +102,10 @@ It also documents updater state under:
 ```
 
 A Remote Dev integration must set the opt-out for normal agent sessions so that starting Antigravity never mutates the executable silently. Updating must be a separate explicit action that uses an upstream-supported command or reviewed installation flow and reports the before/after versions.
+
+## Runtime staging boundary
+
+Remote Dev performs the explicit installer run inside a uniquely named directory below the validated Antigravity-owned runtime state directory. The canonical manager selects this location itself and does not honor a caller-supplied `TMPDIR`, so menu, shell and automation invocations all avoid a non-executable system `/tmp` mount without weakening that mount's security options. Temporary installer, isolated home and candidate payload data are removed when the operation exits.
 
 ## Persistent state and credentials
 
