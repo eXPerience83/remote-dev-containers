@@ -27,7 +27,7 @@
     "relative_path": ".local/bin/agy",
     "version": "1.1.9",
     "size": 193233344,
-    "sha256": "2e44783f64b231bc1437e84bb1b93c99c48163cb818210f0d2d48295ec78d3ce",
+    "sha256": "4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71",
     "format": {
       "elf_64_bit": true,
       "x86_64": true,
