@@ -13,6 +13,7 @@ manager="$temporary/remote-dev-antigravity"
 install_wrapper="$temporary/remote-dev-install-antigravity"
 update_wrapper="$temporary/remote-dev-update-antigravity"
 record="$temporary/manager-record"
+manager_entered="$temporary/manager-entered"
 mkdir -p "$staging_parent"
 
 fail() {
@@ -30,7 +31,9 @@ cat >"$manager" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 : "${REMOTE_DEV_TEST_RECORD:?}"
+: "${REMOTE_DEV_TEST_MANAGER_ENTERED:?}"
 : "${TMPDIR:?}"
+: >"$REMOTE_DEV_TEST_MANAGER_ENTERED"
 staged="$(mktemp -d "$TMPDIR/remote-dev-antigravity.XXXXXXXX")"
 {
   printf 'tmpdir=%s\n' "$TMPDIR"
@@ -69,8 +72,10 @@ PY
 prepare_wrapper "$INSTALL_SOURCE" "$install_wrapper"
 prepare_wrapper "$UPDATE_SOURCE" "$update_wrapper"
 export REMOTE_DEV_TEST_RECORD="$record"
+export REMOTE_DEV_TEST_MANAGER_ENTERED="$manager_entered"
 
 "$install_wrapper" --yes 'literal space'
+test -f "$manager_entered" || fail "install wrapper did not invoke the manager"
 grep -Fx "tmpdir=$staging_parent" "$record" >/dev/null || fail "install wrapper used the wrong TMPDIR"
 grep -E "^staged=${staging_parent}/remote-dev-antigravity[.]" "$record" >/dev/null \
   || fail "install wrapper staged outside the role-scoped state directory"
@@ -81,18 +86,24 @@ test "${install_args[2]}" = 'literal space' || fail "install wrapper changed a l
 test -z "$(find "$staging_parent" -mindepth 1 -maxdepth 1 -name 'remote-dev-antigravity.*' -print -quit)" \
   || fail "install wrapper left staging data behind"
 
+rm -f -- "$manager_entered"
 "$update_wrapper" --yes
+test -f "$manager_entered" || fail "update wrapper did not invoke the manager"
 grep -Fx "tmpdir=$staging_parent" "$record" >/dev/null || fail "update wrapper used the wrong TMPDIR"
 mapfile -t update_args < <(grep '^arg=' "$record" | sed 's/^arg=//')
 test "${update_args[0]}" = update || fail "update wrapper changed the manager action"
 test "${update_args[1]}" = --yes || fail "update wrapper changed the update argument"
 
 rm -rf -- "$staging_parent"
+rm -f -- "$manager_entered"
 expect_failure "$install_wrapper" --yes >/dev/null 2>&1
+test ! -e "$manager_entered" || fail "missing staging path reached the manager"
 
 outside="$temporary/outside"
 mkdir -p "$outside"
 ln -s "$outside" "$staging_parent"
+rm -f -- "$manager_entered"
 expect_failure "$update_wrapper" --yes >/dev/null 2>&1
+test ! -e "$manager_entered" || fail "symlinked staging path reached the manager"
 
 echo 'Antigravity staging wrapper regressions: OK'
