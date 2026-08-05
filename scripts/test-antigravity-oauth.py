@@ -11,10 +11,17 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = ROOT / "scripts" / "remote-dev-antigravity-oauth.py"
+REPOSITORY_HELPER = ROOT / "scripts" / "remote-dev-antigravity-oauth.py"
+INSTALLED_HELPER = Path("/usr/local/bin/remote-dev-antigravity-oauth")
+MODULE_PATH = Path(
+    os.environ.get(
+        "REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER",
+        str(INSTALLED_HELPER if INSTALLED_HELPER.is_file() else REPOSITORY_HELPER),
+    )
+)
 SPEC = importlib.util.spec_from_file_location("remote_dev_antigravity_oauth", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
-    raise RuntimeError("unable to load OAuth helper")
+    raise RuntimeError(f"unable to load OAuth helper from {MODULE_PATH}")
 OAUTH = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(OAUTH)
 
