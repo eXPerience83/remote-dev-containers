@@ -2,7 +2,7 @@
 
 ## Status
 
-Inspection date: **2026-08-02 UTC**
+Inspection date: **2026-08-05 UTC**
 
 This report records bounded metadata from the installer and package currently served by Google. It does not contain or redistribute the installer or the Antigravity CLI binary.
 
@@ -62,13 +62,13 @@ The installer detected `linux_amd64`, reported that it verified the downloaded p
 | Field | Value |
 |---|---|
 | Relative path | `.local/bin/agy` |
-| Reported version | `1.1.9` |
-| Size | `193,233,344` bytes |
-| SHA-256 | `2e44783f64b231bc1437e84bb1b93c99c48163cb818210f0d2d48295ec78d3ce` |
+| Reported version | `1.1.10` |
+| Size | `193,835,456` bytes |
+| SHA-256 | `4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71` |
 | Format | ELF 64-bit x86-64 PIE, dynamically linked, stripped |
 | Interpreter | `/lib64/ld-linux-x86-64.so.2` |
 
-Observed dynamic libraries were `libc`, `libdl`, `libm`, `libpthread`, `libresolv` and `librt` from the runner operating system.
+Observed dynamic libraries were `libc`, `libdl`, `libm`, `libpthread`, `libresolv` and `librt` from the runner operating system. The inspection reported no unrecognized dynamic libraries and no blocking findings.
 
 The package created only these relevant paths under the isolated home:
 
