@@ -7,6 +7,7 @@ import io
 import os
 import tempfile
 import unittest
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest import mock
 
@@ -19,11 +20,12 @@ MODULE_PATH = Path(
         str(INSTALLED_HELPER if INSTALLED_HELPER.is_file() else REPOSITORY_HELPER),
     )
 )
-SPEC = importlib.util.spec_from_file_location("remote_dev_antigravity_oauth", MODULE_PATH)
-if SPEC is None or SPEC.loader is None:
+LOADER = SourceFileLoader("remote_dev_antigravity_oauth", str(MODULE_PATH))
+SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
+if SPEC is None:
     raise RuntimeError(f"unable to load OAuth helper from {MODULE_PATH}")
 OAUTH = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(OAUTH)
+LOADER.exec_module(OAUTH)
 
 VALID_URL = (
     "https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=client.example"
