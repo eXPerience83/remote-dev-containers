@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "inspection_date_utc": "2026-08-02",
+  "inspection_date_utc": "2026-08-05",
   "workflow": {
     "name": "Inspect Antigravity CLI",
     "path": ".github/workflows/inspect-antigravity-cli.yml",
