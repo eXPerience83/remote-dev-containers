@@ -60,6 +60,7 @@ COPY scripts/run-codex.sh /usr/local/bin/run-codex
 COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
+COPY scripts/remote-dev-antigravity-oauth.py /usr/local/bin/remote-dev-antigravity-oauth
 COPY scripts/run-antigravity.sh /usr/local/bin/run-antigravity
 COPY scripts/remote-dev-launcher.py /usr/local/bin/remote-dev-launcher
 COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
@@ -78,6 +79,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
+    --mount=type=bind,source=scripts/test-antigravity-oauth.py,target=/tmp/test-antigravity-oauth.py,ro \
     chmod 0755 \
       /usr/local/bin/start-remote-dev-web \
       /usr/local/bin/start-codex-web \
@@ -87,6 +89,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/remote-dev-antigravity \
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
+      /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/run-antigravity \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-menu \
@@ -101,7 +104,10 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
     && chmod 0444 /usr/local/lib/remote-dev/antigravity-paths.sh \
-    && python -m py_compile /usr/local/bin/remote-dev-launcher \
+    && python -m py_compile \
+      /usr/local/bin/remote-dev-launcher \
+      /usr/local/bin/remote-dev-antigravity-oauth \
+    && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
     && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
@@ -116,6 +122,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/remote-dev-antigravity \
     && grep -Fx '  source "$paths_lib"' /usr/local/bin/remote-dev-antigravity \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
+    && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
