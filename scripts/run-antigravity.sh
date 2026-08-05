@@ -71,7 +71,9 @@ oauth_ready_file=""
 stop_oauth_helper() {
   if [[ -n "$oauth_helper_pid" ]] && kill -0 "$oauth_helper_pid" 2>/dev/null; then
     kill "$oauth_helper_pid" 2>/dev/null || true
-    for _ in {1..20}; do
+    # The helper may be waiting for an interactive tmux popup. Give it enough
+    # time to close the popup and unlink the private OAuth URL before SIGKILL.
+    for _ in {1..100}; do
       kill -0 "$oauth_helper_pid" 2>/dev/null || break
       sleep 0.05
     done
