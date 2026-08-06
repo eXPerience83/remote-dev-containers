@@ -3,8 +3,15 @@ set -euo pipefail
 
 readonly manager=/usr/local/bin/remote-dev-antigravity
 readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth
+readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker
 readonly secure_state=/usr/local/bin/secure-persistent-state
 readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+
+open_resume_picker=0
+if [[ "${1:-}" == --remote-dev-open-resume-picker ]]; then
+  open_resume_picker=1
+  shift
+fi
 
 [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
   || { echo "ERROR: Remote Dev role definitions are unavailable" >&2; exit 1; }
@@ -19,6 +26,12 @@ export REMOTE_DEV_ROLE="$resolved_role"
 
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
 [[ -x "$secure_state" ]] || { echo "ERROR: persistent-state hardening command is unavailable" >&2; exit 1; }
+if (( open_resume_picker )); then
+  [[ "${TMUX_PANE:-}" =~ ^%[0-9]+$ ]] \
+    || { echo "ERROR: the Antigravity conversation picker requires a tmux pane" >&2; exit 2; }
+  [[ -x "$picker_helper" ]] \
+    || { echo "ERROR: Antigravity conversation-picker helper is unavailable" >&2; exit 1; }
+fi
 
 binary="$("$manager" path)"
 if [[ ! -f "$binary" || -L "$binary" || ! -x "$binary" ]]; then
@@ -67,6 +80,8 @@ export AGY_CLI_DISABLE_AUTO_UPDATE=true
 child_pid=""
 oauth_helper_pid=""
 oauth_ready_file=""
+picker_helper_pid=""
+picker_baseline_sha256=""
 
 stop_oauth_helper() {
   if [[ -n "$oauth_helper_pid" ]] && kill -0 "$oauth_helper_pid" 2>/dev/null; then
@@ -87,6 +102,19 @@ stop_oauth_helper() {
     rm -f -- "$oauth_ready_file"
   fi
   oauth_ready_file=""
+}
+
+stop_picker_helper() {
+  if [[ -n "$picker_helper_pid" ]] && kill -0 "$picker_helper_pid" 2>/dev/null; then
+    kill "$picker_helper_pid" 2>/dev/null || true
+    wait "$picker_helper_pid" 2>/dev/null || true
+  fi
+  picker_helper_pid=""
+}
+
+stop_auxiliary_helpers() {
+  stop_picker_helper
+  stop_oauth_helper
 }
 
 start_oauth_helper() {
@@ -135,10 +163,31 @@ start_oauth_helper() {
   stop_oauth_helper
 }
 
+capture_picker_baseline() {
+  (( open_resume_picker )) || return 0
+  if ! picker_baseline_sha256="$(
+    "$picker_helper" snapshot --pane "$TMUX_PANE"
+  )"; then
+    echo "ERROR: unable to capture the tmux pane before starting Antigravity" >&2
+    exit 1
+  fi
+  [[ "$picker_baseline_sha256" =~ ^[0-9a-f]{64}$ ]] \
+    || { echo "ERROR: Antigravity picker returned an invalid screen baseline" >&2; exit 1; }
+}
+
+start_picker_helper() {
+  (( open_resume_picker )) || return 0
+  "$picker_helper" watch \
+    --pane "$TMUX_PANE" \
+    --pid "$child_pid" \
+    --baseline-sha256 "$picker_baseline_sha256" &
+  picker_helper_pid=$!
+}
+
 harden_on_exit() {
   local session_status=$?
   trap - EXIT INT TERM
-  stop_oauth_helper
+  stop_auxiliary_helpers
   if ! "$secure_state"; then
     echo "ERROR: failed to secure persistent state after Antigravity exited" >&2
     exit 1
@@ -149,7 +198,7 @@ harden_on_exit() {
 forward_signal() {
   local signal_name="$1"
   local signal_status="$2"
-  stop_oauth_helper
+  stop_auxiliary_helpers
   if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
     kill -s "$signal_name" "$child_pid" 2>/dev/null || true
     wait "$child_pid" 2>/dev/null || true
@@ -162,18 +211,21 @@ trap harden_on_exit EXIT
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
 
-# Capture the current tmux scrollback before starting the vendor client. This
-# lets the helper ignore a stale authorization URL from an earlier login while
-# still detecting the new PKCE URL before it is visually wrapped by ttyd.
+# Start the OAuth watcher before the vendor process so it can capture a new
+# authorization URL without reusing stale terminal content.
 start_oauth_helper
+# Record the current visible pane before Antigravity starts. The picker helper
+# accepts its prompt only after the screen has changed from this baseline.
+capture_picker_baseline
 
 # Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
 # when job control is disabled. Preserve fd 0 explicitly and reset those signal
 # dispositions before execing the interactive vendor CLI.
 env --default-signal=INT,TERM,QUIT -- "$binary" "$@" <&0 &
 child_pid=$!
+start_picker_helper
 session_status=0
 wait "$child_pid" || session_status=$?
 child_pid=""
-stop_oauth_helper
+stop_auxiliary_helpers
 exit "$session_status"

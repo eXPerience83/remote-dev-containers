@@ -230,12 +230,13 @@ ${version_summary}
 ${status_summary}
 ========================
 1) Start Antigravity
-2) Install Antigravity from Google
-3) Update to the reviewed Antigravity version
-4) Sign in to GitHub CLI
-5) Run diagnostics
-6) Open a login shell
-7) Exit this tmux session
+2) Resume an Antigravity session
+3) Install Antigravity from Google
+4) Update to the reviewed Antigravity version
+5) Sign in to GitHub CLI
+6) Run diagnostics
+7) Open a login shell
+8) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -243,21 +244,26 @@ MENU
         if run_interactive_and_harden "Antigravity" /usr/local/bin/run-antigravity; then :; fi
         ;;
       2)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        if run_interactive_and_harden \
+          "Antigravity resume" \
+          /usr/local/bin/run-antigravity --remote-dev-open-resume-picker; then :; fi
         ;;
       3)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
         ;;
       4)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
       5)
-        run_diagnostics
+        if run_github_login; then :; fi
         ;;
       6)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        run_diagnostics
         ;;
       7)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      8)
         exit 0
         ;;
       *)
