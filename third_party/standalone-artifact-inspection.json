@@ -47,7 +47,7 @@
     },
     {
       "id": "codex-cli",
-      "version": "rust-v0.146.0",
+      "version": "rust-v0.146.1",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -57,23 +57,23 @@
         },
         {
           "path": "third_party/components/codex/NOTICE",
-          "sha256": "3ce7450e8b97d94d27b8c99175b21f86bd786cea3620e5d6b5a7c41e7ed35cee",
-          "size": 240
+          "sha256": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+          "size": 242
         }
       ],
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.0/codex-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "5ba3b9405543953081f661d0854d266f76e2abbe51d41349355a36de7673776a",
-          "asset_size": 114169492,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.1/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "f558105aec12bf6fb33570793adfc089f8b41dc32aced60b8b4fba9b451824ac",
+          "asset_size": 114228235,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.0/codex-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "975bac91562abeedeb8f79636d51a86649b31f34a9de6a3bcb059565b6cf1f87",
-          "asset_size": 105630444,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.146.1/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "05de65ee7b6bd02038e720cc313941d5ec6794718e4261bd28fd83b93fe34d43",
+          "asset_size": 105647055,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -110,7 +110,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.8.0",
+      "version": "2026.8.2",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -122,16 +122,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.0/mise-v2026.8.0-linux-x64",
-          "asset_sha256": "dc62954db7ac2c5a37e3c0454d1744d2eb0bec373222cda6219c5ae3704a759c",
-          "asset_size": 110732448,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.2/mise-v2026.8.2-linux-x64",
+          "asset_sha256": "9a6c2a8b6fe77c98f1d210b4b3cbd2a0cf31886ad1baf10698757a3234c678c1",
+          "asset_size": 113276272,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.0/mise-v2026.8.0-linux-arm64",
-          "asset_sha256": "8db14e256aab170ea7be41068198fb29dbbec97fc532055ddb6934e7aec62328",
-          "asset_size": 91750832,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.2/mise-v2026.8.2-linux-arm64",
+          "asset_sha256": "569051d8c938e448a2cfcf5011a363730998760082a088cb23e9633209e7548d",
+          "asset_size": 94498048,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -139,7 +139,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.1/uv-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "47823f814693bab8623308341369190de30b5c621eec5b1ee20352eae8c7982c",
-          "asset_size": 21930665,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.2/uv-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "2dbe8209c9592f6d1009b8565f4bf29813427907bee2236023c013101ede343f",
+          "asset_size": 21883005,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.1/uv-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "ce218dad9eb48a39dd86160bec6291fac7275f20a9cabcc4bc10dd2c757208f8",
-          "asset_size": 20377441,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.2/uv-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "73b87f0d65d7dfcd39753a51ce65592360b02c29f8e1bc2c85cc4190fe914499",
+          "asset_size": 20293917,
           "archive_member_count": 3,
           "legal_members": []
         }

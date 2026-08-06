@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-01",
-  "refreshed_on": "2026-08-02",
+  "refreshed_on": "2026-08-06",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -74,14 +74,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.8.0",
+      "version": "2026.8.2",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.8.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.8.2/LICENSE"
         }
       ]
     },
@@ -90,14 +90,14 @@
       "name": "Python runtime",
       "image_scope": "both",
       "version_key": "PYTHON_VERSION",
-      "version": "3.14.6",
+      "version": "3.14.7",
       "source": "https://github.com/astral-sh/python-build-standalone",
       "license": "Python-2.0 plus bundled dependency terms recorded from the exact standalone artifacts",
       "notices": [
         {
           "path": "components/python/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/python/cpython/v3.14.6/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/python/cpython/v3.14.7/LICENSE"
         },
         {
           "path": "components/python-build-standalone/",
@@ -110,7 +110,7 @@
       "name": "Node.js runtime",
       "image_scope": "both",
       "version_key": "NODE_VERSION",
-      "version": "24.18.1",
+      "version": "24.19.0",
       "source": "https://github.com/nodejs/node",
       "license": "MIT plus third-party terms in the runtime LICENSE",
       "notices": [
@@ -140,19 +140,19 @@
       "name": "uv",
       "image_scope": "both",
       "version_key": "UV_VERSION",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "source": "https://github.com/astral-sh/uv",
       "license": "Apache-2.0 OR MIT",
       "notices": [
         {
           "path": "components/uv/LICENSE-APACHE-2.0",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.1/LICENSE-APACHE"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.2/LICENSE-APACHE"
         },
         {
           "path": "components/uv/LICENSE-MIT",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.1/LICENSE-MIT"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.2/LICENSE-MIT"
         }
       ]
     },
@@ -161,19 +161,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.146.0",
+      "version": "rust-v0.146.1",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.1/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.0/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.146.1/NOTICE"
         }
       ]
     }
