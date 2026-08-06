@@ -13,6 +13,7 @@ Before changing runtime architecture or support claims, read the current GitHub 
 - #36 records the completed TrueNAS outer-isolation and no-Bubblewrap decision.
 - #42 covers later outer-container hardening and cross-service canaries.
 - #46 covers configurable Codex approval modes.
+- #83 defines the official-source optional-agent update and review model.
 
 If an issue and repository code disagree, report the discrepancy before expanding scope.
 
@@ -54,6 +55,24 @@ The supported TrueNAS isolation boundary is the outer container. Approval prompt
 - Preserve command exit status and run persistent-state hardening after supported interactive sessions.
 - Preserve mandatory ttyd authentication for agent terminals, origin checking for all web endpoints, tmux reconnect behavior, image identity checks, and existing Codex login/start/resume behavior.
 
+### Official-source agent installation and updates
+
+The Docker image must not be the sole availability gate for software that Remote Dev is not permitted to redistribute.
+
+- Installation and update are always explicit user actions. Normal startup, health checks, diagnostics and agent launch must never download or update software.
+- Antigravity may be downloaded only from the fixed official Google HTTPS installer endpoint. Never add a mirror, fallback host, `curl | sh`, editable URL, or caller-provided installer command.
+- Save network responses to a private bounded staging file, verify the final origin and minimum live contract, and run the installer with a credential-free isolated home.
+- Keep `AGY_CLI_DISABLE_AUTO_UPDATE=true` during validation and every normal Antigravity launch.
+- Validate the staged executable before publication, write a private local integrity manifest, and publish only through the canonical manager.
+- A locally intact installation created by the hardened official-source flow may run even when its version/hash is newer than committed Remote Dev review evidence. Report it as review pending rather than unverified.
+- Committed inspection evidence records the latest human-reviewed snapshot; it informs status and compatibility review but does not invalidate an intact official-source installation merely because the image is older.
+- Local executable/manifest mismatch, missing integrity data, malformed manifests, unsafe paths and incompatible installer contracts must still fail closed.
+- Updating an image must not force an agent update. Updating an agent must preserve the current working copy until the candidate has passed validation, and retain one local rollback copy where implemented.
+- Do not claim that TLS origin validation alone is equivalent to Remote Dev's manual payload review. Distinguish `official, reviewed`, `official, review pending`, and damaged/locally modified states.
+- A revocation must identify a specific unsafe version or hash, be explicit in repository data, and have dedicated tests. Absence from the review catalogue is not revocation.
+
+Codex remains bundled in the image as the guaranteed fallback. Any future optional Codex runtime updater must use an official OpenAI source, store the candidate outside immutable image paths, verify it independently, and automatically fall back to the bundled executable when the optional copy is absent or invalid. Implement that in a dedicated focused issue/PR rather than silently replacing the bundled binary.
+
 ### Launcher rules
 
 - `REMOTE_DEV_ROLE=launcher` is navigation only. It must not execute an agent or relay/proxy agent terminal HTTP or WebSocket traffic unless a later PR has an explicit threat-model review.
@@ -94,6 +113,8 @@ Run the narrowest relevant tests during development and the repository's complet
 - embedded image version and source revision;
 - bundled notices, SBOM generation, Trivy, and the no-fixable-critical gate.
 
+Official-source optional-agent changes must additionally test cancellation before download, exact-origin enforcement, response bounds, incompatible installer-contract rejection, isolated staging, candidate validation, local-manifest integrity, review-pending launch, failed-update preservation, rollback, old-manifest compatibility and absence of downloads during normal launch/status.
+
 Use synthetic credentials and state in tests. Never require a real vendor account in CI.
 
 ## Documentation and issue hygiene
@@ -102,4 +123,5 @@ Use synthetic credentials and state in tests. Never require a real vendor accoun
 - Update #31 when a tracked phase or dependency changes state.
 - Keep English and Spanish user documentation aligned when user-visible behavior changes.
 - Record compatibility aliases, defaults, migration effects, authentication boundaries and removal points explicitly.
-- Do not mark optional software as shipped, installed, supported, or covered by the project Apache-2.0 license before the relevant legal and real-environment gates are complete.
+- Do not mark optional software as bundled, redistributed, stable, or covered by the project Apache-2.0 license before the relevant legal and real-environment gates are complete.
+- Review status is not an availability status: an official-source installation may be usable while Remote Dev's human review is pending.

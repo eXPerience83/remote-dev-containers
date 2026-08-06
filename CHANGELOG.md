@@ -41,6 +41,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed paths and unsafe password-file permissions.
 - Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
 - Antigravity menu action that opens the full interactive `/resume` conversation picker, matching the Codex start/resume workflow without adding a latest-session-only shortcut.
+- Private Antigravity local-integrity manifests that record official installer and payload identity independently from the image's human-review snapshot.
+- One-version Antigravity rollback storage and a menu action that restores the previously validated local executable and manifest.
+- English and Spanish documentation for image-independent explicit agent installation and update behavior.
 
 ### Changed
 
@@ -78,6 +81,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
+- Changed Antigravity install/update trust from an image-embedded exact-payload allowlist to a hardened explicit official-source flow with local post-install integrity, so ordinary Google version/hash changes no longer require a new Docker image before users can install or update.
+- Changed Antigravity status to distinguish `official, reviewed`, `official, review pending`, `official, review unavailable`, and damaged/locally modified installations.
+- Changed image upgrades so they no longer invalidate an intact earlier Antigravity installation solely because the image records a newer reviewed payload.
+- Changed the Antigravity menu wording from updating to a pre-reviewed image version to an explicit update from Google.
 
 ### Security
 
@@ -105,3 +112,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
+- Antigravity normal startup and launch remain download-free and force `AGY_CLI_DISABLE_AUTO_UPDATE=true`.
+- Antigravity official-source downloads reject origin drift, oversized or unexpected responses, incompatible installer contracts, unsafe package layout and non-Linux-AMD64 candidates before publication.
+- Antigravity launch verifies the executable against its private local integrity manifest; missing, malformed or locally modified installations remain blocked even when human review is pending.
+- Failed Antigravity updates preserve the active installation, and rollback artifacts remain inside the private Antigravity runtime state boundary.

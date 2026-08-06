@@ -232,11 +232,12 @@ ${status_summary}
 1) Start Antigravity
 2) Resume an Antigravity session
 3) Install Antigravity from Google
-4) Update to the reviewed Antigravity version
-5) Sign in to GitHub CLI
-6) Run diagnostics
-7) Open a login shell
-8) Exit this tmux session
+4) Update Antigravity from Google
+5) Restore previous Antigravity version
+6) Sign in to GitHub CLI
+7) Run diagnostics
+8) Open a login shell
+9) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -255,15 +256,18 @@ MENU
         if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
       5)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Antigravity rollback" /usr/local/bin/remote-dev-antigravity rollback; then :; fi
         ;;
       6)
-        run_diagnostics
+        if run_github_login; then :; fi
         ;;
       7)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        run_diagnostics
         ;;
       8)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      9)
         exit 0
         ;;
       *)

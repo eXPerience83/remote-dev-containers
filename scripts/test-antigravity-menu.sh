@@ -22,7 +22,7 @@ cat >"$bin_dir/run-antigravity" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
 {
-  printf '['
+  printf 'run['
   separator=""
   for argument in "$@"; do
     printf '%s%s' "$separator" "$argument"
@@ -35,8 +35,16 @@ RUNNER
 cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "${1:-}" == status && "${2:-}" == --menu ]]
-printf '%s\n' 'Antigravity: 1.1.10 (runtime installed)'
+case "${1:-}" in
+  status)
+    [[ "${2:-}" == --menu ]]
+    printf '%s\n' 'Antigravity: 1.1.11 (official, review pending)'
+    ;;
+  rollback)
+    printf '%s\n' 'rollback' >>"$REMOTE_DEV_MENU_INVOCATIONS"
+    ;;
+  *) exit 2 ;;
+esac
 MANAGER
 
 for command in remote-dev-install-antigravity remote-dev-update-antigravity; do
@@ -73,20 +81,15 @@ chmod 0755 "$bin_dir"/*
 python3 - "$menu_source" "$fixture_menu" "$runtime_lib" "$bin_dir" <<'PY'
 from pathlib import Path
 import sys
-
 source, destination, runtime_lib, bin_dir = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 replacements = {
-    "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
-        f"runtime_lib={runtime_lib}",
+    "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh": f"runtime_lib={runtime_lib}",
     "/usr/local/bin/run-antigravity": str(bin_dir / "run-antigravity"),
     "/usr/local/bin/remote-dev-antigravity": str(bin_dir / "remote-dev-antigravity"),
-    "/usr/local/bin/remote-dev-install-antigravity":
-        str(bin_dir / "remote-dev-install-antigravity"),
-    "/usr/local/bin/remote-dev-update-antigravity":
-        str(bin_dir / "remote-dev-update-antigravity"),
-    "/usr/local/bin/secure-persistent-state":
-        str(bin_dir / "secure-persistent-state"),
+    "/usr/local/bin/remote-dev-install-antigravity": str(bin_dir / "remote-dev-install-antigravity"),
+    "/usr/local/bin/remote-dev-update-antigravity": str(bin_dir / "remote-dev-update-antigravity"),
+    "/usr/local/bin/secure-persistent-state": str(bin_dir / "secure-persistent-state"),
 }
 for old, new in replacements.items():
     if old not in text:
@@ -97,7 +100,7 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-printf '1\n2\n8\n' | env \
+printf '1\n2\n5\n9\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -105,17 +108,25 @@ printf '1\n2\n8\n' | env \
   "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
-[[ "${#calls[@]}" == 2 ]]
-[[ "${calls[0]}" == '[]' ]]
-[[ "${calls[1]}" == '[--remote-dev-open-resume-picker]' ]]
-[[ "$(wc -l <"$hardening_calls")" == 2 ]]
+[[ "${#calls[@]}" == 3 ]]
+[[ "${calls[0]}" == 'run[]' ]]
+[[ "${calls[1]}" == 'run[--remote-dev-open-resume-picker]' ]]
+[[ "${calls[2]}" == rollback ]]
+[[ "$(wc -l <"$hardening_calls")" == 3 ]]
+grep -Fxq 'Antigravity: 1.1.11 (official, review pending)' "$output"
 grep -Fxq '1) Start Antigravity' "$output"
 grep -Fxq '2) Resume an Antigravity session' "$output"
 grep -Fxq '3) Install Antigravity from Google' "$output"
-grep -Fxq '8) Exit this tmux session' "$output"
-if grep -EFiq 'continue the last|continue latest|last conversation' "$output"; then
+grep -Fxq '4) Update Antigravity from Google' "$output"
+grep -Fxq '5) Restore previous Antigravity version' "$output"
+grep -Fxq '9) Exit this tmux session' "$output"
+if grep -Fq 'Update to the reviewed Antigravity version' "$output"; then
+  echo 'ERROR: menu still gates updates on image review evidence' >&2
+  exit 1
+fi
+if grep -Eiq 'continue the last|continue latest|last conversation' "$output"; then
   echo 'ERROR: menu still exposes a latest-conversation shortcut' >&2
   exit 1
 fi
 
-echo 'Antigravity menu resume action: OK'
+echo 'Antigravity official update and rollback menu: OK'
