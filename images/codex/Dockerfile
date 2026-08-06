@@ -61,6 +61,7 @@ COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
 COPY scripts/remote-dev-antigravity-oauth.py /usr/local/bin/remote-dev-antigravity-oauth
+COPY scripts/remote-dev-antigravity-picker.py /usr/local/bin/remote-dev-antigravity-picker
 COPY scripts/run-antigravity.sh /usr/local/bin/run-antigravity
 COPY scripts/remote-dev-launcher.py /usr/local/bin/remote-dev-launcher
 COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
@@ -80,6 +81,9 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
     --mount=type=bind,source=scripts/test-antigravity-oauth.py,target=/tmp/test-antigravity-oauth.py,ro \
+    --mount=type=bind,source=scripts/test-antigravity-picker.py,target=/tmp/test-antigravity-picker.py,ro \
+    --mount=type=bind,source=scripts/test-run-antigravity-picker.sh,target=/tmp/test-run-antigravity-picker.sh,ro \
+    --mount=type=bind,source=scripts/test-antigravity-menu.sh,target=/tmp/test-antigravity-menu.sh,ro \
     chmod 0755 \
       /usr/local/bin/start-remote-dev-web \
       /usr/local/bin/start-codex-web \
@@ -90,6 +94,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
       /usr/local/bin/remote-dev-antigravity-oauth \
+      /usr/local/bin/remote-dev-antigravity-picker \
       /usr/local/bin/run-antigravity \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-menu \
@@ -107,7 +112,11 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-antigravity-oauth \
+      /usr/local/bin/remote-dev-antigravity-picker \
     && python /tmp/test-antigravity-oauth.py \
+    && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
+    && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
+    && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-antigravity-menu.sh \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-role-neutral-runtime \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
     && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
@@ -123,6 +132,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx '  source "$paths_lib"' /usr/local/bin/remote-dev-antigravity \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
+    && grep -Fx 'readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker' /usr/local/bin/run-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
