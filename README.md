@@ -234,7 +234,7 @@ For the generic or TrueNAS Compose file, set:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Existing `v0.1.x` deployments may keep `CODEX_IMAGE` and `ghcr.io/experience83/codex-remote-dev`. `REMOTE_DEV_IMAGE` takes precedence when both variables are set, and both package names identify the same promoted edge/stable digest. The compatibility names will not be removed before `v0.2.0`; they do not preserve the removed experimental data layout.
+The only published GHCR runtime package is `ghcr.io/experience83/remote-dev`. The legacy `CODEX_IMAGE` variable remains accepted throughout `v0.1.x` as a configuration fallback, but it should point to the canonical `remote-dev` package. The old remote package `ghcr.io/experience83/codex-remote-dev` is retired and may be deleted from GHCR after this change is merged.
 
 For a source-commit-addressed deployment, use the `sha-...` tag shown by the edge workflow and package page:
 
