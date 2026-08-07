@@ -31,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Implemented fixed `REMOTE_DEV_ROLE=launcher|codex|shell` resolution with `antigravity` and `claude` reserved.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
-- Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge and stable tags are promoted from the same scanned digest as their `codex-remote-dev` compatibility tags, while PR candidates are canonical-only.
+- Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge, stable and PR-candidate publication use only this runtime package after exact-digest scanning.
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.
 - Stateless `remote-dev-launcher` page with fixed Codex navigation, optional Basic authentication, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
 - Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
@@ -49,7 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed the edge channel from private validation to public experimental development testing.
 - Updated project documentation to state clearly that no stable release exists yet.
 - Changed the generic and TrueNAS Compose defaults to `ghcr.io/experience83/remote-dev:edge-amd64` through the canonical `REMOTE_DEV_IMAGE` variable.
-- Retained `CODEX_IMAGE` as a lower-priority compatibility fallback throughout `v0.1.x`; it will not be removed before `v0.2.0`.
+- Retained `CODEX_IMAGE` as a lower-priority compatibility fallback throughout `v0.1.x`; it will not be removed before `v0.2.0`, but registry values should use the canonical `ghcr.io/experience83/remote-dev` package.
+- Retired the legacy `ghcr.io/experience83/codex-remote-dev` GHCR package before the first stable release so publication maintains only `remote-dev-base` and the canonical `remote-dev` runtime package.
 - Updated the pinned Codex CLI from `0.144.4` to stable `0.145.0`.
 - Updated the reviewed stable toolchain to mise `2026.7.14`, Node.js `24.18.0` LTS, npm `12.0.1` and uv `0.11.32`; Python `3.14.6`, GitHub CLI `2.96.0` and ttyd `1.7.7` were already current.
 - Changed stable upstream checks from weekly to daily and made the update branch reusable.
@@ -69,8 +70,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
 - Changed `start-codex-web`, `codex-menu` and `codex-doctor` into compatibility wrappers around the canonical role-neutral implementation while retaining legacy `START_MODE=menu|codex|shell` behavior.
 - Limited persistent-state hardening for `REMOTE_DEV_ROLE=shell` to common GitHub, Git and SSH state so that the neutral shell role does not inspect or modify Codex state.
-- Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining legacy aliases through `v0.1.x`.
-- Changed PR candidate publication to use the canonical `remote-dev` package; edge and stable publication retain legacy package tags without rebuilding.
+- Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining local and variable compatibility aliases through `v0.1.x`.
+- Changed all public runtime publication paths to use the canonical `remote-dev` package only; legacy package tags are no longer created.
 - Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
 - Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available through a separate file-backed generic Compose override without affecting the independently authenticated Codex terminal.
@@ -101,7 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
-- Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical and compatibility edge/stable tag resolves to that digest.
+- Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical edge/stable tag resolves to that digest.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
