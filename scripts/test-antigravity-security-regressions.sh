@@ -19,14 +19,31 @@ cp -R -- "$ANTIGRAVITY_LIB_SOURCE" "$ANTIGRAVITY_LIB_DIR"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 expect_failure() { if "$@"; then fail "command unexpectedly succeeded: $*"; fi; }
 
+antigravity_lib_files=(
+  "$ANTIGRAVITY_LIB_SOURCE/core.sh"
+  "$ANTIGRAVITY_LIB_SOURCE/integrity.sh"
+  "$ANTIGRAVITY_LIB_SOURCE/manifest.sh"
+  "$ANTIGRAVITY_LIB_SOURCE/installer.sh"
+  "$ANTIGRAVITY_LIB_SOURCE/commands.sh"
+)
+for scan_source in "$MANAGER_SOURCE" "${antigravity_lib_files[@]}"; do
+  [[ -f "$scan_source" && -r "$scan_source" ]] \
+    || fail "override scan source is unavailable: $scan_source"
+done
+
 for forbidden in \
   REMOTE_DEV_ANTIGRAVITY_TESTING \
   REMOTE_DEV_ANTIGRAVITY_EVIDENCE \
   REMOTE_DEV_ANTIGRAVITY_BIN_DIR \
   REMOTE_DEV_ANTIGRAVITY_STATE_DIR \
   REMOTE_DEV_ANTIGRAVITY_VENDOR_STATE_DIR; do
-  grep -Fq "$forbidden" "$MANAGER_SOURCE" "$ANTIGRAVITY_LIB_SOURCE"/*.sh \
-    && fail "production manager exposes test override: $forbidden"
+  scan_status=0
+  grep -Fq "$forbidden" "$MANAGER_SOURCE" "${antigravity_lib_files[@]}" || scan_status=$?
+  if (( scan_status == 0 )); then
+    fail "production manager exposes test override: $forbidden"
+  fi
+  (( scan_status == 1 )) \
+    || fail "override scan for $forbidden could not read its sources (grep status $scan_status)"
 done
 grep -Fq 'source == "official-google-installer"' "$ANTIGRAVITY_LIB_SOURCE/manifest.sh" \
   || fail "schema-2 manifest does not require official-source provenance"
@@ -40,6 +57,10 @@ grep -Fq -- '--no-new-privs' "$ANTIGRAVITY_LIB_SOURCE/integrity.sh" \
   || fail "official installer sandbox does not set no-new-privileges"
 grep -Fq 'cd -- "$working_directory"' "$ANTIGRAVITY_LIB_SOURCE/integrity.sh" \
   || fail "official installer execution does not enter its isolated working directory"
+grep -Fq 'local sandbox_root="$cleanup_root/sandbox"' "$ANTIGRAVITY_LIB_SOURCE/commands.sh" \
+  || fail "installer sandbox is no longer rooted directly under cleanup_root"
+grep -Fq 'local stage_bin="$sandbox_root/bin"' "$ANTIGRAVITY_LIB_SOURCE/commands.sh" \
+  || fail "installer staging bin is no longer directly under sandbox_root"
 grep -Fq 'local inspection_dir="$cleanup_root/inspection"' "$ANTIGRAVITY_LIB_SOURCE/commands.sh" \
   || fail "inspection captures are not outside the vendor-writable sandbox"
 
@@ -77,6 +98,7 @@ while (( $# )); do
     *) shift ;;
   esac
 done
+[[ -n "$output" ]] || { echo 'fixture curl received no output path' >&2; exit 2; }
 cp -- "${REMOTE_DEV_TEST_INSTALLER_FIXTURE:?}" "$output"
 printf '%s\n%s\n%s\n%s\n' \
   '200' \
@@ -302,7 +324,7 @@ test "$(jq -r '.version' "$MANIFEST")" = 2.1.0 \
   || fail "large compatible candidate was not published"
 
 # When tests execute as root, changed installer code runs as nobody, cannot read
-# root-private state and cannot plant capture symlinks for later root opens.
+# root-private state or create a symlink at the root-owned capture path.
 if [[ "$(id -u)" == 0 ]]; then
   private_secret="$temporary/root-private-secret"
   forbidden_read_marker="$temporary/forbidden-read"
@@ -310,13 +332,14 @@ if [[ "$(id -u)" == 0 ]]; then
   printf '%s\n' secret >"$private_secret"
   chmod 0600 "$private_secret"
   installer_isolated="$temporary/installer-isolated"
-  prelude="if [[ \"\${1:-}\" == --dir ]]; then ln -s '$private_secret' \"\$2/../inspection/readelf.out\" 2>/dev/null || true; fi; if cat '$private_secret' >/dev/null 2>&1; then touch '$forbidden_read_marker'; fi; touch '$forbidden_write_marker' 2>/dev/null || true"
+  prelude="if [[ \"\${1:-}\" == --dir ]] && ln -s '$private_secret' \"\$2/../../inspection/readelf.out\" 2>/dev/null; then echo capture-symlink-planted >&2; exit 89; fi; if cat '$private_secret' >/dev/null 2>&1; then touch '$forbidden_read_marker'; fi; touch '$forbidden_write_marker' 2>/dev/null || true"
   make_installer "$installer_isolated" "$payload_v2" "$prelude"
   export REMOTE_DEV_TEST_INSTALLER_FIXTURE="$installer_isolated"
-  bash "$MANAGER" update --yes >/dev/null
+  bash "$MANAGER" update --yes >/dev/null \
+    || fail "installer could create a symlink in the root-owned capture directory"
   test ! -e "$forbidden_read_marker" || fail "installer read root-private state"
   test ! -e "$forbidden_write_marker" || fail "installer wrote outside its private staging subtree"
-  test "$(<"$private_secret")" = secret || fail "root capture followed an installer-planted symlink"
+  test "$(<"$private_secret")" = secret || fail "root-private capture target changed during validation"
 fi
 
 printf 'Antigravity admission and installer-isolation security regressions: OK\n'

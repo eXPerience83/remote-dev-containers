@@ -111,18 +111,20 @@ cmp -s "$installer_fixture" "$destination" \
   || fail "same-origin redirect final URL was not recorded"
 
 # A chain that leaves the official origin and later returns is rejected before
-# the off-origin request is made.
+# the off-origin request is made, specifically by the origin validator.
 export REMOTE_DEV_TEST_REDIRECT_MODE=off-origin-return
 export REMOTE_DEV_TEST_OFF_ORIGIN_CALLED="$temporary/off-origin-called"
 rm -f -- "$REMOTE_DEV_TEST_OFF_ORIGIN_CALLED"
-if (
+rejection_output=""
+rejection_status=0
+rejection_output="$(
   download_installer \
     "$temporary/rejected-install.sh" \
-    "$temporary/rejected.metadata" \
-    >/dev/null 2>&1
-); then
-  fail "off-origin intermediate redirect was accepted"
-fi
+    "$temporary/rejected.metadata" 2>&1
+)" || rejection_status=$?
+(( rejection_status != 0 )) || fail "off-origin intermediate redirect was accepted"
+grep -Fq 'left the reviewed Google origin' <<<"$rejection_output" \
+  || fail "off-origin redirect was rejected for an unexpected reason: $rejection_output"
 [[ ! -e "$REMOTE_DEV_TEST_OFF_ORIGIN_CALLED" ]] \
   || fail "downloader contacted an off-origin intermediate redirect"
 
