@@ -18,7 +18,7 @@ URL_PATTERN = re.compile(r"^ws://127\.0\.0\.1:(?P<port>[0-9]{1,5})$")
 def process_error(process: subprocess.Popen[str], message: str) -> RuntimeError:
     detail = ""
     if process.poll() is not None and process.stderr is not None:
-        detail = process.stderr.read().strip()
+        detail = process.stderr.read(4096).strip()
     if detail:
         message = f"{message}: {detail}"
     return RuntimeError(message)
