@@ -164,7 +164,7 @@ All stack services use the same image reference. Built-in components are updated
 
 A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate role readiness without requiring user login.
 
-The `codex-remote-dev` package and `CODEX_IMAGE` variable remain image-name compatibility aliases through `v0.1.x`; they do not preserve the removed Codex-specific data layout.
+`ghcr.io/experience83/remote-dev` is the sole published runtime package. The legacy `CODEX_IMAGE` variable remains a configuration fallback through `v0.1.x`, but it should point to the canonical package; the old `codex-remote-dev` GHCR package is retired. Local compatibility tags may still use the old name without creating a registry package.
 
 ## Validation contract
 
