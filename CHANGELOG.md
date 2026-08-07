@@ -102,7 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
-- Publication workflows scan exact pushed digests before promoting public tags and verify that every canonical edge/stable tag resolves to that digest.
+- Publication workflows scan exact pushed digests before promoting public tags; `remote-dev` runtime tags are verified against `REMOTE_DEV_DIGEST`, while `remote-dev-base` promotion metadata is checked separately against `BASE_DIGEST`.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
