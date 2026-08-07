@@ -62,15 +62,13 @@ install_or_update() {
   local staged_manifest="$cleanup_root/install.json"
   local inspection_dir="$cleanup_root/inspection"
 
-  # Only the isolated home, destination and installer are writable by the
-  # vendor process. Capture paths stay root-owned so root redirections cannot
-  # follow a symlink planted by changed installer or candidate code.
+  # Keep the sandbox service-owned while network bytes are downloaded and
+  # statically validated. Transfer only at the first unprivileged execution;
+  # capture paths remain root-owned outside the vendor-writable subtree.
   install -d -m 0700 "$sandbox_root" "$inspection_dir"
   install -d -m 0700 "$isolated_home" "$stage_bin"
-  chown -R "$sandbox_uid:$sandbox_gid" "$sandbox_root"
-
   download_installer "$installer_path"
-  chown "$sandbox_uid:$sandbox_gid" "$installer_path"
+  chown -R "$sandbox_uid:$sandbox_gid" "$sandbox_root"
 
   # Keep the root-owned staging ancestors private. The isolated user receives
   # only one inherited descriptor for its own sandbox subtree.
