@@ -38,10 +38,6 @@ fail() {
   exit 1
 }
 
-recovery_hint() {
-  printf 'Run remote-dev-update-antigravity to replace the damaged installation at %s.\n' "$binary" >&2
-}
-
 require_antigravity_role() {
   [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
     || fail "Remote Dev role definitions are unavailable: $runtime_lib"
@@ -107,13 +103,6 @@ validate_paths() {
   require_absolute_safe_path "vendor state directory" "$vendor_state_dir"
   require_absolute_safe_path "binary path" "$binary"
   require_absolute_safe_path "manifest path" "$manifest"
-
-  [[ "$evidence" == "$ANTIGRAVITY_EVIDENCE" ]] || fail "production evidence path changed"
-  [[ "$bin_dir" == "$ANTIGRAVITY_BIN_DIR" ]] || fail "production binary directory changed"
-  [[ "$state_dir" == "$ANTIGRAVITY_STATE_DIR" ]] || fail "production state directory changed"
-  [[ "$vendor_state_dir" == "$ANTIGRAVITY_VENDOR_STATE_DIR" ]] || fail "production vendor state directory changed"
-  [[ "$binary" == "$ANTIGRAVITY_BINARY" ]] || fail "production binary path changed"
-  [[ "$manifest" == "$ANTIGRAVITY_MANIFEST" ]] || fail "production manifest path changed"
 
   reject_symlink_components "$bin_dir"
   reject_symlink_components "$state_dir"

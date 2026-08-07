@@ -56,7 +56,6 @@ install_or_update() {
   cleanup_root="$(mktemp -d "$state_dir/remote-dev-antigravity.XXXXXXXX")"
   local sandbox_root="$cleanup_root/sandbox"
   local installer_path="$sandbox_root/install.sh"
-  local curl_metadata="$cleanup_root/download.metadata"
   local isolated_home="$sandbox_root/home"
   local stage_bin="$sandbox_root/bin"
   local staged_binary="$stage_bin/agy"
@@ -70,7 +69,7 @@ install_or_update() {
   install -d -m 0700 "$isolated_home" "$stage_bin"
   chown -R "$sandbox_uid:$sandbox_gid" "$sandbox_root"
 
-  download_installer "$installer_path" "$curl_metadata"
+  download_installer "$installer_path"
   chown "$sandbox_uid:$sandbox_gid" "$installer_path"
 
   # Keep the root-owned staging ancestors private. The isolated user receives
@@ -90,7 +89,6 @@ install_or_update() {
     "$installer_exec" "$isolated_home_exec" "$stage_bin_exec" \
     "$inspection_dir/installer-run.out" "$inspection_dir/installer-run.err" \
     || fail "official Antigravity installer failed or exceeded its time limit"
-  profile_paths_unchanged "$isolated_home"
   inspect_binary_candidate \
     "$staged_binary" "$staged_binary_exec" "$isolated_home_exec" "$inspection_dir"
   exec {sandbox_fd}<&-

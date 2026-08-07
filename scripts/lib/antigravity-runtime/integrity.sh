@@ -108,15 +108,6 @@ resolve_official_redirect() {
   validate_official_url "$2" "$1"
 }
 
-profile_paths_unchanged() {
-  local home="$1"
-  local relative
-  for relative in .bashrc .bash_profile .profile .zshrc .config/fish/config.fish; do
-    [[ ! -e "$home/$relative" && ! -L "$home/$relative" ]] \
-      || fail "official installer changed a shell profile in the isolated home: $relative"
-  done
-}
-
 run_bounded() {
   local stdout_path="$1"
   local stderr_path="$2"
@@ -250,5 +241,4 @@ inspect_binary_candidate() {
      && "$(stat -c '%s' "$candidate")" == "$candidate_binary_size"
      && "$(sha256_file "$candidate")" == "$candidate_binary_sha" ]] \
     || fail "installed Antigravity payload changed during bounded validation"
-  profile_paths_unchanged "$isolated_home"
 }

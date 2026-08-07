@@ -103,8 +103,7 @@ export REMOTE_DEV_TEST_INSTALLER_FIXTURE="$installer_fixture"
 # hop at a time and the final installer bytes are retained.
 export REMOTE_DEV_TEST_REDIRECT_MODE=same-origin
 destination="$temporary/downloaded-install.sh"
-metadata="$temporary/download.metadata"
-download_installer "$destination" "$metadata"
+download_installer "$destination"
 cmp -s "$installer_fixture" "$destination" \
   || fail "same-origin redirect did not preserve the installer"
 [[ "$candidate_installer_final_url" == 'https://antigravity.google/cli/current.sh' ]] \
@@ -118,9 +117,7 @@ rm -f -- "$REMOTE_DEV_TEST_OFF_ORIGIN_CALLED"
 rejection_output=""
 rejection_status=0
 rejection_output="$(
-  download_installer \
-    "$temporary/rejected-install.sh" \
-    "$temporary/rejected.metadata" 2>&1
+  download_installer "$temporary/rejected-install.sh" 2>&1
 )" || rejection_status=$?
 (( rejection_status != 0 )) || fail "off-origin intermediate redirect was accepted"
 grep -Fq 'left the reviewed Google origin' <<<"$rejection_output" \

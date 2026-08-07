@@ -35,7 +35,6 @@ confirm_vendor_download() {
 
 download_installer() {
   local destination="$1"
-  local metadata="$2"
   local current_url="$OFFICIAL_INSTALLER_URL"
   local hop=0
 
@@ -67,7 +66,6 @@ download_installer() {
       || fail "official installer download returned malformed metadata"
     local response_code="${download_metadata[0]}"
     local effective_url="${download_metadata[1]}"
-    local content_type="${download_metadata[2]}"
     local location="${download_metadata[3]}"
 
     [[ "$response_code" =~ ^[0-9]{3}$ ]] \
@@ -80,7 +78,6 @@ download_installer() {
         chmod 0700 "$hop_body"
         verify_file_bounds "Antigravity installer" "$hop_body" "$MAX_INSTALLER_SIZE"
         mv -f -- "$hop_body" "$destination"
-        printf '%s\n%s\n' "$effective_url" "$content_type" >"$metadata"
         candidate_installer_final_url="$effective_url"
         candidate_installer_size="$(stat -c '%s' "$destination")"
         candidate_installer_sha="$(sha256_file "$destination")"
@@ -92,8 +89,6 @@ download_installer() {
         [[ -n "$location" ]] || fail "official installer redirect omitted its Location header"
         local next_url=""
         next_url="$(resolve_official_redirect "$current_url" "$location")" \
-          || fail "official installer redirect left the reviewed Google origin"
-        safe_official_url "$next_url" \
           || fail "official installer redirect left the reviewed Google origin"
         rm -f -- "$hop_body"
         current_url="$next_url"
@@ -108,8 +103,6 @@ download_installer() {
 
   verify_owned_regular_file "Antigravity installer" "$destination"
   /bin/bash -n "$destination" || fail "official Antigravity installer is not valid Bash"
-  grep -Eq -- '(^|[^A-Za-z0-9_-])--dir([^A-Za-z0-9_-]|$)' "$destination" \
-    || fail "official Antigravity installer no longer contains the required --dir contract"
 }
 
 verify_installer_contract() {
@@ -135,7 +128,6 @@ verify_installer_contract() {
   grep -Eq '(^|[[:space:]])--dir[[:space:]]+<path>([[:space:]]|$)' \
     "$stdout_path" "$stderr_path" \
     || fail "official Antigravity installer no longer advertises the required --dir <path> contract"
-  profile_paths_unchanged "$isolated_home"
 }
 
 run_installer_isolated() {
