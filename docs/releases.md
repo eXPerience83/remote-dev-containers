@@ -4,7 +4,7 @@
 
 `edge` is the public experimental development channel for the current `main` branch.
 
-The **Publish edge AMD64** workflow runs automatically after relevant image, runtime or version changes merge into `main`. It can also be started manually from `main`. Each run builds and scans one final Remote Dev digest and promotes it to canonical `remote-dev` tags and the `codex-remote-dev` compatibility tags. The compatibility package is not a second build and does not duplicate immutable image content.
+The **Publish edge AMD64** workflow runs automatically after relevant image, runtime or version changes merge into `main`. It can also be started manually from `main`. Each run builds and scans one final Remote Dev digest and promotes it only to canonical `remote-dev` tags. The retired `codex-remote-dev` GHCR package is no longer published.
 
 Generic and TrueNAS Compose use `REMOTE_DEV_IMAGE`, defaulting to:
 
@@ -30,7 +30,7 @@ REMOTE_DEV_DATA_ROOT/
 
 The parent data root is never mounted wholesale. Operators must run the host-side data-layout preflight before deployment. Bind mounts also request `create_host_path: false` as defense-in-depth, but release readiness does not assume that every Compose implementation enforces that option.
 
-The data layout has no compatibility alias or automatic migration because no stable release or external installed base exists yet. Image-name compatibility remains separate: `CODEX_IMAGE` and the `codex-remote-dev` package continue throughout `v0.1.x`, with `REMOTE_DEV_IMAGE` taking precedence.
+The data layout has no compatibility alias or automatic migration because no stable release or external installed base exists yet. Image-variable compatibility remains separate: `CODEX_IMAGE` continues throughout `v0.1.x` as a lower-priority fallback, but it should point to the canonical `remote-dev` package. The legacy `codex-remote-dev` GHCR package is retired before the first stable release.
 
 Public container-registry images can be pulled without authentication. The `sha-...` tag identifies the source commit, but container tags remain mutable in GHCR. Record and deploy the published `sha256:...` digest when immutable reproduction is required.
 
@@ -60,7 +60,7 @@ Both publication workflows push candidates by digest, scan those exact digests a
 Before creating a stable version tag:
 
 1. The AMD64 build, runtime smoke tests and fixable-critical vulnerability gate pass on `main`.
-2. Canonical and compatibility image tags resolve to the same tested digest.
+2. Canonical `remote-dev` runtime tags being promoted resolve to the tested `REMOTE_DEV_DIGEST`, and `remote-dev-base` promotion metadata separately matches the tested `BASE_DIGEST`.
 3. The stack has been deployed on TrueNAS from an exact published digest.
 4. Docker reports launcher and Codex using the same image digest.
 5. The TrueNAS portal opens the launcher on port 7680.
@@ -88,6 +88,6 @@ Do not depend exclusively on moving tags. Record the tested image digest, its `s
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
-and recreate all stack services. Existing `v0.1.x` deployments may continue setting the image-name alias `CODEX_IMAGE` when `REMOTE_DEV_IMAGE` is unset; both image references identify the same promoted digest.
+and recreate all stack services. Existing `v0.1.x` deployments may continue setting the image-name alias `CODEX_IMAGE` when `REMOTE_DEV_IMAGE` is unset, but the value should use the canonical `ghcr.io/experience83/remote-dev` package.
 
 The canonical data layout is independent from the image tag. Rollback must not broaden mounts or copy state automatically. Keep a backup or snapshot before manually moving experimental data into the new paths.

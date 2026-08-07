@@ -18,7 +18,7 @@
 ## Current implementation
 
 - The public canonical edge package is `ghcr.io/experience83/remote-dev`; generic and TrueNAS Compose select it through `REMOTE_DEV_IMAGE`.
-- The `codex-remote-dev` package and `CODEX_IMAGE` remain lower-priority image-name compatibility aliases throughout `v0.1.x` and identify the same promoted edge/stable digest.
+- `ghcr.io/experience83/remote-dev` is the only published runtime package. The legacy `CODEX_IMAGE` variable remains a lower-priority configuration fallback throughout `v0.1.x`, but it should resolve to the canonical package; the old `codex-remote-dev` GHCR package is retired.
 - Generic and TrueNAS Compose start a `launcher` service on primary port 7680 and the isolated `codex` terminal service on port 7681 from the same image reference.
 - The launcher uses fixed validated navigation, no password by default, origin checking and CSP; it does not proxy terminal traffic or mount agent state.
 - Persistent data uses one canonical `REMOTE_DEV_DATA_ROOT` contract with separate `workspaces`, per-role `state` and `secrets` boundaries. The launcher remains mount-free.

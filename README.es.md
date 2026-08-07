@@ -192,7 +192,7 @@ REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
-Los despliegues `v0.1.x` pueden conservar `CODEX_IMAGE` y `ghcr.io/experience83/codex-remote-dev`. Los nombres de compatibilidad no se eliminarán antes de `v0.2.0`, pero no conservan la estructura de datos experimental retirada.
+El único package runtime publicado en GHCR es `ghcr.io/experience83/remote-dev`. La variable heredada `CODEX_IMAGE` continúa aceptándose durante `v0.1.x` como fallback de configuración, pero debe apuntar al package canónico `remote-dev`. El antiguo package remoto `ghcr.io/experience83/codex-remote-dev` está retirado y puede eliminarse de GHCR una vez fusionado este cambio.
 
 Para fijar un commit o digest:
 
