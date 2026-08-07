@@ -232,7 +232,7 @@ ${status_summary}
 1) Start Antigravity
 2) Resume an Antigravity session
 3) Install Antigravity from Google
-4) Update to the reviewed Antigravity version
+4) Update Antigravity from Google
 5) Sign in to GitHub CLI
 6) Run diagnostics
 7) Open a login shell

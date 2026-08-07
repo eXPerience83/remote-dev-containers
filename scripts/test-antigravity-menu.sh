@@ -36,7 +36,7 @@ cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == status && "${2:-}" == --menu ]]
-printf '%s\n' 'Antigravity: 1.1.10 (runtime installed)'
+printf '%s\n' 'Antigravity: 1.1.10 (official and reviewed)'
 MANAGER
 
 for command in remote-dev-install-antigravity remote-dev-update-antigravity; do
@@ -112,6 +112,7 @@ mapfile -t calls <"$invocations"
 grep -Fxq '1) Start Antigravity' "$output"
 grep -Fxq '2) Resume an Antigravity session' "$output"
 grep -Fxq '3) Install Antigravity from Google' "$output"
+grep -Fxq '4) Update Antigravity from Google' "$output"
 grep -Fxq '8) Exit this tmux session' "$output"
 if grep -EFiq 'continue the last|continue latest|last conversation' "$output"; then
   echo 'ERROR: menu still exposes a latest-conversation shortcut' >&2

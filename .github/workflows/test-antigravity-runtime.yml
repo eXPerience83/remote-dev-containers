@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/test-antigravity-runtime.yml"
       - "scripts/remote-dev-antigravity.sh"
+      - "scripts/lib/antigravity-runtime/**"
       - "scripts/remote-dev-install-antigravity.sh"
       - "scripts/remote-dev-update-antigravity.sh"
       - "scripts/remote-dev-antigravity-oauth.py"
@@ -12,6 +13,8 @@ on:
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
       - "scripts/test-antigravity-security-regressions.sh"
+      - "scripts/test-antigravity-redirects.sh"
+      - "scripts/test-antigravity-repair-download-hardening.sh"
       - "scripts/test-antigravity-staging-wrappers.sh"
       - "scripts/test-antigravity-oauth.py"
   workflow_dispatch:
@@ -39,12 +42,15 @@ jobs:
         run: |
           bash -n \
             scripts/remote-dev-antigravity.sh \
+            scripts/lib/antigravity-runtime/*.sh \
             scripts/remote-dev-install-antigravity.sh \
             scripts/remote-dev-update-antigravity.sh \
             scripts/run-antigravity.sh \
             scripts/secure-persistent-state.sh \
             scripts/test-antigravity-runtime.sh \
             scripts/test-antigravity-security-regressions.sh \
+            scripts/test-antigravity-redirects.sh \
+            scripts/test-antigravity-repair-download-hardening.sh \
             scripts/test-antigravity-staging-wrappers.sh
           python -m py_compile \
             scripts/remote-dev-antigravity-oauth.py \
@@ -58,5 +64,7 @@ jobs:
             scripts/run-antigravity.sh
           bash scripts/test-antigravity-runtime.sh
           bash scripts/test-antigravity-security-regressions.sh
+          bash scripts/test-antigravity-redirects.sh
+          bash scripts/test-antigravity-repair-download-hardening.sh
           bash scripts/test-antigravity-staging-wrappers.sh
           python scripts/test-antigravity-oauth.py

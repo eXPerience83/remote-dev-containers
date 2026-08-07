@@ -36,21 +36,23 @@ fi
 binary="$("$manager" path)"
 if [[ ! -f "$binary" || -L "$binary" || ! -x "$binary" ]]; then
   cat >&2 <<EOF
-ERROR: Antigravity is not installed at the canonical path:
+ERROR: Antigravity is absent, damaged or incomplete at the canonical path:
   $binary
-Run remote-dev-install-antigravity explicitly before launching it.
+Run remote-dev-update-antigravity to repair existing state, or
+remote-dev-install-antigravity for a first installation.
 EOF
   exit 1
 fi
 
-# This verifies the reviewed hash and version before the executable is invoked
-# for a real session. It never downloads or updates anything.
+# Verify the canonical executable against its private manifest before a real
+# session. The bounded version check uses a temporary HOME, disables vendor
+# auto-update and never contacts the installer endpoint.
 status_output=""
 status_result=0
 status_output="$("$manager" status 2>&1)" || status_result=$?
 if (( status_result != 0 )); then
   echo "ERROR: Antigravity runtime verification failed: $status_output" >&2
-  echo "Run remote-dev-update-antigravity to install the reviewed version." >&2
+  echo "Run remote-dev-update-antigravity explicitly to repair or replace the installation." >&2
   exit "$status_result"
 fi
 

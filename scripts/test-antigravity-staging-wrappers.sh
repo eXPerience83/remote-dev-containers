@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_SOURCE="$ROOT/scripts/remote-dev-install-antigravity.sh"
 UPDATE_SOURCE="$ROOT/scripts/remote-dev-update-antigravity.sh"
+COMMANDS_SOURCE="$ROOT/scripts/lib/antigravity-runtime/commands.sh"
 
 temporary="$(mktemp -d)"
 trap 'rm -rf -- "$temporary"' EXIT
@@ -60,7 +61,9 @@ mapfile -t update_args <"$record"
 test "${update_args[0]}" = update || fail "update wrapper changed the action"
 test "${update_args[1]}" = --yes || fail "update wrapper changed the argument"
 
-grep -Fq 'mktemp -d "$state_dir/remote-dev-antigravity.XXXXXXXX"'   "$ROOT/scripts/remote-dev-antigravity.sh"   || fail "canonical manager does not own the staging path"
-! grep -Fq '${TMPDIR:-/tmp}/remote-dev-antigravity'   "$ROOT/scripts/remote-dev-antigravity.sh"   || fail "canonical manager still honors caller-controlled TMPDIR"
+grep -Fq 'mktemp -d "$state_dir/remote-dev-antigravity.XXXXXXXX"' "$COMMANDS_SOURCE" \
+  || fail "canonical Antigravity commands library does not own the staging path"
+! grep -Fq '${TMPDIR:-/tmp}/remote-dev-antigravity' "$COMMANDS_SOURCE" \
+  || fail "canonical Antigravity commands library still honors caller-controlled TMPDIR"
 
 echo 'Antigravity canonical staging and wrapper regressions: OK'
