@@ -72,6 +72,7 @@ COPY scripts/remote-dev-healthcheck.sh /usr/local/bin/remote-dev-healthcheck
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
 COPY scripts/lib/remote-dev-runtime.sh /usr/local/lib/remote-dev/remote-dev-runtime.sh
 COPY scripts/lib/antigravity-paths.sh /usr/local/lib/remote-dev/antigravity-paths.sh
+COPY scripts/lib/antigravity-runtime /usr/local/lib/remote-dev/antigravity-runtime
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
@@ -108,7 +109,9 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && chmod 0644 \
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
-    && chmod 0444 /usr/local/lib/remote-dev/antigravity-paths.sh \
+    && chmod 0444 \
+      /usr/local/lib/remote-dev/antigravity-paths.sh \
+      /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-antigravity-oauth \
@@ -127,9 +130,6 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'exec /usr/local/bin/remote-dev-menu "$@"' /usr/local/bin/codex-menu \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
-    && grep -Fx 'readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh' /usr/local/bin/remote-dev-antigravity \
-    && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/remote-dev-antigravity \
-    && grep -Fx '  source "$paths_lib"' /usr/local/bin/remote-dev-antigravity \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker' /usr/local/bin/run-antigravity \
@@ -139,6 +139,18 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
     && run-codex --print-policy | grep -Fx 'Mode source: default' \
     && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
+    && printf '%s\n' 'exit 91' > /tmp/antigravity-bash-env \
+    && printf '%s\n' '#!/bin/sh' 'exit 92' > /tmp/curl \
+    && chmod 0755 /tmp/curl \
+    && /usr/bin/env \
+      BASH_ENV=/tmp/antigravity-bash-env \
+      PATH=/tmp \
+      'BASH_FUNC_curl%%=() { exit 93; }' \
+      REMOTE_DEV_ROLE=antigravity \
+      REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+      /usr/local/bin/remote-dev-antigravity status --menu \
+      | /usr/bin/grep -Fx 'Antigravity: not installed' \
+    && rm -f /tmp/antigravity-bash-env /tmp/curl \
     && test ! -e /root/.local/bin/agy \
     && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
     && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \
