@@ -1,5 +1,28 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 set -euo pipefail
+
+# The supported container executes this manager as root against canonical /root
+# state. Ignore caller shell startup hooks/functions and pin root command lookup
+# to image-owned system paths before loading the immutable runtime libraries.
+builtin unset BASH_ENV ENV
+if (( EUID == 0 )); then
+  PATH=/usr/bin:/bin
+  builtin export PATH
+  builtin hash -r
+fi
+
+# These commands are the complete external-tool contract used by the runtime
+# libraries. Remove inherited shell functions with matching names so normal
+# command dispatch cannot shadow the checked executable after startup.
+# shellcheck disable=SC2034
+readonly -a ANTIGRAVITY_RUNTIME_TOOLS=(
+  bash curl jq sha256sum stat mktemp install mv date awk sed grep dirname env
+  timeout rm chmod chown id readelf setpriv python3 cat uname
+)
+for runtime_tool in "${ANTIGRAVITY_RUNTIME_TOOLS[@]}"; do
+  builtin unset -f "$runtime_tool" 2>/dev/null || true
+done
+builtin unset runtime_tool
 
 # These declarations form the state contract consumed by the immutable
 # antigravity-runtime libraries sourced below.
@@ -44,7 +67,7 @@ for antigravity_lib in core integrity manifest installer commands; do
   # shellcheck source=/dev/null
   source "$antigravity_lib_path"
 done
-unset antigravity_lib antigravity_lib_path
+builtin unset antigravity_lib antigravity_lib_path
 
 main() {
   local command="${1:-}"

@@ -118,9 +118,12 @@ require_supported_platform() {
 }
 
 require_tools() {
-  local tool
-  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed grep dirname env timeout rm chmod chown id readelf setpriv python3; do
-    command -v "$tool" >/dev/null 2>&1 || fail "required command is missing: $tool"
+  local tool resolved
+  for tool in "${ANTIGRAVITY_RUNTIME_TOOLS[@]}"; do
+    resolved="$(builtin type -P "$tool" 2>/dev/null)" \
+      || fail "required command is missing: $tool"
+    [[ -f "$resolved" && -x "$resolved" ]] \
+      || fail "required command is not an executable file: $tool ($resolved)"
   done
 }
 

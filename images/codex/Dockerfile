@@ -139,6 +139,18 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
     && run-codex --print-policy | grep -Fx 'Mode source: default' \
     && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
+    && printf '%s\n' 'exit 91' > /tmp/antigravity-bash-env \
+    && printf '%s\n' '#!/bin/sh' 'exit 92' > /tmp/curl \
+    && chmod 0755 /tmp/curl \
+    && /usr/bin/env \
+      BASH_ENV=/tmp/antigravity-bash-env \
+      PATH=/tmp \
+      'BASH_FUNC_curl%%=() { exit 93; }' \
+      REMOTE_DEV_ROLE=antigravity \
+      REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+      /usr/local/bin/remote-dev-antigravity status --menu \
+      | /usr/bin/grep -Fx 'Antigravity: not installed' \
+    && rm -f /tmp/antigravity-bash-env /tmp/curl \
     && test ! -e /root/.local/bin/agy \
     && install -d -m 0755 /usr/share/remote-dev /usr/share/doc/codex-remote-dev \
     && ln -sfn ../remote-dev/LICENSE /usr/share/doc/codex-remote-dev/LICENSE \

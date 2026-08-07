@@ -17,8 +17,8 @@ install_or_update() {
   local assume_yes="$2"
   local previous_version="not installed"
 
-  require_supported_platform
   require_tools
+  require_supported_platform
   load_evidence
   resolve_sandbox_identity
 
