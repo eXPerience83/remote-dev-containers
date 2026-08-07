@@ -60,7 +60,7 @@ Both publication workflows push candidates by digest, scan those exact digests a
 Before creating a stable version tag:
 
 1. The AMD64 build, runtime smoke tests and fixable-critical vulnerability gate pass on `main`.
-2. All canonical tags being promoted resolve to the same tested digest.
+2. Canonical `remote-dev` runtime tags being promoted resolve to the tested `REMOTE_DEV_DIGEST`, and `remote-dev-base` promotion metadata separately matches the tested `BASE_DIGEST`.
 3. The stack has been deployed on TrueNAS from an exact published digest.
 4. Docker reports launcher and Codex using the same image digest.
 5. The TrueNAS portal opens the launcher on port 7680.
