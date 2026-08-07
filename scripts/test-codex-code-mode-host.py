@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import http.client
 import os
 import re
 import select
 import subprocess
 import time
-import urllib.error
-import urllib.request
 
 HOST = os.environ.get("CODEX_CODE_MODE_HOST", "/usr/local/bin/codex-code-mode-host")
 LISTEN_URL = "ws://127.0.0.1:0"
@@ -50,22 +49,27 @@ def wait_until_ready(process: subprocess.Popen[str], listen_url: str) -> None:
     if not (1 <= port <= 65535):
         raise RuntimeError(f"invalid code-mode host listen port: {port}")
 
-    ready_url = f"http://127.0.0.1:{port}/readyz"
     deadline = time.monotonic() + READY_TIMEOUT_SECONDS
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise process_error(process, "code-mode host exited before becoming ready")
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
         try:
-            with urllib.request.urlopen(ready_url, timeout=0.5) as response:
-                if response.status == 200:
-                    return
-                last_error = RuntimeError(f"unexpected readiness status: {response.status}")
-        except (OSError, urllib.error.URLError) as exc:
+            connection.request("GET", "/readyz")
+            response = connection.getresponse()
+            if response.status == 200:
+                response.read()
+                return
+            last_error = RuntimeError(f"unexpected readiness status: {response.status}")
+            response.read()
+        except OSError as exc:
             last_error = exc
+        finally:
+            connection.close()
         time.sleep(0.05)
 
-    raise RuntimeError(f"timed out waiting for {ready_url}: {last_error}")
+    raise RuntimeError(f"timed out waiting for code-mode host readiness: {last_error}")
 
 
 def stop_process(process: subprocess.Popen[str]) -> None:
