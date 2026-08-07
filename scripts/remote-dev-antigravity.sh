@@ -6,7 +6,7 @@ set -euo pipefail
 # to image-owned system paths before loading the immutable runtime libraries.
 builtin unset BASH_ENV ENV
 if (( EUID == 0 )); then
-  PATH=/usr/bin:/bin
+  PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin
   builtin export PATH
   builtin hash -r
 fi

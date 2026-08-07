@@ -71,7 +71,7 @@ file_identity_matches() {
 validate_official_url() {
   local value="$1"
   local base="${2:-}"
-  python3 - "$value" "$base" <<'PY'
+  python3 -I - "$value" "$base" <<'PY'
 from __future__ import annotations
 
 import sys
