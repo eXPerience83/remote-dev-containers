@@ -130,10 +130,6 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && grep -Fx 'exec /usr/local/bin/remote-dev-menu "$@"' /usr/local/bin/codex-menu \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
-    && grep -Fx 'readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh' /usr/local/bin/remote-dev-antigravity \
-    && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/remote-dev-antigravity \
-    && grep -Fx 'readonly antigravity_lib_dir=/usr/local/lib/remote-dev/antigravity-runtime' /usr/local/bin/remote-dev-antigravity \
-    && grep -Fx '  source "$paths_lib"' /usr/local/lib/remote-dev/antigravity-runtime/core.sh \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker' /usr/local/bin/run-antigravity \

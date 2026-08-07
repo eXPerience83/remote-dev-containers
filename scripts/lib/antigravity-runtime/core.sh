@@ -119,7 +119,7 @@ require_supported_platform() {
 
 require_tools() {
   local tool
-  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed grep dirname env timeout cp rm mkdir chmod chown id readelf head setpriv python3; do
+  for tool in bash curl jq sha256sum stat mktemp install mv date awk sed grep dirname env timeout rm chmod chown id readelf setpriv python3; do
     command -v "$tool" >/dev/null 2>&1 || fail "required command is missing: $tool"
   done
 }

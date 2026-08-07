@@ -6,14 +6,12 @@ set -euo pipefail
 # shellcheck disable=SC2034
 readonly \
   OFFICIAL_INSTALLER_URL="https://antigravity.google/cli/install.sh" \
-  OFFICIAL_INSTALLER_ORIGIN="https://antigravity.google" \
   MAX_INSTALLER_SIZE=$((2 * 1024 * 1024)) \
   MAX_BINARY_SIZE=$((512 * 1024 * 1024)) \
   MAX_INSTALLER_REDIRECTS=5 \
   CAPTURE_LIMIT_BLOCKS=2048
 
-# Keep canonical library paths as standalone declarations. The image build and
-# offline harnesses assert and replace these exact immutable path contracts.
+# Immutable library paths consumed before command dispatch.
 # shellcheck disable=SC2034
 readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
 # shellcheck disable=SC2034

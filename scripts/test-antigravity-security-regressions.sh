@@ -73,15 +73,12 @@ import sys
 source, destination, paths_lib, runtime_lib, antigravity_lib_dir = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
-    "readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh":
-        f"readonly paths_lib={shlex.quote(str(paths_lib))}",
-    "readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
-        f"readonly runtime_lib={shlex.quote(str(runtime_lib))}",
-    "readonly antigravity_lib_dir=/usr/local/lib/remote-dev/antigravity-runtime":
-        f"readonly antigravity_lib_dir={shlex.quote(str(antigravity_lib_dir))}",
+    "/usr/local/lib/remote-dev/antigravity-paths.sh": shlex.quote(str(paths_lib)),
+    "/usr/local/lib/remote-dev/remote-dev-runtime.sh": shlex.quote(str(runtime_lib)),
+    "/usr/local/lib/remote-dev/antigravity-runtime": shlex.quote(str(antigravity_lib_dir)),
 }.items():
     if text.count(old) != 1:
-        raise SystemExit(f"missing fixture anchor: {old}")
+        raise SystemExit(f"expected one canonical manager path: {old}")
     text = text.replace(old, new)
 destination.write_text(text, encoding="utf-8")
 PY

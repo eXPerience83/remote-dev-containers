@@ -10,7 +10,6 @@ cleanup_root="$temporary/work"
 mkdir -p "$test_bin" "$cleanup_root"
 
 readonly OFFICIAL_INSTALLER_URL="https://antigravity.google/cli/install.sh"
-readonly OFFICIAL_INSTALLER_ORIGIN="https://antigravity.google"
 readonly MAX_INSTALLER_SIZE=$((2 * 1024 * 1024))
 readonly MAX_INSTALLER_REDIRECTS=5
 readonly CAPTURE_LIMIT_BLOCKS=2048
