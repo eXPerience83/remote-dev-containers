@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 REPORT_PATH = Path("third_party/standalone-artifact-inspection.json")
-EXPECTED_COMPONENTS = frozenset({"github-cli", "codex-cli", "ttyd", "mise", "uv"})
+EXPECTED_COMPONENTS = frozenset(
+    {"github-cli", "codex-cli", "codex-code-mode-host", "ttyd", "mise", "uv"}
+)
 ARCHITECTURES = ("amd64", "arm64")
 
 
@@ -135,6 +137,25 @@ def expected_report(values: dict[str, str], lock_path: Path) -> dict[str, dict[s
                         "codex-aarch64-unknown-linux-musl.tar.gz"
                     ),
                     "asset_sha256": require_env(values, "CODEX_ARM64_SHA256"),
+                },
+            },
+        },
+        "codex-code-mode-host": {
+            "version": codex_version,
+            "architectures": {
+                "amd64": {
+                    "asset_url": (
+                        f"https://github.com/openai/codex/releases/download/{codex_version}/"
+                        "codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz"
+                    ),
+                    "asset_sha256": require_env(values, "CODEX_CODE_MODE_HOST_AMD64_SHA256"),
+                },
+                "arm64": {
+                    "asset_url": (
+                        f"https://github.com/openai/codex/releases/download/{codex_version}/"
+                        "codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz"
+                    ),
+                    "asset_sha256": require_env(values, "CODEX_CODE_MODE_HOST_ARM64_SHA256"),
                 },
             },
         },
