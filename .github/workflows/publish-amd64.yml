@@ -179,7 +179,7 @@ jobs:
             "exact stable base publication candidate:trivy-publish-base.json" \
             "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
 
-      - name: Promote one scanned digest to canonical and legacy stable tags
+      - name: Promote one scanned digest to canonical stable tags
         env:
           NAMESPACE: ${{ steps.registry.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
@@ -203,10 +203,6 @@ jobs:
             --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
             --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
             --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
-            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable" \
-            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:stable-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/codex-remote-dev:latest" \
             "$runtime_ref"
 
           promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
@@ -221,16 +217,14 @@ jobs:
             exit 1
           fi
 
-          for package in remote-dev codex-remote-dev; do
-            for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do
-              tag_ref="ghcr.io/${NAMESPACE}/${package}:${tag}"
-              actual_digest="$(
-                docker buildx imagetools inspect "$tag_ref" \
-                  --format '{{json .Manifest.Digest}}' | tr -d '"'
-              )"
-              if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-                echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-                exit 1
-              fi
-            done
+          for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do
+            tag_ref="ghcr.io/${NAMESPACE}/remote-dev:${tag}"
+            actual_digest="$(
+              docker buildx imagetools inspect "$tag_ref" \
+                --format '{{json .Manifest.Digest}}' | tr -d '"'
+            )"
+            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
+              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
+              exit 1
+            fi
           done
