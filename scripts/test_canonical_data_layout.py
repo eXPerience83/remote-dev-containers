@@ -15,11 +15,13 @@ TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
 TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
+CODEX_RUNTIME_TARGET = "/root/.local/share/remote-dev/codex-runtime"
 
 EXPECTED_TARGET_SUFFIXES = {
     "codex": {
         "/workspace": "/workspaces/codex",
         "/root/.codex": "/state/codex/agent",
+        CODEX_RUNTIME_TARGET: "/state/codex/runtime",
         "/root/.config/gh": "/state/codex/gh",
         "/root/.config/git": "/state/codex/git",
         "/root/.ssh": "/state/codex/ssh",
@@ -139,6 +141,16 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
 
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {role} environment missing")
+        if role == "codex":
+            require(
+                environment.get("REMOTE_DEV_CODEX_RUNTIME_ROOT") == CODEX_RUNTIME_TARGET,
+                f"{path}: Codex runtime root must use the isolated mount",
+            )
+        else:
+            require(
+                "REMOTE_DEV_CODEX_RUNTIME_ROOT" not in environment,
+                f"{path}: Codex runtime state leaked into Antigravity environment",
+            )
         if truenas:
             require("WEB_PASSWORD_FILE" not in environment, f"{path}: {role} file password remains")
             require(
@@ -152,6 +164,10 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     require(
         all_sources["codex"].isdisjoint(all_sources["antigravity"]),
         f"{path}: agent services share persistent sources",
+    )
+    require(
+        CODEX_RUNTIME_TARGET not in volume_map(services["antigravity"]),
+        f"{path}: Antigravity can see Codex runtime state",
     )
 
     if truenas:
@@ -213,8 +229,8 @@ def validate_sources() -> None:
     require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
     require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
-    require(generic_text.count("create_host_path: false") == 13, "generic bind protection count")
-    require(truenas_text.count("create_host_path: false") == 12, "TrueNAS bind protection count")
+    require(generic_text.count("create_host_path: false") == 14, "generic bind protection count")
+    require(truenas_text.count("create_host_path: false") == 13, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     require("--password-source" in preflight_text, "password source preflight option missing")
     require("\n      WEB_PASSWORD_FILE:" not in truenas_text, "TrueNAS home mode still uses password files")
@@ -223,6 +239,7 @@ def validate_sources() -> None:
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
+        "state/codex/runtime",
         "secrets/codex/web_password.txt",
         "workspaces/antigravity",
         "state/antigravity/bin",
