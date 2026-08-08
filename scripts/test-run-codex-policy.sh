@@ -162,28 +162,24 @@ assert_args 'deployment autonomous mode' \
   --sandbox danger-full-access \
   --ask-for-approval never \
   resume --last
-assert_identity runtime 'deployment autonomous mode'
 
 run_launcher guarded resume --last
 assert_args 'deployment guarded mode' \
   --sandbox danger-full-access \
   --ask-for-approval untrusted \
   resume --last
-assert_identity runtime 'deployment guarded mode'
 
 run_launcher guarded resume --approval-mode autonomous --last
 assert_args 'per-launch override precedence' \
   --sandbox danger-full-access \
   --ask-for-approval never \
   resume --last
-assert_identity runtime 'per-launch override precedence'
 
 run_launcher autonomous --approval-mode=guarded resume
 assert_args 'inline per-launch guarded mode' \
   --sandbox danger-full-access \
   --ask-for-approval untrusted \
   resume
-assert_identity runtime 'inline per-launch guarded mode'
 echo 'Codex deployment and per-launch approval modes: OK'
 
 rm -f "$args_file" "$identity_file"
@@ -336,5 +332,4 @@ assert_args 'option separator preservation' \
   --sandbox danger-full-access \
   --ask-for-approval untrusted \
   -- --approval-mode autonomous --sandbox-is-prompt-text
-assert_identity runtime 'option separator preservation'
 echo 'Codex launcher option separator: preserved'

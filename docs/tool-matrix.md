@@ -36,6 +36,7 @@ Every agent service receives its own narrow persistent mounts:
 | Workspace or worktree | No | Private | Private |
 | Agent authentication/configuration | No | Private | Private |
 | Agent cache/history/sessions | No | Private | Private |
+| Managed runtime packages | No | Private | Private |
 | GitHub CLI configuration | No | Private | Private |
 | Git global configuration | No | Private | Private |
 | SSH keys/configuration | No | Private | Private |
@@ -50,10 +51,12 @@ The supported deployment does not mount `/root`, `/home`, `/opt`, `/usr/local` o
 
 | Agent | Distribution in final image | Supported state |
 |---|---|---|
-| Codex CLI | Built from an official pinned release asset | Current reference implementation |
+| Codex CLI | Immutable fallback built from an official pinned release asset | Current reference implementation; explicit newer official runtime may be admitted into Codex-private state |
 | Antigravity | Not redistributed by default; explicit vendor-sourced installation is planned | Not yet supported |
 | Claude Code | Not installed or advertised | Future research path only |
 | OpenCode | Independent project based on its official image | Outside this stack |
+
+A newer Codex runtime is downloaded only through the explicit project-owned update action, is not part of the image build-time SBOM, and never replaces the image-bundled fallback. Normal startup does not download or update it.
 
 Optional agents must not be downloaded silently during launcher or container startup. Their persisted binaries, credentials and histories remain scoped to their own service.
 

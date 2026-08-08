@@ -941,20 +941,30 @@ def update_runtime(*, yes: bool) -> None:
     print(f"Bundled fallback remains {bundled}.")
 
 
+def remove_runtime_entry(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        fail(f"cannot inspect Codex runtime path for removal: {path}: {exc}")
+    if info.st_uid != expected_owner():
+        fail(f"Codex runtime path has unexpected owner: {path}")
+    if stat.S_ISDIR(info.st_mode):
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
 def remove_runtime(*, yes: bool) -> None:
     if not ROOT.exists() and not ROOT.is_symlink():
         print("Codex runtime: not installed")
         return
     confirm("Remove the optional Codex runtime and use bundled fallback?", yes=yes)
     with runtime_lock():
-        current = ROOT / "current"
-        if current.exists() or current.is_symlink():
-            real_file(current)
-            current.unlink()
+        remove_runtime_entry(ROOT / "current")
         releases = ROOT / "releases"
-        if releases.exists() or releases.is_symlink():
-            real_dir(releases)
-            shutil.rmtree(releases)
+        remove_runtime_entry(releases)
         releases.mkdir(mode=0o700)
     print("Optional Codex runtime removed; bundled fallback is active.")
 

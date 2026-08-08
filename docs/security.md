@@ -45,6 +45,7 @@ The Codex service receives only:
 ```text
 workspaces/codex               -> /workspace
 state/codex/agent              -> /root/.codex
+state/codex/runtime            -> /root/.local/share/remote-dev/codex-runtime
 state/codex/gh                 -> /root/.config/gh
 state/codex/git                -> /root/.config/git
 state/codex/ssh                -> /root/.ssh
@@ -54,6 +55,8 @@ secrets/codex/web_password.txt -> /run/secrets/web_password
 The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
 The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths, symlinks, a missing or empty password file, and password permissions broader than `0600` on POSIX hosts before deployment. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
+
+The optional Codex runtime stays separate from `CODEX_HOME` and is mounted only into the Codex service. Its updater contacts reviewed official origins only after an explicit confirmed action, verifies the release digest, package identity and bounded compatibility probes before publication, and records file identities for later local verification. Missing, damaged or modified runtime state is rejected in favor of the immutable bundled Codex fallback; launcher and Antigravity do not receive this runtime mount.
 
 The project does not automatically copy, migrate, delete or symlink experimental data. Automatic migration would risk credential exposure or ambiguous ownership. Existing experimental state must be moved or recreated manually after backup.
 

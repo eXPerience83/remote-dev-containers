@@ -289,6 +289,24 @@ class CodexRuntimeTests(unittest.TestCase):
             self.assertFalse((self.m.ROOT / "current").exists())
             self.assertEqual(list((self.m.ROOT / "releases").iterdir()), [])
 
+    def test_remove_recovers_damaged_pointer_without_following_symlink(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.m.ROOT = root / "runtime"
+            self.m.ROOT.mkdir()
+            outside = root / "outside"
+            outside.write_text("keep\n", encoding="utf-8")
+            (self.m.ROOT / "current").symlink_to(outside)
+            releases = self.m.ROOT / "releases"
+            (releases / "stale").mkdir(parents=True)
+
+            self.m.remove_runtime(yes=True)
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "keep\n")
+            self.assertFalse((self.m.ROOT / "current").exists())
+            self.assertFalse((self.m.ROOT / "current").is_symlink())
+            self.assertEqual(list(releases.iterdir()), [])
+
     def test_status_and_resolve_never_open_network(self):
         with tempfile.TemporaryDirectory() as text:
             self.m.ROOT = Path(text) / "missing-runtime"
