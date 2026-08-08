@@ -85,7 +85,10 @@ codex_policy_summary() {
 
 codex_runtime_status_summary() {
   local summary="" status=0
-  summary="$(/usr/local/bin/remote-dev-codex-runtime status --menu 2>&1)" || status=$?
+  local -a runtime_manager_command=(
+    /usr/local/bin/remote-dev-codex-runtime status --menu
+  )
+  summary="$("${runtime_manager_command[@]}" 2>&1)" || status=$?
   if [[ -n "$summary" ]]; then
     printf '%s\n' "$summary"
   else

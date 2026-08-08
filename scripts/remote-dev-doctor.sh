@@ -95,7 +95,7 @@ done
 if [[ "$role" == codex ]]; then
   check_cmd codex
   check_cmd run-codex
-  check_cmd remote-dev-codex-runtime
+  check_cmd /usr/local/bin/remote-dev-codex-runtime
 elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
@@ -124,7 +124,8 @@ fi
 if [[ "$role" == codex ]]; then
   echo
   codex_runtime_status=0
-  if remote-dev-codex-runtime status; then
+  codex_runtime_status_command=(/usr/local/bin/remote-dev-codex-runtime status)
+  if "${codex_runtime_status_command[@]}"; then
     :
   else
     codex_runtime_status=$?

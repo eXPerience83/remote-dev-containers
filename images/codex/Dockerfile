@@ -24,7 +24,6 @@ LABEL org.opencontainers.image.title="Remote Dev" \
 ENV HOME=/root \
     WORKSPACE=/workspace \
     CODEX_HOME=/root/.codex \
-    REMOTE_DEV_CODEX_RUNTIME_ROOT=/root/.local/share/remote-dev/codex-runtime \
     GIT_CONFIG_GLOBAL=/root/.config/git/config \
     WEB_BIND=0.0.0.0 \
     WEB_PORT=7681 \
@@ -151,6 +150,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /tmp/test-codex-code-mode-host.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
+    && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
     && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
@@ -220,6 +220,9 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /root/.local/share/remote-dev/antigravity \
       /root/.gemini/antigravity-cli \
     && /usr/local/bin/secure-persistent-state \
+    && if REMOTE_DEV_ROLE=codex REMOTE_DEV_CODEX_RUNTIME_ROOT=/workspace /usr/local/bin/secure-persistent-state >/dev/null 2>&1; then \
+      echo 'unsafe Codex runtime root was accepted' >&2; exit 1; \
+    fi \
     && REMOTE_DEV_ROLE=antigravity /usr/local/bin/secure-persistent-state \
     && REMOTE_DEV_ROLE=launcher remote-dev-doctor | grep -Fx 'Role: launcher' \
     && REMOTE_DEV_ROLE=shell remote-dev-doctor | grep -Fx 'Role: shell' \

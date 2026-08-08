@@ -89,7 +89,7 @@ La interfaz de Codex también ofrece `/permissions`. Ese comando modifica el per
 
 ### Actualizaciones explícitas del runtime de Codex
 
-El `/usr/local/bin/codex` probado con la imagen permanece inmutable. Desde el menú de Codex o mediante `remote-dev-codex-runtime update`, un administrador puede instalar explícitamente un paquete compatible más nuevo desde la release oficial de Codex de OpenAI. La acción de actualización pide confirmación antes de la primera petición de red del actualizador.
+El `/usr/local/bin/codex` probado con la imagen permanece inmutable. Desde el menú de Codex o mediante `remote-dev-codex-runtime install` / `remote-dev-codex-runtime update`, un administrador puede instalar explícitamente un paquete compatible más nuevo desde la release oficial de Codex de OpenAI. Ambos comandos utilizan la misma ruta de admisión acotada y piden confirmación antes de la primera petición de red del actualizador. `--yes` es la forma explícita no interactiva para `install`, `update` y `remove`.
 
 Un paquete más nuevo admitido aparece como **fuente oficial; revisión de Remote Dev pendiente**. Eso significa que han pasado las comprobaciones de origen, digest de release, identidad del paquete y compatibilidad acotada, mientras que Remote Dev todavía no ha revisado ni probado en despliegue real esa release exacta como parte de una build de imagen. El estado opcional dañado o modificado localmente se rechaza, y un runtime igual o más antiguo nunca sustituye al Codex incluido.
 

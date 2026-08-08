@@ -104,7 +104,7 @@ The upstream Codex TUI also exposes `/permissions`. That command changes the act
 
 ### Explicit Codex runtime updates
 
-The image-tested `/usr/local/bin/codex` remains immutable. From the Codex menu or with `remote-dev-codex-runtime update`, an administrator may explicitly install a newer compatible package from OpenAI's official Codex release. The update action asks for confirmation before the first updater network request.
+The image-tested `/usr/local/bin/codex` remains immutable. From the Codex menu or with `remote-dev-codex-runtime install` / `remote-dev-codex-runtime update`, an administrator may explicitly install a newer compatible package from OpenAI's official Codex release. Both commands use the same bounded admission path and ask for confirmation before the first updater network request. `--yes` is the explicit non-interactive form for `install`, `update` and `remove`.
 
 A newer admitted package is shown as **official source; Remote Dev review pending**. That means origin, release digest, package identity and bounded compatibility checks passed, while Remote Dev has not yet reviewed and deployment-tested that exact release as part of an image build. Damaged or locally modified optional state is rejected, and an equal/older optional runtime never shadows the bundled CLI.
 

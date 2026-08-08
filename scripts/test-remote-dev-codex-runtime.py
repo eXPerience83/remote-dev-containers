@@ -59,6 +59,18 @@ class CodexRuntimeTests(unittest.TestCase):
             ],
         }
 
+    def latest_asset_from(self, data):
+        asset = self.asset()
+        with mock.patch.object(self.m, "opener") as opener, mock.patch.object(
+            self.m, "target", return_value=asset["target"]
+        ):
+            response = mock.MagicMock()
+            response.__enter__.return_value = response
+            response.geturl.return_value = self.m.LATEST_URL
+            response.read.return_value = json.dumps(data).encode()
+            opener.return_value.open.return_value = response
+            return self.m.latest_asset()
+
     def package(self, root: Path, version: str = "0.148.0"):
         package = root / f"package-{version}"
         for directory in ("bin", "codex-path", "codex-resources"):
@@ -88,27 +100,30 @@ class CodexRuntimeTests(unittest.TestCase):
 
     def test_release_metadata_requires_exact_stable_tag_and_digest(self):
         data = self.release_metadata()
-        asset = self.asset()
-        with mock.patch.object(self.m, "opener") as opener, mock.patch.object(
-            self.m, "target", return_value=asset["target"]
-        ):
-            response = mock.MagicMock()
-            response.__enter__.return_value = response
-            response.geturl.return_value = self.m.LATEST_URL
-            response.read.return_value = json.dumps(data).encode()
-            opener.return_value.open.return_value = response
-            selected = self.m.latest_asset()
-        self.assertEqual(selected, asset)
+        self.assertEqual(self.latest_asset_from(data), self.asset())
 
+        data = self.release_metadata()
         data["tag_name"] = "rust-v0.149.0-alpha.1"
-        with mock.patch.object(self.m, "opener") as opener:
-            response = mock.MagicMock()
-            response.__enter__.return_value = response
-            response.geturl.return_value = self.m.LATEST_URL
-            response.read.return_value = json.dumps(data).encode()
-            opener.return_value.open.return_value = response
-            with self.assertRaisesRegex(self.m.ManagerError, "exact stable"):
-                self.m.latest_asset()
+        with self.assertRaisesRegex(self.m.ManagerError, "exact stable"):
+            self.latest_asset_from(data)
+
+        invalid_cases = (
+            ("digest without prefix", "digest", "a" * 64, "SHA-256"),
+            ("non-hex digest", "digest", "sha256:" + "g" * 64, "SHA-256"),
+            ("zero size", "size", 0, "invalid/excessive size"),
+            (
+                "oversized package",
+                "size",
+                self.m.MAX_PACKAGE + 1,
+                "invalid/excessive size",
+            ),
+        )
+        for label, field, value, message in invalid_cases:
+            with self.subTest(case=label):
+                invalid = self.release_metadata()
+                invalid["assets"][0][field] = value
+                with self.assertRaisesRegex(self.m.ManagerError, message):
+                    self.latest_asset_from(invalid)
 
     def test_archive_rejects_traversal_and_symlink(self):
         with tempfile.TemporaryDirectory() as text:
@@ -216,6 +231,21 @@ class CodexRuntimeTests(unittest.TestCase):
                     self.m.publish(package, self.asset(), self.asset()["url"])
             self.assertEqual((self.m.ROOT / "current").read_text(), previous)
 
+    def test_publish_oserror_is_manager_error_and_preserves_previous_runtime(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            package = self.package(root)
+            self.m.ROOT = root / "runtime"
+            asset = self.asset()
+            with mock.patch.object(self.m, "target", return_value=asset["target"]):
+                self.m.publish(package, asset, asset["url"])
+                previous = (self.m.ROOT / "current").read_text()
+                with mock.patch.object(
+                    self.m.shutil, "copytree", side_effect=OSError("read-only")
+                ), self.assertRaisesRegex(self.m.ManagerError, "cannot publish"):
+                    self.m.publish(package, asset, asset["url"])
+            self.assertEqual((self.m.ROOT / "current").read_text(), previous)
+
     def test_successful_publication_retains_previous_generation(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)
@@ -229,14 +259,18 @@ class CodexRuntimeTests(unittest.TestCase):
                     self.package(root, "0.148.0"), first_asset, first_asset["url"]
                 )
                 previous_name = (self.m.ROOT / "current").read_text().strip()
+                releases = self.m.ROOT / "releases"
+                stale = releases / ".candidate-abandoned"
+                stale.mkdir()
+                (stale / "partial").write_text("stale\n", encoding="utf-8")
                 self.m.publish(
                     self.package(root, "0.149.0"), second_asset, second_asset["url"]
                 )
             current_name = (self.m.ROOT / "current").read_text().strip()
-            releases = self.m.ROOT / "releases"
             self.assertNotEqual(previous_name, current_name)
             self.assertTrue((releases / previous_name).is_dir())
             self.assertTrue((releases / current_name).is_dir())
+            self.assertFalse(stale.exists())
 
     def test_resolve_selects_runtime_only_for_runtime_state(self):
         runtime_binary = Path("/private/runtime/bin/codex")
@@ -309,18 +343,35 @@ class CodexRuntimeTests(unittest.TestCase):
 
     def test_status_and_resolve_never_open_network(self):
         with tempfile.TemporaryDirectory() as text:
-            self.m.ROOT = Path(text) / "missing-runtime"
+            root = Path(text)
+            self.m.ROOT = root / "missing-runtime"
             with mock.patch.object(
                 self.m, "bundled_version", return_value="0.147.0"
             ), mock.patch.object(
                 self.m, "opener", side_effect=AssertionError("network used")
             ):
                 for command in (["status"], ["resolve"]):
-                    with self.subTest(command=command[0]):
+                    with self.subTest(command=command[0], installed=False):
                         stdout = io.StringIO()
                         with contextlib.redirect_stdout(stdout):
                             self.assertEqual(self.m.main(command), 0)
                         self.assertTrue(stdout.getvalue().strip())
+
+            asset = self.asset()
+            self.m.ROOT = root / "runtime"
+            with mock.patch.object(self.m, "target", return_value=asset["target"]):
+                self.m.publish(self.package(root), asset, asset["url"])
+                with mock.patch.object(
+                    self.m, "bundled_version", return_value="0.147.0"
+                ), mock.patch.object(
+                    self.m, "opener", side_effect=AssertionError("network used")
+                ):
+                    for command in (["status"], ["resolve"]):
+                        with self.subTest(command=command[0], installed=True):
+                            stdout = io.StringIO()
+                            with contextlib.redirect_stdout(stdout):
+                                self.assertEqual(self.m.main(command), 0)
+                            self.assertTrue(stdout.getvalue().strip())
 
     def test_update_requires_confirmation_before_network(self):
         with mock.patch.object(

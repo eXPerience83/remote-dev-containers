@@ -21,28 +21,32 @@ El menú, `remote-dev-version` y `remote-dev-doctor` distinguen estos estados:
 
 El arranque normal, `status`, `resolve`, el lanzamiento de Codex, reanudar sesiones, health checks y diagnósticos no contactan con el endpoint de actualizaciones.
 
-Sólo hay acceso a red después de una acción explícita de actualización:
+Sólo hay acceso a red después de una acción explícita de instalación/actualización:
 
 ```bash
+remote-dev-codex-runtime install
 remote-dev-codex-runtime update
 ```
 
-El comando interactivo pide confirmación **antes** de contactar con la release oficial. `--yes` queda disponible para un administrador que ya está realizando de forma explícita una actualización no interactiva:
+`install` y `update` utilizan la misma ruta de admisión acotada: comprueban la última release oficial estable exacta y sólo publican un runtime opcional cuando es más nuevo que el fallback inmutable incluido y que cualquier runtime opcional ya activo. Ambos comandos interactivos piden confirmación **antes** de contactar con la release oficial. `--yes` queda disponible para un administrador que ya está realizando de forma explícita una operación de ciclo de vida no interactiva:
 
 ```bash
+remote-dev-codex-runtime install --yes
 remote-dev-codex-runtime update --yes
 ```
 
-El menú ofrece esa misma acción explícita. No hay actualizador en segundo plano ni sustituciones silenciosas del runtime.
+El menú ofrece las acciones explícitas de actualización y eliminación. No hay actualizador en segundo plano ni sustituciones silenciosas del runtime.
 
 ## Límite del paquete oficial
 
-El actualizador acepta únicamente la última release estable exacta `rust-vX.Y.Z` y únicamente el paquete Linux musl correspondiente a la arquitectura actual:
+El gestor reconoce el paquete Linux musl oficial correspondiente a la arquitectura de la máquina:
 
 ```text
 codex-package-x86_64-unknown-linux-musl.tar.gz
 codex-package-aarch64-unknown-linux-musl.tar.gz
 ```
+
+La publicación de imágenes y la CI de Remote Dev siguen siendo **AMD64-first**. Reconocer el formato de paquete AArch64 es una capacidad de mapeo de upstream en el gestor de runtime y la lógica de build; todavía no constituye un target ARM64 soportado/publicado por Remote Dev. La validación completa de build, seguridad, ciclo de vida y hardware real ARM64 se sigue en [#112](https://github.com/eXPerience83/remote-dev-containers/issues/112).
 
 Se utiliza el paquete completo de upstream porque Codex resuelve sus binarios auxiliares y recursos respecto a la raíz de ese paquete. La estructura esperada incluye:
 
@@ -72,7 +76,7 @@ Antes de activar un runtime opcional, Remote Dev:
 
 1. obtiene los metadatos de release del repositorio oficial y fijo de Codex de OpenAI en GitHub;
 2. exige un tag de release estable exacto;
-3. selecciona sólo el paquete correspondiente a la arquitectura soportada actual;
+3. selecciona sólo el paquete correspondiente al límite de arquitectura soportado actual;
 4. verifica durante la descarga el tamaño y el SHA-256 publicado en los metadatos de la release de GitHub;
 5. extrae con reglas acotadas y rechaza enlaces, archivos especiales y path traversal;
 6. verifica los metadatos canónicos del paquete de Codex y los ejecutables obligatorios;
@@ -82,7 +86,7 @@ Antes de activar un runtime opcional, Remote Dev:
 10. calcula la huella de cada archivo publicado y la guarda en un manifiesto privado restrictivo;
 11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones.
 
-Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. El lanzamiento normal no necesita ese lock: verifica el conjunto de archivos ya publicado y puede volver inmediatamente al Codex incluido en la imagen.
+Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. Los directorios de staging `.candidate-*` abandonados por una publicación anterior interrumpida se recuperan bajo ese mismo lock en un intento posterior de publicación. El lanzamiento normal no necesita ese lock: verifica el conjunto de archivos ya publicado y puede volver inmediatamente al Codex incluido en la imagen.
 
 ## Lanzamiento y fallback
 
@@ -99,11 +103,12 @@ remote-dev-codex-runtime status
 remote-dev-codex-runtime status --menu
 remote-dev-codex-runtime resolve
 remote-dev-codex-runtime remove
+remote-dev-codex-runtime remove --yes
 ```
 
 `resolve` está pensado para el launcher del proyecto e imprime la ruta del ejecutable seleccionado. Sólo realiza comprobaciones locales de integridad.
 
-`remove` elimina únicamente el estado del runtime opcional gestionado por Remote Dev y vuelve inmediatamente al fallback inmutable incluido. Nunca modifica `/usr/local/bin/codex` ni `/root/.codex`.
+`remove` elimina únicamente el estado del runtime opcional gestionado por Remote Dev y vuelve inmediatamente al fallback inmutable incluido. Nunca modifica `/usr/local/bin/codex` ni `/root/.codex`. La eliminación interactiva pide confirmación; `--yes` es la forma explícita no interactiva.
 
 ## Layout persistente del host
 
@@ -119,4 +124,4 @@ En el ejemplo genérico debe crearse junto con el resto de directorios de estado
 /mnt/Pool1/remote-dev/state/codex/runtime
 ```
 
-El preflight del host rechaza symlinks en esta ruta. Al arrancar el contenedor se endurecen los permisos del árbol de runtime montado antes de utilizarlo.
+El preflight del host rechaza symlinks en esta ruta. Al arrancar el contenedor sólo se acepta el target canónico del runtime de Codex y se rechazan componentes de ruta que sean symlinks o no sean directorios antes de aplicar el endurecimiento recursivo de permisos privados.

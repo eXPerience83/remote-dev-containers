@@ -21,28 +21,32 @@ The menu, `remote-dev-version` and `remote-dev-doctor` distinguish these states:
 
 Normal startup, `status`, `resolve`, Codex launch, resume, health checks and diagnostics do not contact the update endpoint.
 
-Network access happens only after an explicit update action:
+Network access happens only after an explicit install/update action:
 
 ```bash
+remote-dev-codex-runtime install
 remote-dev-codex-runtime update
 ```
 
-The interactive command asks for confirmation **before** contacting the official release endpoint. `--yes` is available for an administrator who is already making an explicit non-interactive update request:
+`install` and `update` use the same bounded admission path: they check the latest exact stable official release and publish an optional runtime only when it is newer than the immutable bundled fallback and any already-active optional runtime. Both interactive commands ask for confirmation **before** contacting the official release endpoint. `--yes` is available for an administrator who is already making an explicit non-interactive lifecycle request:
 
 ```bash
+remote-dev-codex-runtime install --yes
 remote-dev-codex-runtime update --yes
 ```
 
-The menu exposes the same explicit update action. There is no background updater and no silent runtime replacement.
+The menu exposes the explicit update and removal actions. There is no background updater and no silent runtime replacement.
 
 ## Official package boundary
 
-The updater accepts only the latest exact stable `rust-vX.Y.Z` release and only the matching Linux musl architecture package:
+The updater recognizes the matching official Linux musl package for the current machine architecture:
 
 ```text
 codex-package-x86_64-unknown-linux-musl.tar.gz
 codex-package-aarch64-unknown-linux-musl.tar.gz
 ```
+
+Remote Dev's published image/CI support is still **AMD64-first**. AArch64 package recognition is an upstream package mapping in the runtime manager and image build logic; it is not yet a supported/published Remote Dev ARM64 target. Full ARM64 build, security, lifecycle and real-hardware validation is tracked in [#112](https://github.com/eXPerience83/remote-dev-containers/issues/112).
 
 The complete upstream package is used because Codex resolves required companions and resources relative to that package root. The expected layout includes:
 
@@ -72,7 +76,7 @@ Before an optional runtime becomes active, Remote Dev:
 
 1. fetches release metadata from the fixed official OpenAI Codex GitHub repository;
 2. requires an exact stable release tag;
-3. selects only the package matching the current supported architecture;
+3. selects only the package matching the current supported architecture boundary;
 4. verifies the package size and GitHub release SHA-256 metadata while streaming the download;
 5. extracts with bounded archive rules and rejects links/special files/path traversal;
 6. verifies canonical Codex package metadata and required executables;
@@ -82,7 +86,7 @@ Before an optional runtime becomes active, Remote Dev:
 10. fingerprints every published file into a restrictive private manifest;
 11. atomically switches the active pointer only after all checks pass.
 
-Mutation is serialized with a private lock. Failed or interrupted admission leaves the previous active runtime untouched. Normal launch does not use that lock: it verifies the immutable published file set and can fall back immediately to the bundled CLI.
+Mutation is serialized with a private lock. Failed or interrupted admission leaves the previous active runtime untouched. Abandoned `.candidate-*` staging directories from an interrupted earlier publish are reclaimed under that same lock on a later publish attempt. Normal launch does not use the lock: it verifies the immutable published file set and can fall back immediately to the bundled CLI.
 
 ## Launch and fallback
 
@@ -99,11 +103,12 @@ remote-dev-codex-runtime status
 remote-dev-codex-runtime status --menu
 remote-dev-codex-runtime resolve
 remote-dev-codex-runtime remove
+remote-dev-codex-runtime remove --yes
 ```
 
 `resolve` is intended for the project launcher and prints the selected executable path. It performs local integrity checks only.
 
-`remove` deletes only the optional Remote Dev-managed runtime state and returns immediately to the immutable bundled fallback. It never modifies `/usr/local/bin/codex` or `/root/.codex`.
+`remove` deletes only the optional Remote Dev-managed runtime state and returns immediately to the immutable bundled fallback. It never modifies `/usr/local/bin/codex` or `/root/.codex`. Interactive removal asks for confirmation; `--yes` is the explicit non-interactive form.
 
 ## Persistent host layout
 
@@ -119,4 +124,4 @@ For the generic example, create it together with the other Codex state directori
 /mnt/Pool1/remote-dev/state/codex/runtime
 ```
 
-The host-side preflight rejects symlinks in this path. Container startup hardens the mounted runtime tree to private modes before it is used.
+The host-side preflight rejects symlinks in this path. Container startup accepts only the canonical Codex runtime target and rejects symlinked/non-directory runtime path components before applying recursive private-mode hardening.

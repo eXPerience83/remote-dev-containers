@@ -101,9 +101,12 @@ def expected_owner() -> int:
 
 def file_sha(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            digest.update(chunk)
+    try:
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as exc:
+        fail(f"cannot hash Codex runtime file {path}: {exc}")
     return digest.hexdigest()
 
 
@@ -138,11 +141,14 @@ def real_dir(path: Path) -> os.stat_result:
 
 
 def prepare_root() -> None:
-    if ROOT.exists() or ROOT.is_symlink():
-        real_dir(ROOT)
-    else:
-        ROOT.mkdir(parents=True, mode=0o700)
-    ROOT.chmod(0o700)
+    try:
+        if ROOT.exists() or ROOT.is_symlink():
+            real_dir(ROOT)
+        else:
+            ROOT.mkdir(parents=True, mode=0o700)
+        ROOT.chmod(0o700)
+    except OSError as exc:
+        fail(f"cannot prepare Codex runtime root {ROOT}: {exc}")
 
 
 @contextlib.contextmanager
@@ -157,14 +163,18 @@ def runtime_lock() -> Iterator[None]:
     except OSError as exc:
         fail(f"cannot open Codex runtime mutation lock: {exc}")
     try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != expected_owner():
-            fail("Codex runtime mutation lock has invalid identity")
-        os.fchmod(descriptor, 0o600)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != expected_owner():
+                fail("Codex runtime mutation lock has invalid identity")
+            os.fchmod(descriptor, 0o600)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        except OSError as exc:
+            fail(f"cannot secure Codex runtime mutation lock: {exc}")
         yield
     finally:
-        os.close(descriptor)
+        with contextlib.suppress(OSError):
+            os.close(descriptor)
 
 
 def bundled_version() -> str:
@@ -250,7 +260,12 @@ def latest_asset() -> dict[str, Any]:
         with opener().open(request, timeout=TIMEOUT) as response:
             validate_url(response.geturl())
             payload = response.read(MAX_METADATA + 1)
-    except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
+    except (
+        OSError,
+        http.client.HTTPException,
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+    ) as exc:
         fail(f"cannot fetch official Codex release metadata: {exc}")
     if len(payload) > MAX_METADATA:
         fail("official Codex release metadata exceeds size limit")
@@ -323,13 +338,22 @@ def download(asset: dict[str, Any], destination: Path) -> str:
                 output.write(chunk)
                 digest.update(chunk)
     except ManagerError:
-        destination.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            destination.unlink(missing_ok=True)
         raise
-    except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as exc:
-        destination.unlink(missing_ok=True)
+    except (
+        OSError,
+        ValueError,
+        http.client.HTTPException,
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+    ) as exc:
+        with contextlib.suppress(OSError):
+            destination.unlink(missing_ok=True)
         fail(f"cannot download official Codex runtime package: {exc}")
     if size != asset["size"] or digest.hexdigest() != asset["sha256"]:
-        destination.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            destination.unlink(missing_ok=True)
         fail("official Codex package size or SHA-256 does not match release metadata")
     return final_url
 
@@ -344,8 +368,8 @@ def member_path(name: str) -> Path:
 
 
 def extract(archive_path: Path, destination: Path) -> None:
-    destination.mkdir(mode=0o755)
     try:
+        destination.mkdir(mode=0o755)
         with tarfile.open(archive_path, "r:gz") as archive:
             members = archive.getmembers()
             if not 1 <= len(members) <= MAX_MEMBERS:
@@ -396,7 +420,8 @@ def package_metadata(
     for rel in REQUIRED_FILES:
         real_file(package / rel, executable=rel != "codex-package.json")
     metadata_path = package / "codex-package.json"
-    if metadata_path.stat().st_size > MAX_METADATA:
+    metadata_info = real_file(metadata_path)
+    if metadata_info.st_size > MAX_METADATA:
         fail("Codex package metadata exceeds size limit")
     try:
         data = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -573,7 +598,7 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
                 response.read()
                 if response.status == 200:
                     return
-            except OSError:
+            except (OSError, http.client.HTTPException):
                 pass
             finally:
                 connection.close()
@@ -611,21 +636,24 @@ def validate_candidate(package: Path, expected_version: str) -> None:
 
 def records(package: Path) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    for path in sorted(package.rglob("*")):
-        if path.is_symlink():
-            fail(f"candidate package contains a symlink: {path}")
-        if path.is_dir():
-            continue
-        rel = path.relative_to(package).as_posix()
-        info = real_file(path)
-        result.append(
-            {
-                "path": rel,
-                "size": info.st_size,
-                "sha256": file_sha(path),
-                "executable": bool(info.st_mode & stat.S_IXUSR),
-            }
-        )
+    try:
+        for path in sorted(package.rglob("*")):
+            if path.is_symlink():
+                fail(f"candidate package contains a symlink: {path}")
+            if path.is_dir():
+                continue
+            rel = path.relative_to(package).as_posix()
+            info = real_file(path)
+            result.append(
+                {
+                    "path": rel,
+                    "size": info.st_size,
+                    "sha256": file_sha(path),
+                    "executable": bool(info.st_mode & stat.S_IXUSR),
+                }
+            )
+    except OSError as exc:
+        fail(f"cannot inspect Codex package files: {exc}")
     return result
 
 
@@ -649,17 +677,25 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
         f"{asset['version']}-{asset['sha256'][:16]}-{uuid.uuid4().hex[:8]}"
     )
     with runtime_lock():
-        releases = ROOT / "releases"
-        if releases.exists() or releases.is_symlink():
-            real_dir(releases)
-        else:
-            releases.mkdir(mode=0o700)
-        releases.chmod(0o700)
-        previous_name = read_previous_name()
-        staging = releases / f".candidate-{uuid.uuid4().hex}"
-        final_release = releases / release_name
-        staging.mkdir(mode=0o700)
+        staging: Path | None = None
         try:
+            releases = ROOT / "releases"
+            if releases.exists() or releases.is_symlink():
+                real_dir(releases)
+            else:
+                releases.mkdir(mode=0o700)
+            releases.chmod(0o700)
+            for old in releases.iterdir():
+                if (
+                    old.name.startswith(".candidate-")
+                    and old.is_dir()
+                    and not old.is_symlink()
+                ):
+                    shutil.rmtree(old, ignore_errors=True)
+            previous_name = read_previous_name()
+            staging = releases / f".candidate-{uuid.uuid4().hex}"
+            final_release = releases / release_name
+            staging.mkdir(mode=0o700)
             destination = staging / "package"
             shutil.copytree(package, destination)
             for path in [destination, *destination.rglob("*")]:
@@ -706,8 +742,10 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
                     and not old.name.startswith(".candidate-")
                 ):
                     shutil.rmtree(old, ignore_errors=True)
+        except OSError as exc:
+            fail(f"cannot publish Codex runtime: {exc}")
         finally:
-            if staging.exists() and not staging.is_symlink():
+            if staging is not None and staging.exists() and not staging.is_symlink():
                 shutil.rmtree(staging, ignore_errors=True)
 
 
@@ -744,33 +782,7 @@ def validate_manifest(manifest: object) -> dict[str, Any]:
     return manifest
 
 
-def active_runtime() -> tuple[str, Path] | None:
-    current = ROOT / "current"
-    if not current.exists() and not current.is_symlink():
-        return None
-    current_info = real_file(current)
-    if current_info.st_size > MAX_POINTER:
-        fail("Codex runtime current pointer exceeds size limit")
-    try:
-        name = current.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError) as exc:
-        fail(f"Codex runtime current pointer cannot be read: {exc}")
-    if not CURRENT_RE.fullmatch(name):
-        fail("Codex runtime current pointer is malformed")
-    release = ROOT / "releases" / name
-    real_dir(release)
-    manifest_path = release / "remote-dev-runtime.json"
-    manifest_info = real_file(manifest_path)
-    if manifest_info.st_size > MAX_MANIFEST:
-        fail("Codex runtime manifest exceeds size limit")
-    try:
-        manifest = validate_manifest(
-            json.loads(manifest_path.read_text(encoding="utf-8"))
-        )
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        fail(f"Codex runtime manifest is invalid: {exc}")
-    package = release / "package"
-    real_dir(package)
+def verify_package_files(package: Path, manifest: dict[str, Any]) -> set[str]:
     files = manifest.get("files")
     if not isinstance(files, list) or not files or len(files) > MAX_MEMBERS:
         fail("Codex runtime manifest has invalid file records")
@@ -807,13 +819,49 @@ def active_runtime() -> tuple[str, Path] | None:
         info = real_file(path, executable=executable)
         if info.st_size != size or file_sha(path) != sha:
             fail(f"Codex runtime file changed: {rel_value}")
-    actual_paths = {
-        path.relative_to(package).as_posix()
-        for path in package.rglob("*")
-        if path.is_file()
-    }
-    if actual_paths != expected_paths or any(path.is_symlink() for path in package.rglob("*")):
+
+    actual_paths: set[str] = set()
+    try:
+        for path in package.rglob("*"):
+            if path.is_symlink():
+                fail("Codex runtime package file set changed")
+            if path.is_file():
+                actual_paths.add(path.relative_to(package).as_posix())
+    except OSError as exc:
+        fail(f"cannot inspect Codex runtime package file set: {exc}")
+    if actual_paths != expected_paths:
         fail("Codex runtime package file set changed")
+    return expected_paths
+
+
+def active_runtime() -> tuple[str, Path] | None:
+    current = ROOT / "current"
+    if not current.exists() and not current.is_symlink():
+        return None
+    current_info = real_file(current)
+    if current_info.st_size > MAX_POINTER:
+        fail("Codex runtime current pointer exceeds size limit")
+    try:
+        name = current.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        fail(f"Codex runtime current pointer cannot be read: {exc}")
+    if not CURRENT_RE.fullmatch(name):
+        fail("Codex runtime current pointer is malformed")
+    release = ROOT / "releases" / name
+    real_dir(release)
+    manifest_path = release / "remote-dev-runtime.json"
+    manifest_info = real_file(manifest_path)
+    if manifest_info.st_size > MAX_MANIFEST:
+        fail("Codex runtime manifest exceeds size limit")
+    try:
+        manifest = validate_manifest(
+            json.loads(manifest_path.read_text(encoding="utf-8"))
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        fail(f"Codex runtime manifest is invalid: {exc}")
+    package = release / "package"
+    real_dir(package)
+    verify_package_files(package, manifest)
     metadata = package_metadata(package)
     version = manifest["version"]
     if metadata.get("version") != version:
@@ -965,10 +1013,13 @@ def remove_runtime(*, yes: bool) -> None:
         return
     confirm("Remove the optional Codex runtime and use bundled fallback?", yes=yes)
     with runtime_lock():
-        remove_runtime_entry(ROOT / "current")
-        releases = ROOT / "releases"
-        remove_runtime_entry(releases)
-        releases.mkdir(mode=0o700)
+        try:
+            remove_runtime_entry(ROOT / "current")
+            releases = ROOT / "releases"
+            remove_runtime_entry(releases)
+            releases.mkdir(mode=0o700)
+        except OSError as exc:
+            fail(f"cannot reset Codex runtime state after removal: {exc}")
     print("Optional Codex runtime removed; bundled fallback is active.")
 
 
