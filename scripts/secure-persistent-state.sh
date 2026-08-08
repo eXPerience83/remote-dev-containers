@@ -10,7 +10,6 @@ case "$role" in
     ;;
 esac
 
-codex_home="${CODEX_HOME:-/root/.codex}"
 gh_config_dir="${GH_CONFIG_DIR:-/root/.config/gh}"
 git_config_global="${GIT_CONFIG_GLOBAL:-/root/.config/git/config}"
 git_config_dir="$(dirname "$git_config_global")"
@@ -43,9 +42,39 @@ secure_private_tree() {
   done < <(find "$root" -type f -print0)
 }
 
+validate_codex_runtime_root() {
+  local root="$1"
+  local canonical=/root/.local/share/remote-dev/codex-runtime
+  local path=""
+
+  if [[ "$root" != "$canonical" ]]; then
+    echo "ERROR: REMOTE_DEV_CODEX_RUNTIME_ROOT must be $canonical" >&2
+    return 1
+  fi
+
+  for path in \
+    /root/.local \
+    /root/.local/share \
+    /root/.local/share/remote-dev \
+    "$canonical"; do
+    if [[ -L "$path" ]]; then
+      echo "ERROR: Codex runtime path component must not be a symlink: $path" >&2
+      return 1
+    fi
+    if [[ -e "$path" && ! -d "$path" ]]; then
+      echo "ERROR: Codex runtime path component must be a directory: $path" >&2
+      return 1
+    fi
+  done
+}
+
 if [[ "$role" == codex ]]; then
+  codex_home="${CODEX_HOME:-/root/.codex}"
+  codex_runtime_root="${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
+  validate_codex_runtime_root "$codex_runtime_root"
   secure_dir "$codex_home"
   secure_file "$codex_home/auth.json"
+  secure_private_tree "$codex_runtime_root"
 fi
 secure_dir "$gh_config_dir"
 secure_dir "$git_config_dir"

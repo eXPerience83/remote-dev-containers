@@ -121,6 +121,7 @@ REMOTE_DEV_DATA_ROOT/
 ├── state/
 │   └── codex/
 │       ├── agent/
+│       ├── runtime/
 │       ├── gh/
 │       ├── git/
 │       └── ssh/
@@ -135,6 +136,7 @@ The Codex service receives only these child paths:
 |---|---|
 | `workspaces/codex` | `/workspace` |
 | `state/codex/agent` | `/root/.codex` |
+| `state/codex/runtime` | `/root/.local/share/remote-dev/codex-runtime` |
 | `state/codex/gh` | `/root/.config/gh` |
 | `state/codex/git` | `/root/.config/git` |
 | `state/codex/ssh` | `/root/.ssh` |
@@ -160,7 +162,7 @@ The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, un
 
 ## Versioning and updates
 
-All stack services use the same image reference. Built-in components are updated through reviewed image rebuilds. Future vendor-installed agents may keep an independent persisted version only inside their own private service state.
+All stack services use the same image reference. The image-bundled Codex release remains the reviewed, tested fallback. Codex may also use a newer official release only after an explicit project-owned admission into its private `state/codex/runtime` mount; that optional runtime never replaces the bundled executable and normal startup performs no update network access. Other built-in components continue to be updated through reviewed image rebuilds, while future vendor-installed agents may keep an independent persisted version only inside their own private service state.
 
 A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate role readiness without requiring user login.
 

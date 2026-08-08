@@ -6,9 +6,11 @@ workdir="$(mktemp -d)"
 fixture_menu="$workdir/remote-dev-menu"
 runtime_lib="$workdir/remote-dev-runtime.sh"
 run_codex="$workdir/run-codex"
+codex_runtime="$workdir/remote-dev-codex-runtime"
 secure_state="$workdir/secure-persistent-state"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
+runtime_invocations="$workdir/runtime-invocations"
 hardening_calls="$workdir/hardening-calls"
 
 cleanup() {
@@ -73,6 +75,22 @@ fi
 RUN_CODEX
 chmod 0755 "$run_codex"
 
+cat > "$codex_runtime" <<'CODEX_RUNTIME'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status)
+    [[ "${2:-}" == --menu ]] || exit 2
+    printf '%s\n' 'Codex: bundled 0.147.0'
+    ;;
+  update|remove)
+    printf '%s\n' "$1" >> "$REMOTE_DEV_MENU_RUNTIME_INVOCATIONS"
+    ;;
+  *) exit 2 ;;
+esac
+CODEX_RUNTIME
+chmod 0755 "$codex_runtime"
+
 cat > "$secure_state" <<'SECURE_STATE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -104,6 +122,7 @@ chmod 0755 "$bin_dir/clear"
 sed \
   -e "s|^runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh$|runtime_lib=$runtime_lib|" \
   -e "s|/usr/local/bin/run-codex|$run_codex|g" \
+  -e "s|/usr/local/bin/remote-dev-codex-runtime|$codex_runtime|g" \
   -e "s|/usr/local/bin/secure-persistent-state|$secure_state|g" \
   "$menu_source" > "$fixture_menu"
 chmod 0755 "$fixture_menu"
@@ -114,55 +133,45 @@ if ! grep -Fxq "runtime_lib=$runtime_lib" "$fixture_menu"; then
 fi
 
 assert_file_lines() {
-  local label="$1"
-  shift
-  local -a expected=("$@")
-  local -a actual=()
-
-  if [[ -f "$invocations" ]]; then
-    mapfile -t actual < "$invocations"
+  local file="$1"
+  local label="$2"
+  shift 2
+  local -a expected=("$@") actual=()
+  if [[ -f "$file" ]]; then
+    mapfile -t actual < "$file"
   fi
   if (( ${#actual[@]} != ${#expected[@]} )); then
-    printf 'ERROR: %s recorded %d invocations, expected %d\n' \
-      "$label" "${#actual[@]}" "${#expected[@]}" >&2
+    printf 'ERROR: %s recorded %d lines, expected %d\n' "$label" "${#actual[@]}" "${#expected[@]}" >&2
     printf 'Actual: %s\n' "${actual[*]:-<none>}" >&2
     exit 1
   fi
   for index in "${!expected[@]}"; do
     if [[ "${actual[$index]}" != "${expected[$index]}" ]]; then
-      printf 'ERROR: %s invocation %d is %q, expected %q\n' \
-        "$label" "$index" "${actual[$index]}" "${expected[$index]}" >&2
+      printf 'ERROR: %s line %d is %q, expected %q\n' "$label" "$index" "${actual[$index]}" "${expected[$index]}" >&2
       exit 1
     fi
   done
 }
 
 run_menu() {
-  local deployment_mode="$1"
-  local input="$2"
-  local output_file="$3"
-
-  rm -f "$invocations" "$hardening_calls"
+  local deployment_mode="$1" input="$2" output_file="$3"
+  rm -f "$invocations" "$runtime_invocations" "$hardening_calls"
+  common_env=(
+    PATH="$bin_dir:$PATH"
+    WORKSPACE="$workdir/workspace"
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations"
+    REMOTE_DEV_MENU_RUNTIME_INVOCATIONS="$runtime_invocations"
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls"
+  )
   if [[ "$deployment_mode" == __unset__ ]]; then
-    printf '%s' "$input" | env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
-      PATH="$bin_dir:$PATH" \
-      WORKSPACE="$workdir/workspace" \
-      REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-      REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-      "$fixture_menu" > "$output_file" 2>&1
+    printf '%s' "$input" | env -u REMOTE_DEV_CODEX_APPROVAL_MODE "${common_env[@]}" "$fixture_menu" > "$output_file" 2>&1
   else
-    printf '%s' "$input" | env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" \
-      PATH="$bin_dir:$PATH" \
-      WORKSPACE="$workdir/workspace" \
-      REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-      REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-      "$fixture_menu" > "$output_file" 2>&1
+    printf '%s' "$input" | env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" "${common_env[@]}" "$fixture_menu" > "$output_file" 2>&1
   fi
 }
 
 assert_hardening_count() {
-  local expected_count="$1"
-  local actual_count=0
+  local expected_count="$1" actual_count=0
   if [[ -f "$hardening_calls" ]]; then
     actual_count="$(wc -l < "$hardening_calls")"
   fi
@@ -173,22 +182,26 @@ assert_hardening_count() {
 }
 
 output="$workdir/output"
-run_menu __unset__ $'1\n8\n' "$output"
-assert_file_lines 'configured start' '[]'
+run_menu __unset__ $'1\n10\n' "$output"
+assert_file_lines "$invocations" 'configured start' '[]'
 assert_hardening_count 1
+grep -Fxq 'Codex: bundled 0.147.0' "$output"
 grep -Fxq '1) Start Codex' "$output"
 grep -Fxq '2) Resume a Codex session' "$output"
 grep -Fxq '3) Approval mode for next launch...' "$output"
+grep -Fxq '4) Update optional Codex runtime from official OpenAI release' "$output"
+grep -Fxq '5) Remove optional Codex runtime (use bundled fallback)' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
-if grep -Fq 'Start Codex with a one-time mode' "$output"; then
-  echo "ERROR: the duplicate one-time start action remains in the menu" >&2
-  exit 1
-fi
 
 echo 'Configured Codex menu actions: OK'
 
-run_menu __unset__ $'3\n3\n2\n1\n8\n' "$output"
-assert_file_lines 'guarded resume then configured start' \
+run_menu __unset__ $'4\n5\n10\n' "$output"
+assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
+assert_hardening_count 2
+echo 'Codex runtime update/remove menu actions: OK'
+
+run_menu __unset__ $'3\n3\n2\n1\n10\n' "$output"
+assert_file_lines "$invocations" 'guarded resume then configured start' \
   '[--approval-mode][guarded][resume]' \
   '[]'
 assert_hardening_count 2
@@ -200,17 +213,16 @@ fi
 
 echo 'One-launch guarded selection and reset: OK'
 
-run_menu guarded $'3\n2\n1\n8\n' "$output"
-assert_file_lines 'autonomous override of guarded deployment' \
-  '[--approval-mode][autonomous]'
+run_menu guarded $'3\n2\n1\n10\n' "$output"
+assert_file_lines "$invocations" 'autonomous override of guarded deployment' '[--approval-mode][autonomous]'
 assert_hardening_count 1
 grep -Fxq 'Next launch mode: configured (guarded)' "$output"
 grep -Fxq 'Next launch mode: autonomous (one launch)' "$output"
 
 echo 'One-launch autonomous selection precedence: OK'
 
-run_menu __unset__ $'3\n3\n3\n1\n1\n8\n' "$output"
-assert_file_lines 'configured-mode reset before launch' '[]'
+run_menu __unset__ $'3\n3\n3\n1\n1\n10\n' "$output"
+assert_file_lines "$invocations" 'configured-mode reset before launch' '[]'
 assert_hardening_count 1
 
 echo 'Configured-mode reset: OK'
@@ -218,9 +230,9 @@ echo 'Configured-mode reset: OK'
 fail_once="$workdir/fail-once"
 rm -f "$fail_once"
 export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
-run_menu __unset__ $'3\n3\n1\n\n1\n8\n' "$output"
+run_menu __unset__ $'3\n3\n1\n\n1\n10\n' "$output"
 unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
-assert_file_lines 'failed override then configured retry' \
+assert_file_lines "$invocations" 'failed override then configured retry' \
   '[--approval-mode][guarded]' \
   '[]'
 assert_hardening_count 2

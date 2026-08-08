@@ -15,6 +15,7 @@ PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
 CODEX_DIRECTORY_SUFFIXES = (
     "workspaces/codex",
     "state/codex/agent",
+    "state/codex/runtime",
     "state/codex/gh",
     "state/codex/git",
     "state/codex/ssh",
@@ -171,6 +172,15 @@ def validate_file_mode(root: Path) -> None:
 
 def validate_symlinks(root: Path, temporary_directory: str) -> None:
     """Reject symlinks in persistent state and file-backed credential paths."""
+    codex_runtime = root / "state/codex/runtime"
+    codex_runtime.rmdir()
+    codex_runtime.symlink_to(root / "state/codex/agent", target_is_directory=True)
+    runtime_symlink = run_preflight(root, include_antigravity=True)
+    require(runtime_symlink.returncode == 1, "symlinked Codex runtime directory must fail")
+    require("must not be a symlink" in runtime_symlink.stderr, runtime_symlink.stderr)
+    codex_runtime.unlink()
+    codex_runtime.mkdir()
+
     antigravity_vendor = root / "state/antigravity/vendor"
     antigravity_vendor.rmdir()
     antigravity_vendor.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
@@ -219,7 +229,7 @@ def validate_symlinks(root: Path, temporary_directory: str) -> None:
     write_password(root, CODEX_PASSWORD_SUFFIX, "test-codex-password")
 
     outside_state = Path(temporary_directory) / "outside-state"
-    for child in ("agent", "gh", "git", "ssh"):
+    for child in ("agent", "runtime", "gh", "git", "ssh"):
         (outside_state / child).mkdir(parents=True, exist_ok=True)
     state_codex = root / "state/codex"
     shutil.rmtree(state_codex)

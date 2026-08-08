@@ -4,9 +4,13 @@ set -euo pipefail
 workdir="$(mktemp -d)"
 launcher_source=/usr/local/bin/run-codex
 pinned_codex=/usr/local/bin/codex
-test_codex="$workdir/codex"
+runtime_manager_source=/usr/local/bin/remote-dev-codex-runtime
+test_bundled_codex="$workdir/bundled-codex"
+test_runtime_codex="$workdir/runtime-codex"
+test_runtime_manager="$workdir/remote-dev-codex-runtime"
 test_launcher="$workdir/run-codex"
 args_file="$workdir/args"
+identity_file="$workdir/identity"
 
 cleanup() {
   rm -rf "$workdir"
@@ -23,25 +27,55 @@ if [[ ! -x "$pinned_codex" ]]; then
   echo "ERROR: missing pinned Codex binary: $pinned_codex" >&2
   exit 1
 fi
-if ! grep -Fxq 'readonly codex_binary=/usr/local/bin/codex' "$launcher_source"; then
-  echo "ERROR: run-codex does not pin /usr/local/bin/codex" >&2
+if [[ ! -x "$runtime_manager_source" ]]; then
+  echo "ERROR: missing Codex runtime manager: $runtime_manager_source" >&2
+  exit 1
+fi
+if ! grep -Fxq 'readonly bundled_codex_binary=/usr/local/bin/codex' "$launcher_source"; then
+  echo "ERROR: run-codex does not retain the immutable bundled fallback" >&2
+  exit 1
+fi
+if ! grep -Fxq 'readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime' "$launcher_source"; then
+  echo "ERROR: run-codex does not use the canonical runtime resolver" >&2
   exit 1
 fi
 
-cat > "$test_codex" <<'FAKE_PINNED_CODEX'
+cat > "$test_bundled_codex" <<'FAKE_BUNDLED_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' bundled > "$REMOTE_DEV_CODEX_IDENTITY_FILE"
 printf '%s\n' "$@" > "$REMOTE_DEV_CODEX_ARGS_FILE"
-FAKE_PINNED_CODEX
-chmod 0755 "$test_codex"
+FAKE_BUNDLED_CODEX
+chmod 0755 "$test_bundled_codex"
+
+cat > "$test_runtime_codex" <<'FAKE_RUNTIME_CODEX'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' runtime > "$REMOTE_DEV_CODEX_IDENTITY_FILE"
+printf '%s\n' "$@" > "$REMOTE_DEV_CODEX_ARGS_FILE"
+FAKE_RUNTIME_CODEX
+chmod 0755 "$test_runtime_codex"
+
+cat > "$test_runtime_manager" <<'FAKE_RUNTIME_MANAGER'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == resolve ]] || exit 98
+if [[ "${REMOTE_DEV_TEST_RESOLVER_FAIL:-0}" == 1 ]]; then
+  exit 97
+fi
+printf '%s\n' "$REMOTE_DEV_TEST_RUNTIME_CODEX"
+FAKE_RUNTIME_MANAGER
+chmod 0755 "$test_runtime_manager"
 
 sed \
-  "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$test_codex|" \
+  -e "s|^readonly bundled_codex_binary=/usr/local/bin/codex$|readonly bundled_codex_binary=$test_bundled_codex|" \
+  -e "s|^readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime$|readonly runtime_manager=$test_runtime_manager|" \
   "$launcher_source" > "$test_launcher"
 chmod 0755 "$test_launcher"
 
-if ! grep -Fq "readonly codex_binary=$test_codex" "$test_launcher"; then
-  echo "ERROR: failed to create an isolated run-codex test launcher" >&2
+if ! grep -Fq "readonly bundled_codex_binary=$test_bundled_codex" "$test_launcher" \
+   || ! grep -Fq "readonly runtime_manager=$test_runtime_manager" "$test_launcher"; then
+  echo "ERROR: failed to create isolated run-codex test launcher" >&2
   exit 1
 fi
 
@@ -57,17 +91,17 @@ run_launcher() {
   local deployment_mode="$1"
   shift
 
-  rm -f "$args_file"
+  rm -f "$args_file" "$identity_file"
+  common_env=(
+    PATH="$workdir/path-bin:$PATH"
+    REMOTE_DEV_CODEX_ARGS_FILE="$args_file"
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file"
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex"
+  )
   if [[ "$deployment_mode" == __unset__ ]]; then
-    env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
-      PATH="$workdir/path-bin:$PATH" \
-      REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-      "$test_launcher" "$@"
+    env -u REMOTE_DEV_CODEX_APPROVAL_MODE "${common_env[@]}" "$test_launcher" "$@"
   else
-    env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" \
-      PATH="$workdir/path-bin:$PATH" \
-      REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
-      "$test_launcher" "$@"
+    env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" "${common_env[@]}" "$test_launcher" "$@"
   fi
 }
 
@@ -78,7 +112,7 @@ assert_args() {
   local -a actual=()
 
   if [[ ! -f "$args_file" ]]; then
-    echo "ERROR: $label did not invoke the pinned Codex fixture" >&2
+    echo "ERROR: $label did not invoke a Codex fixture" >&2
     exit 1
   fi
   mapfile -t actual < "$args_file"
@@ -100,13 +134,28 @@ assert_args() {
   done
 }
 
+assert_identity() {
+  local expected_identity="$1"
+  local label="$2"
+  local actual_identity=""
+  if [[ ! -f "$identity_file" ]]; then
+    echo "ERROR: $label did not record executable identity" >&2
+    exit 1
+  fi
+  IFS= read -r actual_identity < "$identity_file"
+  if [[ "$actual_identity" != "$expected_identity" ]]; then
+    printf 'ERROR: %s used %q Codex, expected %q\n' "$label" "$actual_identity" "$expected_identity" >&2
+    exit 1
+  fi
+}
+
 run_launcher __unset__ resume --last
 assert_args 'default autonomous mode' \
   --sandbox danger-full-access \
   --ask-for-approval never \
   resume --last
-
-echo 'Codex default approval mode: autonomous'
+assert_identity runtime 'default autonomous mode'
+echo 'Codex default approval mode: autonomous; resolved runtime selected'
 
 run_launcher autonomous resume --last
 assert_args 'deployment autonomous mode' \
@@ -131,8 +180,23 @@ assert_args 'inline per-launch guarded mode' \
   --sandbox danger-full-access \
   --ask-for-approval untrusted \
   resume
-
 echo 'Codex deployment and per-launch approval modes: OK'
+
+rm -f "$args_file" "$identity_file"
+env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
+  PATH="$workdir/path-bin:$PATH" \
+  REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+  REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+  REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
+  REMOTE_DEV_TEST_RESOLVER_FAIL=1 \
+  "$test_launcher" resume --last 2>"$workdir/fallback-error"
+assert_args 'resolver failure bundled fallback' \
+  --sandbox danger-full-access \
+  --ask-for-approval never \
+  resume --last
+assert_identity bundled 'resolver failure bundled fallback'
+grep -Fq 'using immutable bundled fallback' "$workdir/fallback-error"
+echo 'Codex resolver failure: immutable bundled fallback selected'
 
 assert_policy_output() {
   local label="$1"
@@ -171,10 +235,12 @@ assert_rejected() {
   local error_file="$workdir/rejected-error"
   local status=0
 
-  rm -f "$args_file" "$error_file"
+  rm -f "$args_file" "$identity_file" "$error_file"
   if env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
     PATH="$workdir/path-bin:$PATH" \
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
       "$test_launcher" "$@" >/dev/null 2>"$error_file"; then
     status=0
   else
@@ -186,7 +252,7 @@ assert_rejected() {
     cat "$error_file" >&2 || true
     exit 1
   fi
-  if [[ -e "$args_file" ]]; then
+  if [[ -e "$args_file" || -e "$identity_file" ]]; then
     echo "ERROR: $label invoked Codex despite the rejected policy override" >&2
     exit 1
   fi
@@ -219,9 +285,11 @@ assert_invalid_mode() {
   local error_file="$workdir/mode-error"
   local status=0
 
-  rm -f "$args_file" "$error_file"
+  rm -f "$args_file" "$identity_file" "$error_file"
   if PATH="$workdir/path-bin:$PATH" \
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
       "$@" >/dev/null 2>"$error_file"; then
     status=0
   else
@@ -233,7 +301,7 @@ assert_invalid_mode() {
     cat "$error_file" >&2 || true
     exit 1
   fi
-  if [[ -e "$args_file" ]]; then
+  if [[ -e "$args_file" || -e "$identity_file" ]]; then
     echo "ERROR: $label invoked Codex despite invalid project-owned policy input" >&2
     exit 1
   fi
@@ -264,5 +332,4 @@ assert_args 'option separator preservation' \
   --sandbox danger-full-access \
   --ask-for-approval untrusted \
   -- --approval-mode autonomous --sandbox-is-prompt-text
-
 echo 'Codex launcher option separator: preserved'

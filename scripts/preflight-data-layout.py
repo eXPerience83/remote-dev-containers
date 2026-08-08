@@ -12,6 +12,7 @@ from pathlib import Path
 CODEX_DIRECTORY_SUFFIXES = (
     "workspaces/codex",
     "state/codex/agent",
+    "state/codex/runtime",
     "state/codex/gh",
     "state/codex/git",
     "state/codex/ssh",

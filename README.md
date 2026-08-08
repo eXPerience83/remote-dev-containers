@@ -18,7 +18,7 @@ The current edge stack is the Codex reference implementation:
 - one isolated, independently authenticated Codex terminal service with private role-scoped mounts;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
-- Codex CLI from an official pinned release asset;
+- Codex CLI from an official pinned release asset, plus an explicit optional official runtime-update path with the bundled CLI retained as fallback;
 - GitHub CLI as a core tool;
 - Python 3.14, Node 24, uv and mise;
 - browser terminal through ttyd;
@@ -68,7 +68,7 @@ Remote Dev stack
 
 The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
 
-Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts or Codex terminal password.
+Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password.
 
 The Codex endpoint authenticates independently with its own password source. Credentials are not embedded in the link, passed through the launcher or shared between services.
 
@@ -102,6 +102,14 @@ A per-launch selection overrides the deployment value only for that process. Unk
 
 The upstream Codex TUI also exposes `/permissions`. That command changes the active upstream permission profile inside the running Codex process; it does not set `REMOTE_DEV_CODEX_APPROVAL_MODE` and does not replace Remote Dev's validated autonomous/guarded resolver. Use the Remote Dev menu or deployment variable for the supported default and next-launch behavior.
 
+### Explicit Codex runtime updates
+
+The image-tested `/usr/local/bin/codex` remains immutable. From the Codex menu or with `remote-dev-codex-runtime install` / `remote-dev-codex-runtime update`, an administrator may explicitly install a newer compatible package from OpenAI's official Codex release. Both commands use the same bounded admission path and ask for confirmation before the first updater network request. `--yes` is the explicit non-interactive form for `install`, `update` and `remove`.
+
+A newer admitted package is shown as **official source; Remote Dev review pending**. That means origin, release digest, package identity and bounded compatibility checks passed, while Remote Dev has not yet reviewed and deployment-tested that exact release as part of an image build. Damaged or locally modified optional state is rejected, and an equal/older optional runtime never shadows the bundled CLI.
+
+The optional package is stored outside `CODEX_HOME` under the Codex-only runtime state mount, so credentials/config/sessions remain separate and the upstream standalone self-update path cannot bypass the project-owned explicit updater. See `docs/codex-runtime-updates.md` for the trust states, package checks, fallback behavior and removal command.
+
 ### Isolation on TrueNAS
 
 The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
@@ -129,6 +137,7 @@ REMOTE_DEV_DATA_ROOT/
 ├── state/
 │   └── codex/
 │       ├── agent/
+│       ├── runtime/
 │       ├── gh/
 │       ├── git/
 │       └── ssh/
@@ -137,7 +146,7 @@ REMOTE_DEV_DATA_ROOT/
         └── web_password.txt
 ```
 
-The Codex service mounts only the corresponding child paths. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The Codex service mounts only the corresponding child paths. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
@@ -180,7 +189,7 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex \
-  data/state/codex/{agent,gh,git,ssh} \
+  data/state/codex/{agent,runtime,gh,git,ssh} \
   data/secrets/codex
 printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
@@ -200,9 +209,10 @@ Open the launcher at published port `7680` and select Codex. The browser then op
 
 1. start Codex or resume a saved session with the configured deployment mode;
 2. select autonomous or guarded for the next start/resume only;
-3. use Codex device-code login;
-4. use GitHub CLI login;
-5. run diagnostics.
+3. explicitly update or remove the optional official Codex runtime while retaining the bundled fallback;
+4. use Codex device-code login;
+5. use GitHub CLI login;
+6. run diagnostics.
 
 To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
 
@@ -248,19 +258,21 @@ GHCR tags are mutable. For immutable reproduction or rollback, record the publis
 ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
-The launcher and terminal diagnostics show the embedded image channel and source revision. To display the complete embedded image metadata together with the runtime Codex CLI version from a Codex shell, run:
+The launcher and terminal diagnostics show the embedded image channel and source revision. To display the complete embedded image metadata together with the bundled and optional Codex runtime state from a Codex shell, run:
 
 ```bash
 remote-dev-version
 ```
 
-Expected edge output:
+Expected edge output begins with:
 
 ```text
 Image version: edge
 Source revision: <full-commit-sha>
-Codex CLI: codex-cli <version>
+Codex CLI: codex-cli <bundled-version>
 ```
+
+When an optional runtime exists, the command also reports its version, trust state and active source.
 
 See `docs/releases.md` for release channels, promotion criteria and rollback guidance.
 
@@ -271,7 +283,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - The Codex terminal remains independently authenticated.
 - The launcher never embeds or forwards the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
-- Do not mount agent workspaces or credentials into the launcher.
+- Do not mount agent workspaces, credentials or optional runtime state into the launcher.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
 - The default Codex command launcher disables the inner sandbox explicitly; the outer Codex container is the supported isolation boundary.
@@ -279,6 +291,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Guarded prompts are not a sandbox and do not hide mounted files or credentials from Codex.
 - Anyone with terminal access can read repositories and credentials mounted into that agent service.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
+- A newer optional Codex runtime marked review-pending has passed provenance/integrity/compatibility admission but has not yet completed Remote Dev review and real deployment validation for that exact upstream release.
 - Optional vendor agents are not bundled or covered by the project Apache-2.0 license.
 - `edge` is experimental and may be replaced without notice.
 - Breaking configuration and persistence changes are still possible before `v0.1.0`.
@@ -304,6 +317,8 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests u
 - `docs/decisions.md`
 - `docs/releases.md`
 - `docs/runtime-locks.md`
+- `docs/codex-runtime-updates.md`
+- `docs/codex-runtime-updates.es.md`
 - `docs/roadmap.md`
 
 ## Upstream references

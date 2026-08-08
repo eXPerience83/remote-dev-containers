@@ -23,7 +23,7 @@ Stack Remote Dev
 - Codex se ejecuta en su propio contenedor con montajes privados y separados por rol.
 - Docker reutiliza la misma imagen y sus mismas capas para ambos servicios.
 - El terminal Codex conserva su propia autenticación independiente.
-- La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
+- La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, más una ruta explícita y opcional para instalar un runtime oficial más nuevo manteniendo el Codex incluido como fallback, además de GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
 - La persistencia utiliza un único contrato canónico y neutral.
 - AMD64 continúa siendo la arquitectura inicial.
 
@@ -55,7 +55,7 @@ El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOT
 
 La página del launcher no requiere autenticación por defecto porque es navegación sin estado: no contiene credenciales, no actúa como proxy y no monta datos privados de los agentes. Mantiene la comprobación de origen cuando el navegador envía la cabecera `Origin` y aplica una política CSP restrictiva.
 
-Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH ni la contraseña del terminal.
+Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal.
 
 El terminal Codex se autentica de manera independiente mediante su propia fuente de contraseña. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
 
@@ -87,6 +87,14 @@ Los valores desconocidos y los flags directos de sandbox/aprobación se rechazan
 
 La interfaz de Codex también ofrece `/permissions`. Ese comando modifica el perfil de permisos activo dentro del proceso Codex en ejecución; no cambia `REMOTE_DEV_CODEX_APPROVAL_MODE` ni sustituye el resolver validado autonomous/guarded de Remote Dev. Utiliza el menú o la variable del despliegue para el comportamiento soportado y persistente entre nuevos procesos.
 
+### Actualizaciones explícitas del runtime de Codex
+
+El `/usr/local/bin/codex` probado con la imagen permanece inmutable. Desde el menú de Codex o mediante `remote-dev-codex-runtime install` / `remote-dev-codex-runtime update`, un administrador puede instalar explícitamente un paquete compatible más nuevo desde la release oficial de Codex de OpenAI. Ambos comandos utilizan la misma ruta de admisión acotada y piden confirmación antes de la primera petición de red del actualizador. `--yes` es la forma explícita no interactiva para `install`, `update` y `remove`.
+
+Un paquete más nuevo admitido aparece como **fuente oficial; revisión de Remote Dev pendiente**. Eso significa que han pasado las comprobaciones de origen, digest de release, identidad del paquete y compatibilidad acotada, mientras que Remote Dev todavía no ha revisado ni probado en despliegue real esa release exacta como parte de una build de imagen. El estado opcional dañado o modificado localmente se rechaza, y un runtime igual o más antiguo nunca sustituye al Codex incluido.
+
+El paquete opcional se guarda fuera de `CODEX_HOME` en un montaje exclusivo de estado de runtime de Codex, separando credenciales/configuración/sesiones e impidiendo que la ruta de autoactualización standalone de upstream pueda saltarse el gestor explícito del proyecto. Consulta `docs/codex-runtime-updates.es.md` para los estados de confianza, comprobaciones del paquete, fallback y eliminación.
+
 ## Aislamiento en TrueNAS
 
 El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher añade únicamente su propio secreto de contraseña en modo solo lectura.
@@ -112,6 +120,7 @@ REMOTE_DEV_DATA_ROOT/
 ├── state/
 │   └── codex/
 │       ├── agent/
+│       ├── runtime/
 │       ├── gh/
 │       ├── git/
 │       └── ssh/
@@ -120,7 +129,7 @@ REMOTE_DEV_DATA_ROOT/
         └── web_password.txt
 ```
 
-El servicio Codex monta exclusivamente esos directorios hijo. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
+El servicio Codex monta exclusivamente esos directorios hijo. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
 Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
@@ -144,7 +153,7 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex \
-  data/state/codex/{agent,gh,git,ssh} \
+  data/state/codex/{agent,runtime,gh,git,ssh} \
   data/secrets/codex
 printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
@@ -163,7 +172,7 @@ docker compose -f compose/docker-compose.yml up -d
 1. Abre el launcher en el puerto publicado `7680`.
 2. Pulsa Codex.
 3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
-4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, realiza los login de Codex/GitHub y ejecuta diagnósticos.
+4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional de Codex manteniendo el fallback incluido, inicia sesión en Codex y GitHub y ejecuta diagnósticos.
 
 Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
 
@@ -207,6 +216,8 @@ El launcher y los diagnósticos muestran la identidad embebida de la imagen. Des
 remote-dev-version
 ```
 
+Cuando exista un runtime opcional, el comando también muestra su versión, estado de confianza y la fuente activa.
+
 ## Advertencias importantes
 
 - No expongas los puertos 7680 o 7681 directamente a Internet.
@@ -214,14 +225,15 @@ remote-dev-version
 - Codex sigue autenticado de forma independiente.
 - El launcher no reenvía ni incluye en la URL la contraseña de Codex.
 - El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
-- No montes workspaces ni credenciales de agente en el launcher.
+- No montes workspaces, credenciales de agente ni estado de runtime opcional en el launcher.
 - No montes el socket Docker ni uses modo privilegiado.
 - En modo autónomo, Codex puede actuar sin confirmaciones sobre todo lo montado en su servicio.
 - Las confirmaciones del modo protegido no son un sandbox.
+- Un runtime opcional de Codex marcado como revisión pendiente ha superado admisión de procedencia, integridad y compatibilidad, pero esa release exacta todavía no ha completado la revisión y validación real de Remote Dev.
 - `edge` sigue siendo experimental.
 
 ## Desarrollo y revisiones
 
 El desarrollo se realiza mediante pull requests. CodeRabbit revisa Dockerfiles, Bash, el launcher Python, GitHub Actions, Compose y cambios sensibles de seguridad. CI y las pruebas manuales siguen siendo obligatorios.
 
-Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md` y `docs/roadmap.md` para el estado y los siguientes pasos.
+Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md`, `docs/codex-runtime-updates.es.md` y `docs/roadmap.md` para el estado y los siguientes pasos.

@@ -51,6 +51,7 @@ services:
       REMOTE_DEV_ROLE: codex
       WORKSPACE: /workspace
       CODEX_HOME: /root/.codex
+      REMOTE_DEV_CODEX_RUNTIME_ROOT: /root/.local/share/remote-dev/codex-runtime
       GH_CONFIG_DIR: /root/.config/gh
       GIT_CONFIG_GLOBAL: /root/.config/git/config
 
@@ -97,6 +98,11 @@ services:
       - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/agent
         target: /root/.codex
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/runtime
+        target: /root/.local/share/remote-dev/codex-runtime
         bind:
           create_host_path: false
       - type: bind

@@ -52,6 +52,7 @@ GitHub config: ${GH_CONFIG_DIR:-unset}
 EOF_AGENT
   if [[ "$role" == codex ]]; then
     echo "Codex home: ${CODEX_HOME:-unset}"
+    echo "Codex runtime state: ${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
   elif [[ "$role" == antigravity ]]; then
     readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
     if [[ -r "$paths_lib" && ! -L "$paths_lib" ]]; then
@@ -94,6 +95,7 @@ done
 if [[ "$role" == codex ]]; then
   check_cmd codex
   check_cmd run-codex
+  check_cmd /usr/local/bin/remote-dev-codex-runtime
 elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
@@ -120,6 +122,20 @@ else
 fi
 
 if [[ "$role" == codex ]]; then
+  echo
+  codex_runtime_status=0
+  codex_runtime_status_command=(/usr/local/bin/remote-dev-codex-runtime status)
+  if "${codex_runtime_status_command[@]}"; then
+    :
+  else
+    codex_runtime_status=$?
+    echo "Codex runtime status: unavailable (exit $codex_runtime_status)"
+    status=1
+  fi
+  echo 'Codex runtime trust boundary: official package may be newer than the image; review-pending means Remote Dev has not reviewed that exact release.'
+  echo 'Codex runtime automatic updates: disabled; network access occurs only after the explicit update action.'
+  echo 'Codex runtime fallback: missing, damaged, modified, equal or older runtime state selects the immutable bundled CLI.'
+
   echo
   if policy_output="$(run-codex --print-policy 2>/dev/null)"; then
     printf '%s\n' "$policy_output"
@@ -168,7 +184,10 @@ if [[ "$role" != launcher ]]; then
     "${GH_CONFIG_DIR:-/root/.config/gh}"
   )
   if [[ "$role" == codex ]]; then
-    writable_paths+=("${CODEX_HOME:-/root/.codex}")
+    writable_paths+=(
+      "${CODEX_HOME:-/root/.codex}"
+      "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
+    )
   elif [[ "$role" == antigravity ]]; then
     writable_paths+=(
       "$ANTIGRAVITY_BIN_DIR"

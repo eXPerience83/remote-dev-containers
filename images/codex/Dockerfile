@@ -82,6 +82,7 @@ COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
 COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
@@ -106,6 +107,8 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
+    --mount=type=bind,source=scripts/remote-dev-codex-runtime.py,target=/tmp/remote-dev-codex-runtime.py,ro \
+    --mount=type=bind,source=scripts/test-remote-dev-codex-runtime.py,target=/tmp/test-remote-dev-codex-runtime.py,ro \
     --mount=type=bind,source=scripts/test-codex-code-mode-host.py,target=/tmp/test-codex-code-mode-host.py,ro \
     --mount=type=bind,source=scripts/test-antigravity-oauth.py,target=/tmp/test-antigravity-oauth.py,ro \
     --mount=type=bind,source=scripts/test-antigravity-picker.py,target=/tmp/test-antigravity-picker.py,ro \
@@ -117,6 +120,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/attach-remote-dev-tmux \
       /usr/local/bin/run-direct-session \
       /usr/local/bin/run-codex \
+      /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-antigravity \
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
@@ -140,9 +144,13 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
+      /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /tmp/test-codex-code-mode-host.py \
+    && python /tmp/test-remote-dev-codex-runtime.py \
+    && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
+    && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
     && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
@@ -208,9 +216,13 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /root/.config/git \
       /root/.ssh \
       /root/.local/bin \
+      /root/.local/share/remote-dev/codex-runtime \
       /root/.local/share/remote-dev/antigravity \
       /root/.gemini/antigravity-cli \
     && /usr/local/bin/secure-persistent-state \
+    && if REMOTE_DEV_ROLE=codex REMOTE_DEV_CODEX_RUNTIME_ROOT=/workspace /usr/local/bin/secure-persistent-state >/dev/null 2>&1; then \
+      echo 'unsafe Codex runtime root was accepted' >&2; exit 1; \
+    fi \
     && REMOTE_DEV_ROLE=antigravity /usr/local/bin/secure-persistent-state \
     && REMOTE_DEV_ROLE=launcher remote-dev-doctor | grep -Fx 'Role: launcher' \
     && REMOTE_DEV_ROLE=shell remote-dev-doctor | grep -Fx 'Role: shell' \
