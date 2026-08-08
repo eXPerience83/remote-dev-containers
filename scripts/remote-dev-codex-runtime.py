@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage an optional official Codex runtime while preserving the bundled fallback."""
+"""Manage an optional official Codex runtime with an immutable bundled fallback."""
 
 from __future__ import annotations
 
@@ -25,8 +25,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, NoReturn
+from typing import Any, NoReturn
 
 ROOT = Path(
     os.environ.get(
@@ -38,7 +39,7 @@ BUNDLED = Path(
     os.environ.get("REMOTE_DEV_CODEX_BUNDLED_BINARY", "/usr/local/bin/codex")
 )
 LATEST_URL = "https://api.github.com/repos/openai/codex/releases/latest"
-CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
+SYSTEM_CA_FILE = Path("/etc/ssl/certs/ca-certificates.crt")
 ALLOWED_HOSTS = {
     "api.github.com",
     "github.com",
@@ -49,7 +50,7 @@ STABLE_RE = re.compile(r"^rust-v([0-9]+\.[0-9]+\.[0-9]+)$")
 VERSION_RE = re.compile(r"^codex-cli ([0-9]+\.[0-9]+\.[0-9]+)$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 CURRENT_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{16}-[0-9a-f]{8}$")
-REQUIRED = (
+REQUIRED_FILES = (
     "bin/codex",
     "bin/codex-code-mode-host",
     "codex-path/rg",
@@ -71,7 +72,7 @@ NOBODY = 65534
 
 
 class ManagerError(RuntimeError):
-    """One bounded runtime-admission or local-integrity check failed."""
+    """A bounded admission or local-integrity check failed."""
 
 
 def fail(message: str) -> NoReturn:
@@ -94,6 +95,10 @@ def target() -> str:
     fail(f"unsupported Codex runtime architecture: {machine}")
 
 
+def expected_owner() -> int:
+    return os.geteuid()
+
+
 def file_sha(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -102,38 +107,34 @@ def file_sha(path: Path) -> str:
     return digest.hexdigest()
 
 
-def expected_owner() -> int:
-    return os.geteuid()
-
-
-def real_file(path: Path, executable: bool = False) -> os.stat_result:
+def real_file(path: Path, *, executable: bool = False) -> os.stat_result:
     try:
-        result = path.lstat()
+        info = path.lstat()
     except OSError as exc:
         fail(f"required runtime file is unavailable: {path}: {exc}")
-    if not stat.S_ISREG(result.st_mode):
+    if not stat.S_ISREG(info.st_mode):
         fail(f"runtime path is not a regular file: {path}")
-    if result.st_uid != expected_owner():
+    if info.st_uid != expected_owner():
         fail(f"runtime file has unexpected owner: {path}")
-    if executable and not result.st_mode & stat.S_IXUSR:
+    if executable and not info.st_mode & stat.S_IXUSR:
         fail(f"runtime executable is not owner-executable: {path}")
-    if result.st_mode & 0o022:
+    if info.st_mode & 0o022:
         fail(f"runtime file is group/world writable: {path}")
-    return result
+    return info
 
 
 def real_dir(path: Path) -> os.stat_result:
     try:
-        result = path.lstat()
+        info = path.lstat()
     except OSError as exc:
         fail(f"runtime directory is unavailable: {path}: {exc}")
-    if not stat.S_ISDIR(result.st_mode):
+    if not stat.S_ISDIR(info.st_mode):
         fail(f"runtime path is not a real directory: {path}")
-    if result.st_uid != expected_owner():
+    if info.st_uid != expected_owner():
         fail(f"runtime directory has unexpected owner: {path}")
-    if result.st_mode & 0o022:
+    if info.st_mode & 0o022:
         fail(f"runtime directory is group/world writable: {path}")
-    return result
+    return info
 
 
 def prepare_root() -> None:
@@ -146,7 +147,7 @@ def prepare_root() -> None:
 
 @contextlib.contextmanager
 def runtime_lock() -> Iterator[None]:
-    """Serialize mutation without making lock-free launch/status depend on it."""
+    """Serialize mutations while keeping launch/status lock-free."""
     prepare_root()
     lock_path = ROOT / ".lock"
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
@@ -167,14 +168,13 @@ def runtime_lock() -> Iterator[None]:
 
 
 def bundled_version() -> str:
-    real_file(BUNDLED, True)
+    real_file(BUNDLED, executable=True)
     try:
         result = subprocess.run(
             [str(BUNDLED), "--version"],
             check=True,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=10,
             env={"PATH": "/usr/bin:/bin"},
         )
@@ -200,21 +200,40 @@ def validate_url(url: str) -> None:
 
 
 class Redirects(urllib.request.HTTPRedirectHandler):
-    """Permit redirects only while every hop remains on reviewed HTTPS origins."""
+    """Permit redirects only while every URL remains on reviewed HTTPS origins."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         validate_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def ssl_context() -> ssl.SSLContext:
+    if not SYSTEM_CA_FILE.is_file():
+        fail(f"system CA bundle is unavailable: {SYSTEM_CA_FILE}")
+    context = ssl.create_default_context(cafile=str(SYSTEM_CA_FILE))
+    extra_ca = os.environ.get("CODEX_CA_CERTIFICATE", "").strip()
+    if extra_ca:
+        ca_path = Path(extra_ca)
+        try:
+            info = ca_path.lstat()
+        except OSError as exc:
+            fail(f"CODEX_CA_CERTIFICATE is unavailable: {exc}")
+        if not stat.S_ISREG(info.st_mode) or info.st_size <= 0 or info.st_size > MAX_METADATA:
+            fail("CODEX_CA_CERTIFICATE must be a bounded regular file")
+        try:
+            context.load_verify_locations(cafile=str(ca_path))
+        except (OSError, ssl.SSLError) as exc:
+            fail(f"cannot load CODEX_CA_CERTIFICATE: {exc}")
+    return context
+
+
 def opener() -> urllib.request.OpenerDirector:
-    if not Path(CA_FILE).is_file():
-        fail(f"system CA bundle is unavailable: {CA_FILE}")
-    context = ssl.create_default_context(cafile=CA_FILE)
+    # Default ProxyHandler behavior intentionally honors HTTP(S)_PROXY/NO_PROXY,
+    # matching the existing Codex deployment contract. URL validation still
+    # constrains request, redirect and final destination origins.
     return urllib.request.build_opener(
-        # Do not let ambient proxy configuration replace the reviewed origin path.
-        urllib.request.ProxyHandler({}),
-        urllib.request.HTTPSHandler(context=context),
+        urllib.request.ProxyHandler(),
+        urllib.request.HTTPSHandler(context=ssl_context()),
         Redirects(),
     )
 
@@ -374,8 +393,8 @@ def extract(archive_path: Path, destination: Path) -> None:
 def package_metadata(
     package: Path, expected: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    for rel in REQUIRED:
-        real_file(package / rel, rel != "codex-package.json")
+    for rel in REQUIRED_FILES:
+        real_file(package / rel, executable=rel != "codex-package.json")
     metadata_path = package / "codex-package.json"
     if metadata_path.stat().st_size > MAX_METADATA:
         fail("Codex package metadata exceeds size limit")
@@ -435,65 +454,10 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=2)
 
 
-def bounded_run(
-    argv: list[str], cwd: Path, home: Path, timeout: float = 10
-) -> subprocess.CompletedProcess[str]:
-    """Run changed vendor bytes with bounded time and combined captured output."""
-    process = subprocess.Popen(
-        argv,
-        cwd=cwd,
-        env=candidate_env(home),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=0,
-        preexec_fn=drop_privileges if os.name == "posix" else None,
-    )
-    assert process.stdout is not None and process.stderr is not None
-    streams = {process.stdout: bytearray(), process.stderr: bytearray()}
-    deadline = time.monotonic() + timeout
-    try:
-        while streams:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                terminate(process)
-                fail(f"candidate command timed out: {argv[0]}")
-            ready, _, _ = select.select(list(streams), [], [], min(0.1, remaining))
-            if not ready:
-                continue
-            for stream in ready:
-                chunk = os.read(stream.fileno(), 65536)
-                if not chunk:
-                    streams.pop(stream, None)
-                    continue
-                streams[stream].extend(chunk)
-                total = sum(len(value) for value in streams.values())
-                if total > MAX_PROBE_OUTPUT:
-                    terminate(process)
-                    fail(f"candidate command exceeded output limit: {argv[0]}")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            terminate(process)
-            fail(f"candidate command timed out: {argv[0]}")
-        returncode = process.wait(timeout=remaining)
-    except subprocess.TimeoutExpired:
-        terminate(process)
-        fail(f"candidate command timed out: {argv[0]}")
-    finally:
-        if process.poll() is None:
-            terminate(process)
-    stdout = bytes(streams.get(process.stdout, b""))
-    stderr = bytes(streams.get(process.stderr, b""))
-    # streams entries are removed at EOF; retain output through independent buffers.
-    # Re-run bounded capture with stable references populated below is not possible,
-    # so keep references before the loop instead.
-    raise AssertionError("unreachable")
-
-
 def candidate_run(
-    argv: list[str], cwd: Path, home: Path, timeout: float = 10
+    argv: list[str], cwd: Path, home: Path, *, timeout: float = 10
 ) -> subprocess.CompletedProcess[str]:
-    """Bound output from a candidate without exposing user credentials or workspace."""
+    """Run fixed candidate commands with bounded time/output and synthetic state."""
     process = subprocess.Popen(
         argv,
         cwd=cwd,
@@ -504,7 +468,9 @@ def candidate_run(
         bufsize=0,
         preexec_fn=drop_privileges if os.name == "posix" else None,
     )
-    assert process.stdout is not None and process.stderr is not None
+    if process.stdout is None or process.stderr is None:
+        terminate(process)
+        fail("candidate output pipes are unavailable")
     output = {process.stdout: bytearray(), process.stderr: bytearray()}
     open_streams = set(output)
     deadline = time.monotonic() + timeout
@@ -517,8 +483,6 @@ def candidate_run(
             ready, _, _ = select.select(
                 list(open_streams), [], [], min(0.1, remaining)
             )
-            if not ready:
-                continue
             for stream in ready:
                 chunk = os.read(stream.fileno(), 65536)
                 if not chunk:
@@ -558,7 +522,9 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
         bufsize=0,
         preexec_fn=drop_privileges if os.name == "posix" else None,
     )
-    assert process.stdout is not None and process.stderr is not None
+    if process.stdout is None or process.stderr is None:
+        terminate(process)
+        fail("candidate code-mode host output pipes are unavailable")
     stdout = bytearray()
     stderr = bytearray()
     deadline = time.monotonic() + 5
@@ -568,14 +534,10 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
             [process.stdout, process.stderr], [], [], max(0.0, wait)
         )
         for stream in ready:
-            try:
-                chunk = os.read(stream.fileno(), 65536)
-            except BlockingIOError:
-                continue
+            chunk = os.read(stream.fileno(), 65536)
             if not chunk:
                 continue
-            destination = stdout if stream is process.stdout else stderr
-            destination.extend(chunk)
+            (stdout if stream is process.stdout else stderr).extend(chunk)
             if len(stdout) + len(stderr) > MAX_PROBE_OUTPUT:
                 fail("candidate code-mode host exceeded output limit")
 
@@ -667,6 +629,20 @@ def records(package: Path) -> list[dict[str, Any]]:
     return result
 
 
+def read_previous_name() -> str | None:
+    current = ROOT / "current"
+    if not current.exists() and not current.is_symlink():
+        return None
+    try:
+        info = real_file(current)
+        if info.st_size > MAX_POINTER:
+            return None
+        name = current.read_text(encoding="utf-8").strip()
+    except (ManagerError, OSError, UnicodeDecodeError):
+        return None
+    return name if CURRENT_RE.fullmatch(name) else None
+
+
 def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
     expected_records = records(package)
     release_name = (
@@ -679,6 +655,7 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
         else:
             releases.mkdir(mode=0o700)
         releases.chmod(0o700)
+        previous_name = read_previous_name()
         staging = releases / f".candidate-{uuid.uuid4().hex}"
         final_release = releases / release_name
         staging.mkdir(mode=0o700)
@@ -718,9 +695,12 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
             pointer.write_text(release_name + "\n", encoding="utf-8")
             pointer.chmod(0o600)
             os.replace(pointer, ROOT / "current")
+            keep_names = {release_name}
+            if previous_name:
+                keep_names.add(previous_name)
             for old in releases.iterdir():
                 if (
-                    old != final_release
+                    old.name not in keep_names
                     and old.is_dir()
                     and not old.is_symlink()
                     and not old.name.startswith(".candidate-")
@@ -731,7 +711,7 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
                 shutil.rmtree(staging, ignore_errors=True)
 
 
-def validate_manifest(manifest: Any) -> dict[str, Any]:
+def validate_manifest(manifest: object) -> dict[str, Any]:
     if not isinstance(manifest, dict) or manifest.get("schema_version") != SCHEMA:
         fail("Codex runtime manifest is incompatible")
     version = manifest.get("version")
@@ -766,12 +746,15 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
 
 def active_runtime() -> tuple[str, Path] | None:
     current = ROOT / "current"
-    if not current.exists():
+    if not current.exists() and not current.is_symlink():
         return None
     current_info = real_file(current)
     if current_info.st_size > MAX_POINTER:
         fail("Codex runtime current pointer exceeds size limit")
-    name = current.read_text(encoding="utf-8").strip()
+    try:
+        name = current.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        fail(f"Codex runtime current pointer cannot be read: {exc}")
     if not CURRENT_RE.fullmatch(name):
         fail("Codex runtime current pointer is malformed")
     release = ROOT / "releases" / name
@@ -821,7 +804,7 @@ def active_runtime() -> tuple[str, Path] | None:
             fail("Codex runtime manifest has malformed file identity")
         expected_paths.add(rel_value)
         path = package.joinpath(*rel.parts)
-        info = real_file(path, executable)
+        info = real_file(path, executable=executable)
         if info.st_size != size or file_sha(path) != sha:
             fail(f"Codex runtime file changed: {rel_value}")
     actual_paths = {
@@ -865,7 +848,7 @@ def state() -> dict[str, Any]:
     }
 
 
-def print_status(current: dict[str, Any], menu: bool) -> None:
+def print_status(current: dict[str, Any], *, menu: bool) -> None:
     kind = current["kind"]
     bundled = current["bundled"]
     if menu:
@@ -906,7 +889,7 @@ def print_status(current: dict[str, Any], menu: bool) -> None:
         print("Codex active source: bundled")
 
 
-def confirm(prompt: str, yes: bool) -> None:
+def confirm(prompt: str, *, yes: bool) -> None:
     if yes:
         return
     if not sys.stdin.isatty():
@@ -915,14 +898,14 @@ def confirm(prompt: str, yes: bool) -> None:
         raise KeyboardInterrupt
 
 
-def update_runtime(yes: bool) -> None:
+def update_runtime(*, yes: bool) -> None:
     bundled = bundled_version()
     current = state()
     confirm(
         "Check the official OpenAI Codex release and install a newer compatible "
         "runtime if available? This action will make network requests; the "
         f"immutable bundled {bundled} remains the fallback.",
-        yes,
+        yes=yes,
     )
     asset = latest_asset()
     if version_tuple(asset["version"]) <= version_tuple(bundled):
@@ -958,11 +941,11 @@ def update_runtime(yes: bool) -> None:
     print(f"Bundled fallback remains {bundled}.")
 
 
-def remove_runtime(yes: bool) -> None:
+def remove_runtime(*, yes: bool) -> None:
     if not ROOT.exists() and not ROOT.is_symlink():
         print("Codex runtime: not installed")
         return
-    confirm("Remove the optional Codex runtime and use bundled fallback?", yes)
+    confirm("Remove the optional Codex runtime and use bundled fallback?", yes=yes)
     with runtime_lock():
         current = ROOT / "current"
         if current.exists() or current.is_symlink():
@@ -988,7 +971,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "status":
-            print_status(state(), args.menu)
+            print_status(state(), menu=args.menu)
         elif args.command == "resolve":
             current = state()
             if current["kind"] == "runtime":
@@ -1002,9 +985,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 print(BUNDLED)
         elif args.command in {"install", "update"}:
-            update_runtime(args.yes)
+            update_runtime(yes=args.yes)
         elif args.command == "remove":
-            remove_runtime(args.yes)
+            remove_runtime(yes=args.yes)
         return 0
     except KeyboardInterrupt:
         print("Codex runtime operation cancelled.", file=sys.stderr)
