@@ -4,6 +4,8 @@ Remote Dev always ships an immutable, image-tested Codex CLI. An administrator m
 
 This mechanism is deliberately similar to the Antigravity runtime admission model, with one important difference: OpenAI currently publishes the Codex CLI/package under its own upstream Apache-2.0 license terms and provides complete package archives. Those upstream terms and notices remain applicable to the downloaded Codex package; the Remote Dev project license does not extend to third-party components. Remote Dev therefore downloads the exact official Codex package instead of executing the mutable upstream installer.
 
+These trust states describe the upstream Codex runtime package, not the stability of Remote Dev itself. The public Remote Dev `edge` image remains experimental and is not a stable Remote Dev release; see [release channels and promotion criteria](releases.md).
+
 ## Trust states
 
 The menu, `remote-dev-version` and `remote-dev-doctor` distinguish these states:

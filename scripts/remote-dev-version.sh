@@ -55,10 +55,15 @@ validate_metadata() {
 
 print_codex_runtime_status() {
   local role="${REMOTE_DEV_ROLE:-codex}"
+  local runtime_status=""
   if [[ "$role" != codex || ! -x "$runtime_manager" ]]; then
     return 0
   fi
-  "$runtime_manager" status | sed '/^Codex bundled:/d'
+  if ! runtime_status="$("$runtime_manager" status 2>/dev/null)"; then
+    printf '%s\n' 'Codex runtime: unavailable'
+    return 0
+  fi
+  sed '/^Codex bundled:/d' <<<"$runtime_status"
 }
 
 case "${1:-}" in
