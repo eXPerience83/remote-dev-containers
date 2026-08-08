@@ -107,8 +107,19 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     config = compose_config(path)
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
-    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
-    require(volume_map(services["launcher"]) == {}, f"{path}: launcher must remain mount-free")
+    require(
+        set(services) == {"launcher", "codex", "antigravity"},
+        f"{path}: unexpected services",
+    )
+    launcher = services["launcher"]
+    require(isinstance(launcher, dict), f"{path}: invalid launcher service")
+    require(volume_map(launcher) == {}, f"{path}: launcher must remain mount-free")
+    launcher_environment = launcher.get("environment")
+    require(isinstance(launcher_environment, dict), f"{path}: launcher environment missing")
+    require(
+        "REMOTE_DEV_CODEX_RUNTIME_ROOT" not in launcher_environment,
+        f"{path}: Codex runtime state leaked into launcher environment",
+    )
 
     all_sources: dict[str, set[str]] = {}
     for role in ("codex", "antigravity"):
@@ -130,12 +141,18 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
             source = str(mount["source"])
             sources.add(source)
             if truenas:
-                require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
+                require(
+                    source == f"{TRUENAS_ROOT}{suffix}",
+                    f"{path}: invalid TrueNAS source {source}",
+                )
 
         if not truenas and role == "antigravity":
             password_mount = mounts["/run/secrets/web_password"]
             validate_bind_mount(path, password_mount, ANTIGRAVITY_PASSWORD_SUFFIX)
-            require(password_mount.get("read_only") is True, f"{path}: Antigravity password must be read-only")
+            require(
+                password_mount.get("read_only") is True,
+                f"{path}: Antigravity password must be read-only",
+            )
             sources.add(str(password_mount["source"]))
         all_sources[role] = sources
 
@@ -152,14 +169,23 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
                 f"{path}: Codex runtime state leaked into Antigravity environment",
             )
         if truenas:
-            require("WEB_PASSWORD_FILE" not in environment, f"{path}: {role} file password remains")
+            require(
+                "WEB_PASSWORD_FILE" not in environment,
+                f"{path}: {role} file password remains",
+            )
             require(
                 environment.get("WEB_PASSWORD") == "",
                 f"{path}: {role} public YAML password must remain empty",
             )
         else:
-            require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {role} file target")
-            require("WEB_PASSWORD" not in environment, f"{path}: {role} environment password leaked")
+            require(
+                environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password",
+                f"{path}: {role} file target",
+            )
+            require(
+                "WEB_PASSWORD" not in environment,
+                f"{path}: {role} environment password leaked",
+            )
 
     require(
         all_sources["codex"].isdisjoint(all_sources["antigravity"]),
@@ -171,7 +197,10 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     )
 
     if truenas:
-        require("secrets" not in config, f"{path}: TrueNAS home mode retained top-level secrets")
+        require(
+            "secrets" not in config,
+            f"{path}: TrueNAS home mode retained top-level secrets",
+        )
     else:
         secrets = config.get("secrets")
         require(isinstance(secrets, dict), f"{path}: top-level secrets missing")
@@ -191,9 +220,18 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     for role in ("codex", "antigravity"):
         for mount in volume_map(services[role]).values():
             source = str(mount.get("source", ""))
-            require(source not in {"/", "/root", "/home", "/mnt"}, f"{path}: broad mount {source}")
-            require("docker.sock" not in source.lower(), f"{path}: Docker socket mount {source}")
-            require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
+            require(
+                source not in {"/", "/root", "/home", "/mnt"},
+                f"{path}: broad mount {source}",
+            )
+            require(
+                "docker.sock" not in source.lower(),
+                f"{path}: Docker socket mount {source}",
+            )
+            require(
+                "podman.sock" not in source.lower(),
+                f"{path}: Podman socket mount {source}",
+            )
 
 
 def tracked_repository_files() -> list[Path]:
@@ -201,14 +239,25 @@ def tracked_repository_files() -> list[Path]:
         ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
     )
     if completed.returncode != 0:
-        raise AssertionError("git ls-files failed: " + completed.stderr.decode(errors="replace"))
+        raise AssertionError(
+            "git ls-files failed: " + completed.stderr.decode(errors="replace")
+        )
     return [ROOT / os.fsdecode(path) for path in completed.stdout.split(b"\0") if path]
 
 
 def validate_repository_has_no_legacy_data_root() -> None:
     legacy_variable = "CODEX" + "_DATA_ROOT"
     legacy_path = "/mnt/Pool1/" + "codex"
-    ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
+    ignored_suffixes = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".pdf",
+        ".zip",
+        ".gz",
+    }
     for path in tracked_repository_files():
         if not path.is_file() or path.suffix.lower() in ignored_suffixes:
             continue
@@ -216,7 +265,10 @@ def validate_repository_has_no_legacy_data_root() -> None:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        require(legacy_variable not in text, f"legacy data-root variable remains in {path}")
+        require(
+            legacy_variable not in text,
+            f"legacy data-root variable remains in {path}",
+        )
         require(legacy_path not in text, f"legacy TrueNAS data path remains in {path}")
 
 
@@ -226,16 +278,46 @@ def validate_sources() -> None:
     truenas_text = TRUENAS_COMPOSE.read_text(encoding="utf-8")
     preflight_text = PREFLIGHT.read_text(encoding="utf-8")
 
-    require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
-    require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
-    require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
-    require(generic_text.count("create_host_path: false") == 14, "generic bind protection count")
-    require(truenas_text.count("create_host_path: false") == 13, "TrueNAS bind protection count")
-    require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
-    require("--password-source" in preflight_text, "password source preflight option missing")
-    require("\n      WEB_PASSWORD_FILE:" not in truenas_text, "TrueNAS home mode still uses password files")
-    require("target: /run/secrets/web_password" not in truenas_text, "TrueNAS home mode still mounts passwords")
-    require(truenas_text.count("WEB_PASSWORD: ''") == 2, "TrueNAS password placeholders must fail closed")
+    require(
+        "REMOTE_DEV_DATA_ROOT=../data" in env_text,
+        ".env.example must define the data root",
+    )
+    require(
+        "REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text,
+        "Antigravity opt-in missing",
+    )
+    require(
+        'profiles: ["antigravity"]' in generic_text,
+        "generic Antigravity profile missing",
+    )
+    require(
+        generic_text.count("create_host_path: false") == 14,
+        "generic bind protection count",
+    )
+    require(
+        truenas_text.count("create_host_path: false") == 13,
+        "TrueNAS bind protection count",
+    )
+    require(
+        "--include-antigravity" in preflight_text,
+        "optional Antigravity preflight flag missing",
+    )
+    require(
+        "--password-source" in preflight_text,
+        "password source preflight option missing",
+    )
+    require(
+        "\n      WEB_PASSWORD_FILE:" not in truenas_text,
+        "TrueNAS home mode still uses password files",
+    )
+    require(
+        "target: /run/secrets/web_password" not in truenas_text,
+        "TrueNAS home mode still mounts passwords",
+    )
+    require(
+        truenas_text.count("WEB_PASSWORD: ''") == 2,
+        "TrueNAS password placeholders must fail closed",
+    )
     for marker in (
         "workspaces/codex",
         "state/codex/agent",
