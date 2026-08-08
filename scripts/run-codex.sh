@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly codex_binary=/usr/local/bin/codex
+readonly bundled_codex_binary=/usr/local/bin/codex
+readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 readonly sandbox_mode=danger-full-access
 readonly default_approval_mode=autonomous
 
@@ -167,6 +168,16 @@ for argument in "${forwarded[@]}"; do
       ;;
   esac
 done
+
+codex_binary=""
+if ! codex_binary="$($runtime_manager resolve)"; then
+  echo "WARNING: Codex runtime resolver failed; using immutable bundled fallback" >&2
+  codex_binary="$bundled_codex_binary"
+fi
+if [[ ! -x "$codex_binary" ]]; then
+  echo "WARNING: resolved Codex executable is unavailable; using immutable bundled fallback" >&2
+  codex_binary="$bundled_codex_binary"
+fi
 
 exec "$codex_binary" \
   --sandbox "$sandbox_mode" \
