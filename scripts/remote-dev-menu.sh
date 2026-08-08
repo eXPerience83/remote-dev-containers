@@ -83,6 +83,16 @@ codex_policy_summary() {
     | grep -E '^(Codex approval mode|Codex approval policy|Mode source):'
 }
 
+codex_runtime_status_summary() {
+  local summary="" status=0
+  summary="$(/usr/local/bin/remote-dev-codex-runtime status --menu 2>&1)" || status=$?
+  if [[ -n "$summary" ]]; then
+    printf '%s\n' "$summary"
+  else
+    printf 'Codex runtime: status unavailable (exit %s)\n' "$status"
+  fi
+}
+
 configured_codex_mode=""
 policy_summary=""
 refresh_codex_policy() {
@@ -164,26 +174,30 @@ else
 fi
 
 show_codex_menu() {
-  local next_mode_summary=""
+  local next_mode_summary="" runtime_summary=""
 
   while true; do
     refresh_codex_policy
     next_mode_summary="$(next_codex_mode_summary)"
+    runtime_summary="$(codex_runtime_status_summary)"
     clear
     cat <<MENU
 Remote Dev — Codex
 ${version_summary}
+${runtime_summary}
 ${policy_summary}
 ${next_mode_summary}
 ==================
 1) Start Codex
 2) Resume a Codex session
 3) Approval mode for next launch...
-4) Sign in to Codex with device code
-5) Sign in to GitHub CLI
-6) Run diagnostics
-7) Open a login shell
-8) Exit this tmux session
+4) Update optional Codex runtime from official OpenAI release
+5) Remove optional Codex runtime (use bundled fallback)
+6) Sign in to Codex with device code
+7) Sign in to GitHub CLI
+8) Run diagnostics
+9) Open a login shell
+10) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -197,18 +211,24 @@ MENU
         if choose_next_codex_mode; then :; fi
         ;;
       4)
-        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
+        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
         ;;
       5)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
         ;;
       6)
-        run_diagnostics
+        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
         ;;
       7)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        if run_github_login; then :; fi
         ;;
       8)
+        run_diagnostics
+        ;;
+      9)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      10)
         exit 0
         ;;
       *)
