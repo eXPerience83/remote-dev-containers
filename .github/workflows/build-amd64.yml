@@ -30,6 +30,8 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
             scripts/remote-dev-launcher.py \
+            scripts/remote-dev-codex-runtime.py \
+            scripts/test-remote-dev-codex-runtime.py \
             scripts/preflight-data-layout.py \
             scripts/inspect-antigravity-cli.py \
             scripts/test_single_stack_compose.py \
@@ -46,6 +48,7 @@ jobs:
             scripts/test_sync_standalone_artifact_inspection.py \
             scripts/validate-standalone-artifact-inspection.py \
             scripts/test_validate_standalone_artifact_inspection.py
+          python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test_update_third_party_inventory.py
           python3 scripts/test_sync_python_runtime_notices.py
           python3 scripts/test_compact_python_runtime_notices.py
