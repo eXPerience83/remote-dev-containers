@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep the historical pinned variable for compatibility with the direct-session
+# smoke fixture. The runtime resolver may select a newer private package, while
+# both names continue to identify the immutable image fallback.
+readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 readonly sandbox_mode=danger-full-access
@@ -169,17 +173,21 @@ for argument in "${forwarded[@]}"; do
   esac
 done
 
-codex_binary=""
-if ! codex_binary="$($runtime_manager resolve)"; then
+resolved_codex_binary=""
+if ! resolved_codex_binary="$($runtime_manager resolve)"; then
   echo "WARNING: Codex runtime resolver failed; using immutable bundled fallback" >&2
-  codex_binary="$bundled_codex_binary"
+  resolved_codex_binary="$bundled_codex_binary"
+elif [[ "$resolved_codex_binary" == /usr/local/bin/codex ]]; then
+  # Normalize the resolver's bundled sentinel through the pinned fallback name.
+  # This also keeps direct-session smoke fixtures independent of the host image.
+  resolved_codex_binary="$codex_binary"
 fi
-if [[ ! -x "$codex_binary" ]]; then
+if [[ ! -x "$resolved_codex_binary" ]]; then
   echo "WARNING: resolved Codex executable is unavailable; using immutable bundled fallback" >&2
-  codex_binary="$bundled_codex_binary"
+  resolved_codex_binary="$bundled_codex_binary"
 fi
 
-exec "$codex_binary" \
+exec "$resolved_codex_binary" \
   --sandbox "$sandbox_mode" \
   --ask-for-approval "$approval_policy" \
   "${forwarded[@]}"
