@@ -80,6 +80,40 @@
       }
     },
     {
+      "id": "codex-code-mode-host",
+      "version": "rust-v0.147.0",
+      "packaging": "tar.gz",
+      "repository_notices": [
+        {
+          "path": "third_party/components/codex/LICENSE",
+          "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+          "size": 10926
+        },
+        {
+          "path": "third_party/components/codex/NOTICE",
+          "sha256": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+          "size": 242
+        }
+      ],
+      "architecture_legal_sets_equal": true,
+      "architectures": {
+        "amd64": {
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.147.0/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "0146adfaac8363ec9fcdb5895f7624db5b2e8617a283887938b7fb97a1dd4356",
+          "asset_size": 18267855,
+          "archive_member_count": 1,
+          "legal_members": []
+        },
+        "arm64": {
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.147.0/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "dfd4ff98ea4db30ed078af9c31b6f86e3da4836d0573aa87e225e5a5b54d3c7c",
+          "asset_size": 17260137,
+          "archive_member_count": 1,
+          "legal_members": []
+        }
+      }
+    },
+    {
       "id": "ttyd",
       "version": "1.7.7",
       "packaging": "raw-binary",

@@ -6,6 +6,8 @@ ARG TARGETARCH
 ARG CODEX_RELEASE_TAG=rust-v0.147.0
 ARG CODEX_AMD64_SHA256=0246e2e773834e07f0fb5249ed6ebad12e4591e608f8c7bb97dd6a9690544c36
 ARG CODEX_ARM64_SHA256=eb677c80f666b1ab8b4b1d083b66e8d614b1281d960bb6f9fd8ca98f58b38b90
+ARG CODEX_CODE_MODE_HOST_AMD64_SHA256=0146adfaac8363ec9fcdb5895f7624db5b2e8617a283887938b7fb97a1dd4356
+ARG CODEX_CODE_MODE_HOST_ARM64_SHA256=dfd4ff98ea4db30ed078af9c31b6f86e3da4836d0573aa87e225e5a5b54d3c7c
 ARG PROJECT_VERSION=0.1.0-dev
 ARG SOURCE_REVISION=local-untracked
 
@@ -52,6 +54,29 @@ RUN case "${TARGETARCH}" in \
     && cd / \
     && rm -rf "$workdir"
 
+# Codex 0.147+ Code Mode uses a companion host process. Keep the existing
+# outer-container isolation model and install only the matching official host
+# beside /usr/local/bin/codex, where Codex resolves the legacy/sibling host.
+RUN case "${TARGETARCH}" in \
+      amd64) target="x86_64-unknown-linux-musl"; expected_sha="$CODEX_CODE_MODE_HOST_AMD64_SHA256" ;; \
+      arm64) target="aarch64-unknown-linux-musl"; expected_sha="$CODEX_CODE_MODE_HOST_ARM64_SHA256" ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && asset="codex-code-mode-host-${target}.tar.gz" \
+    && binary="codex-code-mode-host-${target}" \
+    && workdir="$(mktemp -d)" \
+    && cd "$workdir" \
+    && curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 300 \
+      "https://github.com/openai/codex/releases/download/${CODEX_RELEASE_TAG}/${asset}" -o code-mode-host.tar.gz \
+    && printf '%s  %s\n' "$expected_sha" code-mode-host.tar.gz | sha256sum -c - \
+    && member_count="$(tar -tzf code-mode-host.tar.gz | wc -l | tr -d ' ')" \
+    && test "$member_count" = 1 \
+    && test "$(tar -tzf code-mode-host.tar.gz)" = "$binary" \
+    && tar -xzf code-mode-host.tar.gz \
+    && install -m 0755 "$binary" /usr/local/bin/codex-code-mode-host \
+    && cd / \
+    && rm -rf "$workdir"
+
 COPY scripts/start-remote-dev-web.sh /usr/local/bin/start-remote-dev-web
 COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
@@ -81,6 +106,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
+    --mount=type=bind,source=scripts/test-codex-code-mode-host.py,target=/tmp/test-codex-code-mode-host.py,ro \
     --mount=type=bind,source=scripts/test-antigravity-oauth.py,target=/tmp/test-antigravity-oauth.py,ro \
     --mount=type=bind,source=scripts/test-antigravity-picker.py,target=/tmp/test-antigravity-picker.py,ro \
     --mount=type=bind,source=scripts/test-run-antigravity-picker.sh,target=/tmp/test-run-antigravity-picker.sh,ro \
@@ -116,6 +142,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
+      /tmp/test-codex-code-mode-host.py \
     && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
@@ -124,6 +151,8 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
     && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
     && bash /tmp/test-run-codex-policy \
+    && test -x /usr/local/bin/codex-code-mode-host \
+    && python /tmp/test-codex-code-mode-host.py \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/start-codex-web \
     && grep -Fx 'exec /usr/local/bin/start-remote-dev-web "$@"' /usr/local/bin/start-codex-web \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-menu \
@@ -162,6 +191,8 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       "CODEX_RELEASE_TAG=${CODEX_RELEASE_TAG}" \
       "CODEX_AMD64_SHA256=${CODEX_AMD64_SHA256}" \
       "CODEX_ARM64_SHA256=${CODEX_ARM64_SHA256}" \
+      "CODEX_CODE_MODE_HOST_AMD64_SHA256=${CODEX_CODE_MODE_HOST_AMD64_SHA256}" \
+      "CODEX_CODE_MODE_HOST_ARM64_SHA256=${CODEX_CODE_MODE_HOST_ARM64_SHA256}" \
       > /usr/share/doc/remote-dev/third_party/CODEX-BUILD.env \
     && remote-dev-notices --check \
     && printf '%s\n' "$PROJECT_VERSION" > /usr/share/remote-dev/image-version \

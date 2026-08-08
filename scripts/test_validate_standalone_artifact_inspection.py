@@ -28,6 +28,8 @@ ENV = """\
 CODEX_RELEASE_TAG=rust-v1.2.3
 CODEX_AMD64_SHA256={codex_a}
 CODEX_ARM64_SHA256={codex_b}
+CODEX_CODE_MODE_HOST_AMD64_SHA256={codex_host_a}
+CODEX_CODE_MODE_HOST_ARM64_SHA256={codex_host_b}
 GH_VERSION=2.3.4
 GH_AMD64_SHA256={gh_a}
 GH_ARM64_SHA256={gh_b}
@@ -41,6 +43,8 @@ UV_VERSION=0.12.3
 """.format(
     codex_a="a" * 64,
     codex_b="b" * 64,
+    codex_host_a="5" * 64,
+    codex_host_b="6" * 64,
     gh_a="c" * 64,
     gh_b="d" * 64,
     ttyd_a="e" * 64,
@@ -122,8 +126,16 @@ class ValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "asset_sha256 is stale"):
             self.validator.validate(self.root)
 
+    def test_stale_code_mode_host_digest_fails(self) -> None:
+        report = copy.deepcopy(self.report)
+        host = next(item for item in report["components"] if item["id"] == "codex-code-mode-host")
+        host["architectures"]["arm64"]["asset_sha256"] = "0" * 64
+        self.write_report(report)
+        with self.assertRaisesRegex(SystemExit, "codex-code-mode-host arm64 asset_sha256 is stale"):
+            self.validator.validate(self.root)
+
     def test_uv_lock_change_fails(self) -> None:
-        lock = LOCK.replace("4" * 64, "5" * 64)
+        lock = LOCK.replace("4" * 64, "7" * 64)
         (self.root / "mise.lock").write_text(lock, encoding="utf-8")
         self.write_report(copy.deepcopy(self.report))
         with self.assertRaisesRegex(SystemExit, "uv amd64 asset_sha256 is stale"):

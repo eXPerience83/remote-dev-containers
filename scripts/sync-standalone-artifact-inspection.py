@@ -24,10 +24,21 @@ LEGAL_NAME_RE = re.compile(
     r"COPYRIGHT(?:[._-].*)?|AUTHORS(?:[._-].*)?)$",
     re.IGNORECASE,
 )
-COMPONENT_ORDER = ("github-cli", "codex-cli", "ttyd", "mise", "uv")
+COMPONENT_ORDER = (
+    "github-cli",
+    "codex-cli",
+    "codex-code-mode-host",
+    "ttyd",
+    "mise",
+    "uv",
+)
 COMPONENT_NOTICE_PATHS = {
     "github-cli": ("third_party/components/github-cli/LICENSE",),
     "codex-cli": (
+        "third_party/components/codex/LICENSE",
+        "third_party/components/codex/NOTICE",
+    ),
+    "codex-code-mode-host": (
         "third_party/components/codex/LICENSE",
         "third_party/components/codex/NOTICE",
     ),
@@ -153,6 +164,26 @@ def expected_components(root: Path) -> dict[str, dict[str, Any]]:
                         "codex-aarch64-unknown-linux-musl.tar.gz"
                     ),
                     "asset_sha256": require(values, "CODEX_ARM64_SHA256"),
+                },
+            },
+        },
+        "codex-code-mode-host": {
+            "version": codex_version,
+            "packaging": "tar.gz",
+            "architectures": {
+                "amd64": {
+                    "asset_url": (
+                        f"https://github.com/openai/codex/releases/download/{codex_version}/"
+                        "codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz"
+                    ),
+                    "asset_sha256": require(values, "CODEX_CODE_MODE_HOST_AMD64_SHA256"),
+                },
+                "arm64": {
+                    "asset_url": (
+                        f"https://github.com/openai/codex/releases/download/{codex_version}/"
+                        "codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz"
+                    ),
+                    "asset_sha256": require(values, "CODEX_CODE_MODE_HOST_ARM64_SHA256"),
                 },
             },
         },
