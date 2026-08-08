@@ -4,7 +4,9 @@ set -euo pipefail
 workdir="$(mktemp -d)"
 launcher_source=/usr/local/bin/run-codex
 pinned_codex=/usr/local/bin/codex
+runtime_manager_source=/usr/local/bin/remote-dev-codex-runtime
 test_codex="$workdir/codex"
+test_runtime_manager="$workdir/remote-dev-codex-runtime"
 test_launcher="$workdir/run-codex"
 args_file="$workdir/args"
 
@@ -23,25 +25,46 @@ if [[ ! -x "$pinned_codex" ]]; then
   echo "ERROR: missing pinned Codex binary: $pinned_codex" >&2
   exit 1
 fi
-if ! grep -Fxq 'readonly codex_binary=/usr/local/bin/codex' "$launcher_source"; then
-  echo "ERROR: run-codex does not pin /usr/local/bin/codex" >&2
+if [[ ! -x "$runtime_manager_source" ]]; then
+  echo "ERROR: missing Codex runtime manager: $runtime_manager_source" >&2
+  exit 1
+fi
+if ! grep -Fxq 'readonly bundled_codex_binary=/usr/local/bin/codex' "$launcher_source"; then
+  echo "ERROR: run-codex does not retain the immutable bundled fallback" >&2
+  exit 1
+fi
+if ! grep -Fxq 'readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime' "$launcher_source"; then
+  echo "ERROR: run-codex does not use the canonical runtime resolver" >&2
   exit 1
 fi
 
-cat > "$test_codex" <<'FAKE_PINNED_CODEX'
+cat > "$test_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" > "$REMOTE_DEV_CODEX_ARGS_FILE"
-FAKE_PINNED_CODEX
+FAKE_CODEX
 chmod 0755 "$test_codex"
 
+cat > "$test_runtime_manager" <<'FAKE_RUNTIME_MANAGER'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == resolve ]] || exit 98
+if [[ "${REMOTE_DEV_TEST_RESOLVER_FAIL:-0}" == 1 ]]; then
+  exit 97
+fi
+printf '%s\n' "$REMOTE_DEV_TEST_CODEX"
+FAKE_RUNTIME_MANAGER
+chmod 0755 "$test_runtime_manager"
+
 sed \
-  "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$test_codex|" \
+  -e "s|^readonly bundled_codex_binary=/usr/local/bin/codex$|readonly bundled_codex_binary=$test_codex|" \
+  -e "s|^readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime$|readonly runtime_manager=$test_runtime_manager|" \
   "$launcher_source" > "$test_launcher"
 chmod 0755 "$test_launcher"
 
-if ! grep -Fq "readonly codex_binary=$test_codex" "$test_launcher"; then
-  echo "ERROR: failed to create an isolated run-codex test launcher" >&2
+if ! grep -Fq "readonly bundled_codex_binary=$test_codex" "$test_launcher" \
+   || ! grep -Fq "readonly runtime_manager=$test_runtime_manager" "$test_launcher"; then
+  echo "ERROR: failed to create isolated run-codex test launcher" >&2
   exit 1
 fi
 
@@ -62,11 +85,13 @@ run_launcher() {
     env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
       PATH="$workdir/path-bin:$PATH" \
       REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+      REMOTE_DEV_TEST_CODEX="$test_codex" \
       "$test_launcher" "$@"
   else
     env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" \
       PATH="$workdir/path-bin:$PATH" \
       REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+      REMOTE_DEV_TEST_CODEX="$test_codex" \
       "$test_launcher" "$@"
   fi
 }
@@ -78,7 +103,7 @@ assert_args() {
   local -a actual=()
 
   if [[ ! -f "$args_file" ]]; then
-    echo "ERROR: $label did not invoke the pinned Codex fixture" >&2
+    echo "ERROR: $label did not invoke the resolved Codex fixture" >&2
     exit 1
   fi
   mapfile -t actual < "$args_file"
@@ -134,6 +159,20 @@ assert_args 'inline per-launch guarded mode' \
 
 echo 'Codex deployment and per-launch approval modes: OK'
 
+rm -f "$args_file"
+env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
+  PATH="$workdir/path-bin:$PATH" \
+  REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+  REMOTE_DEV_TEST_CODEX="$test_codex" \
+  REMOTE_DEV_TEST_RESOLVER_FAIL=1 \
+  "$test_launcher" resume --last 2>"$workdir/fallback-error"
+assert_args 'resolver failure bundled fallback' \
+  --sandbox danger-full-access \
+  --ask-for-approval never \
+  resume --last
+grep -Fq 'using immutable bundled fallback' "$workdir/fallback-error"
+echo 'Codex resolver failure: immutable bundled fallback selected'
+
 assert_policy_output() {
   local label="$1"
   local expected_mode="$2"
@@ -175,6 +214,7 @@ assert_rejected() {
   if env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
     PATH="$workdir/path-bin:$PATH" \
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_TEST_CODEX="$test_codex" \
       "$test_launcher" "$@" >/dev/null 2>"$error_file"; then
     status=0
   else
@@ -222,6 +262,7 @@ assert_invalid_mode() {
   rm -f "$args_file" "$error_file"
   if PATH="$workdir/path-bin:$PATH" \
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_TEST_CODEX="$test_codex" \
       "$@" >/dev/null 2>"$error_file"; then
     status=0
   else
