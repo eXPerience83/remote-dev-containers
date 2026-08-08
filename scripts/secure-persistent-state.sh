@@ -11,6 +11,7 @@ case "$role" in
 esac
 
 codex_home="${CODEX_HOME:-/root/.codex}"
+codex_runtime_root="${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
 gh_config_dir="${GH_CONFIG_DIR:-/root/.config/gh}"
 git_config_global="${GIT_CONFIG_GLOBAL:-/root/.config/git/config}"
 git_config_dir="$(dirname "$git_config_global")"
@@ -46,6 +47,7 @@ secure_private_tree() {
 if [[ "$role" == codex ]]; then
   secure_dir "$codex_home"
   secure_file "$codex_home/auth.json"
+  secure_private_tree "$codex_runtime_root"
 fi
 secure_dir "$gh_config_dir"
 secure_dir "$git_config_dir"
