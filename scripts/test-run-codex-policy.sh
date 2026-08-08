@@ -135,16 +135,16 @@ assert_args() {
 }
 
 assert_identity() {
-  local expected="$1"
+  local expected_identity="$1"
   local label="$2"
-  local actual=""
+  local actual_identity=""
   if [[ ! -f "$identity_file" ]]; then
     echo "ERROR: $label did not record executable identity" >&2
     exit 1
   fi
-  IFS= read -r actual < "$identity_file"
-  if [[ "$actual" != "$expected" ]]; then
-    printf 'ERROR: %s used %q Codex, expected %q\n' "$label" "$actual" "$expected" >&2
+  IFS= read -r actual_identity < "$identity_file"
+  if [[ "$actual_identity" != "$expected_identity" ]]; then
+    printf 'ERROR: %s used %q Codex, expected %q\n' "$label" "$actual_identity" "$expected_identity" >&2
     exit 1
   fi
 }

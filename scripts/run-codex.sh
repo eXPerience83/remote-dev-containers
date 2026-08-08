@@ -174,7 +174,7 @@ for argument in "${forwarded[@]}"; do
 done
 
 resolved_codex_binary=""
-if ! resolved_codex_binary="$($runtime_manager resolve)"; then
+if ! resolved_codex_binary="$("$runtime_manager" resolve)"; then
   echo "WARNING: Codex runtime resolver failed; using immutable bundled fallback" >&2
   resolved_codex_binary="$bundled_codex_binary"
 elif [[ "$resolved_codex_binary" == /usr/local/bin/codex ]]; then

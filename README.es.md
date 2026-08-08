@@ -172,7 +172,7 @@ docker compose -f compose/docker-compose.yml up -d
 1. Abre el launcher en el puerto publicado `7680`.
 2. Pulsa Codex.
 3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
-4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional de Codex manteniendo el fallback incluido, realiza los login de Codex/GitHub y ejecuta diagnósticos.
+4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional de Codex manteniendo el fallback incluido, inicia sesión en Codex y GitHub y ejecuta diagnósticos.
 
 Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
 

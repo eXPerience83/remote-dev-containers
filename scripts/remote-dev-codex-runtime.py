@@ -950,10 +950,13 @@ def remove_runtime_entry(path: Path) -> None:
         fail(f"cannot inspect Codex runtime path for removal: {path}: {exc}")
     if info.st_uid != expected_owner():
         fail(f"Codex runtime path has unexpected owner: {path}")
-    if stat.S_ISDIR(info.st_mode):
-        shutil.rmtree(path)
-    else:
-        path.unlink()
+    try:
+        if stat.S_ISDIR(info.st_mode):
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    except OSError as exc:
+        fail(f"cannot remove Codex runtime path: {path}: {exc}")
 
 
 def remove_runtime(*, yes: bool) -> None:
