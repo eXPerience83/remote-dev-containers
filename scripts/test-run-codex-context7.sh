@@ -55,7 +55,10 @@ case "${REMOTE_DEV_TEST_CONTEXT7_STATE:-unmanaged}" in
   unmanaged)
     exit 4
     ;;
-  anonymous|unsafe)
+  anonymous)
+    exit 5
+    ;;
+  unsafe)
     exit 3
     ;;
   *)
@@ -121,12 +124,20 @@ if grep -Fq 'stale-inherited-key' "$output"; then
   echo 'ERROR: inherited Context7 key leaked into launcher output' >&2
   exit 1
 fi
+if grep -Fq 'WARNING:' "$output"; then
+  echo 'ERROR: healthy anonymous Context7 state produced an unexpected warning' >&2
+  exit 1
+fi
 
 echo 'Managed anonymous Context7 launch: inherited key suppressed'
 
 run_case unsafe stale-inherited-key "$output"
 if [[ "$(read_env)" != __unset__ ]]; then
   echo 'ERROR: unsafe managed Context7 state exposed an inherited API key' >&2
+  exit 1
+fi
+if ! grep -Fq 'managed Context7 state is unavailable or unsafe' "$output"; then
+  echo 'ERROR: unsafe managed Context7 state did not produce a bounded warning' >&2
   exit 1
 fi
 
