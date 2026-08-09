@@ -508,29 +508,22 @@ def command_status(paths: Paths, args: argparse.Namespace) -> int:
     return code
 
 
-def validate_codex_mcp_list(output: str) -> None:
+def validate_codex_mcp_get(output: str) -> None:
     try:
-        entries = json.loads(output)
+        entry = json.loads(output)
     except json.JSONDecodeError as exc:
-        raise Context7Error("bundled Codex returned invalid JSON for the MCP server list") from exc
-    if not isinstance(entries, list):
-        raise Context7Error("bundled Codex returned an unexpected MCP server list shape")
+        raise Context7Error("bundled Codex returned invalid JSON for the Context7 MCP server") from exc
+    if not isinstance(entry, dict) or entry.get("name") != "context7":
+        raise Context7Error("bundled Codex returned an unexpected Context7 MCP server shape")
 
-    matches = [
-        entry
-        for entry in entries
-        if isinstance(entry, dict) and entry.get("name") == "context7"
-    ]
-    if len(matches) != 1:
-        raise Context7Error("bundled Codex did not report exactly one managed Context7 server")
-
-    entry = matches[0]
     transport = entry.get("transport")
     if (
         entry.get("enabled") is not True
         or not isinstance(transport, dict)
         or transport.get("type") != "streamable_http"
         or transport.get("url") != CONTEXT7_ENDPOINT
+        or transport.get("bearer_token_env_var") is not None
+        or transport.get("http_headers") is not None
         or transport.get("env_http_headers") != {"CONTEXT7_API_KEY": CONTEXT7_ENV}
     ):
         raise Context7Error("bundled Codex reported an unexpected managed Context7 server contract")
@@ -547,8 +540,11 @@ def bundled_codex_accepts_config(paths: Paths) -> None:
     else:
         environment.pop(CONTEXT7_ENV, None)
     try:
+        # `mcp get` reads and serializes one configured server without the
+        # authentication discovery performed by `mcp list`, so this contract
+        # check remains local. Network belongs only to the explicit ping below.
         result = subprocess.run(
-            [str(BUNDLED_CODEX), "mcp", "list", "--json"],
+            [str(BUNDLED_CODEX), "mcp", "get", "context7", "--json"],
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -560,7 +556,7 @@ def bundled_codex_accepts_config(paths: Paths) -> None:
         raise Context7Error(f"could not validate config with bundled Codex: {type(exc).__name__}") from exc
     if result.returncode != 0:
         raise Context7Error(f"bundled Codex rejected the MCP configuration (exit {result.returncode})")
-    validate_codex_mcp_list(result.stdout)
+    validate_codex_mcp_get(result.stdout)
 
 
 def hosted_ping() -> None:
