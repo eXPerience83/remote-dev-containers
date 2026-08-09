@@ -248,47 +248,45 @@ url = "https://mcp.context7.com/mcp"
         require_failure(result, "non-Codex role rejection")
 
         module = load_manager_module()
-        valid_mcp_list = json.dumps(
-            [
+        valid_mcp_get = json.dumps(
+            {
+                "name": "context7",
+                "enabled": True,
+                "transport": {
+                    "type": "streamable_http",
+                    "url": "https://mcp.context7.com/mcp",
+                    "bearer_token_env_var": None,
+                    "http_headers": None,
+                    "env_http_headers": {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"},
+                },
+            }
+        )
+        module.validate_codex_mcp_get(valid_mcp_get)
+        invalid_mcp_gets = (
+            "not-json",
+            json.dumps([{"name": "context7"}]),
+            json.dumps({"name": "context70", "enabled": True, "transport": {}}),
+            json.dumps(
                 {
                     "name": "context7",
                     "enabled": True,
                     "transport": {
                         "type": "streamable_http",
-                        "url": "https://mcp.context7.com/mcp",
+                        "url": "https://example.invalid/mcp",
                         "bearer_token_env_var": None,
                         "http_headers": None,
                         "env_http_headers": {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"},
                     },
                 }
-            ]
-        )
-        module.validate_codex_mcp_list(valid_mcp_list)
-        invalid_mcp_lists = (
-            "not-json",
-            json.dumps({"name": "context7"}),
-            json.dumps([{"name": "context70", "enabled": True, "transport": {}}]),
-            json.dumps(
-                [
-                    {
-                        "name": "context7",
-                        "enabled": True,
-                        "transport": {
-                            "type": "streamable_http",
-                            "url": "https://example.invalid/mcp",
-                            "env_http_headers": {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"},
-                        },
-                    }
-                ]
             ),
         )
-        for invalid_mcp_list in invalid_mcp_lists:
+        for invalid_mcp_get in invalid_mcp_gets:
             try:
-                module.validate_codex_mcp_list(invalid_mcp_list)
+                module.validate_codex_mcp_get(invalid_mcp_get)
             except module.Context7Error:
                 pass
             else:
-                raise AssertionError("structured Codex MCP-list validator accepted invalid Context7 evidence")
+                raise AssertionError("structured Codex MCP-get validator accepted invalid Context7 evidence")
 
         try:
             module._NoRedirect().redirect_request(None, None, 302, "Found", {}, "http://127.0.0.1/")
