@@ -46,7 +46,6 @@ require_sha256() {
 base_dockerfile="$ROOT/images/base/Dockerfile"
 codex_dockerfile="$ROOT/images/codex/Dockerfile"
 edge_workflow="$ROOT/.github/workflows/publish-edge-amd64.yml"
-upstream_workflow="$ROOT/.github/workflows/check-upstream.yml"
 
 require_frontend_pin() {
   local file="$1"
@@ -98,25 +97,6 @@ require_edge_path_trigger() {
   fi
 }
 
-require_codex_companion_updater() {
-  local needle=""
-  local required=(
-    'release_sha256 "$workdir/codex.json" codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz'
-    'release_sha256 "$workdir/codex.json" codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz'
-    'replace_env CODEX_CODE_MODE_HOST_AMD64_SHA256 "$codex_code_mode_host_amd64_sha256"'
-    'replace_env CODEX_CODE_MODE_HOST_ARM64_SHA256 "$codex_code_mode_host_arm64_sha256"'
-    'replace_arg images/codex/Dockerfile CODEX_CODE_MODE_HOST_AMD64_SHA256 "$codex_code_mode_host_amd64_sha256"'
-    'replace_arg images/codex/Dockerfile CODEX_CODE_MODE_HOST_ARM64_SHA256 "$codex_code_mode_host_arm64_sha256"'
-  )
-
-  for needle in "${required[@]}"; do
-    if ! grep -Fq "$needle" "$upstream_workflow"; then
-      echo "ERROR: check-upstream.yml must keep Codex code-mode host pins synchronized: $needle" >&2
-      exit 1
-    fi
-  done
-}
-
 base_frontend="$(require_frontend_pin "$base_dockerfile")"
 codex_frontend="$(require_frontend_pin "$codex_dockerfile")"
 if [[ "$base_frontend" != "$codex_frontend" ]]; then
@@ -130,7 +110,8 @@ fi
 require_action_shas
 require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
-require_codex_companion_updater
+python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
 
 if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
