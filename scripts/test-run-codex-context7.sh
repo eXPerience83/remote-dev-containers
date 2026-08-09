@@ -83,6 +83,7 @@ chmod 0600 "$key_file"
 
 run_case() {
   local state="$1" inherited="$2" output="$3"
+  local codex_home="${4:-$workdir}"
   rm -f "$env_file" "$args_file" "$output"
   common_env=(
     REMOTE_DEV_TEST_CODEX="$test_codex"
@@ -90,7 +91,7 @@ run_case() {
     REMOTE_DEV_TEST_CONTEXT7_KEY_FILE="$key_file"
     REMOTE_DEV_TEST_CONTEXT7_ENV_FILE="$env_file"
     REMOTE_DEV_TEST_CODEX_ARGS_FILE="$args_file"
-    CODEX_HOME="$workdir"
+    CODEX_HOME="$codex_home"
   )
   if [[ "$inherited" == __unset__ ]]; then
     env -u CONTEXT7_API_KEY "${common_env[@]}" "$test_launcher" resume --last >"$output" 2>&1
@@ -140,6 +141,18 @@ if grep -Fq "$synthetic_key" "$output"; then
 fi
 
 echo 'Managed Context7 key injection: OK'
+
+run_case key __unset__ "$output" "$workdir/"
+if [[ "$(read_env)" != "$synthetic_key" ]]; then
+  echo 'ERROR: trailing-slash CODEX_HOME rejected the canonical managed Context7 key path' >&2
+  exit 1
+fi
+if grep -Fq 'WARNING:' "$output"; then
+  echo 'ERROR: trailing-slash CODEX_HOME produced an unexpected Context7 warning' >&2
+  exit 1
+fi
+
+echo 'Trailing-slash CODEX_HOME normalization: OK'
 
 assert_rejected_key \
   'wrong managed key path' \
