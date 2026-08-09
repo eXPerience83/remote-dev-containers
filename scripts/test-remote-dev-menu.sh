@@ -7,10 +7,12 @@ fixture_menu="$workdir/remote-dev-menu"
 runtime_lib="$workdir/remote-dev-runtime.sh"
 run_codex="$workdir/run-codex"
 codex_runtime="$workdir/remote-dev-codex-runtime"
+context7_manager="$workdir/remote-dev-context7"
 secure_state="$workdir/secure-persistent-state"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
 runtime_invocations="$workdir/runtime-invocations"
+context7_invocations="$workdir/context7-invocations"
 hardening_calls="$workdir/hardening-calls"
 
 cleanup() {
@@ -91,6 +93,22 @@ esac
 CODEX_RUNTIME
 chmod 0755 "$codex_runtime"
 
+cat > "$context7_manager" <<'CONTEXT7'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status)
+    [[ "${2:-}" == --menu ]] || exit 2
+    printf '%s\n' 'Context7: not configured'
+    ;;
+  install|test|update|remove)
+    printf '%s\n' "$1" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  *) exit 2 ;;
+esac
+CONTEXT7
+chmod 0755 "$context7_manager"
+
 cat > "$secure_state" <<'SECURE_STATE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -123,6 +141,7 @@ sed \
   -e "s|^runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh$|runtime_lib=$runtime_lib|" \
   -e "s|/usr/local/bin/run-codex|$run_codex|g" \
   -e "s|/usr/local/bin/remote-dev-codex-runtime|$codex_runtime|g" \
+  -e "s|/usr/local/bin/remote-dev-context7|$context7_manager|g" \
   -e "s|/usr/local/bin/secure-persistent-state|$secure_state|g" \
   "$menu_source" > "$fixture_menu"
 chmod 0755 "$fixture_menu"
@@ -155,12 +174,13 @@ assert_file_lines() {
 
 run_menu() {
   local deployment_mode="$1" input="$2" output_file="$3"
-  rm -f "$invocations" "$runtime_invocations" "$hardening_calls"
+  rm -f "$invocations" "$runtime_invocations" "$context7_invocations" "$hardening_calls"
   common_env=(
     PATH="$bin_dir:$PATH"
     WORKSPACE="$workdir/workspace"
     REMOTE_DEV_MENU_INVOCATIONS="$invocations"
     REMOTE_DEV_MENU_RUNTIME_INVOCATIONS="$runtime_invocations"
+    REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS="$context7_invocations"
     REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls"
   )
   if [[ "$deployment_mode" == __unset__ ]]; then
@@ -182,25 +202,34 @@ assert_hardening_count() {
 }
 
 output="$workdir/output"
-run_menu __unset__ $'1\n10\n' "$output"
+run_menu __unset__ $'1\n11\n' "$output"
 assert_file_lines "$invocations" 'configured start' '[]'
 assert_hardening_count 1
 grep -Fxq 'Codex: bundled 0.147.0' "$output"
+grep -Fxq 'Context7: not configured' "$output"
 grep -Fxq '1) Start Codex' "$output"
 grep -Fxq '2) Resume a Codex session' "$output"
 grep -Fxq '3) Approval mode for next launch...' "$output"
 grep -Fxq '4) Update optional Codex runtime from official OpenAI release' "$output"
 grep -Fxq '5) Remove optional Codex runtime (use bundled fallback)' "$output"
+grep -Fxq '6) Context7 integration...' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 
 echo 'Configured Codex menu actions: OK'
 
-run_menu __unset__ $'4\n5\n10\n' "$output"
+run_menu __unset__ $'4\n5\n11\n' "$output"
 assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
 echo 'Codex runtime update/remove menu actions: OK'
 
-run_menu __unset__ $'3\n3\n2\n1\n10\n' "$output"
+run_menu __unset__ $'6\n1\n2\n3\n4\n5\n11\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 menu actions' install test update remove
+assert_hardening_count 4
+grep -Fxq 'Remote Dev — Codex — Context7' "$output"
+grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"
+echo 'Context7 explicit menu actions: OK'
+
+run_menu __unset__ $'3\n3\n2\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
   '[--approval-mode][guarded][resume]' \
   '[]'
@@ -213,7 +242,7 @@ fi
 
 echo 'One-launch guarded selection and reset: OK'
 
-run_menu guarded $'3\n2\n1\n10\n' "$output"
+run_menu guarded $'3\n2\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'autonomous override of guarded deployment' '[--approval-mode][autonomous]'
 assert_hardening_count 1
 grep -Fxq 'Next launch mode: configured (guarded)' "$output"
@@ -221,7 +250,7 @@ grep -Fxq 'Next launch mode: autonomous (one launch)' "$output"
 
 echo 'One-launch autonomous selection precedence: OK'
 
-run_menu __unset__ $'3\n3\n3\n1\n1\n10\n' "$output"
+run_menu __unset__ $'3\n3\n3\n1\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'configured-mode reset before launch' '[]'
 assert_hardening_count 1
 
@@ -230,7 +259,7 @@ echo 'Configured-mode reset: OK'
 fail_once="$workdir/fail-once"
 rm -f "$fail_once"
 export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
-run_menu __unset__ $'3\n3\n1\n\n1\n10\n' "$output"
+run_menu __unset__ $'3\n3\n1\n\n1\n11\n' "$output"
 unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
 assert_file_lines "$invocations" 'failed override then configured retry' \
   '[--approval-mode][guarded]' \
