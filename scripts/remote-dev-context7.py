@@ -72,34 +72,45 @@ def validate_role() -> None:
 
 
 def validate_home(paths: Paths, *, create: bool = False) -> None:
-    if paths.home.exists() or paths.home.is_symlink():
-        info = paths.home.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-            raise Context7Error(f"CODEX_HOME must be a real directory: {paths.home}")
-    elif create:
-        paths.home.mkdir(parents=True, mode=0o700)
-    else:
-        return
+    try:
+        if paths.home.exists() or paths.home.is_symlink():
+            info = paths.home.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise Context7Error(f"CODEX_HOME must be a real directory: {paths.home}")
+        elif create:
+            paths.home.mkdir(parents=True, mode=0o700)
+    except OSError as exc:
+        raise Context7Error(f"could not validate CODEX_HOME: errno {exc.errno}") from exc
 
 
 def read_regular_text(path: Path, *, max_bytes: int) -> str:
-    if not path.exists() and not path.is_symlink():
-        return ""
-    info = path.lstat()
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-        raise Context7Error(f"refusing non-regular or symlinked file: {path}")
-    if info.st_size > max_bytes:
-        raise Context7Error(f"file exceeds the supported size limit: {path}")
     try:
+        if not path.exists() and not path.is_symlink():
+            return ""
+        info = path.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            raise Context7Error(f"refusing non-regular or symlinked file: {path}")
+        if info.st_size > max_bytes:
+            raise Context7Error(f"file exceeds the supported size limit: {path}")
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise Context7Error(f"file is not valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise Context7Error(f"could not read local Context7 state: errno {exc.errno}") from exc
 
 
 def marker_span(text: str) -> tuple[int, int] | None:
     lines = text.splitlines(keepends=True)
-    starts = [index for index, line in enumerate(lines) if line.strip() == START_MARKER]
-    ends = [index for index, line in enumerate(lines) if line.strip() == END_MARKER]
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if line.rstrip("\r\n") == START_MARKER
+    ]
+    ends = [
+        index
+        for index, line in enumerate(lines)
+        if line.rstrip("\r\n") == END_MARKER
+    ]
     if not starts and not ends:
         return None
     if len(starts) != 1 or len(ends) != 1 or ends[0] <= starts[0]:
@@ -118,6 +129,13 @@ def parse_toml(text: str, *, label: str) -> dict[str, object]:
         raise Context7Error(f"{label} is not valid TOML: {exc}") from exc
 
 
+def context7_table(data: dict[str, object]) -> object | None:
+    servers = data.get("mcp_servers")
+    if not isinstance(servers, dict):
+        return None
+    return servers.get("context7")
+
+
 def has_context7(data: dict[str, object]) -> bool:
     servers = data.get("mcp_servers")
     return isinstance(servers, dict) and "context7" in servers
@@ -126,6 +144,7 @@ def has_context7(data: dict[str, object]) -> bool:
 def inspect_config(paths: Paths) -> ConfigState:
     try:
         text = read_regular_text(paths.config, max_bytes=MAX_CONFIG_BYTES)
+        full_data = parse_toml(text, label="Codex config")
     except Context7Error as exc:
         return ConfigState(text="", kind="invalid", detail=str(exc))
 
@@ -135,13 +154,20 @@ def inspect_config(paths: Paths) -> ConfigState:
         return ConfigState(text=text, kind="markers-malformed", detail=str(exc))
 
     if span is None:
-        try:
-            data = parse_toml(text, label="Codex config")
-        except Context7Error as exc:
-            return ConfigState(text=text, kind="invalid", detail=str(exc))
-        if has_context7(data):
+        if has_context7(full_data):
             return ConfigState(text=text, kind="unmanaged")
         return ConfigState(text=text, kind="absent")
+
+    # Ownership comments are trusted only when the complete valid TOML actually
+    # contains a Context7 table. This prevents marker-looking text inside a TOML
+    # multiline string from being treated as Remote Dev-owned configuration.
+    if not has_context7(full_data):
+        return ConfigState(
+            text=text,
+            kind="conflict",
+            span=span,
+            detail="Context7 ownership markers exist without a parsed mcp_servers.context7 table",
+        )
 
     start, end = span
     outside = text[:start] + text[end:]
@@ -158,20 +184,13 @@ def inspect_config(paths: Paths) -> ConfigState:
         )
 
     block = text[start:end]
-    if block != MANAGED_BLOCK:
-        return ConfigState(text=text, kind="managed-drift", span=span)
-
-    try:
-        data = parse_toml(text, label="Codex config")
-    except Context7Error as exc:
-        return ConfigState(text=text, kind="invalid", span=span, detail=str(exc))
-    context7 = data.get("mcp_servers", {})
-    if not isinstance(context7, dict) or context7.get("context7") != {
+    expected = {
         "url": CONTEXT7_ENDPOINT,
         "bearer_token_env_var": CONTEXT7_ENV,
         "enabled": True,
         "required": False,
-    }:
+    }
+    if block != MANAGED_BLOCK or context7_table(full_data) != expected:
         return ConfigState(text=text, kind="managed-drift", span=span)
     return ConfigState(text=text, kind="managed", span=span)
 
@@ -253,14 +272,13 @@ def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
         candidate = state.text[:start] + MANAGED_BLOCK + state.text[end:]
 
     data = parse_toml(candidate, label="resulting Codex config")
-    servers = data.get("mcp_servers")
     expected = {
         "url": CONTEXT7_ENDPOINT,
         "bearer_token_env_var": CONTEXT7_ENV,
         "enabled": True,
         "required": False,
     }
-    if not isinstance(servers, dict) or servers.get("context7") != expected:
+    if context7_table(data) != expected:
         raise Context7Error("resulting Context7 configuration does not match the reviewed contract")
     return candidate
 
@@ -289,25 +307,25 @@ def validate_api_key(value: str) -> str:
 
 
 def secret_status(paths: Paths) -> tuple[str, str | None]:
-    if paths.state_dir.exists() or paths.state_dir.is_symlink():
-        info = paths.state_dir.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+    try:
+        if paths.state_dir.exists() or paths.state_dir.is_symlink():
+            info = paths.state_dir.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                return "unsafe", None
+            if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+                return "unsafe", None
+        else:
+            return "missing", None
+
+        if not paths.key.exists() and not paths.key.is_symlink():
+            return "missing", None
+        info = paths.key.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             return "unsafe", None
         if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
             return "unsafe", None
-    else:
-        return "missing", None
-
-    if not paths.key.exists() and not paths.key.is_symlink():
-        return "missing", None
-    info = paths.key.lstat()
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-        return "unsafe", None
-    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
-        return "unsafe", None
-    if info.st_size <= 0 or info.st_size > MAX_KEY_BYTES:
-        return "unsafe", None
-    try:
+        if info.st_size <= 0 or info.st_size > MAX_KEY_BYTES:
+            return "unsafe", None
         value = paths.key.read_text(encoding="utf-8")
         validate_api_key(value)
     except (OSError, UnicodeDecodeError, Context7Error):
@@ -326,6 +344,8 @@ def remove_owned_key(paths: Paths) -> None:
     info = paths.state_dir.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
         raise Context7Error(f"refusing unsafe Context7 state path: {paths.state_dir}")
+    if info.st_uid != os.geteuid():
+        raise Context7Error("refusing Context7 state not owned by the service user")
     if paths.key.exists() or paths.key.is_symlink():
         paths.key.unlink()
         fsync_directory(paths.state_dir)
@@ -394,6 +414,8 @@ def apply_managed_config(paths: Paths, *, require_existing: bool) -> bool:
 def command_install(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Install/repair", yes=args.yes)
     key_action, key_value = choose_key(paths, args)
+    if key_action == "replace":
+        ensure_state_dir(paths)
     changed = apply_managed_config(paths, require_existing=False)
     if key_action == "replace" and key_value is not None:
         store_key(paths, key_value)
@@ -415,9 +437,7 @@ def command_update(paths: Paths, args: argparse.Namespace) -> int:
 
 def remove_managed_block(paths: Paths) -> bool:
     state = inspect_config(paths)
-    if state.kind == "markers-malformed":
-        raise Context7Error(state.detail)
-    if state.kind in {"invalid", "conflict"}:
+    if state.kind in {"markers-malformed", "invalid", "conflict"}:
         raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
     if state.span is None:
         return False
@@ -484,7 +504,7 @@ def bundled_codex_accepts_config(paths: Paths) -> None:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise Context7Error(f"could not validate config with bundled Codex: {exc}") from exc
+        raise Context7Error(f"could not validate config with bundled Codex: {type(exc).__name__}") from exc
     if result.returncode != 0:
         raise Context7Error(f"bundled Codex rejected the MCP configuration (exit {result.returncode})")
     combined = (result.stdout + "\n" + result.stderr).lower()
@@ -540,6 +560,8 @@ def command_key_file(paths: Paths, args: argparse.Namespace) -> int:
     if state.kind != "managed":
         return 4 if state.kind in {"absent", "unmanaged"} else 3
     secret, _ = secret_status(paths)
+    if secret == "missing":
+        return 5
     if secret != "safe":
         return 3
     print(paths.key)
@@ -583,6 +605,7 @@ def main() -> int:
     try:
         validate_role()
         paths = Paths()
+        validate_home(paths, create=False)
         if args.command == "status":
             return command_status(paths, args)
         if args.command in {"install", "repair"}:
@@ -598,6 +621,9 @@ def main() -> int:
         parser.error(f"unsupported command: {args.command}")
     except Context7Error as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"ERROR: local Context7 state operation failed (errno {exc.errno})", file=sys.stderr)
         return 2
     return 2
 
