@@ -85,7 +85,7 @@ Los límites de red dependen de la acción:
 - `test`: comprobación explícita de la configuración con el Codex incluido y de `https://mcp.context7.com/ping`;
 - una sesión normal de Codex después de habilitar Context7: Codex puede contactar el MCP alojado durante la inicialización y el uso normal de sus herramientas.
 
-La build de imagen crea además una configuración temporal anónima y obliga al binario exacto de Codex incluido a aceptarla mediante `codex mcp list`. Así no se depende de `codex mcp add --url` como primitiva de escritura de confianza.
+La build de imagen crea además una configuración temporal anónima y exige que el binario exacto de Codex incluido analice y describa ese único servidor mediante la ruta exclusivamente local `codex mcp get context7 --json`. Así se evita tanto el descubrimiento de autenticación MCP con capacidad de red como depender de `codex mcp add --url` como primitiva de escritura de confianza.
 
 ## Privacidad, términos y licencias de documentación
 
