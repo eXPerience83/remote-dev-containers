@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import stat
@@ -247,12 +248,61 @@ url = "https://mcp.context7.com/mcp"
         require_failure(result, "non-Codex role rejection")
 
         module = load_manager_module()
-        original_urlopen = module.urlopen
+        valid_mcp_list = json.dumps(
+            [
+                {
+                    "name": "context7",
+                    "enabled": True,
+                    "transport": {
+                        "type": "streamable_http",
+                        "url": "https://mcp.context7.com/mcp",
+                        "bearer_token_env_var": None,
+                        "http_headers": None,
+                        "env_http_headers": {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"},
+                    },
+                }
+            ]
+        )
+        module.validate_codex_mcp_list(valid_mcp_list)
+        invalid_mcp_lists = (
+            "not-json",
+            json.dumps({"name": "context7"}),
+            json.dumps([{"name": "context70", "enabled": True, "transport": {}}]),
+            json.dumps(
+                [
+                    {
+                        "name": "context7",
+                        "enabled": True,
+                        "transport": {
+                            "type": "streamable_http",
+                            "url": "https://example.invalid/mcp",
+                            "env_http_headers": {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"},
+                        },
+                    }
+                ]
+            ),
+        )
+        for invalid_mcp_list in invalid_mcp_lists:
+            try:
+                module.validate_codex_mcp_list(invalid_mcp_list)
+            except module.Context7Error:
+                pass
+            else:
+                raise AssertionError("structured Codex MCP-list validator accepted invalid Context7 evidence")
+
+        try:
+            module._NoRedirect().redirect_request(None, None, 302, "Found", {}, "http://127.0.0.1/")
+        except module.Context7Error:
+            pass
+        else:
+            raise AssertionError("Context7 ping redirect handler allowed a redirect")
+
+        original_build_opener = module.build_opener
 
         def fail_if_called(*_args, **_kwargs):
             raise AssertionError("passive Context7 operation attempted network access")
 
-        module.urlopen = fail_if_called
+        module.build_opener = fail_if_called
         old_home = os.environ.get("CODEX_HOME")
         old_role = os.environ.get("REMOTE_DEV_ROLE")
         try:
@@ -261,7 +311,7 @@ url = "https://mcp.context7.com/mcp"
             paths = module.Paths()
             module.command_status(paths, argparse_namespace(menu=True))
         finally:
-            module.urlopen = original_urlopen
+            module.build_opener = original_build_opener
             if old_home is None:
                 os.environ.pop("CODEX_HOME", None)
             else:
