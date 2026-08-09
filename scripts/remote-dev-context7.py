@@ -141,6 +141,19 @@ def has_context7(data: dict[str, object]) -> bool:
     return isinstance(servers, dict) and "context7" in servers
 
 
+def without_context7(data: dict[str, object]) -> dict[str, object]:
+    normalized = dict(data)
+    servers = data.get("mcp_servers")
+    if isinstance(servers, dict):
+        normalized_servers = dict(servers)
+        normalized_servers.pop("context7", None)
+        if normalized_servers:
+            normalized["mcp_servers"] = normalized_servers
+        else:
+            normalized.pop("mcp_servers", None)
+    return normalized
+
+
 def inspect_config(paths: Paths) -> ConfigState:
     try:
         text = read_regular_text(paths.config, max_bytes=MAX_CONFIG_BYTES)
@@ -443,7 +456,14 @@ def remove_managed_block(paths: Paths) -> bool:
         return False
     start, end = state.span
     candidate = state.text[:start] + state.text[end:]
-    parse_toml(candidate, label="Codex config after Context7 removal")
+    before = parse_toml(state.text, label="Codex config before Context7 removal")
+    result = parse_toml(candidate, label="Codex config after Context7 removal")
+    if has_context7(result):
+        raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
+    if without_context7(before) != without_context7(result):
+        raise Context7Error(
+            "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
+        )
     return backup_and_replace_config(paths, state.text, candidate)
 
 
