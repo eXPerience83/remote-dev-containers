@@ -83,6 +83,7 @@ COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
+COPY scripts/remote-dev-context7.py /usr/local/bin/remote-dev-context7
 COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
@@ -104,6 +105,7 @@ COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
+    --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
@@ -121,6 +123,7 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
       /usr/local/bin/run-direct-session \
       /usr/local/bin/run-codex \
       /usr/local/bin/remote-dev-codex-runtime \
+      /usr/local/bin/remote-dev-context7 \
       /usr/local/bin/remote-dev-antigravity \
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
@@ -145,12 +148,18 @@ RUN --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-r
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
+      /usr/local/bin/remote-dev-context7 \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /tmp/test-codex-code-mode-host.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
     && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
+    && context7_smoke_home="$(mktemp -d)" \
+    && CODEX_HOME="$context7_smoke_home" REMOTE_DEV_ROLE=codex /usr/local/bin/remote-dev-context7 install --yes --anonymous \
+    && CODEX_HOME="$context7_smoke_home" /usr/local/bin/codex mcp list | grep -Fq 'context7' \
+    && rm -rf "$context7_smoke_home" \
+    && bash /tmp/test-run-codex-context7 \
     && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
