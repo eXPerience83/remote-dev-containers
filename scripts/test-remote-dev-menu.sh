@@ -222,11 +222,12 @@ assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
 echo 'Codex runtime update/remove menu actions: OK'
 
-run_menu __unset__ $'6\n1\n2\n3\n4\n5\n11\n' "$output"
+run_menu __unset__ $'6\n1\n\n2\n\n3\n\n4\n\n5\n11\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 menu actions' install test update remove
 assert_hardening_count 4
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"
+grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 echo 'Context7 explicit menu actions: OK'
 
 run_menu __unset__ $'3\n3\n2\n1\n11\n' "$output"
