@@ -47,7 +47,8 @@ jobs:
             scripts/sync-standalone-artifact-inspection.py \
             scripts/test_sync_standalone_artifact_inspection.py \
             scripts/validate-standalone-artifact-inspection.py \
-            scripts/test_validate_standalone_artifact_inspection.py
+            scripts/test_validate_standalone_artifact_inspection.py \
+            scripts/validate-release-channel-contract.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test_update_third_party_inventory.py
           python3 scripts/test_sync_python_runtime_notices.py
@@ -55,6 +56,7 @@ jobs:
           python3 scripts/test_sync_standalone_artifact_inspection.py
           python3 scripts/test_validate_standalone_artifact_inspection.py
           python3 scripts/test_inspect_antigravity_cli.py
+          python3 scripts/validate-release-channel-contract.py --root .
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
           python3 scripts/validate-standalone-artifact-inspection.py

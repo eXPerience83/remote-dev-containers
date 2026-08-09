@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - SBOM and provenance generation in image publication workflows.
 - Renovate dependency tracking, including grouped Ubuntu LTS base updates and immutable GitHub Action pins.
 - Public experimental `edge` images with commit-addressed `sha-...` tags and published digests for reproducible testing.
+- Explicit owner-authorized `dev` / `dev-amd64` image channel for reviewed pre-merge PR candidates, while preserving candidate-specific tags and immutable digests.
+- Bounded release-channel validation that keeps `dev`, `edge`, `stable` and `latest` publication sources and tag promotion boundaries distinct.
 - CodeRabbit configuration focused on Dockerfiles, Bash, Python launcher code, GitHub Actions, Compose and security-sensitive changes.
 - Shared tmux mouse and scrollback configuration for browser terminals.
 - Persistent credential permission hardening for Codex, GitHub CLI, Git and SSH state.
@@ -47,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Migrated the effective base image from Ubuntu 24.04 to Ubuntu 26.04 LTS.
 - Updated maintained GitHub Actions to their current major releases.
 - Changed the edge channel from private validation to public experimental development testing.
+- Defined the permanent image-channel hierarchy as `dev -> edge -> stable = latest`; `latest` now has an explicit contract as a stable-only alias and must never follow `edge` or `dev`.
 - Updated project documentation to state clearly that no stable release exists yet.
 - Changed the generic and TrueNAS Compose defaults to `ghcr.io/experience83/remote-dev:edge-amd64` through the canonical `REMOTE_DEV_IMAGE` variable.
 - Retained `CODEX_IMAGE` as a lower-priority compatibility fallback throughout `v0.1.x`; it will not be removed before `v0.2.0`, but registry values should use the canonical `ghcr.io/experience83/remote-dev` package.
