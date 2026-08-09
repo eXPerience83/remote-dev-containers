@@ -35,11 +35,13 @@ Remote Dev owns only one explicitly marked block inside the existing persistent 
 # BEGIN REMOTE DEV MANAGED CONTEXT7
 [mcp_servers.context7]
 url = "https://mcp.context7.com/mcp"
-bearer_token_env_var = "CONTEXT7_API_KEY"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
 enabled = true
 required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
+
+Context7's current Codex client documentation requires an HTTP header named `CONTEXT7_API_KEY` for API-key authentication. Codex's `env_http_headers` setting maps that header to an environment-variable name, so the secret value remains outside the TOML file while Codex sends the header expected by the hosted MCP service.
 
 All configuration outside those markers is preserved. Before writing, the manager parses the existing TOML and refuses to overwrite a pre-existing, unowned `mcp_servers.context7` entry. Missing, duplicated or malformed ownership markers also fail closed instead of guessing which content belongs to Remote Dev.
 
@@ -61,7 +63,7 @@ $CODEX_HOME/.remote-dev-context7/api-key
 
 The state directory is mode `0700` and the key file is mode `0600`. Symlinked, non-regular, wrong-owner or overly permissive key state is rejected.
 
-The key is **not** written into TOML, command arguments, diagnostics, menu status, issue/PR evidence or normal logs. Immediately before launching a Remote Dev-managed Context7 configuration, `run-codex` validates the owned key path and exports `CONTEXT7_API_KEY` only into the Codex process environment. A managed anonymous configuration suppresses an unrelated inherited value of the same variable. When Context7 is not Remote Dev-managed, the wrapper leaves user-managed environment/configuration alone.
+The key is **not** written into TOML, command arguments, diagnostics, menu status, issue/PR evidence or normal logs. Immediately before launching a Remote Dev-managed Context7 configuration, `run-codex` validates the owned key path and exports `CONTEXT7_API_KEY` only into the Codex process environment. Codex then resolves that environment variable through `env_http_headers` and sends its value in the `CONTEXT7_API_KEY` HTTP header. A managed anonymous configuration suppresses an unrelated inherited value of the same variable. When Context7 is not Remote Dev-managed, the wrapper leaves user-managed environment/configuration alone.
 
 ## Availability and network behavior
 
