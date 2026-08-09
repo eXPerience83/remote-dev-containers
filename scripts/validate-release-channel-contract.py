@@ -33,6 +33,13 @@ def bounded(text: str, start: str, end: str | None, label: str) -> str:
     return text[start_index:end_index]
 
 
+def active(block: str) -> str:
+    """Return non-comment workflow lines so comments cannot satisfy the contract."""
+    return "\n".join(
+        line for line in block.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def require(block: str, expected: tuple[str, ...], label: str) -> None:
     for token in expected:
         if token not in block:
@@ -53,12 +60,39 @@ def validate(root: Path) -> None:
     releases_es = read(root, "docs/releases.es.md")
     env_example = read(root, ".env.example")
 
+    candidate_concurrency = active(
+        bounded(candidate, "concurrency:\n", "\njobs:\n", "candidate concurrency")
+    )
     require(
-        candidate,
+        candidate_concurrency,
+        ("group: publish-pr-candidate-dev-amd64", "cancel-in-progress: false"),
+        "candidate concurrency",
+    )
+
+    candidate_job_gate = active(
+        bounded(candidate, "    if: >-\n", "    runs-on:", "candidate job gate")
+    )
+    require(
+        candidate_job_gate,
         (
-            "group: publish-pr-candidate-dev-amd64",
-            "startsWith(github.event.comment.body, '/publish-candidate ')",
+            "github.event.issue.pull_request &&",
+            "startsWith(github.event.comment.body, '/publish-candidate ') &&",
             "github.event.comment.user.login == github.repository_owner",
+        ),
+        "candidate job gate",
+    )
+
+    candidate_authorization = active(
+        bounded(
+            candidate,
+            "      - name: Resolve and authorize the pull request\n",
+            "      - name: Checkout the exact pull-request head\n",
+            "candidate authorization",
+        )
+    )
+    require(
+        candidate_authorization,
+        (
             'if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]]',
             'if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]',
             'if [[ "$base_ref" != main ]]',
@@ -67,11 +101,14 @@ def validate(root: Path) -> None:
         ),
         "candidate authorization",
     )
-    candidate_publish = bounded(
-        candidate,
-        "      - name: Publish the candidate and promote the dev channel\n",
-        "      - name: Comment the exact candidate on the pull request\n",
-        "candidate publication",
+
+    candidate_publish = active(
+        bounded(
+            candidate,
+            "      - name: Publish the candidate and promote the dev channel\n",
+            "      - name: Comment the exact candidate on the pull request\n",
+            "candidate publication",
+        )
     )
     require(
         candidate_publish,
@@ -91,19 +128,32 @@ def validate(root: Path) -> None:
         "candidate publication",
     )
 
+    edge_trigger = active(bounded(edge, "on:\n", "\npermissions:", "edge trigger"))
     require(
-        edge,
-        (
-            "branches:\n      - main",
-            'if [[ "$GITHUB_REF" != "refs/heads/main" ]]',
-        ),
-        "edge source boundary",
+        edge_trigger,
+        ("push:\n    branches:\n      - main",),
+        "edge trigger",
     )
-    edge_publish = bounded(
-        edge,
-        "      - name: Promote one scanned digest to canonical edge tags\n",
-        None,
-        "edge publication",
+    edge_guard = active(
+        bounded(
+            edge,
+            "      - name: Require the main branch\n",
+            "      - name: Validate repository configuration\n",
+            "edge main guard",
+        )
+    )
+    require(
+        edge_guard,
+        ('if [[ "$GITHUB_REF" != "refs/heads/main" ]]',),
+        "edge main guard",
+    )
+    edge_publish = active(
+        bounded(
+            edge,
+            "      - name: Promote one scanned digest to canonical edge tags\n",
+            None,
+            "edge publication",
+        )
     )
     require(
         edge_publish,
@@ -121,20 +171,43 @@ def validate(root: Path) -> None:
         "edge publication",
     )
 
-    require(
-        stable,
-        (
-            '- "v*"',
-            'if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',
-            'if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then',
-        ),
-        "stable source boundary",
+    stable_trigger = active(
+        bounded(stable, "on:\n", "\npermissions:", "stable trigger")
     )
-    stable_publish = bounded(
-        stable,
-        "      - name: Promote one scanned digest to canonical stable tags\n",
-        None,
-        "stable publication",
+    require(stable_trigger, ('tags:\n      - "v*"',), "stable trigger")
+    stable_tag_validation = active(
+        bounded(
+            stable,
+            "      - name: Validate stable release tag\n",
+            "      - name: Require the tagged commit from main history\n",
+            "stable tag validation",
+        )
+    )
+    require(
+        stable_tag_validation,
+        ('if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',),
+        "stable tag validation",
+    )
+    stable_main_guard = active(
+        bounded(
+            stable,
+            "      - name: Require the tagged commit from main history\n",
+            "      - name: Validate repository configuration\n",
+            "stable main guard",
+        )
+    )
+    require(
+        stable_main_guard,
+        ('if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then',),
+        "stable main guard",
+    )
+    stable_publish = active(
+        bounded(
+            stable,
+            "      - name: Promote one scanned digest to canonical stable tags\n",
+            None,
+            "stable publication",
+        )
     )
     require(
         stable_publish,
