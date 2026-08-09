@@ -72,6 +72,33 @@ def assert_private_file(path: Path) -> None:
         raise AssertionError(f"{path} mode is {mode:o}, expected 600")
 
 
+def assert_passive_status_no_network(module, home: Path) -> None:
+    original_build_opener = module.build_opener
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("passive Context7 operation attempted network access")
+
+    module.build_opener = fail_if_called
+    old_home = os.environ.get("CODEX_HOME")
+    old_role = os.environ.get("REMOTE_DEV_ROLE")
+    try:
+        os.environ["CODEX_HOME"] = str(home)
+        os.environ["REMOTE_DEV_ROLE"] = "codex"
+        paths = module.Paths()
+        if module.command_status(paths, argparse_namespace(menu=True)) != 0:
+            raise AssertionError("passive Context7 status unexpectedly failed")
+    finally:
+        module.build_opener = original_build_opener
+        if old_home is None:
+            os.environ.pop("CODEX_HOME", None)
+        else:
+            os.environ["CODEX_HOME"] = old_home
+        if old_role is None:
+            os.environ.pop("REMOTE_DEV_ROLE", None)
+        else:
+            os.environ["REMOTE_DEV_ROLE"] = old_role
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -185,6 +212,9 @@ args = ["--safe"]
         if "network: not used" not in result.stdout:
             raise AssertionError("update did not make its no-network behavior explicit")
 
+        module = load_manager_module()
+        assert_passive_status_no_network(module, home)
+
         result = run_manager(home, "remove", "--yes")
         require_success(result, "managed removal")
         after_remove = config.read_text(encoding="utf-8")
@@ -247,7 +277,6 @@ url = "https://mcp.context7.com/mcp"
         )
         require_failure(result, "non-Codex role rejection")
 
-        module = load_manager_module()
         valid_mcp_get = json.dumps(
             {
                 "name": "context7",
@@ -295,29 +324,7 @@ url = "https://mcp.context7.com/mcp"
         else:
             raise AssertionError("Context7 ping redirect handler allowed a redirect")
 
-        original_build_opener = module.build_opener
-
-        def fail_if_called(*_args, **_kwargs):
-            raise AssertionError("passive Context7 operation attempted network access")
-
-        module.build_opener = fail_if_called
-        old_home = os.environ.get("CODEX_HOME")
-        old_role = os.environ.get("REMOTE_DEV_ROLE")
-        try:
-            os.environ["CODEX_HOME"] = str(home)
-            os.environ["REMOTE_DEV_ROLE"] = "codex"
-            paths = module.Paths()
-            module.command_status(paths, argparse_namespace(menu=True))
-        finally:
-            module.build_opener = original_build_opener
-            if old_home is None:
-                os.environ.pop("CODEX_HOME", None)
-            else:
-                os.environ["CODEX_HOME"] = old_home
-            if old_role is None:
-                os.environ.pop("REMOTE_DEV_ROLE", None)
-            else:
-                os.environ["REMOTE_DEV_ROLE"] = old_role
+        assert_passive_status_no_network(module, home)
 
     print("Context7 Codex integration lifecycle regressions: OK")
     return 0
