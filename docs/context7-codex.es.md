@@ -2,6 +2,8 @@
 
 Remote Dev puede configurar el servicio Codex incluido para utilizar Context7 como servicio MCP alojado y opcional de documentación.
 
+> **Estado de publicación:** esta integración se introduce en la línea experimental actual de candidatos/`edge` de Remote Dev que sigue #31. No forma parte de ninguna versión estable publicada anteriormente; no debe anunciarse como disponible en estable hasta que una versión estable que incluya este cambio complete sus gates de publicación.
+
 Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. Remote Dev no incluye, redistribuye, instala ni persiste el CLI, paquete npm o runtime de servidor MCP de Context7 para esta integración. Se utiliza el cliente MCP HTTP nativo de Codex contra el endpoint alojado revisado:
 
 ```text
@@ -25,7 +27,7 @@ remote-dev-context7 remove
 
 Para automatización no interactiva revisada, las acciones aceptan `--yes`. `install` y `repair` permiten además `--anonymous` o `--api-key-stdin`; el uso de stdin requiere `--yes` para que la entrada de la clave no pueda confundirse con la confirmación interactiva.
 
-`update` **no** descarga ningún runtime de Context7: vuelve a validar y aplicar el contrato MCP alojado actualmente revisado.
+`update` **no** actualiza el servicio Context7 alojado ni descarga un runtime de Context7. Vuelve a validar y aplicar el contrato MCP alojado incluido en la imagen Remote Dev actual. Si Context7 cambia en el futuro su endpoint o su contrato de autenticación, Remote Dev deberá incorporar y revisar primero ese nuevo contrato; después, `update` sobre esa imagen más nueva podrá volver a aplicarlo.
 
 ## Configuración de Codex gestionada
 
@@ -89,7 +91,8 @@ La build de imagen crea además una configuración temporal anónima y obliga al
 
 Habilitar Context7 introduce un límite de servicio externo. Según la documentación oficial de Context7/Upstash revisada para el issue #94:
 
-- el prompt original, código y conversación permanecen con el asistente de IA, mientras el cliente MCP formula consultas de búsqueda de documentación para Context7;
+- Remote Dev no envía intencionadamente a Context7 el prompt original completo, archivos de código ni la conversación; Codex formula peticiones MCP de documentación y el texto de consulta que envía debe considerarse igualmente dato comunicado a un servicio externo;
+- una petición MCP por HTTP puede incluir la consulta de documentación y los identificadores de librería, además de metadatos HTTP/MCP normales generados por el cliente Codex configurado, como identidad/versión del cliente y cabeceras de protocolo/transporte; en modo autenticado se envía además la cabecera `CONTEXT7_API_KEY`;
 - esas consultas generadas por MCP pueden procesarse para recuperación/reranking y almacenarse de forma anónima para evaluar la calidad de recuperación;
 - Context7 documenta una retención de 30 días para logs de API;
 - no se deben enviar datos sensibles, sanitarios, de pago u otros datos regulados mediante el servicio;
@@ -102,7 +105,7 @@ La revisión legal/de privacidad de este diseño MCP alojado y acotado está reg
 
 ## Eliminación y recuperación
 
-`remote-dev-context7 remove` elimina únicamente el bloque marcado como propiedad de Remote Dev y el archivo de API key propiedad de Remote Dev. No borra otros servidores MCP, `AGENTS.md`, instrucciones de Codex, skills, sesiones, autenticación ni una configuración Context7 no gestionada.
+Como no se instala ningún runtime/paquete local de Context7, `remote-dev-context7 remove` es el equivalente a desinstalar esta integración. Elimina únicamente el bloque marcado como propiedad de Remote Dev y el archivo de API key propiedad de Remote Dev. No borra otros servidores MCP, `AGENTS.md`, instrucciones de Codex, skills, sesiones, autenticación ni una configuración Context7 no gestionada.
 
 Si los marcadores de propiedad son ambiguos, la eliminación se detiene. Revisa la configuración y, si corresponde, restaura la copia privada antes de volver a intentarlo.
 
