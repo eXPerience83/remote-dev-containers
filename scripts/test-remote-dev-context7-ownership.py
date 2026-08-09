@@ -64,6 +64,29 @@ url = "https://mcp.context7.com/mcp"
         if status.returncode != 3 or "damaged" not in status.stdout:
             raise AssertionError("marker-looking string data did not fail closed in passive status")
 
+        rebind_home = root / "remove-rebind"
+        rebind_home.mkdir(mode=0o700)
+        rebind_config = rebind_home / "config.toml"
+        rebind_text = f'''[mcp_servers.other]
+command = "other-mcp"
+{START_MARKER}
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+env_http_headers = {{ "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }}
+enabled = true
+required = false
+{END_MARKER}
+args = ["--would-rebind"]
+'''
+        rebind_config.write_text(rebind_text, encoding="utf-8")
+        removal = run_manager(rebind_home, "remove", "--yes")
+        if removal.returncode == 0:
+            raise AssertionError("remove accepted a managed drift that would rebind trailing TOML keys")
+        if rebind_config.read_text(encoding="utf-8") != rebind_text:
+            raise AssertionError("failed removal changed unrelated Codex TOML semantics")
+        if "would change unrelated Codex configuration" not in removal.stderr:
+            raise AssertionError("unsafe removal did not report the bounded semantic-preservation error")
+
     print("Context7 ownership edge-case regressions: OK")
     return 0
 
