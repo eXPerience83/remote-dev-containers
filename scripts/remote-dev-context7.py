@@ -28,6 +28,12 @@ enabled = true
 required = false
 {END_MARKER}
 '''
+MANAGED_CONTRACT = {
+    "url": CONTEXT7_ENDPOINT,
+    "env_http_headers": {"CONTEXT7_API_KEY": CONTEXT7_ENV},
+    "enabled": True,
+    "required": False,
+}
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
 MAX_KEY_BYTES = 16 * 1024
 MAX_PING_BYTES = 4096
@@ -202,13 +208,7 @@ def inspect_config(paths: Paths) -> ConfigState:
         )
 
     block = text[start:end]
-    expected = {
-        "url": CONTEXT7_ENDPOINT,
-        "env_http_headers": {"CONTEXT7_API_KEY": CONTEXT7_ENV},
-        "enabled": True,
-        "required": False,
-    }
-    if block != MANAGED_BLOCK or context7_table(full_data) != expected:
+    if block != MANAGED_BLOCK or context7_table(full_data) != MANAGED_CONTRACT:
         return ConfigState(text=text, kind="managed-drift", span=span)
     return ConfigState(text=text, kind="managed", span=span)
 
@@ -290,13 +290,7 @@ def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
         candidate = state.text[:start] + MANAGED_BLOCK + state.text[end:]
 
     data = parse_toml(candidate, label="resulting Codex config")
-    expected = {
-        "url": CONTEXT7_ENDPOINT,
-        "env_http_headers": {"CONTEXT7_API_KEY": CONTEXT7_ENV},
-        "enabled": True,
-        "required": False,
-    }
-    if context7_table(data) != expected:
+    if context7_table(data) != MANAGED_CONTRACT:
         raise Context7Error("resulting Context7 configuration does not match the reviewed contract")
     return candidate
 

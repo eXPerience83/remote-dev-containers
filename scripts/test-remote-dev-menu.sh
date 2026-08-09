@@ -222,7 +222,9 @@ assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
 echo 'Codex runtime update/remove menu actions: OK'
 
-run_menu __unset__ $'6\n1\n\n2\n\n3\n\n4\n\n5\n11\n' "$output"
+# Each successful Context7 action must consume its duplicate choice at the pause.
+# If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
+run_menu __unset__ $'6\n1\n1\n2\n2\n3\n3\n4\n4\n5\n11\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 menu actions' install test update remove
 assert_hardening_count 4
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"

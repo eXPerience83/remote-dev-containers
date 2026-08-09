@@ -152,7 +152,7 @@ if [[ "$role" == codex ]]; then
   fi
   echo 'Context7 boundary: optional external Upstash hosted MCP service; no Context7 runtime is bundled or downloaded.'
   echo 'Context7 passive diagnostics network: not used; only explicit test and enabled Codex MCP use may contact Context7.'
-  echo 'Context7 credentials: stored only in Codex-private state and never printed by Remote Dev diagnostics.'
+  echo 'Remote Dev-managed Context7 credentials are stored only in Codex-private state; Remote Dev diagnostics never print credentials.'
 
   echo
   if policy_output="$(run-codex --print-policy 2>/dev/null)"; then
