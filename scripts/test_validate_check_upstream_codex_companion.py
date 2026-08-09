@@ -52,6 +52,28 @@ def main() -> int:
         "commented companion update",
     )
 
+    hidden_env_override = (
+        active_env
+        + '\n          replace_env CODEX_CODE_MODE_HOST_AMD64_SHA256 '
+        + '"$codex_code_mode_host_arm64_sha256"'
+    )
+    expect_failure(
+        module,
+        text.replace(active_env, hidden_env_override, 1),
+        "later conflicting companion env override",
+    )
+
+    dead_branch_env = (
+        '          if false; then\n'
+        + active_env
+        + '\n          fi'
+    )
+    expect_failure(
+        module,
+        text.replace(active_env, dead_branch_env, 1),
+        "companion update hidden in dead branch",
+    )
+
     amd64_resolution = (
         '          codex_code_mode_host_amd64_sha256="$(release_sha256 '
         '"$workdir/codex.json" codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz)"'
