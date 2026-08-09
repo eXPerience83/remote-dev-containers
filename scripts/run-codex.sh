@@ -199,8 +199,9 @@ configure_context7_environment() {
       unset CONTEXT7_API_KEY
       return 0
     fi
-    if ! IFS= read -r CONTEXT7_API_KEY < "$key_path" || [[ -z "$CONTEXT7_API_KEY" ]]; then
-      echo "WARNING: managed Context7 credential could not be read; starting without the managed API key" >&2
+    CONTEXT7_API_KEY="$(<"$key_path")"
+    if [[ -z "$CONTEXT7_API_KEY" || ${#CONTEXT7_API_KEY} -gt 16384 || "$CONTEXT7_API_KEY" =~ [[:space:]] ]]; then
+      echo "WARNING: managed Context7 credential could not be read safely; starting without the managed API key" >&2
       unset CONTEXT7_API_KEY
       return 0
     fi
