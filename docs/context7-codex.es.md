@@ -35,11 +35,13 @@ Remote Dev solo es propietario de un bloque marcado de forma explícita dentro d
 # BEGIN REMOTE DEV MANAGED CONTEXT7
 [mcp_servers.context7]
 url = "https://mcp.context7.com/mcp"
-bearer_token_env_var = "CONTEXT7_API_KEY"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
 enabled = true
 required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
+
+La documentación actual de Context7 para el cliente Codex exige una cabecera HTTP llamada `CONTEXT7_API_KEY` para la autenticación mediante API key. La opción `env_http_headers` de Codex relaciona esa cabecera con el nombre de una variable de entorno, de forma que el valor secreto queda fuera del TOML y Codex envía la cabecera que espera el MCP alojado.
 
 Todo lo que quede fuera de esos marcadores se conserva. Antes de escribir, el gestor analiza el TOML existente y se niega a sobrescribir un `mcp_servers.context7` previo que no sea propiedad de Remote Dev. Si faltan marcadores, están duplicados o son ambiguos, también falla de forma segura en lugar de adivinar qué contenido puede modificar.
 
@@ -61,7 +63,7 @@ $CODEX_HOME/.remote-dev-context7/api-key
 
 El directorio utiliza modo `0700` y la clave `0600`. Se rechazan enlaces simbólicos, archivos no regulares, propietarios incorrectos o permisos demasiado amplios.
 
-La clave **no** se escribe en TOML, argumentos, diagnósticos, estado del menú, issues/PR ni logs normales. Justo antes de iniciar Codex con una integración Context7 gestionada por Remote Dev, `run-codex` valida la ruta privada y exporta `CONTEXT7_API_KEY` únicamente al entorno del proceso Codex. Si la integración gestionada es anónima, se elimina cualquier valor heredado accidental con ese nombre. Cuando Context7 no está gestionado por Remote Dev, el wrapper no modifica el entorno ni la configuración que pueda mantener el usuario por su cuenta.
+La clave **no** se escribe en TOML, argumentos, diagnósticos, estado del menú, issues/PR ni logs normales. Justo antes de iniciar Codex con una integración Context7 gestionada por Remote Dev, `run-codex` valida la ruta privada y exporta `CONTEXT7_API_KEY` únicamente al entorno del proceso Codex. Codex resuelve después esa variable mediante `env_http_headers` y envía su valor en la cabecera HTTP `CONTEXT7_API_KEY`. Si la integración gestionada es anónima, se elimina cualquier valor heredado accidental con ese nombre. Cuando Context7 no está gestionado por Remote Dev, el wrapper no modifica el entorno ni la configuración que pueda mantener el usuario por su cuenta.
 
 ## Disponibilidad y comportamiento de red
 
