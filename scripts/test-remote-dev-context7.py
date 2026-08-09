@@ -98,8 +98,8 @@ args = ["--safe"]
             raise AssertionError("install did not create exactly one managed Context7 block")
         if 'url = "https://mcp.context7.com/mcp"' not in installed:
             raise AssertionError("managed block does not use the reviewed hosted endpoint")
-        if 'bearer_token_env_var = "CONTEXT7_API_KEY"' not in installed:
-            raise AssertionError("managed block does not use the reviewed bearer-token environment")
+        if 'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }' not in installed:
+            raise AssertionError("managed block does not map the Context7 API-key header to its private environment variable")
         if "required = false" not in installed:
             raise AssertionError("Context7 must remain non-fatal to Codex startup")
         assert_private_file(config)
