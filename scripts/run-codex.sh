@@ -190,9 +190,18 @@ if [[ ! -x "$resolved_codex_binary" ]]; then
 fi
 
 configure_context7_environment() {
-  local key_path="" manager_status=0
-  local expected_key_path="${CODEX_HOME:-/root/.codex}/.remote-dev-context7/api-key"
+  local key_path="" manager_status=0 expected_key_path=""
+  local codex_home="${CODEX_HOME:-/root/.codex}"
   local -a context7_key_command=("$context7_manager" key-file --active)
+
+  while [[ "$codex_home" != / && "$codex_home" == */ ]]; do
+    codex_home="${codex_home%/}"
+  done
+  if [[ "$codex_home" == / ]]; then
+    expected_key_path="/.remote-dev-context7/api-key"
+  else
+    expected_key_path="$codex_home/.remote-dev-context7/api-key"
+  fi
 
   if key_path="$("${context7_key_command[@]}" 2>/dev/null)"; then
     if [[ "$key_path" != "$expected_key_path" || ! -f "$key_path" || -L "$key_path" ]]; then
