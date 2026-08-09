@@ -110,6 +110,8 @@ fi
 require_action_shas
 require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
+python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
 
 if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
@@ -226,4 +228,4 @@ printf 'Python release pin: %s\n' "$PYTHON_VERSION"
 printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
 printf 'uv release pin: %s\n' "$UV_VERSION"
-echo "Release asset SHA-256 pins and mise runtime lock data are present and synchronized."
+echo "Release asset SHA-256 pins, Codex companion updater bindings and mise runtime lock data are present and synchronized."
