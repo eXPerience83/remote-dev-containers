@@ -62,9 +62,9 @@ Optional agents must not be downloaded silently during launcher or container sta
 
 ## Optional integrations
 
-| Integration | Bundled runtime/package | Network behavior | Private state | Current scope |
-|---|---|---|---|---|
-| Context7 for Codex | None; only the Remote Dev manager is in the image | Passive status and lifecycle configuration are offline; explicit `test` and enabled Codex MCP use may contact `mcp.context7.com` | Marked block in Codex `config.toml`; optional API key below persistent `CODEX_HOME` | Hosted Streamable HTTP MCP only; no Context7 CLI, npm runtime, skills or `AGENTS.md` mutation |
+| Integration | Bundled runtime/package | Network behavior | Private state | Current scope | Release status |
+|---|---|---|---|---|---|
+| Context7 for Codex | None; only the Remote Dev manager is in the image | Passive status and lifecycle configuration are offline; explicit `test` and enabled Codex MCP use may contact `mcp.context7.com` | Marked block in Codex `config.toml`; optional API key below persistent `CODEX_HOME` | Hosted Streamable HTTP MCP only; no Context7 CLI, npm runtime, skills or `AGENTS.md` mutation | Experimental candidate/edge line under #31; not yet a stable-release claim |
 
 Context7 is an external service operated by Upstash and is not part of the Remote Dev image SBOM. The manager refuses to overwrite an unowned Context7 MCP entry, keeps `required = false`, and never prints the API key. See `docs/context7-codex.md` and `docs/context7-codex.es.md` for the lifecycle, privacy/terms boundary and removal contract.
 
