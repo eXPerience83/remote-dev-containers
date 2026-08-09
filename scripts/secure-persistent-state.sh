@@ -68,12 +68,37 @@ validate_codex_runtime_root() {
   done
 }
 
+validate_context7_state() {
+  local codex_home="$1"
+  local state_dir="$codex_home/.remote-dev-context7"
+  local path=""
+
+  for path in \
+    "$codex_home/config.toml" \
+    "$codex_home/config.toml.remote-dev-context7.bak" \
+    "$state_dir"; do
+    if [[ -L "$path" ]]; then
+      echo "ERROR: Context7-managed Codex state must not be symlinked: $path" >&2
+      return 1
+    fi
+  done
+  if [[ -e "$state_dir" && ! -d "$state_dir" ]]; then
+    echo "ERROR: Context7 private state path must be a directory: $state_dir" >&2
+    return 1
+  fi
+}
+
 if [[ "$role" == codex ]]; then
   codex_home="${CODEX_HOME:-/root/.codex}"
   codex_runtime_root="${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
+  context7_state_dir="$codex_home/.remote-dev-context7"
   validate_codex_runtime_root "$codex_runtime_root"
+  validate_context7_state "$codex_home"
   secure_dir "$codex_home"
   secure_file "$codex_home/auth.json"
+  secure_file "$codex_home/config.toml"
+  secure_file "$codex_home/config.toml.remote-dev-context7.bak"
+  secure_private_tree "$context7_state_dir"
   secure_private_tree "$codex_runtime_root"
 fi
 secure_dir "$gh_config_dir"
