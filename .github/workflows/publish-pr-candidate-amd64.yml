@@ -7,8 +7,10 @@ on:
 permissions:
   contents: read
 
+# `dev` is a single mutable pre-merge channel. Serialize the whole workflow so
+# two explicitly authorized candidate publications cannot race its promotion.
 concurrency:
-  group: publish-pr-candidate-${{ github.event.issue.number }}
+  group: publish-pr-candidate-dev-amd64
   cancel-in-progress: false
 
 jobs:
@@ -296,7 +298,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Publish the candidate under the canonical package
+      - name: Publish the candidate and promote the dev channel
         id: image
         env:
           PR_NUMBER: ${{ needs.build.outputs.pr_number }}
@@ -318,9 +320,30 @@ jobs:
             exit 1
           fi
 
+          source_ref="${image}@${digest}"
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file dev-promotion.json \
+            --tag "${image}:dev" \
+            --tag "${image}:dev-amd64" \
+            "$source_ref"
+
+          for published_tag in "$tag" dev dev-amd64; do
+            published_ref="${image}:${published_tag}"
+            actual_digest="$(
+              docker buildx imagetools inspect "$published_ref" \
+                --format '{{json .Manifest.Digest}}' | tr -d '"'
+            )"
+            if [[ "$actual_digest" != "$digest" ]]; then
+              echo "ERROR: $published_ref resolved to $actual_digest instead of $digest" >&2
+              exit 1
+            fi
+          done
+
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "source=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "dev_ref=${image}:dev-amd64" >> "$GITHUB_OUTPUT"
 
       - name: Comment the exact candidate on the pull request
         env:
@@ -329,18 +352,20 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           SOURCE_REVISION: ${{ steps.image.outputs.source }}
+          DEV_REF: ${{ steps.image.outputs.dev_ref }}
         run: |
           set -euo pipefail
           immutable_ref="${IMAGE_REF%:*}@${IMAGE_DIGEST}"
           body="$(cat <<EOF
           Published an isolated AMD64 candidate after smoke tests, independent artifact verification and the fixable-critical vulnerability gate passed.
 
-          - Image: \`${IMAGE_REF}\`
+          - Candidate tag: \`${IMAGE_REF}\`
+          - Dev channel: \`${DEV_REF}\`
           - Immutable reference: \`${immutable_ref}\`
           - Source revision: \`${SOURCE_REVISION}\`
           - Triggering workflow run: \`${GITHUB_RUN_ID}\`
 
-          This is a temporary test candidate, not \`edge\` or a stable release. Validate the immutable digest on TrueNAS before merging the runtime change.
+          The mutable \`dev\` channel now points to this exact candidate. It may contain unmerged code and is not \`edge\`, \`stable\` or \`latest\`. Use the immutable digest for exact TrueNAS validation and rollback evidence.
           EOF
           )"
           gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
