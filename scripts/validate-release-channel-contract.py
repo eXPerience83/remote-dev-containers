@@ -50,6 +50,7 @@ def validate(root: Path) -> None:
     edge = read(root, ".github/workflows/publish-edge-amd64.yml")
     stable = read(root, ".github/workflows/publish-amd64.yml")
     releases = read(root, "docs/releases.md")
+    releases_es = read(root, "docs/releases.es.md")
     env_example = read(root, ".env.example")
 
     require(
@@ -59,6 +60,9 @@ def validate(root: Path) -> None:
             "startsWith(github.event.comment.body, '/publish-candidate ')",
             "github.event.comment.user.login == github.repository_owner",
             'if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]]',
+            'if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]',
+            'if [[ "$base_ref" != main ]]',
+            'if [[ "$state" != open ]]',
             'if [[ "$requested_sha" != "$head_sha" ]]',
         ),
         "candidate authorization",
@@ -87,6 +91,14 @@ def validate(root: Path) -> None:
         "candidate publication",
     )
 
+    require(
+        edge,
+        (
+            "branches:\n      - main",
+            'if [[ "$GITHUB_REF" != "refs/heads/main" ]]',
+        ),
+        "edge source boundary",
+    )
     edge_publish = bounded(
         edge,
         "      - name: Promote one scanned digest to canonical edge tags\n",
@@ -109,6 +121,15 @@ def validate(root: Path) -> None:
         "edge publication",
     )
 
+    require(
+        stable,
+        (
+            '- "v*"',
+            'if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',
+            'if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then',
+        ),
+        "stable source boundary",
+    )
     stable_publish = bounded(
         stable,
         "      - name: Promote one scanned digest to canonical stable tags\n",
@@ -143,8 +164,24 @@ def validate(root: Path) -> None:
             "ghcr.io/experience83/remote-dev:dev-amd64",
             "ghcr.io/experience83/remote-dev:edge-amd64",
             "ghcr.io/experience83/remote-dev:stable-amd64",
+            "Spanish version: [`releases.es.md`](releases.es.md)",
         ),
-        "release documentation",
+        "English release documentation",
+    )
+    require(
+        releases_es,
+        (
+            "`dev` / `dev-amd64`",
+            "`edge` / `edge-amd64`",
+            "`stable` / `stable-amd64`",
+            "`latest`",
+            "`latest` es siempre un alias de `stable`",
+            "ghcr.io/experience83/remote-dev:dev-amd64",
+            "ghcr.io/experience83/remote-dev:edge-amd64",
+            "ghcr.io/experience83/remote-dev:stable-amd64",
+            "Versión inglesa: [`releases.md`](releases.md)",
+        ),
+        "Spanish release documentation",
     )
     require(
         env_example,
