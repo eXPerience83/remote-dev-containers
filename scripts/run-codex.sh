@@ -7,6 +7,7 @@ set -euo pipefail
 readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
+readonly context7_manager=/usr/local/bin/remote-dev-context7
 readonly sandbox_mode=danger-full-access
 readonly default_approval_mode=autonomous
 
@@ -187,6 +188,46 @@ if [[ ! -x "$resolved_codex_binary" ]]; then
   echo "WARNING: resolved Codex executable is unavailable; using immutable bundled fallback" >&2
   resolved_codex_binary="$bundled_codex_binary"
 fi
+
+configure_context7_environment() {
+  local key_path="" manager_status=0
+  local expected_key_path="${CODEX_HOME:-/root/.codex}/.remote-dev-context7/api-key"
+
+  if key_path="$("$context7_manager" key-file --active 2>/dev/null)"; then
+    if [[ "$key_path" != "$expected_key_path" || ! -f "$key_path" || -L "$key_path" ]]; then
+      echo "WARNING: managed Context7 credential path failed validation; starting without the managed API key" >&2
+      unset CONTEXT7_API_KEY
+      return 0
+    fi
+    if ! IFS= read -r CONTEXT7_API_KEY < "$key_path" || [[ -z "$CONTEXT7_API_KEY" ]]; then
+      echo "WARNING: managed Context7 credential could not be read; starting without the managed API key" >&2
+      unset CONTEXT7_API_KEY
+      return 0
+    fi
+    export CONTEXT7_API_KEY
+    return 0
+  else
+    manager_status=$?
+  fi
+
+  case "$manager_status" in
+    4)
+      # No Remote Dev-owned Context7 block. Preserve any explicitly user-managed
+      # environment because the project does not own that configuration.
+      ;;
+    5)
+      # A healthy Remote Dev-managed anonymous integration must not inherit an
+      # unrelated/stale key from the container environment.
+      unset CONTEXT7_API_KEY
+      ;;
+    *)
+      unset CONTEXT7_API_KEY
+      echo "WARNING: managed Context7 state is unavailable or unsafe; starting Codex without the managed API key" >&2
+      ;;
+  esac
+}
+
+configure_context7_environment
 
 exec "$resolved_codex_binary" \
   --sandbox "$sandbox_mode" \
