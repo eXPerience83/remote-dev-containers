@@ -192,8 +192,9 @@ fi
 configure_context7_environment() {
   local key_path="" manager_status=0
   local expected_key_path="${CODEX_HOME:-/root/.codex}/.remote-dev-context7/api-key"
+  local -a context7_key_command=("$context7_manager" key-file --active)
 
-  if key_path="$("$context7_manager" key-file --active 2>/dev/null)"; then
+  if key_path="$("${context7_key_command[@]}" 2>/dev/null)"; then
     if [[ "$key_path" != "$expected_key_path" || ! -f "$key_path" || -L "$key_path" ]]; then
       echo "WARNING: managed Context7 credential path failed validation; starting without the managed API key" >&2
       unset CONTEXT7_API_KEY
