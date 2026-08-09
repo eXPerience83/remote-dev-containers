@@ -12,7 +12,7 @@ import sys
 import tempfile
 import tomllib
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 CONTEXT7_ENDPOINT = "https://mcp.context7.com/mcp"
@@ -36,6 +36,11 @@ BUNDLED_CODEX = Path("/usr/local/bin/codex")
 
 class Context7Error(RuntimeError):
     pass
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise Context7Error("Context7 ping attempted a redirect; refusing to follow it")
 
 
 class ConfigState:
@@ -503,6 +508,34 @@ def command_status(paths: Paths, args: argparse.Namespace) -> int:
     return code
 
 
+def validate_codex_mcp_list(output: str) -> None:
+    try:
+        entries = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise Context7Error("bundled Codex returned invalid JSON for the MCP server list") from exc
+    if not isinstance(entries, list):
+        raise Context7Error("bundled Codex returned an unexpected MCP server list shape")
+
+    matches = [
+        entry
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("name") == "context7"
+    ]
+    if len(matches) != 1:
+        raise Context7Error("bundled Codex did not report exactly one managed Context7 server")
+
+    entry = matches[0]
+    transport = entry.get("transport")
+    if (
+        entry.get("enabled") is not True
+        or not isinstance(transport, dict)
+        or transport.get("type") != "streamable_http"
+        or transport.get("url") != CONTEXT7_ENDPOINT
+        or transport.get("env_http_headers") != {"CONTEXT7_API_KEY": CONTEXT7_ENV}
+    ):
+        raise Context7Error("bundled Codex reported an unexpected managed Context7 server contract")
+
+
 def bundled_codex_accepts_config(paths: Paths) -> None:
     if not BUNDLED_CODEX.is_file() or not os.access(BUNDLED_CODEX, os.X_OK):
         raise Context7Error(f"bundled Codex executable is unavailable: {BUNDLED_CODEX}")
@@ -515,7 +548,7 @@ def bundled_codex_accepts_config(paths: Paths) -> None:
         environment.pop(CONTEXT7_ENV, None)
     try:
         result = subprocess.run(
-            [str(BUNDLED_CODEX), "mcp", "list"],
+            [str(BUNDLED_CODEX), "mcp", "list", "--json"],
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -527,9 +560,7 @@ def bundled_codex_accepts_config(paths: Paths) -> None:
         raise Context7Error(f"could not validate config with bundled Codex: {type(exc).__name__}") from exc
     if result.returncode != 0:
         raise Context7Error(f"bundled Codex rejected the MCP configuration (exit {result.returncode})")
-    combined = (result.stdout + "\n" + result.stderr).lower()
-    if "context7" not in combined:
-        raise Context7Error("bundled Codex did not report the managed Context7 server")
+    validate_codex_mcp_list(result.stdout)
 
 
 def hosted_ping() -> None:
@@ -538,11 +569,12 @@ def hosted_ping() -> None:
         headers={"User-Agent": "remote-dev-context7/0.1"},
         method="GET",
     )
+    opener = build_opener(_NoRedirect())
     try:
-        with urlopen(request, timeout=10) as response:
+        with opener.open(request, timeout=10) as response:
             final = urlparse(response.geturl())
             if final.scheme != "https" or final.hostname != "mcp.context7.com" or final.path != "/ping":
-                raise Context7Error("Context7 ping redirected outside the reviewed hosted endpoint")
+                raise Context7Error("Context7 ping response came from an unexpected endpoint")
             payload = response.read(MAX_PING_BYTES + 1)
             if len(payload) > MAX_PING_BYTES:
                 raise Context7Error("Context7 ping response exceeded the supported size limit")
