@@ -52,6 +52,9 @@ case "${REMOTE_DEV_TEST_CONTEXT7_STATE:-unmanaged}" in
   key)
     printf '%s\n' "$REMOTE_DEV_TEST_CONTEXT7_KEY_FILE"
     ;;
+  wrong-path)
+    printf '%s\n' "${REMOTE_DEV_TEST_CONTEXT7_KEY_FILE}.wrong"
+    ;;
   unmanaged)
     exit 4
     ;;
@@ -102,6 +105,29 @@ read_env() {
   printf '%s\n' "$value"
 }
 
+assert_rejected_key() {
+  local label="$1" state="$2" warning="$3"
+  run_case "$state" stale-inherited-key "$output"
+  if [[ "$(read_env)" != __unset__ ]]; then
+    echo "ERROR: $label exposed a Context7 API key" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$warning" "$output"; then
+    echo "ERROR: $label did not emit the expected bounded warning" >&2
+    exit 1
+  fi
+  if grep -Fq 'stale-inherited-key' "$output"; then
+    echo "ERROR: $label leaked an inherited Context7 API key" >&2
+    exit 1
+  fi
+}
+
+restore_valid_key() {
+  rm -f "$key_file"
+  printf '%s' "$synthetic_key" > "$key_file"
+  chmod 0600 "$key_file"
+}
+
 output="$workdir/output"
 run_case key __unset__ "$output"
 if [[ "$(read_env)" != "$synthetic_key" ]]; then
@@ -114,6 +140,48 @@ if grep -Fq "$synthetic_key" "$output"; then
 fi
 
 echo 'Managed Context7 key injection: OK'
+
+assert_rejected_key \
+  'wrong managed key path' \
+  wrong-path \
+  'managed Context7 credential path failed validation'
+
+real_key_file="$workdir/real-context7-key"
+printf '%s' "$synthetic_key" > "$real_key_file"
+chmod 0600 "$real_key_file"
+rm -f "$key_file"
+ln -s "$real_key_file" "$key_file"
+assert_rejected_key \
+  'symlinked managed key file' \
+  key \
+  'managed Context7 credential path failed validation'
+restore_valid_key
+
+: > "$key_file"
+chmod 0600 "$key_file"
+assert_rejected_key \
+  'empty managed key file' \
+  key \
+  'managed Context7 credential could not be read safely'
+restore_valid_key
+
+printf '%s' 'ctx7 key with whitespace' > "$key_file"
+chmod 0600 "$key_file"
+assert_rejected_key \
+  'whitespace-containing managed key file' \
+  key \
+  'managed Context7 credential could not be read safely'
+restore_valid_key
+
+python3 -c 'print("x" * 16385, end="")' > "$key_file"
+chmod 0600 "$key_file"
+assert_rejected_key \
+  'oversized managed key file' \
+  key \
+  'managed Context7 credential could not be read safely'
+restore_valid_key
+
+echo 'Managed Context7 local key-file rejection cases: OK'
 
 run_case anonymous stale-inherited-key "$output"
 if [[ "$(read_env)" != __unset__ ]]; then
