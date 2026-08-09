@@ -85,7 +85,7 @@ Network boundaries are intentionally different for each action:
 - `test`: explicit live check of the bundled Codex config plus `https://mcp.context7.com/ping`;
 - a normal Codex session after Context7 has been enabled: Codex may contact the configured hosted MCP endpoint as part of normal MCP initialization and tool use.
 
-The image build also creates a temporary anonymous managed config and requires the exact bundled Codex binary to accept it through `codex mcp list`. This avoids relying on `codex mcp add --url` as the trusted mutation primitive.
+The image build also creates a temporary anonymous managed config and requires the exact bundled Codex binary to parse and report that one server through the local-only `codex mcp get context7 --json` path. This avoids both network-capable MCP authentication discovery and reliance on `codex mcp add --url` as the trusted mutation primitive.
 
 ## Privacy, terms and documentation licenses
 
