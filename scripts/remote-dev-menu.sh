@@ -41,6 +41,18 @@ run_interactive_and_harden() {
   return "$action_status"
 }
 
+run_context7_action() {
+  local label="$1"
+  shift
+  local action_status=0
+
+  run_interactive_and_harden "$label" "$@" || action_status=$?
+  if (( action_status == 0 )); then
+    read -r -p "Press Enter to return to the Context7 menu..." _
+  fi
+  return "$action_status"
+}
+
 run_github_login() {
   local action_status=0
 
@@ -198,16 +210,16 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Context7 install/repair" "${context7_install_command[@]}"; then :; fi
+        if run_context7_action "Context7 install/repair" "${context7_install_command[@]}"; then :; fi
         ;;
       2)
-        if run_interactive_and_harden "Context7 connection test" "${context7_test_command[@]}"; then :; fi
+        if run_context7_action "Context7 connection test" "${context7_test_command[@]}"; then :; fi
         ;;
       3)
-        if run_interactive_and_harden "Context7 contract update" "${context7_update_command[@]}"; then :; fi
+        if run_context7_action "Context7 contract update" "${context7_update_command[@]}"; then :; fi
         ;;
       4)
-        if run_interactive_and_harden "Context7 removal" "${context7_remove_command[@]}"; then :; fi
+        if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
         ;;
       5)
         return 0
