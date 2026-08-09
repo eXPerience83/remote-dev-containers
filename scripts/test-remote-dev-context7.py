@@ -99,6 +99,37 @@ def assert_passive_status_no_network(module, home: Path) -> None:
             os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
+def assert_update_no_network(module, home: Path) -> None:
+    original_build_opener = module.build_opener
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("Context7 update attempted network access")
+
+    module.build_opener = fail_if_called
+    old_home = os.environ.get("CODEX_HOME")
+    old_role = os.environ.get("REMOTE_DEV_ROLE")
+    config = home / "config.toml"
+    before = config.read_bytes()
+    try:
+        os.environ["CODEX_HOME"] = str(home)
+        os.environ["REMOTE_DEV_ROLE"] = "codex"
+        paths = module.Paths()
+        if module.command_update(paths, argparse_namespace(yes=True)) != 0:
+            raise AssertionError("in-process Context7 update unexpectedly failed")
+        if config.read_bytes() != before:
+            raise AssertionError("in-process current update unexpectedly rewrote configuration")
+    finally:
+        module.build_opener = original_build_opener
+        if old_home is None:
+            os.environ.pop("CODEX_HOME", None)
+        else:
+            os.environ["CODEX_HOME"] = old_home
+        if old_role is None:
+            os.environ.pop("REMOTE_DEV_ROLE", None)
+        else:
+            os.environ["REMOTE_DEV_ROLE"] = old_role
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -213,6 +244,7 @@ args = ["--safe"]
             raise AssertionError("update did not make its no-network behavior explicit")
 
         module = load_manager_module()
+        assert_update_no_network(module, home)
         assert_passive_status_no_network(module, home)
 
         result = run_manager(home, "remove", "--yes")

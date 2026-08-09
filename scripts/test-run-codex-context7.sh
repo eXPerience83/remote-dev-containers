@@ -154,6 +154,19 @@ fi
 
 echo 'Trailing-slash CODEX_HOME normalization: OK'
 
+redundant_codex_home="${workdir%/*}//${workdir##*/}"
+run_case key __unset__ "$output" "$redundant_codex_home"
+if [[ "$(read_env)" != "$synthetic_key" ]]; then
+  echo 'ERROR: redundant-separator CODEX_HOME rejected the canonical managed Context7 key path' >&2
+  exit 1
+fi
+if grep -Fq 'WARNING:' "$output"; then
+  echo 'ERROR: redundant-separator CODEX_HOME produced an unexpected Context7 warning' >&2
+  exit 1
+fi
+
+echo 'Redundant-separator CODEX_HOME normalization: OK'
+
 assert_rejected_key \
   'wrong managed key path' \
   wrong-path \

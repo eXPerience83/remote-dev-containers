@@ -192,15 +192,15 @@ fi
 configure_context7_environment() {
   local key_path="" manager_status=0 expected_key_path=""
   local codex_home="${CODEX_HOME:-/root/.codex}"
+  local -a expected_key_path_command=(
+    python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]) / ".remote-dev-context7" / "api-key")' "$codex_home"
+  )
   local -a context7_key_command=("$context7_manager" key-file --active)
 
-  while [[ "$codex_home" != / && "$codex_home" == */ ]]; do
-    codex_home="${codex_home%/}"
-  done
-  if [[ "$codex_home" == / ]]; then
-    expected_key_path="/.remote-dev-context7/api-key"
-  else
-    expected_key_path="$codex_home/.remote-dev-context7/api-key"
+  if ! expected_key_path="$("${expected_key_path_command[@]}" 2>/dev/null)"; then
+    echo "WARNING: managed Context7 credential path could not be normalized safely; starting without the managed API key" >&2
+    unset CONTEXT7_API_KEY
+    return 0
   fi
 
   if key_path="$("${context7_key_command[@]}" 2>/dev/null)"; then
