@@ -98,7 +98,10 @@ codex_runtime_status_summary() {
 
 context7_status_summary() {
   local summary="" status=0
-  summary="$(/usr/local/bin/remote-dev-context7 status --menu 2>&1)" || status=$?
+  local -a context7_status_command=(
+    /usr/local/bin/remote-dev-context7 status --menu
+  )
+  summary="$("${context7_status_command[@]}" 2>&1)" || status=$?
   if [[ -n "$summary" ]]; then
     printf '%s\n' "$summary"
   else
@@ -172,6 +175,10 @@ run_codex_action() {
 
 show_context7_menu() {
   local status_summary=""
+  local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
+  local -a context7_test_command=(/usr/local/bin/remote-dev-context7 test)
+  local -a context7_update_command=(/usr/local/bin/remote-dev-context7 update)
+  local -a context7_remove_command=(/usr/local/bin/remote-dev-context7 remove)
 
   while true; do
     status_summary="$(context7_status_summary)"
@@ -191,16 +198,16 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Context7 install/repair" /usr/local/bin/remote-dev-context7 install; then :; fi
+        if run_interactive_and_harden "Context7 install/repair" "${context7_install_command[@]}"; then :; fi
         ;;
       2)
-        if run_interactive_and_harden "Context7 connection test" /usr/local/bin/remote-dev-context7 test; then :; fi
+        if run_interactive_and_harden "Context7 connection test" "${context7_test_command[@]}"; then :; fi
         ;;
       3)
-        if run_interactive_and_harden "Context7 contract update" /usr/local/bin/remote-dev-context7 update; then :; fi
+        if run_interactive_and_harden "Context7 contract update" "${context7_update_command[@]}"; then :; fi
         ;;
       4)
-        if run_interactive_and_harden "Context7 removal" /usr/local/bin/remote-dev-context7 remove; then :; fi
+        if run_interactive_and_harden "Context7 removal" "${context7_remove_command[@]}"; then :; fi
         ;;
       5)
         return 0
