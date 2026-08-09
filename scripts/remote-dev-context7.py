@@ -23,7 +23,7 @@ END_MARKER = "# END REMOTE DEV MANAGED CONTEXT7"
 MANAGED_BLOCK = f'''{START_MARKER}
 [mcp_servers.context7]
 url = "{CONTEXT7_ENDPOINT}"
-bearer_token_env_var = "{CONTEXT7_ENV}"
+env_http_headers = {{ "CONTEXT7_API_KEY" = "{CONTEXT7_ENV}" }}
 enabled = true
 required = false
 {END_MARKER}
@@ -186,7 +186,7 @@ def inspect_config(paths: Paths) -> ConfigState:
     block = text[start:end]
     expected = {
         "url": CONTEXT7_ENDPOINT,
-        "bearer_token_env_var": CONTEXT7_ENV,
+        "env_http_headers": {"CONTEXT7_API_KEY": CONTEXT7_ENV},
         "enabled": True,
         "required": False,
     }
@@ -274,7 +274,7 @@ def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
     data = parse_toml(candidate, label="resulting Codex config")
     expected = {
         "url": CONTEXT7_ENDPOINT,
-        "bearer_token_env_var": CONTEXT7_ENV,
+        "env_http_headers": {"CONTEXT7_API_KEY": CONTEXT7_ENV},
         "enabled": True,
         "required": False,
     }
