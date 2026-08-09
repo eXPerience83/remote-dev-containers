@@ -7,7 +7,7 @@ test_launcher="$workdir/run-codex"
 test_codex="$workdir/codex"
 test_runtime_manager="$workdir/remote-dev-codex-runtime"
 test_context7_manager="$workdir/remote-dev-context7"
-key_file="$workdir/api-key"
+key_file="$workdir/.remote-dev-context7/api-key"
 env_file="$workdir/context7-env"
 args_file="$workdir/args"
 readonly synthetic_key='ctx7-test-key-do-not-use'
@@ -71,6 +71,7 @@ sed \
   "$launcher_source" > "$test_launcher"
 chmod 0755 "$test_launcher"
 
+mkdir -p "$(dirname "$key_file")"
 printf '%s' "$synthetic_key" > "$key_file"
 chmod 0600 "$key_file"
 
