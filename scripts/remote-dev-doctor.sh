@@ -140,7 +140,8 @@ if [[ "$role" == codex ]]; then
 
   echo
   context7_status_code=0
-  context7_status="$(/usr/local/bin/remote-dev-context7 status --menu 2>&1)" || context7_status_code=$?
+  context7_status_command=(/usr/local/bin/remote-dev-context7 status --menu)
+  context7_status="$("${context7_status_command[@]}" 2>&1)" || context7_status_code=$?
   if [[ -n "$context7_status" ]]; then
     printf '%s\n' "$context7_status"
   else
