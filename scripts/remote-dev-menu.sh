@@ -16,18 +16,23 @@ harden_state_or_exit() {
   fi
 }
 
+pause_for_menu() {
+  local prompt="${1:-Press Enter to return to the menu...}"
+  read -r -p "$prompt" _
+}
+
 report_action_failure() {
   local label="$1"
   local action_status="$2"
 
   echo >&2
   echo "ERROR: $label exited with status $action_status" >&2
-  read -r -p "Press Enter to return to the menu..." _
 }
 
-run_interactive_and_harden() {
-  local label="$1"
-  shift
+run_interactive_and_harden_to() {
+  local return_prompt="$1"
+  local label="$2"
+  shift 2
   local action_status=0
 
   clear
@@ -38,19 +43,28 @@ run_interactive_and_harden() {
     report_action_failure "$label" "$action_status"
   fi
 
+  pause_for_menu "$return_prompt"
   return "$action_status"
+}
+
+run_interactive_and_harden() {
+  local label="$1"
+  shift
+
+  run_interactive_and_harden_to \
+    "Press Enter to return to the menu..." \
+    "$label" \
+    "$@"
 }
 
 run_context7_action() {
   local label="$1"
   shift
-  local action_status=0
 
-  run_interactive_and_harden "$label" "$@" || action_status=$?
-  if (( action_status == 0 )); then
-    read -r -p "Press Enter to return to the Context7 menu..." _
-  fi
-  return "$action_status"
+  run_interactive_and_harden_to \
+    "Press Enter to return to the Context7 menu..." \
+    "$label" \
+    "$@"
 }
 
 run_github_login() {
@@ -75,6 +89,7 @@ run_github_login() {
     report_action_failure "GitHub CLI setup" "$action_status"
   fi
 
+  pause_for_menu "Press Enter to return to the menu..."
   return "$action_status"
 }
 
@@ -87,7 +102,7 @@ run_diagnostics() {
     echo >&2
     echo "ERROR: diagnostics reported one or more failures (status $doctor_status)" >&2
   fi
-  read -r -p "Press Enter to continue..." _
+  pause_for_menu "Press Enter to return to the menu..."
 }
 
 codex_policy_summary() {
