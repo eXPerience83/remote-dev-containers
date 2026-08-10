@@ -106,7 +106,9 @@ case "${1:-}" in
     printf '%s\n' 'Context7: not configured'
     ;;
   install|test|update|remove)
-    [[ "${2:-}" == --yes && "$#" == 2 ]] || exit 2
+    # Production deliberately omits --yes here so the real manager owns the
+    # disclosure/confirmation prompt. Reject any accidental extra arguments.
+    [[ "$#" == 1 ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
@@ -292,10 +294,10 @@ echo 'Codex runtime update/remove result pauses: OK'
 # If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
 run_menu __unset__ $'6\n1\n1\n2\n2\n3\n3\n4\n4\n5\n11\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 menu actions' \
-  'install --yes' \
-  'test --yes' \
-  'update --yes' \
-  'remove --yes'
+  'install' \
+  'test' \
+  'update' \
+  'remove'
 assert_hardening_count 4
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"
