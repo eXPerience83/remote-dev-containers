@@ -102,11 +102,12 @@ cat > "$context7_manager" <<'CONTEXT7'
 set -euo pipefail
 case "${1:-}" in
   status)
-    [[ "${2:-}" == --menu ]] || exit 2
+    [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
     printf '%s\n' 'Context7: not configured'
     ;;
   install|test|update|remove)
-    printf '%s\n' "$1" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    [[ "${2:-}" == --yes && "$#" == 2 ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
 esac
@@ -290,7 +291,11 @@ echo 'Codex runtime update/remove result pauses: OK'
 # Each successful Context7 action must consume its duplicate choice at the pause.
 # If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
 run_menu __unset__ $'6\n1\n1\n2\n2\n3\n3\n4\n4\n5\n11\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 menu actions' install test update remove
+assert_file_lines "$context7_invocations" 'Context7 menu actions' \
+  'install --yes' \
+  'test --yes' \
+  'update --yes' \
+  'remove --yes'
 assert_hardening_count 4
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"

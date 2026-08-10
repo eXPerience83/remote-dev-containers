@@ -173,6 +173,35 @@ def assert_masked_interactive_key_prompt(module, home: Path) -> None:
             os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
+def assert_main_cancelled_prompt_handling(module, home: Path) -> None:
+    original_confirm = module.confirm
+    original_argv = list(module.sys.argv)
+    old_home = os.environ.get("CODEX_HOME")
+    old_role = os.environ.get("REMOTE_DEV_ROLE")
+    try:
+        os.environ["CODEX_HOME"] = str(home)
+        os.environ["REMOTE_DEV_ROLE"] = "codex"
+        module.sys.argv = ["remote-dev-context7", "remove"]
+        for exception_type in (EOFError, KeyboardInterrupt):
+            def cancelled(*_args, _exception_type=exception_type, **_kwargs):
+                raise _exception_type()
+
+            module.confirm = cancelled
+            if module.main() != 2:
+                raise AssertionError(f"{exception_type.__name__} was not mapped to Context7 cancellation status")
+    finally:
+        module.confirm = original_confirm
+        module.sys.argv = original_argv
+        if old_home is None:
+            os.environ.pop("CODEX_HOME", None)
+        else:
+            os.environ["CODEX_HOME"] = old_home
+        if old_role is None:
+            os.environ.pop("REMOTE_DEV_ROLE", None)
+        else:
+            os.environ["REMOTE_DEV_ROLE"] = old_role
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -290,6 +319,7 @@ args = ["--safe"]
         assert_masked_interactive_key_prompt(module, home)
         assert_update_no_network(module, home)
         assert_passive_status_no_network(module, home)
+        assert_main_cancelled_prompt_handling(module, home)
 
         result = run_manager(home, "remove", "--yes")
         require_success(result, "managed removal")
@@ -325,6 +355,10 @@ url = "https://example.invalid/user-owned"
         require_success(result, "unmanaged status")
         if "unmanaged configuration" not in result.stdout:
             raise AssertionError("unmanaged Context7 state is not reported distinctly")
+        result = run_manager(unmanaged_home, "remove", "--yes")
+        require_failure(result, "unmanaged Context7 removal protection")
+        if unmanaged_config.read_text(encoding="utf-8") != unmanaged_text:
+            raise AssertionError("remove modified an unowned Context7 configuration")
 
         malformed_home = root / "malformed"
         malformed_home.mkdir(mode=0o700)

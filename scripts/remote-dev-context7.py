@@ -318,30 +318,61 @@ def validate_api_key(value: str) -> str:
     return value
 
 
-def secret_status(paths: Paths) -> tuple[str, str | None]:
-    try:
-        if paths.state_dir.exists() or paths.state_dir.is_symlink():
-            info = paths.state_dir.lstat()
-            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-                return "unsafe", None
-            if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
-                return "unsafe", None
-        else:
-            return "missing", None
+def read_private_key_from_fd(fd: int) -> str:
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode):
+        raise Context7Error("Context7 API-key path is not a regular file")
+    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise Context7Error("Context7 API-key file ownership or permissions are unsafe")
+    if info.st_size <= 0 or info.st_size > MAX_KEY_BYTES:
+        raise Context7Error("Context7 API-key file size is unsafe")
 
-        if not paths.key.exists() and not paths.key.is_symlink():
+    chunks: list[bytes] = []
+    remaining = MAX_KEY_BYTES + 1
+    while remaining > 0:
+        chunk = os.read(fd, remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    data = b"".join(chunks)
+    if not data or len(data) > MAX_KEY_BYTES:
+        raise Context7Error("Context7 API-key file size is unsafe")
+    try:
+        value = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise Context7Error("Context7 API-key file is not valid UTF-8") from exc
+    return validate_api_key(value)
+
+
+def secret_status(paths: Paths) -> tuple[str, str | None]:
+    state_fd: int | None = None
+    key_fd: int | None = None
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    try:
+        try:
+            state_fd = os.open(paths.state_dir, directory_flags)
+        except FileNotFoundError:
             return "missing", None
-        info = paths.key.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        state_info = os.fstat(state_fd)
+        if not stat.S_ISDIR(state_info.st_mode):
             return "unsafe", None
-        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        if state_info.st_uid != os.geteuid() or stat.S_IMODE(state_info.st_mode) & 0o077:
             return "unsafe", None
-        if info.st_size <= 0 or info.st_size > MAX_KEY_BYTES:
-            return "unsafe", None
-        value = paths.key.read_text(encoding="utf-8")
-        validate_api_key(value)
+
+        try:
+            key_fd = os.open("api-key", key_flags, dir_fd=state_fd)
+        except FileNotFoundError:
+            return "missing", None
+        value = read_private_key_from_fd(key_fd)
     except (OSError, UnicodeDecodeError, Context7Error):
         return "unsafe", None
+    finally:
+        if key_fd is not None:
+            os.close(key_fd)
+        if state_fd is not None:
+            os.close(state_fd)
     return "safe", value
 
 
@@ -663,6 +694,9 @@ def main() -> int:
         parser.error(f"unsupported command: {args.command}")
     except Context7Error as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    except (EOFError, KeyboardInterrupt):
+        print("ERROR: cancelled", file=sys.stderr)
         return 2
     except OSError as exc:
         print(f"ERROR: local Context7 state operation failed (errno {exc.errno})", file=sys.stderr)

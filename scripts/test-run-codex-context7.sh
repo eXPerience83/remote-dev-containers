@@ -78,6 +78,7 @@ sed \
 chmod 0755 "$test_launcher"
 
 mkdir -p "$(dirname "$key_file")"
+chmod 0700 "$(dirname "$key_file")"
 printf '%s' "$synthetic_key" > "$key_file"
 chmod 0600 "$key_file"
 
@@ -180,7 +181,7 @@ ln -s "$real_key_file" "$key_file"
 assert_rejected_key \
   'symlinked managed key file' \
   key \
-  'managed Context7 credential path failed validation'
+  'managed Context7 credential could not be read safely'
 restore_valid_key
 
 : > "$key_file"
