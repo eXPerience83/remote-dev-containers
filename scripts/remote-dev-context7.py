@@ -480,6 +480,10 @@ def command_update(paths: Paths, args: argparse.Namespace) -> int:
 
 def remove_managed_block(paths: Paths) -> bool:
     state = inspect_config(paths)
+    if state.kind == "unmanaged":
+        raise Context7Error(
+            "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
+        )
     if state.kind in {"markers-malformed", "invalid", "conflict"}:
         raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
     if state.span is None:
