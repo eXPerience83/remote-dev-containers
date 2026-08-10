@@ -409,7 +409,7 @@ def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None]
         return "replace", read_key_from_stdin()
     if sys.stdin.isatty() and not args.yes:
         prompt = "Context7 API key (optional; blank keeps the current key or uses anonymous access): "
-        entered = getpass.getpass(prompt)
+        entered = getpass.getpass(prompt, echo_char="*")
         if entered:
             return "replace", validate_api_key(entered)
     if current_status == "safe":
