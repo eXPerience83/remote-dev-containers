@@ -130,6 +130,49 @@ def assert_update_no_network(module, home: Path) -> None:
             os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
+def assert_masked_interactive_key_prompt(module, home: Path) -> None:
+    original_getpass = module.getpass.getpass
+    original_stdin = sys.stdin
+    old_home = os.environ.get("CODEX_HOME")
+    old_role = os.environ.get("REMOTE_DEV_ROLE")
+    calls: list[tuple[str, str | None]] = []
+    expected_prompt = "Context7 API key (optional; blank keeps the current key or uses anonymous access): "
+
+    class TtyInput:
+        @staticmethod
+        def isatty() -> bool:
+            return True
+
+    def fake_getpass(prompt: str, *, echo_char: str | None = None) -> str:
+        calls.append((prompt, echo_char))
+        return SYNTHETIC_KEY
+
+    try:
+        module.getpass.getpass = fake_getpass
+        module.sys.stdin = TtyInput()
+        os.environ["CODEX_HOME"] = str(home)
+        os.environ["REMOTE_DEV_ROLE"] = "codex"
+        action, value = module.choose_key(
+            module.Paths(),
+            argparse_namespace(anonymous=False, api_key_stdin=False, yes=False),
+        )
+        if action != "replace" or value != SYNTHETIC_KEY:
+            raise AssertionError("interactive Context7 key prompt did not return the supplied synthetic key")
+        if calls != [(expected_prompt, "*")]:
+            raise AssertionError(f"interactive Context7 key prompt is not masked with '*': {calls!r}")
+    finally:
+        module.getpass.getpass = original_getpass
+        module.sys.stdin = original_stdin
+        if old_home is None:
+            os.environ.pop("CODEX_HOME", None)
+        else:
+            os.environ["CODEX_HOME"] = old_home
+        if old_role is None:
+            os.environ.pop("REMOTE_DEV_ROLE", None)
+        else:
+            os.environ["REMOTE_DEV_ROLE"] = old_role
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -244,6 +287,7 @@ args = ["--safe"]
             raise AssertionError("update did not make its no-network behavior explicit")
 
         module = load_manager_module()
+        assert_masked_interactive_key_prompt(module, home)
         assert_update_no_network(module, home)
         assert_passive_status_no_network(module, home)
 
