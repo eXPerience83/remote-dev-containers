@@ -2,7 +2,7 @@
 
 Remote Dev can configure the built-in Codex service to use Context7 as an optional hosted MCP documentation service.
 
-> **Release status:** this integration is being introduced on the current Remote Dev experimental candidate/edge line tracked by #31. It is not part of any previously published stable release; stable availability must not be claimed until a stable release containing this change has completed its release gates.
+> **Release status:** this integration is being introduced through the current Remote Dev experimental `dev -> edge` path tracked by #31. Reviewed pre-merge candidates may be published to `dev`; `edge` contains only integrated `main`. It is not part of any previously published stable release; stable availability must not be claimed until a stable release containing this change has completed its release gates.
 
 Context7 is operated by **Upstash** and is external to Remote Dev and OpenAI. Remote Dev does not bundle, redistribute, install or persist the Context7 CLI, npm package or MCP server runtime for this integration. The integration uses Codex's native Streamable HTTP MCP client against the reviewed hosted endpoint:
 

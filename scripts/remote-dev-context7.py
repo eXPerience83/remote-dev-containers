@@ -611,6 +611,8 @@ def hosted_ping() -> None:
         data = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise Context7Error("Context7 ping returned an unexpected response") from exc
+    if not isinstance(data, dict):
+        raise Context7Error("Context7 ping returned an unexpected response")
     if data.get("status") != "ok" or data.get("message") != "pong":
         raise Context7Error("Context7 ping returned an unexpected status")
 

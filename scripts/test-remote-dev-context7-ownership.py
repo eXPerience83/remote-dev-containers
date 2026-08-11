@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -24,6 +25,62 @@ def run_manager(home: Path, *arguments: str) -> subprocess.CompletedProcess[str]
         timeout=15,
         check=False,
     )
+
+
+def load_manager_module():
+    spec = importlib.util.spec_from_file_location("remote_dev_context7_ownership", MANAGER)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"could not load {MANAGER}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def assert_ping_json_shape(module) -> None:
+    original_build_opener = module.build_opener
+    payload = b'{"status":"ok","message":"pong"}'
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        @staticmethod
+        def geturl() -> str:
+            return module.CONTEXT7_PING
+
+        @staticmethod
+        def read(limit: int) -> bytes:
+            return payload[:limit]
+
+    class FakeOpener:
+        @staticmethod
+        def open(_request, *, timeout: int):
+            if timeout != 10:
+                raise AssertionError("Context7 ping timeout contract changed unexpectedly")
+            return FakeResponse()
+
+    def fake_build_opener(*_args):
+        return FakeOpener()
+
+    try:
+        module.build_opener = fake_build_opener
+        module.hosted_ping()
+        for payload in (b"[]", b'"pong"', b"1", b"null"):
+            try:
+                module.hosted_ping()
+            except module.Context7Error:
+                pass
+            except Exception as exc:
+                raise AssertionError(
+                    f"non-object Context7 ping JSON escaped as {type(exc).__name__} instead of Context7Error"
+                ) from exc
+            else:
+                raise AssertionError("non-object Context7 ping JSON was accepted")
+    finally:
+        module.build_opener = original_build_opener
 
 
 def main() -> int:
@@ -86,6 +143,8 @@ args = ["--would-rebind"]
             raise AssertionError("failed removal changed unrelated Codex TOML semantics")
         if "would change unrelated Codex configuration" not in removal.stderr:
             raise AssertionError("unsafe removal did not report the bounded semantic-preservation error")
+
+        assert_ping_json_shape(load_manager_module())
 
     print("Context7 ownership edge-case regressions: OK")
     return 0

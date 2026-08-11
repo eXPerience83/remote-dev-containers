@@ -110,4 +110,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
-- Context7 API keys are kept out of Codex TOML, arguments and diagnostics, stored only in restrictive Codex-private state, and injected only into the Codex process for a healthy Remote Dev-managed integration; unmanaged Context7 configuration is never overwritten and passive lifecycle/status paths do not contact the external service.
+- Remote Dev-managed Context7 API keys are kept out of Codex TOML, arguments and diagnostics, stored only in restrictive Codex-private state, and injected only into the Codex process for a healthy Remote Dev-managed integration; unmanaged Context7 configuration is never overwritten and passive lifecycle/status paths do not contact the external service.

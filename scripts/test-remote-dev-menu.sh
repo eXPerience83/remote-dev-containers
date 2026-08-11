@@ -188,6 +188,23 @@ LOGIN_SHELL
 
 chmod 0755 "$bin_dir"/*
 
+if ! grep -Fxq 'runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' "$menu_source"; then
+  echo 'ERROR: missing fixture anchor: runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' >&2
+  exit 1
+fi
+for anchor in \
+  '/usr/local/bin/run-codex' \
+  '/usr/local/bin/remote-dev-codex-runtime' \
+  '/usr/local/bin/remote-dev-context7' \
+  '/usr/local/bin/secure-persistent-state' \
+  '/usr/local/bin/remote-dev-doctor' \
+  'bash --login'; do
+  if ! grep -Fq "$anchor" "$menu_source"; then
+    echo "ERROR: missing fixture anchor: $anchor" >&2
+    exit 1
+  fi
+done
+
 sed \
   -e "s|^runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh$|runtime_lib=$runtime_lib|" \
   -e "s|/usr/local/bin/run-codex|$run_codex|g" \
