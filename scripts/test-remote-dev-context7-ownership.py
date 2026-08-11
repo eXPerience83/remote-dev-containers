@@ -11,6 +11,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MANAGER = ROOT / "scripts" / "remote-dev-context7.py"
+SYNTHETIC_KEY = "ctx7-test-key-do-not-use"
 START_MARKER = "# BEGIN REMOTE DEV MANAGED CONTEXT7"
 END_MARKER = "# END REMOTE DEV MANAGED CONTEXT7"
 
@@ -34,6 +35,72 @@ def load_manager_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def assert_supported_python_pin() -> None:
+    versions = ROOT / "versions.env"
+    python_version = ""
+    for line in versions.read_text(encoding="utf-8").splitlines():
+        if line.startswith("PYTHON_VERSION="):
+            python_version = line.split("=", 1)[1]
+            break
+    if not python_version:
+        raise AssertionError("versions.env is missing the supported Python runtime pin")
+    try:
+        major, minor = (int(part) for part in python_version.split(".", 2)[:2])
+    except ValueError as exc:
+        raise AssertionError(f"invalid PYTHON_VERSION pin: {python_version}") from exc
+    if (major, minor) < (3, 14):
+        raise AssertionError(
+            f"Context7 masked getpass requires Python >= 3.14, but the image pin is {python_version}"
+        )
+
+
+def assert_manager_key_rejection_contract(home: Path) -> None:
+    state_dir = home / ".remote-dev-context7"
+    key_file = state_dir / "api-key"
+    state_dir.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(state_dir, 0o700)
+
+    def restore_valid_key() -> None:
+        key_file.unlink(missing_ok=True)
+        key_file.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        os.chmod(key_file, 0o600)
+
+    def require_rejected(label: str) -> None:
+        result = run_manager(home, "key-file", "--active")
+        if result.returncode != 3 or result.stdout:
+            raise AssertionError(
+                f"{label} was not rejected by the canonical Context7 key reader: "
+                f"status={result.returncode}, stdout={result.stdout!r}"
+            )
+
+    restore_valid_key()
+    result = run_manager(home, "key-file", "--active")
+    if result.returncode != 0 or Path(result.stdout.strip()) != key_file:
+        raise AssertionError("canonical Context7 key reader rejected valid private key state")
+
+    real_key = home / "real-context7-key"
+    real_key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+    os.chmod(real_key, 0o600)
+    key_file.unlink()
+    key_file.symlink_to(real_key)
+    require_rejected("symlinked API-key file")
+
+    key_file.unlink()
+    key_file.touch(mode=0o600)
+    require_rejected("empty API-key file")
+
+    restore_valid_key()
+    key_file.write_text("ctx7 key with whitespace", encoding="utf-8")
+    os.chmod(key_file, 0o600)
+    require_rejected("whitespace-containing API-key file")
+
+    key_file.write_text("x" * 16385, encoding="utf-8")
+    os.chmod(key_file, 0o600)
+    require_rejected("oversized API-key file")
+
+    restore_valid_key()
 
 
 def assert_ping_json_shape(module) -> None:
@@ -87,6 +154,8 @@ def assert_ping_json_shape(module) -> None:
 
 
 def main() -> int:
+    assert_supported_python_pin()
+
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-ownership-") as temp:
         root = Path(temp)
 
@@ -102,6 +171,7 @@ def main() -> int:
             raise AssertionError(
                 "healthy managed anonymous state must return internal key-file status 5 with no path"
             )
+        assert_manager_key_rejection_contract(anonymous_home)
 
         spoof_home = root / "marker-spoof"
         spoof_home.mkdir(mode=0o700)
