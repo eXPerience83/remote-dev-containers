@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
@@ -72,6 +73,24 @@ def assert_private_file(path: Path) -> None:
         raise AssertionError(f"{path} mode is {mode:o}, expected 600")
 
 
+@contextlib.contextmanager
+def codex_environment(home: Path):
+    previous = {
+        key: os.environ.get(key)
+        for key in ("CODEX_HOME", "REMOTE_DEV_ROLE")
+    }
+    os.environ["CODEX_HOME"] = str(home)
+    os.environ["REMOTE_DEV_ROLE"] = "codex"
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def assert_passive_status_no_network(module, home: Path) -> None:
     original_build_opener = module.build_opener
 
@@ -79,24 +98,13 @@ def assert_passive_status_no_network(module, home: Path) -> None:
         raise AssertionError("passive Context7 operation attempted network access")
 
     module.build_opener = fail_if_called
-    old_home = os.environ.get("CODEX_HOME")
-    old_role = os.environ.get("REMOTE_DEV_ROLE")
     try:
-        os.environ["CODEX_HOME"] = str(home)
-        os.environ["REMOTE_DEV_ROLE"] = "codex"
-        paths = module.Paths()
-        if module.command_status(paths, argparse_namespace(menu=True)) != 0:
-            raise AssertionError("passive Context7 status unexpectedly failed")
+        with codex_environment(home):
+            paths = module.Paths()
+            if module.command_status(paths, argparse_namespace(menu=True)) != 0:
+                raise AssertionError("passive Context7 status unexpectedly failed")
     finally:
         module.build_opener = original_build_opener
-        if old_home is None:
-            os.environ.pop("CODEX_HOME", None)
-        else:
-            os.environ["CODEX_HOME"] = old_home
-        if old_role is None:
-            os.environ.pop("REMOTE_DEV_ROLE", None)
-        else:
-            os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
 def assert_update_no_network(module, home: Path) -> None:
@@ -106,35 +114,22 @@ def assert_update_no_network(module, home: Path) -> None:
         raise AssertionError("Context7 update attempted network access")
 
     module.build_opener = fail_if_called
-    old_home = os.environ.get("CODEX_HOME")
-    old_role = os.environ.get("REMOTE_DEV_ROLE")
     config = home / "config.toml"
     before = config.read_bytes()
     try:
-        os.environ["CODEX_HOME"] = str(home)
-        os.environ["REMOTE_DEV_ROLE"] = "codex"
-        paths = module.Paths()
-        if module.command_update(paths, argparse_namespace(yes=True)) != 0:
-            raise AssertionError("in-process Context7 update unexpectedly failed")
-        if config.read_bytes() != before:
-            raise AssertionError("in-process current update unexpectedly rewrote configuration")
+        with codex_environment(home):
+            paths = module.Paths()
+            if module.command_update(paths, argparse_namespace(yes=True)) != 0:
+                raise AssertionError("in-process Context7 update unexpectedly failed")
+            if config.read_bytes() != before:
+                raise AssertionError("in-process current update unexpectedly rewrote configuration")
     finally:
         module.build_opener = original_build_opener
-        if old_home is None:
-            os.environ.pop("CODEX_HOME", None)
-        else:
-            os.environ["CODEX_HOME"] = old_home
-        if old_role is None:
-            os.environ.pop("REMOTE_DEV_ROLE", None)
-        else:
-            os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
 def assert_masked_interactive_key_prompt(module, home: Path) -> None:
     original_getpass = module.getpass.getpass
     original_stdin = sys.stdin
-    old_home = os.environ.get("CODEX_HOME")
-    old_role = os.environ.get("REMOTE_DEV_ROLE")
     calls: list[tuple[str, str | None]] = []
     expected_prompt = "Context7 API key (optional; blank keeps the current key or uses anonymous access): "
 
@@ -150,56 +145,36 @@ def assert_masked_interactive_key_prompt(module, home: Path) -> None:
     try:
         module.getpass.getpass = fake_getpass
         module.sys.stdin = TtyInput()
-        os.environ["CODEX_HOME"] = str(home)
-        os.environ["REMOTE_DEV_ROLE"] = "codex"
-        action, value = module.choose_key(
-            module.Paths(),
-            argparse_namespace(anonymous=False, api_key_stdin=False, yes=False),
-        )
-        if action != "replace" or value != SYNTHETIC_KEY:
-            raise AssertionError("interactive Context7 key prompt did not return the supplied synthetic key")
-        if calls != [(expected_prompt, "*")]:
-            raise AssertionError(f"interactive Context7 key prompt is not masked with '*': {calls!r}")
+        with codex_environment(home):
+            action, value = module.choose_key(
+                module.Paths(),
+                argparse_namespace(anonymous=False, api_key_stdin=False, yes=False),
+            )
+            if action != "replace" or value != SYNTHETIC_KEY:
+                raise AssertionError("interactive Context7 key prompt did not return the supplied synthetic key")
+            if calls != [(expected_prompt, "*")]:
+                raise AssertionError(f"interactive Context7 key prompt is not masked with '*': {calls!r}")
     finally:
         module.getpass.getpass = original_getpass
         module.sys.stdin = original_stdin
-        if old_home is None:
-            os.environ.pop("CODEX_HOME", None)
-        else:
-            os.environ["CODEX_HOME"] = old_home
-        if old_role is None:
-            os.environ.pop("REMOTE_DEV_ROLE", None)
-        else:
-            os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
 def assert_main_cancelled_prompt_handling(module, home: Path) -> None:
     original_confirm = module.confirm
     original_argv = list(module.sys.argv)
-    old_home = os.environ.get("CODEX_HOME")
-    old_role = os.environ.get("REMOTE_DEV_ROLE")
     try:
-        os.environ["CODEX_HOME"] = str(home)
-        os.environ["REMOTE_DEV_ROLE"] = "codex"
-        module.sys.argv = ["remote-dev-context7", "remove"]
-        for exception_type in (EOFError, KeyboardInterrupt):
-            def cancelled(*_args, _exception_type=exception_type, **_kwargs):
-                raise _exception_type()
+        with codex_environment(home):
+            module.sys.argv = ["remote-dev-context7", "remove"]
+            for exception_type in (EOFError, KeyboardInterrupt):
+                def cancelled(*_args, _exception_type=exception_type, **_kwargs):
+                    raise _exception_type()
 
-            module.confirm = cancelled
-            if module.main() != 2:
-                raise AssertionError(f"{exception_type.__name__} was not mapped to Context7 cancellation status")
+                module.confirm = cancelled
+                if module.main() != 2:
+                    raise AssertionError(f"{exception_type.__name__} was not mapped to Context7 cancellation status")
     finally:
         module.confirm = original_confirm
         module.sys.argv = original_argv
-        if old_home is None:
-            os.environ.pop("CODEX_HOME", None)
-        else:
-            os.environ["CODEX_HOME"] = old_home
-        if old_role is None:
-            os.environ.pop("REMOTE_DEV_ROLE", None)
-        else:
-            os.environ["REMOTE_DEV_ROLE"] = old_role
 
 
 def main() -> int:
