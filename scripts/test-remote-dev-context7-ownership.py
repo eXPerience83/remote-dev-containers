@@ -38,7 +38,7 @@ def load_manager_module():
 
 def assert_ping_json_shape(module) -> None:
     original_build_opener = module.build_opener
-    payload = b'{"status":"ok","message":"pong"}'
+    current = {"payload": b'{"status":"ok","message":"pong"}'}
 
     class FakeResponse:
         def __enter__(self):
@@ -53,7 +53,7 @@ def assert_ping_json_shape(module) -> None:
 
         @staticmethod
         def read(limit: int) -> bytes:
-            return payload[:limit]
+            return current["payload"][:limit]
 
     class FakeOpener:
         @staticmethod
@@ -70,7 +70,8 @@ def assert_ping_json_shape(module) -> None:
     try:
         module.build_opener = fake_build_opener
         module.hosted_ping()
-        for payload in (b"[]", b'"pong"', b"1", b"null"):
+        for invalid_payload in (b"[]", b'"pong"', b"1", b"null"):
+            current["payload"] = invalid_payload
             try:
                 module.hosted_ping()
             except module.Context7Error:
