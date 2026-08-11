@@ -57,7 +57,9 @@ def assert_ping_json_shape(module) -> None:
 
     class FakeOpener:
         @staticmethod
-        def open(_request, *, timeout: int):
+        def open(request, *, timeout: int):
+            if request.get_full_url() != "https://mcp.context7.com/ping":
+                raise AssertionError("Context7 ping endpoint contract changed unexpectedly")
             if timeout != 10:
                 raise AssertionError("Context7 ping timeout contract changed unexpectedly")
             return FakeResponse()
