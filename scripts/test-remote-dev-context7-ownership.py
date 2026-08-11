@@ -100,6 +100,10 @@ def assert_manager_key_rejection_contract(home: Path) -> None:
     os.chmod(key_file, 0o600)
     require_rejected("oversized API-key file")
 
+    key_file.write_text("ctx7-key\x01", encoding="utf-8")
+    os.chmod(key_file, 0o600)
+    require_rejected("control-character API-key file")
+
     restore_valid_key()
 
 
