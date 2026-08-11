@@ -122,7 +122,7 @@ def assert_update_no_network(module, home: Path) -> None:
             if module.command_update(paths, argparse_namespace(yes=True)) != 0:
                 raise AssertionError("in-process Context7 update unexpectedly failed")
             if config.read_bytes() != before:
-                raise AssertionError("in-process current update unexpectedly rewrote configuration")
+                raise AssertionError("in-process Context7 update unexpectedly rewrote configuration")
     finally:
         module.build_opener = original_build_opener
 
