@@ -56,26 +56,9 @@ if (( status_result != 0 )); then
   exit "$status_result"
 fi
 
-workspace="${WORKSPACE:-/workspace}"
-[[ "$workspace" == /* && "$workspace" != //* && "$workspace" != *$'\n'* \
-   && "$workspace" != *'/../'* && "$workspace" != */.. ]] \
-  || { echo "ERROR: WORKSPACE must be a safe absolute path" >&2; exit 2; }
-case "$workspace" in
-  /|/root|/home|/opt|/usr|/usr/local|/etc|/var|/tmp)
-    echo "ERROR: WORKSPACE is too broad: $workspace" >&2
-    exit 2
-    ;;
-esac
-[[ -d "$workspace" ]] || { echo "ERROR: WORKSPACE does not exist: $workspace" >&2; exit 2; }
-
-current="$workspace"
-previous=""
-while [[ "$current" != / && "$current" != "$previous" ]]; do
-  [[ ! -L "$current" ]] || { echo "ERROR: WORKSPACE contains a symlinked path component: $current" >&2; exit 2; }
-  previous="$current"
-  current="$(dirname "$current")"
-done
-cd "$workspace"
+workspace="$(remote_dev_workspace_root)" || exit $?
+project="$(remote_dev_resolve_project "$workspace")" || exit $?
+cd "$project"
 
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
 
