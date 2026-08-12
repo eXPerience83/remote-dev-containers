@@ -38,7 +38,7 @@ case "$start_mode" in
       antigravity)
         printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
         printf -v quoted_project_name '%q' "$project_name"
-        session_command="cd $quoted_project && exec /usr/local/bin/run-direct-session env REMOTE_DEV_PROJECT=$quoted_project_name $quoted_run_antigravity_binary"
+        session_command="cd $quoted_project && exec env REMOTE_DEV_PROJECT=$quoted_project_name $quoted_run_antigravity_binary"
         ;;
       *)
         echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2
