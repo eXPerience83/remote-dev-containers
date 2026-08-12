@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-01",
-  "refreshed_on": "2026-08-08",
+  "refreshed_on": "2026-08-12",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -74,14 +74,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.8.3",
+      "version": "2026.8.4",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.8.3/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.8.4/LICENSE"
         }
       ]
     },
