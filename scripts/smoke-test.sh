@@ -268,13 +268,19 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
   fi
 
   direct_codex_state="$workdir/direct-codex-state"
+  direct_codex_workspace="$workdir/direct-codex-workspace"
+  direct_codex_project="$direct_codex_workspace/project"
+  direct_codex_args="$workdir/direct-codex-args"
+  direct_codex_cwd="$workdir/direct-codex-cwd"
   fake_codex="$workdir/fake codex&pipe|back\\slash"
   test_run_codex="$workdir/run codex&pipe|back\\slash"
   test_attach_tmux="$workdir/attach remote-dev tmux"
-  mkdir -p "$direct_codex_state"
+  mkdir -p "$direct_codex_state" "$direct_codex_project"
   cat > "$fake_codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
+pwd > "$REMOTE_DEV_TEST_DIRECT_CODEX_CWD"
+printf '%s\n' "$@" > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
 umask 000
 printf 'token\n' > "$CODEX_HOME/auth.json"
 chmod 0660 "$CODEX_HOME/auth.json"
@@ -292,6 +298,10 @@ FAKE_CODEX
   fi
   if ! grep -Fq 'printf -v quoted_run_codex_binary' /usr/local/bin/attach-remote-dev-tmux; then
     echo "ERROR: START_MODE=codex does not shell-quote the pinned run-codex path" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'remote_dev_resolve_project "$workspace"' /usr/local/bin/attach-remote-dev-tmux; then
+    echo "ERROR: direct agent mode does not resolve a bounded project below WORKSPACE" >&2
     exit 1
   fi
 
@@ -321,12 +331,33 @@ FAKE_CODEX
   TMUX_SOCKET_NAME="$direct_codex_socket" \
   TMUX_SESSION=direct-codex \
   START_MODE=codex \
-  WORKSPACE=/workspace \
+  REMOTE_DEV_PROJECT=project \
+  WORKSPACE="$direct_codex_workspace" \
   CODEX_HOME="$direct_codex_state" \
+  REMOTE_DEV_TEST_DIRECT_CODEX_ARGS="$direct_codex_args" \
+  REMOTE_DEV_TEST_DIRECT_CODEX_CWD="$direct_codex_cwd" \
     "$test_attach_tmux"
 
   wait_for_tmux_session_exit "$direct_codex_socket" direct-codex
   assert_auth_hardened "START_MODE=codex" "$direct_codex_state"
+  if [[ "$(<"$direct_codex_cwd")" != "$direct_codex_project" ]]; then
+    echo "ERROR: START_MODE=codex did not run from the selected project" >&2
+    exit 1
+  fi
+  mapfile -t direct_codex_argv < "$direct_codex_args"
+  direct_cd_seen=0
+  for ((index = 0; index + 1 < ${#direct_codex_argv[@]}; index++)); do
+    if [[ "${direct_codex_argv[$index]}" == --cd \
+       && "${direct_codex_argv[$((index + 1))]}" == "$direct_codex_project" ]]; then
+      direct_cd_seen=1
+      break
+    fi
+  done
+  if (( direct_cd_seen != 1 )); then
+    echo "ERROR: START_MODE=codex did not pass --cd with the selected project" >&2
+    printf 'Arguments: %s\n' "${direct_codex_argv[*]}" >&2
+    exit 1
+  fi
 
   direct_shell_state="$workdir/direct-shell-state"
   mkdir -p "$direct_shell_state"
@@ -344,7 +375,7 @@ FAKE_CODEX
   assert_auth_hardened "START_MODE=shell" "$direct_shell_state"
 
   echo "Tmux fresh, existing and concurrent session paths: OK"
-  echo "Direct codex and shell start modes harden state after exit: OK"
+  echo "Direct project-scoped Codex and shell start modes harden state after exit: OK"
 else
   echo "Tmux runtime smoke test: skipped during image build"
 fi
