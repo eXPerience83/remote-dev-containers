@@ -97,7 +97,9 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-printf '1\n2\n8\n' | env \
+# Duplicate action choices must be consumed by the success pause. If any pause
+# disappears, the duplicate triggers another action and the exact counts fail.
+printf '1\n1\n2\n2\n3\n3\n4\n4\n8\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -108,7 +110,7 @@ mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 2 ]]
 [[ "${calls[0]}" == '[]' ]]
 [[ "${calls[1]}" == '[--remote-dev-open-resume-picker]' ]]
-[[ "$(wc -l <"$hardening_calls")" == 2 ]]
+[[ "$(wc -l <"$hardening_calls")" == 4 ]]
 grep -Fxq '1) Start Antigravity' "$output"
 grep -Fxq '2) Resume an Antigravity session' "$output"
 grep -Fxq '3) Install Antigravity from Google' "$output"
@@ -119,4 +121,4 @@ if grep -EFiq 'continue the last|continue latest|last conversation' "$output"; t
   exit 1
 fi
 
-echo 'Antigravity menu resume action: OK'
+echo 'Antigravity menu result pauses: OK'

@@ -7,6 +7,7 @@ set -euo pipefail
 readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
+readonly context7_manager=/usr/local/bin/remote-dev-context7
 readonly sandbox_mode=danger-full-access
 readonly default_approval_mode=autonomous
 
@@ -187,6 +188,115 @@ if [[ ! -x "$resolved_codex_binary" ]]; then
   echo "WARNING: resolved Codex executable is unavailable; using immutable bundled fallback" >&2
   resolved_codex_binary="$bundled_codex_binary"
 fi
+
+configure_context7_environment() {
+  local key_path="" manager_status=0 expected_key_path=""
+  local codex_home="${CODEX_HOME:-/root/.codex}"
+  local -a expected_key_path_command=(
+    python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]) / ".remote-dev-context7" / "api-key")' "$codex_home"
+  )
+  local -a context7_key_command=("$context7_manager" key-file --active)
+  local -a context7_read_key_command=()
+
+  if ! expected_key_path="$("${expected_key_path_command[@]}" 2>/dev/null)"; then
+    echo "WARNING: managed Context7 credential path could not be normalized safely; starting without the managed API key" >&2
+    unset CONTEXT7_API_KEY
+    return 0
+  fi
+
+  if key_path="$("${context7_key_command[@]}" 2>/dev/null)"; then
+    if [[ "$key_path" != "$expected_key_path" ]]; then
+      echo "WARNING: managed Context7 credential path failed validation; starting without the managed API key" >&2
+      unset CONTEXT7_API_KEY
+      return 0
+    fi
+
+    context7_read_key_command=(
+      python3 -c '
+import os
+import stat
+import sys
+
+home = sys.argv[1]
+directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+home_fd = state_fd = key_fd = None
+try:
+    home_fd = os.open(home, directory_flags)
+    state_fd = os.open(".remote-dev-context7", directory_flags, dir_fd=home_fd)
+    state_info = os.fstat(state_fd)
+    if not stat.S_ISDIR(state_info.st_mode):
+        raise SystemExit(2)
+    if state_info.st_uid != os.geteuid() or stat.S_IMODE(state_info.st_mode) & 0o077:
+        raise SystemExit(2)
+
+    key_fd = os.open("api-key", key_flags, dir_fd=state_fd)
+    key_info = os.fstat(key_fd)
+    if not stat.S_ISREG(key_info.st_mode):
+        raise SystemExit(2)
+    if key_info.st_uid != os.geteuid() or stat.S_IMODE(key_info.st_mode) & 0o077:
+        raise SystemExit(2)
+    if key_info.st_size <= 0 or key_info.st_size > 16384:
+        raise SystemExit(2)
+
+    chunks = []
+    remaining = 16385
+    while remaining > 0:
+        chunk = os.read(key_fd, remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    data = b"".join(chunks)
+    if not data or len(data) > 16384:
+        raise SystemExit(2)
+    try:
+        value = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise SystemExit(2)
+    if value != value.strip() or any(character.isspace() for character in value):
+        raise SystemExit(2)
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise SystemExit(2)
+    sys.stdout.write(value)
+finally:
+    if key_fd is not None:
+        os.close(key_fd)
+    if state_fd is not None:
+        os.close(state_fd)
+    if home_fd is not None:
+        os.close(home_fd)
+' "$codex_home"
+    )
+    if ! CONTEXT7_API_KEY="$("${context7_read_key_command[@]}" 2>/dev/null)"; then
+      echo "WARNING: managed Context7 credential could not be read safely; starting without the managed API key" >&2
+      unset CONTEXT7_API_KEY
+      return 0
+    fi
+    export CONTEXT7_API_KEY
+    return 0
+  else
+    manager_status=$?
+  fi
+
+  case "$manager_status" in
+    4)
+      # No Remote Dev-owned Context7 block. Preserve any explicitly user-managed
+      # environment because the project does not own that configuration.
+      ;;
+    5)
+      # A healthy Remote Dev-managed anonymous integration must not inherit an
+      # unrelated/stale key from the container environment.
+      unset CONTEXT7_API_KEY
+      ;;
+    *)
+      unset CONTEXT7_API_KEY
+      echo "WARNING: managed Context7 state is unavailable or unsafe; starting Codex without the managed API key" >&2
+      ;;
+  esac
+}
+
+configure_context7_environment
 
 exec "$resolved_codex_binary" \
   --sandbox "$sandbox_mode" \

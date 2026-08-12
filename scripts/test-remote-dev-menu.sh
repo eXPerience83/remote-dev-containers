@@ -7,10 +7,16 @@ fixture_menu="$workdir/remote-dev-menu"
 runtime_lib="$workdir/remote-dev-runtime.sh"
 run_codex="$workdir/run-codex"
 codex_runtime="$workdir/remote-dev-codex-runtime"
+context7_manager="$workdir/remote-dev-context7"
 secure_state="$workdir/secure-persistent-state"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
 runtime_invocations="$workdir/runtime-invocations"
+context7_invocations="$workdir/context7-invocations"
+codex_cli_invocations="$workdir/codex-cli-invocations"
+github_invocations="$workdir/github-invocations"
+doctor_invocations="$workdir/doctor-invocations"
+shell_invocations="$workdir/shell-invocations"
 hardening_calls="$workdir/hardening-calls"
 
 cleanup() {
@@ -29,7 +35,7 @@ mkdir -p "$bin_dir" "$workdir/workspace"
 
 cat > "$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
-  printf '%s\n' codex
+  printf '%s\n' "${REMOTE_DEV_TEST_ROLE:-codex}"
 }
 RUNTIME
 
@@ -91,6 +97,25 @@ esac
 CODEX_RUNTIME
 chmod 0755 "$codex_runtime"
 
+cat > "$context7_manager" <<'CONTEXT7'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status)
+    [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
+    printf '%s\n' 'Context7: not configured'
+    ;;
+  install|test|update|remove)
+    # Production deliberately omits --yes here so the real manager owns the
+    # disclosure/confirmation prompt. Reject any accidental extra arguments.
+    [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  *) exit 2 ;;
+esac
+CONTEXT7
+chmod 0755 "$context7_manager"
+
 cat > "$secure_state" <<'SECURE_STATE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -111,19 +136,83 @@ case "${1:-}" in
   *) exit 2 ;;
 esac
 VERSION
-chmod 0755 "$bin_dir/remote-dev-version"
 
 cat > "$bin_dir/clear" <<'CLEAR'
 #!/usr/bin/env bash
 exit 0
 CLEAR
-chmod 0755 "$bin_dir/clear"
+
+cat > "$bin_dir/codex" <<'CODEX_CLI'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  printf '['
+  separator=""
+  for argument in "$@"; do
+    printf '%s%s' "$separator" "$argument"
+    separator=']['
+  done
+  printf ']\n'
+} >> "$REMOTE_DEV_MENU_CODEX_CLI_INVOCATIONS"
+CODEX_CLI
+
+cat > "$bin_dir/gh" <<'GH'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  printf '['
+  separator=""
+  for argument in "$@"; do
+    printf '%s%s' "$separator" "$argument"
+    separator=']['
+  done
+  printf ']\n'
+} >> "$REMOTE_DEV_MENU_GITHUB_INVOCATIONS"
+case "${1:-}:${2:-}" in
+  auth:login|auth:setup-git) exit 0 ;;
+  *) exit 2 ;;
+esac
+GH
+
+cat > "$bin_dir/remote-dev-doctor" <<'DOCTOR'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' doctor >> "$REMOTE_DEV_MENU_DOCTOR_INVOCATIONS"
+DOCTOR
+
+cat > "$bin_dir/login-shell" <<'LOGIN_SHELL'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' shell >> "$REMOTE_DEV_MENU_SHELL_INVOCATIONS"
+LOGIN_SHELL
+
+chmod 0755 "$bin_dir"/*
+
+if ! grep -Fxq 'runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' "$menu_source"; then
+  echo 'ERROR: missing fixture anchor: runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' >&2
+  exit 1
+fi
+for anchor in \
+  '/usr/local/bin/run-codex' \
+  '/usr/local/bin/remote-dev-codex-runtime' \
+  '/usr/local/bin/remote-dev-context7' \
+  '/usr/local/bin/secure-persistent-state' \
+  '/usr/local/bin/remote-dev-doctor' \
+  'bash --login'; do
+  if ! grep -Fq "$anchor" "$menu_source"; then
+    echo "ERROR: missing fixture anchor: $anchor" >&2
+    exit 1
+  fi
+done
 
 sed \
   -e "s|^runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh$|runtime_lib=$runtime_lib|" \
   -e "s|/usr/local/bin/run-codex|$run_codex|g" \
   -e "s|/usr/local/bin/remote-dev-codex-runtime|$codex_runtime|g" \
+  -e "s|/usr/local/bin/remote-dev-context7|$context7_manager|g" \
   -e "s|/usr/local/bin/secure-persistent-state|$secure_state|g" \
+  -e "s|/usr/local/bin/remote-dev-doctor|$bin_dir/remote-dev-doctor|g" \
+  -e "s|bash --login|$bin_dir/login-shell|g" \
   "$menu_source" > "$fixture_menu"
 chmod 0755 "$fixture_menu"
 
@@ -154,13 +243,27 @@ assert_file_lines() {
 }
 
 run_menu() {
-  local deployment_mode="$1" input="$2" output_file="$3"
-  rm -f "$invocations" "$runtime_invocations" "$hardening_calls"
+  local deployment_mode="$1" input="$2" output_file="$3" test_role="${4:-codex}"
+  rm -f \
+    "$invocations" \
+    "$runtime_invocations" \
+    "$context7_invocations" \
+    "$codex_cli_invocations" \
+    "$github_invocations" \
+    "$doctor_invocations" \
+    "$shell_invocations" \
+    "$hardening_calls"
   common_env=(
     PATH="$bin_dir:$PATH"
     WORKSPACE="$workdir/workspace"
+    REMOTE_DEV_TEST_ROLE="$test_role"
     REMOTE_DEV_MENU_INVOCATIONS="$invocations"
     REMOTE_DEV_MENU_RUNTIME_INVOCATIONS="$runtime_invocations"
+    REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS="$context7_invocations"
+    REMOTE_DEV_MENU_CODEX_CLI_INVOCATIONS="$codex_cli_invocations"
+    REMOTE_DEV_MENU_GITHUB_INVOCATIONS="$github_invocations"
+    REMOTE_DEV_MENU_DOCTOR_INVOCATIONS="$doctor_invocations"
+    REMOTE_DEV_MENU_SHELL_INVOCATIONS="$shell_invocations"
     REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls"
   )
   if [[ "$deployment_mode" == __unset__ ]]; then
@@ -182,25 +285,53 @@ assert_hardening_count() {
 }
 
 output="$workdir/output"
-run_menu __unset__ $'1\n10\n' "$output"
+# Duplicate action choices are consumed by the success pause. If the pause
+# disappears, the duplicate becomes another action and the exact call count fails.
+run_menu __unset__ $'1\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'configured start' '[]'
 assert_hardening_count 1
 grep -Fxq 'Codex: bundled 0.147.0' "$output"
+grep -Fxq 'Context7: not configured' "$output"
 grep -Fxq '1) Start Codex' "$output"
 grep -Fxq '2) Resume a Codex session' "$output"
 grep -Fxq '3) Approval mode for next launch...' "$output"
 grep -Fxq '4) Update optional Codex runtime from official OpenAI release' "$output"
 grep -Fxq '5) Remove optional Codex runtime (use bundled fallback)' "$output"
+grep -Fxq '6) Context7 integration...' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 
 echo 'Configured Codex menu actions: OK'
 
-run_menu __unset__ $'4\n5\n10\n' "$output"
+run_menu __unset__ $'4\n4\n5\n5\n11\n' "$output"
 assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
-echo 'Codex runtime update/remove menu actions: OK'
+echo 'Codex runtime update/remove result pauses: OK'
 
-run_menu __unset__ $'3\n3\n2\n1\n10\n' "$output"
+# Each successful Context7 action must consume its duplicate choice at the pause.
+# If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
+run_menu __unset__ $'6\n1\n1\n2\n2\n3\n3\n4\n4\n5\n11\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 menu actions' \
+  'install' \
+  'test' \
+  'update' \
+  'remove'
+assert_hardening_count 4
+grep -Fxq 'Remote Dev — Codex — Context7' "$output"
+grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"
+grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
+echo 'Context7 explicit menu actions: OK'
+
+run_menu __unset__ $'7\n7\n8\n8\n9\n9\n10\n10\n11\n' "$output"
+assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
+assert_file_lines "$github_invocations" 'GitHub CLI setup' \
+  '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
+  '[auth][setup-git]'
+assert_file_lines "$doctor_invocations" 'Codex diagnostics' doctor
+assert_file_lines "$shell_invocations" 'Codex login shell' shell
+assert_hardening_count 3
+echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
+
+run_menu __unset__ $'3\n3\n2\n2\n1\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
   '[--approval-mode][guarded][resume]' \
   '[]'
@@ -213,7 +344,7 @@ fi
 
 echo 'One-launch guarded selection and reset: OK'
 
-run_menu guarded $'3\n2\n1\n10\n' "$output"
+run_menu guarded $'3\n2\n1\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'autonomous override of guarded deployment' '[--approval-mode][autonomous]'
 assert_hardening_count 1
 grep -Fxq 'Next launch mode: configured (guarded)' "$output"
@@ -221,7 +352,7 @@ grep -Fxq 'Next launch mode: autonomous (one launch)' "$output"
 
 echo 'One-launch autonomous selection precedence: OK'
 
-run_menu __unset__ $'3\n3\n3\n1\n1\n10\n' "$output"
+run_menu __unset__ $'3\n3\n3\n1\n1\n1\n11\n' "$output"
 assert_file_lines "$invocations" 'configured-mode reset before launch' '[]'
 assert_hardening_count 1
 
@@ -230,7 +361,7 @@ echo 'Configured-mode reset: OK'
 fail_once="$workdir/fail-once"
 rm -f "$fail_once"
 export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
-run_menu __unset__ $'3\n3\n1\n\n1\n10\n' "$output"
+run_menu __unset__ $'3\n3\n1\n1\n1\n1\n11\n' "$output"
 unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
 assert_file_lines "$invocations" 'failed override then configured retry' \
   '[--approval-mode][guarded]' \
@@ -238,4 +369,19 @@ assert_file_lines "$invocations" 'failed override then configured retry' \
 assert_hardening_count 2
 grep -Fq 'ERROR: Codex (guarded) exited with status 42' "$output"
 
-echo 'Failed one-launch override consumption: OK'
+echo 'Failed and successful action result pauses: OK'
+
+run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
+assert_file_lines "$shell_invocations" 'Shell login shell' shell
+assert_file_lines "$github_invocations" 'Shell GitHub CLI setup' \
+  '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
+  '[auth][setup-git]'
+assert_file_lines "$doctor_invocations" 'Shell diagnostics' doctor
+assert_hardening_count 2
+grep -Fxq 'Remote Dev — Shell' "$output"
+grep -Fxq '1) Open a login shell' "$output"
+grep -Fxq '2) Sign in to GitHub CLI' "$output"
+grep -Fxq '3) Run diagnostics' "$output"
+grep -Fxq '4) Exit this tmux session' "$output"
+
+echo 'Shell menu result pauses: OK'

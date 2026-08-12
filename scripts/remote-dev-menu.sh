@@ -16,18 +16,23 @@ harden_state_or_exit() {
   fi
 }
 
+pause_for_menu() {
+  local prompt="${1:-Press Enter to return to the menu...}"
+  read -r -p "$prompt" _
+}
+
 report_action_failure() {
   local label="$1"
   local action_status="$2"
 
   echo >&2
   echo "ERROR: $label exited with status $action_status" >&2
-  read -r -p "Press Enter to return to the menu..." _
 }
 
-run_interactive_and_harden() {
-  local label="$1"
-  shift
+run_interactive_and_harden_to() {
+  local return_prompt="$1"
+  local label="$2"
+  shift 2
   local action_status=0
 
   clear
@@ -38,7 +43,28 @@ run_interactive_and_harden() {
     report_action_failure "$label" "$action_status"
   fi
 
+  pause_for_menu "$return_prompt"
   return "$action_status"
+}
+
+run_interactive_and_harden() {
+  local label="$1"
+  shift
+
+  run_interactive_and_harden_to \
+    "Press Enter to return to the menu..." \
+    "$label" \
+    "$@"
+}
+
+run_context7_action() {
+  local label="$1"
+  shift
+
+  run_interactive_and_harden_to \
+    "Press Enter to return to the Context7 menu..." \
+    "$label" \
+    "$@"
 }
 
 run_github_login() {
@@ -63,6 +89,7 @@ run_github_login() {
     report_action_failure "GitHub CLI setup" "$action_status"
   fi
 
+  pause_for_menu "Press Enter to return to the menu..."
   return "$action_status"
 }
 
@@ -75,7 +102,7 @@ run_diagnostics() {
     echo >&2
     echo "ERROR: diagnostics reported one or more failures (status $doctor_status)" >&2
   fi
-  read -r -p "Press Enter to continue..." _
+  pause_for_menu "Press Enter to return to the menu..."
 }
 
 codex_policy_summary() {
@@ -93,6 +120,19 @@ codex_runtime_status_summary() {
     printf '%s\n' "$summary"
   else
     printf 'Codex runtime: status unavailable (exit %s)\n' "$status"
+  fi
+}
+
+context7_status_summary() {
+  local summary="" status=0
+  local -a context7_status_command=(
+    /usr/local/bin/remote-dev-context7 status --menu
+  )
+  summary="$("${context7_status_command[@]}" 2>&1)" || status=$?
+  if [[ -n "$summary" ]]; then
+    printf '%s\n' "$summary"
+  else
+    printf 'Context7: status unavailable (exit %s)\n' "$status"
   fi
 }
 
@@ -160,6 +200,52 @@ run_codex_action() {
   run_interactive_and_harden "$label" "${command[@]}"
 }
 
+show_context7_menu() {
+  local status_summary=""
+  local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
+  local -a context7_test_command=(/usr/local/bin/remote-dev-context7 test)
+  local -a context7_update_command=(/usr/local/bin/remote-dev-context7 update)
+  local -a context7_remove_command=(/usr/local/bin/remote-dev-context7 remove)
+
+  while true; do
+    status_summary="$(context7_status_summary)"
+    clear
+    cat <<MENU
+Remote Dev — Codex — Context7
+${status_summary}
+=============================
+Context7 is an optional external Upstash service.
+Configuration/status are offline; only Test performs an explicit network check.
+1) Install / repair hosted Context7 MCP integration
+2) Test bundled Codex config and Context7 hosted endpoint
+3) Update / reapply reviewed hosted integration contract
+4) Remove Remote Dev-managed Context7 integration
+5) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if run_context7_action "Context7 install/repair" "${context7_install_command[@]}"; then :; fi
+        ;;
+      2)
+        if run_context7_action "Context7 connection test" "${context7_test_command[@]}"; then :; fi
+        ;;
+      3)
+        if run_context7_action "Context7 contract update" "${context7_update_command[@]}"; then :; fi
+        ;;
+      4)
+        if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
+        ;;
+      5)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
 antigravity_status_summary() {
   local summary="" status=0
   summary="$(/usr/local/bin/remote-dev-antigravity status --menu 2>&1)" || status=$?
@@ -177,17 +263,19 @@ else
 fi
 
 show_codex_menu() {
-  local next_mode_summary="" runtime_summary=""
+  local next_mode_summary="" runtime_summary="" context7_summary=""
 
   while true; do
     refresh_codex_policy
     next_mode_summary="$(next_codex_mode_summary)"
     runtime_summary="$(codex_runtime_status_summary)"
+    context7_summary="$(context7_status_summary)"
     clear
     cat <<MENU
 Remote Dev — Codex
 ${version_summary}
 ${runtime_summary}
+${context7_summary}
 ${policy_summary}
 ${next_mode_summary}
 ==================
@@ -196,11 +284,12 @@ ${next_mode_summary}
 3) Approval mode for next launch...
 4) Update optional Codex runtime from official OpenAI release
 5) Remove optional Codex runtime (use bundled fallback)
-6) Sign in to Codex with device code
-7) Sign in to GitHub CLI
-8) Run diagnostics
-9) Open a login shell
-10) Exit this tmux session
+6) Context7 integration...
+7) Sign in to Codex with device code
+8) Sign in to GitHub CLI
+9) Run diagnostics
+10) Open a login shell
+11) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -220,18 +309,21 @@ MENU
         if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
         ;;
       6)
-        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
+        show_context7_menu
         ;;
       7)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
         ;;
       8)
-        run_diagnostics
+        if run_github_login; then :; fi
         ;;
       9)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        run_diagnostics
         ;;
       10)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      11)
         exit 0
         ;;
       *)

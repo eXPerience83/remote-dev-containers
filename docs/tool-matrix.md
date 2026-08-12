@@ -21,7 +21,7 @@ These executables and project-owned runtime components are shared through read-o
 | Checks | shellcheck |
 | User entry point | launcher or gateway runtime after issue #25 is implemented |
 | Built-in agent | Codex CLI reference integration |
-| Optional integrations | reviewed installer/manager code only; proprietary binaries are not implied |
+| Optional integrations | reviewed project-owned manager code only; hosted services and proprietary/runtime-installed binaries are not implied |
 
 The system Bubblewrap package and executable are deliberately not installed in the default image. The pinned Codex release may carry its own packaged fallback, but the supported launcher disables the unsupported inner sandbox explicitly, uses `untrusted` approvals and relies on the outer container plus narrow mounts as the TrueNAS isolation boundary.
 
@@ -59,6 +59,14 @@ The supported deployment does not mount `/root`, `/home`, `/opt`, `/usr/local` o
 A newer Codex runtime is downloaded only through the explicit project-owned update action, is not part of the image build-time SBOM, and never replaces the image-bundled fallback. Normal startup does not download or update it.
 
 Optional agents must not be downloaded silently during launcher or container startup. Their persisted binaries, credentials and histories remain scoped to their own service.
+
+## Optional integrations
+
+| Integration | Bundled runtime/package | Network behavior | Private state | Current scope | Release status |
+|---|---|---|---|---|---|
+| Context7 for Codex | None; only the Remote Dev manager is in the image | Passive status and lifecycle configuration are offline; explicit `test` and enabled Codex MCP use may contact `mcp.context7.com` | Marked block in Codex `config.toml`; optional API key below persistent `CODEX_HOME` | Hosted Streamable HTTP MCP only; no Context7 CLI, npm runtime, skills or `AGENTS.md` mutation | Experimental `dev -> edge` path under #31; not yet a stable-release claim |
+
+Context7 is an external service operated by Upstash and is not part of the Remote Dev image SBOM. The manager refuses to overwrite an unowned Context7 MCP entry, keeps `required = false`, and never prints the API key. See `docs/context7-codex.md` and `docs/context7-codex.es.md` for the lifecycle, privacy/terms boundary and removal contract.
 
 ## Explicitly deferred
 

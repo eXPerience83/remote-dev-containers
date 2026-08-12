@@ -53,6 +53,7 @@ EOF_AGENT
   if [[ "$role" == codex ]]; then
     echo "Codex home: ${CODEX_HOME:-unset}"
     echo "Codex runtime state: ${REMOTE_DEV_CODEX_RUNTIME_ROOT:-/root/.local/share/remote-dev/codex-runtime}"
+    echo "Context7 private state: ${CODEX_HOME:-/root/.codex}/.remote-dev-context7"
   elif [[ "$role" == antigravity ]]; then
     readonly paths_lib=/usr/local/lib/remote-dev/antigravity-paths.sh
     if [[ -r "$paths_lib" && ! -L "$paths_lib" ]]; then
@@ -96,6 +97,7 @@ if [[ "$role" == codex ]]; then
   check_cmd codex
   check_cmd run-codex
   check_cmd /usr/local/bin/remote-dev-codex-runtime
+  check_cmd /usr/local/bin/remote-dev-context7
 elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
@@ -135,6 +137,22 @@ if [[ "$role" == codex ]]; then
   echo 'Codex runtime trust boundary: official package may be newer than the image; review-pending means Remote Dev has not reviewed that exact release.'
   echo 'Codex runtime automatic updates: disabled; network access occurs only after the explicit update action.'
   echo 'Codex runtime fallback: missing, damaged, modified, equal or older runtime state selects the immutable bundled CLI.'
+
+  echo
+  context7_status_code=0
+  context7_status_command=(/usr/local/bin/remote-dev-context7 status --menu)
+  context7_status="$("${context7_status_command[@]}" 2>&1)" || context7_status_code=$?
+  if [[ -n "$context7_status" ]]; then
+    printf '%s\n' "$context7_status"
+  else
+    echo "Context7: status unavailable (exit $context7_status_code)"
+  fi
+  if (( context7_status_code != 0 )); then
+    status=1
+  fi
+  echo 'Context7 boundary: optional external Upstash hosted MCP service; no Context7 runtime is bundled or downloaded.'
+  echo 'Context7 passive diagnostics network: not used; only explicit test and enabled Codex MCP use may contact Context7.'
+  echo 'Remote Dev-managed Context7 credentials are stored only in Codex-private state; Remote Dev diagnostics never print credentials.'
 
   echo
   if policy_output="$(run-codex --print-policy 2>/dev/null)"; then
