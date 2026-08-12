@@ -7,7 +7,16 @@ source "$runtime_lib"
 
 role="$(remote_dev_resolve_role)"
 export REMOTE_DEV_ROLE="$role"
-cd "${WORKSPACE:-/workspace}"
+workspace="${WORKSPACE:-/workspace}"
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || exit $?
+fi
+cd "$workspace"
+
+active_project_name=""
+active_project_path=""
+project_choice_name=""
+project_count=0
 
 harden_state_or_exit() {
   if ! /usr/local/bin/secure-persistent-state; then
@@ -105,6 +114,192 @@ run_diagnostics() {
   pause_for_menu "Press Enter to return to the menu..."
 }
 
+refresh_project_selection() {
+  local resolved=""
+  local -a projects=()
+
+  mapfile -t projects < <(remote_dev_list_projects "$workspace")
+  project_count="${#projects[@]}"
+
+  if [[ -n "$active_project_name" ]]; then
+    if resolved="$(remote_dev_project_path "$workspace" "$active_project_name" 2>/dev/null)"; then
+      active_project_path="$resolved"
+      return 0
+    fi
+    active_project_name=""
+    active_project_path=""
+  fi
+
+  if (( project_count == 1 )); then
+    active_project_name="${projects[0]}"
+    active_project_path="$(remote_dev_project_path "$workspace" "$active_project_name")"
+  fi
+}
+
+project_status_summary() {
+  refresh_project_selection
+  if [[ -n "$active_project_name" ]]; then
+    printf 'Project: %s\n' "$active_project_name"
+  elif (( project_count == 0 )); then
+    printf 'Project: none (create one in Projects...)\n'
+  else
+    printf 'Project: not selected (%d available)\n' "$project_count"
+  fi
+}
+
+ensure_active_project() {
+  refresh_project_selection
+  if [[ -n "$active_project_name" ]]; then
+    return 0
+  fi
+
+  if (( project_count == 0 )); then
+    echo "ERROR: no projects are available under $workspace; create one in Projects..." >&2
+  else
+    echo "ERROR: multiple projects are available; select one in Projects... before starting an agent" >&2
+  fi
+  return 2
+}
+
+choose_project_name() {
+  local heading="$1"
+  local choice=""
+  local index=0
+  local -a projects=()
+
+  project_choice_name=""
+  mapfile -t projects < <(remote_dev_list_projects "$workspace")
+  if (( ${#projects[@]} == 0 )); then
+    echo "No projects are available under $workspace."
+    return 1
+  fi
+
+  clear
+  printf '%s\n' "$heading" "${heading//?/=}"
+  for index in "${!projects[@]}"; do
+    printf '%d) %s\n' "$((index + 1))" "${projects[$index]}"
+  done
+  printf '%d) Back\n' "$(( ${#projects[@]} + 1 ))"
+  read -r -p "> " choice
+
+  if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  index=$((10#$choice - 1))
+  if (( index == ${#projects[@]} )); then
+    return 1
+  fi
+  if (( index < 0 || index >= ${#projects[@]} )); then
+    return 1
+  fi
+
+  project_choice_name="${projects[$index]}"
+}
+
+select_project_action() {
+  local resolved=""
+
+  if ! choose_project_name "Select project"; then
+    return 1
+  fi
+  resolved="$(remote_dev_project_path "$workspace" "$project_choice_name")" || return $?
+  active_project_name="$project_choice_name"
+  active_project_path="$resolved"
+}
+
+create_project_action() {
+  local name=""
+  local resolved=""
+  local action_status=0
+
+  clear
+  echo "Create project"
+  echo "=============="
+  echo "Projects are created as direct child directories of $workspace."
+  read -r -p "Project name: " name
+  if resolved="$(remote_dev_create_project "$workspace" "$name")"; then
+    active_project_name="$name"
+    active_project_path="$resolved"
+    echo
+    echo "Created project: $resolved"
+  else
+    action_status=$?
+  fi
+  pause_for_menu "Press Enter to return to the Projects menu..."
+  return "$action_status"
+}
+
+delete_project_action() {
+  local confirmation=""
+  local resolved=""
+  local action_status=0
+
+  if ! choose_project_name "Delete project"; then
+    return 1
+  fi
+  resolved="$(remote_dev_project_path "$workspace" "$project_choice_name")" || return $?
+
+  clear
+  cat <<DELETE_WARNING
+Delete project
+==============
+Path: $resolved
+
+This permanently removes the entire project directory and all of its contents.
+Type the exact project name to confirm: $project_choice_name
+DELETE_WARNING
+  read -r -p "> " confirmation
+  if remote_dev_delete_project "$workspace" "$project_choice_name" "$confirmation"; then
+    if [[ "$active_project_name" == "$project_choice_name" ]]; then
+      active_project_name=""
+      active_project_path=""
+    fi
+    refresh_project_selection
+    echo
+    echo "Deleted project: $project_choice_name"
+  else
+    action_status=$?
+  fi
+  pause_for_menu "Press Enter to return to the Projects menu..."
+  return "$action_status"
+}
+
+show_projects_menu() {
+  local summary=""
+
+  while true; do
+    summary="$(project_status_summary)"
+    clear
+    cat <<MENU
+Remote Dev — Projects
+${summary}
+=====================
+1) Select project
+2) Create project
+3) Delete project
+4) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if select_project_action; then :; fi
+        ;;
+      2)
+        if create_project_action; then :; fi
+        ;;
+      3)
+        if delete_project_action; then :; fi
+        ;;
+      4)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
 codex_policy_summary() {
   /usr/local/bin/run-codex --print-policy \
     | grep -E '^(Codex approval mode|Codex approval policy|Mode source):'
@@ -187,16 +382,38 @@ next_codex_mode_summary() {
 run_codex_action() {
   local label="$1"
   shift
-  local launch_mode="$next_codex_mode"
+  local launch_mode=""
   local -a command=(/usr/local/bin/run-codex)
 
+  if ! ensure_active_project; then
+    pause_for_menu
+    return 2
+  fi
+
+  launch_mode="$next_codex_mode"
   next_codex_mode=""
   if [[ -n "$launch_mode" ]]; then
     command+=(--approval-mode "$launch_mode")
     label+=" ($launch_mode)"
   fi
+  command+=(--cd "$active_project_path")
   command+=("$@")
 
+  run_interactive_and_harden "$label" "${command[@]}"
+}
+
+run_antigravity_action() {
+  local label="$1"
+  shift
+  local -a command=()
+
+  if ! ensure_active_project; then
+    pause_for_menu
+    return 2
+  fi
+
+  command=(env "REMOTE_DEV_PROJECT=$active_project_name" /usr/local/bin/run-antigravity)
+  command+=("$@")
   run_interactive_and_harden "$label" "${command[@]}"
 }
 
@@ -256,6 +473,13 @@ antigravity_status_summary() {
   fi
 }
 
+show_unavailable_action() {
+  local message="$1"
+  clear
+  printf '%s\n' "$message"
+  pause_for_menu
+}
+
 if remote-dev-version --check >/dev/null 2>&1; then
   version_summary="$(remote-dev-version --menu)"
 else
@@ -263,13 +487,14 @@ else
 fi
 
 show_codex_menu() {
-  local next_mode_summary="" runtime_summary="" context7_summary=""
+  local next_mode_summary="" runtime_summary="" context7_summary="" project_summary=""
 
   while true; do
     refresh_codex_policy
     next_mode_summary="$(next_codex_mode_summary)"
     runtime_summary="$(codex_runtime_status_summary)"
     context7_summary="$(context7_status_summary)"
+    project_summary="$(project_status_summary)"
     clear
     cat <<MENU
 Remote Dev — Codex
@@ -278,18 +503,20 @@ ${runtime_summary}
 ${context7_summary}
 ${policy_summary}
 ${next_mode_summary}
+${project_summary}
 ==================
 1) Start Codex
 2) Resume a Codex session
-3) Approval mode for next launch...
-4) Update optional Codex runtime from official OpenAI release
-5) Remove optional Codex runtime (use bundled fallback)
-6) Context7 integration...
-7) Sign in to Codex with device code
-8) Sign in to GitHub CLI
-9) Run diagnostics
-10) Open a login shell
-11) Exit this tmux session
+3) Projects...
+4) Approval mode for next launch...
+5) Update optional Codex runtime from official OpenAI release
+6) Remove optional Codex runtime (use bundled fallback)
+7) Context7 integration...
+8) Sign in to Codex with device code
+9) Sign in to GitHub CLI
+10) Run diagnostics
+11) Open a login shell
+12) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -300,30 +527,33 @@ MENU
         if run_codex_action "Codex resume" resume; then :; fi
         ;;
       3)
-        if choose_next_codex_mode; then :; fi
+        show_projects_menu
         ;;
       4)
-        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
+        if choose_next_codex_mode; then :; fi
         ;;
       5)
-        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
+        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
         ;;
       6)
-        show_context7_menu
+        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
         ;;
       7)
-        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
+        show_context7_menu
         ;;
       8)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
         ;;
       9)
-        run_diagnostics
+        if run_github_login; then :; fi
         ;;
       10)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        run_diagnostics
         ;;
       11)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      12)
         exit 0
         ;;
       *)
@@ -334,51 +564,67 @@ MENU
 }
 
 show_antigravity_menu() {
-  local status_summary=""
+  local status_summary="" project_summary=""
 
   while true; do
     status_summary="$(antigravity_status_summary)"
+    project_summary="$(project_status_summary)"
     clear
     cat <<MENU
 Remote Dev — Antigravity
 ${version_summary}
 ${status_summary}
+${project_summary}
 ========================
 1) Start Antigravity
 2) Resume an Antigravity session
-3) Install Antigravity from Google
-4) Update Antigravity from Google
-5) Sign in to GitHub CLI
-6) Run diagnostics
-7) Open a login shell
-8) Exit this tmux session
+3) Projects...
+4) Launch/approval options [not available]
+5) Install Antigravity from Google
+6) Update Antigravity from Google
+7) Context7 integration [pending #95]
+8) Antigravity sign-in [handled during launch]
+9) Sign in to GitHub CLI
+10) Run diagnostics
+11) Open a login shell
+12) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Antigravity" /usr/local/bin/run-antigravity; then :; fi
+        if run_antigravity_action "Antigravity"; then :; fi
         ;;
       2)
-        if run_interactive_and_harden \
-          "Antigravity resume" \
-          /usr/local/bin/run-antigravity --remote-dev-open-resume-picker; then :; fi
+        if run_antigravity_action "Antigravity resume" --remote-dev-open-resume-picker; then :; fi
         ;;
       3)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        show_projects_menu
         ;;
       4)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        show_unavailable_action "Antigravity does not currently expose a Remote Dev-reviewed launch/approval option."
         ;;
       5)
-        if run_github_login; then :; fi
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
         ;;
       6)
-        run_diagnostics
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
       7)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        show_unavailable_action "Context7 for Antigravity is not implemented yet; see #95."
         ;;
       8)
+        show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
+        ;;
+      9)
+        if run_github_login; then :; fi
+        ;;
+      10)
+        run_diagnostics
+        ;;
+      11)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      12)
         exit 0
         ;;
       *)
