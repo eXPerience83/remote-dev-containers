@@ -31,11 +31,51 @@ if [[ ! -f "$menu_source" ]]; then
   exit 1
 fi
 
-mkdir -p "$bin_dir" "$workdir/workspace"
+mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat > "$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
   printf '%s\n' "${REMOTE_DEV_TEST_ROLE:-codex}"
+}
+
+remote_dev_validate_workspace_root() {
+  [[ "$1" == /* && -d "$1" && ! -L "$1" ]] || return 2
+  printf '%s\n' "$1"
+}
+
+remote_dev_validate_project_name() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2
+  printf '%s\n' "$1"
+}
+
+remote_dev_list_projects() {
+  local path name
+  for path in "$1"/*; do
+    [[ -d "$path" && ! -L "$path" ]] || continue
+    name="${path##*/}"
+    remote_dev_validate_project_name "$name" >/dev/null 2>&1 || continue
+    printf '%s\n' "$name"
+  done | LC_ALL=C sort
+}
+
+remote_dev_project_path() {
+  remote_dev_validate_workspace_root "$1" >/dev/null || return 2
+  remote_dev_validate_project_name "$2" >/dev/null || return 2
+  [[ -d "$1/$2" && ! -L "$1/$2" ]] || return 2
+  printf '%s/%s\n' "$1" "$2"
+}
+
+remote_dev_create_project() {
+  remote_dev_validate_project_name "$2" >/dev/null || return 2
+  [[ ! -e "$1/$2" && ! -L "$1/$2" ]] || return 2
+  mkdir -- "$1/$2"
+  printf '%s/%s\n' "$1" "$2"
+}
+
+remote_dev_delete_project() {
+  [[ "$2" == "$3" ]] || return 2
+  remote_dev_project_path "$1" "$2" >/dev/null || return 2
+  rm -rf -- "$1/$2"
 }
 RUNTIME
 
@@ -284,32 +324,36 @@ assert_hardening_count() {
   fi
 }
 
+project_path="$workdir/workspace/project"
 output="$workdir/output"
 # Duplicate action choices are consumed by the success pause. If the pause
 # disappears, the duplicate becomes another action and the exact call count fails.
-run_menu __unset__ $'1\n1\n11\n' "$output"
-assert_file_lines "$invocations" 'configured start' '[]'
+run_menu __unset__ $'1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'configured start' "[--cd][$project_path]"
 assert_hardening_count 1
 grep -Fxq 'Codex: bundled 0.147.0' "$output"
 grep -Fxq 'Context7: not configured' "$output"
+grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Codex' "$output"
 grep -Fxq '2) Resume a Codex session' "$output"
-grep -Fxq '3) Approval mode for next launch...' "$output"
-grep -Fxq '4) Update optional Codex runtime from official OpenAI release' "$output"
-grep -Fxq '5) Remove optional Codex runtime (use bundled fallback)' "$output"
-grep -Fxq '6) Context7 integration...' "$output"
+grep -Fxq '3) Projects...' "$output"
+grep -Fxq '4) Approval mode for next launch...' "$output"
+grep -Fxq '5) Update optional Codex runtime from official OpenAI release' "$output"
+grep -Fxq '6) Remove optional Codex runtime (use bundled fallback)' "$output"
+grep -Fxq '7) Context7 integration...' "$output"
+grep -Fxq '12) Exit this tmux session' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 
-echo 'Configured Codex menu actions: OK'
+echo 'Configured project-scoped Codex menu actions: OK'
 
-run_menu __unset__ $'4\n4\n5\n5\n11\n' "$output"
+run_menu __unset__ $'5\n5\n6\n6\n12\n' "$output"
 assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
 echo 'Codex runtime update/remove result pauses: OK'
 
 # Each successful Context7 action must consume its duplicate choice at the pause.
 # If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
-run_menu __unset__ $'6\n1\n1\n2\n2\n3\n3\n4\n4\n5\n11\n' "$output"
+run_menu __unset__ $'7\n1\n1\n2\n2\n3\n3\n4\n4\n5\n12\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 menu actions' \
   'install' \
   'test' \
@@ -321,7 +365,7 @@ grep -Fxq 'Configuration/status are offline; only Test performs an explicit netw
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 echo 'Context7 explicit menu actions: OK'
 
-run_menu __unset__ $'7\n7\n8\n8\n9\n9\n10\n10\n11\n' "$output"
+run_menu __unset__ $'8\n8\n9\n9\n10\n10\n11\n11\n12\n' "$output"
 assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
 assert_file_lines "$github_invocations" 'GitHub CLI setup' \
   '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
@@ -331,10 +375,10 @@ assert_file_lines "$shell_invocations" 'Codex login shell' shell
 assert_hardening_count 3
 echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
 
-run_menu __unset__ $'3\n3\n2\n2\n1\n1\n11\n' "$output"
+run_menu __unset__ $'4\n3\n2\n2\n1\n1\n12\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
-  '[--approval-mode][guarded][resume]' \
-  '[]'
+  "[--approval-mode][guarded][--cd][$project_path][resume]" \
+  "[--cd][$project_path]"
 assert_hardening_count 2
 grep -Fxq 'Next launch mode: guarded (one launch)' "$output"
 if [[ "$(grep -Fxc 'Next launch mode: configured (autonomous)' "$output")" -lt 2 ]]; then
@@ -344,16 +388,17 @@ fi
 
 echo 'One-launch guarded selection and reset: OK'
 
-run_menu guarded $'3\n2\n1\n1\n11\n' "$output"
-assert_file_lines "$invocations" 'autonomous override of guarded deployment' '[--approval-mode][autonomous]'
+run_menu guarded $'4\n2\n1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'autonomous override of guarded deployment' \
+  "[--approval-mode][autonomous][--cd][$project_path]"
 assert_hardening_count 1
 grep -Fxq 'Next launch mode: configured (guarded)' "$output"
 grep -Fxq 'Next launch mode: autonomous (one launch)' "$output"
 
 echo 'One-launch autonomous selection precedence: OK'
 
-run_menu __unset__ $'3\n3\n3\n1\n1\n1\n11\n' "$output"
-assert_file_lines "$invocations" 'configured-mode reset before launch' '[]'
+run_menu __unset__ $'4\n3\n4\n1\n1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'configured-mode reset before launch' "[--cd][$project_path]"
 assert_hardening_count 1
 
 echo 'Configured-mode reset: OK'
@@ -361,15 +406,27 @@ echo 'Configured-mode reset: OK'
 fail_once="$workdir/fail-once"
 rm -f "$fail_once"
 export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
-run_menu __unset__ $'3\n3\n1\n1\n1\n1\n11\n' "$output"
+run_menu __unset__ $'4\n3\n1\n1\n1\n1\n12\n' "$output"
 unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
 assert_file_lines "$invocations" 'failed override then configured retry' \
-  '[--approval-mode][guarded]' \
-  '[]'
+  "[--approval-mode][guarded][--cd][$project_path]" \
+  "[--cd][$project_path]"
 assert_hardening_count 2
 grep -Fq 'ERROR: Codex (guarded) exited with status 42' "$output"
 
 echo 'Failed and successful action result pauses: OK'
+
+# Exercise create, explicit selection, and exact-name deletion through the shared
+# Projects menu without changing the persistent active-project contract.
+run_menu __unset__ $'3\n2\nnew-project\n\n1\n2\n4\n1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'selected existing project after create' "[--cd][$project_path]"
+[[ -d "$workdir/workspace/new-project" ]]
+grep -Fq "Created project: $workdir/workspace/new-project" "$output"
+
+run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n12\n' "$output"
+[[ ! -e "$workdir/workspace/new-project" ]]
+grep -Fxq 'Deleted project: new-project' "$output"
+echo 'Projects menu create/select/delete flow: OK'
 
 run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
 assert_file_lines "$shell_invocations" 'Shell login shell' shell
