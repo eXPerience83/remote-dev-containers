@@ -12,11 +12,24 @@ secure_state="$workdir/secure-persistent-state"
 runtime_lib="$workdir/remote-dev-runtime.sh"
 binary="$workdir/agy"
 workspace="$workdir/workspace"
-mkdir -p "$workspace"
+project="$workspace/project"
+mkdir -p "$project"
 
 cat >"$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
   printf '%s\n' antigravity
+}
+
+remote_dev_workspace_root() {
+  [[ -d "${WORKSPACE:-}" && ! -L "${WORKSPACE:-}" ]] || return 2
+  printf '%s\n' "$WORKSPACE"
+}
+
+remote_dev_resolve_project() {
+  local root="$1"
+  [[ "${REMOTE_DEV_PROJECT:-}" == project ]] || return 2
+  [[ -d "$root/project" && ! -L "$root/project" ]] || return 2
+  printf '%s/project\n' "$root"
 }
 RUNTIME
 
@@ -33,6 +46,7 @@ MANAGER
 cat >"$binary" <<'BINARY'
 #!/usr/bin/env bash
 set -euo pipefail
+pwd >"$REMOTE_DEV_TEST_VENDOR_CWD"
 : >"$REMOTE_DEV_TEST_VENDOR_ARGS"
 for argument in "$@"; do
   printf '%s\n' "$argument" >>"$REMOTE_DEV_TEST_VENDOR_ARGS"
@@ -97,14 +111,17 @@ chmod 0755 "$runner"
 
 export REMOTE_DEV_ROLE=antigravity
 export REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER=0
+export REMOTE_DEV_PROJECT=project
 export WORKSPACE="$workspace"
 export TMUX_PANE=%4
 export REMOTE_DEV_TEST_VENDOR_ARGS="$workdir/vendor-args"
+export REMOTE_DEV_TEST_VENDOR_CWD="$workdir/vendor-cwd"
 export REMOTE_DEV_TEST_PICKER_ARGS="$workdir/picker-args"
 export REMOTE_DEV_TEST_HARDENING="$workdir/hardening"
 export REMOTE_DEV_TEST_EXPECT_PICKER=1
 
 "$runner" --remote-dev-open-resume-picker 'literal space' ';not evaluated'
+[[ "$(<"$REMOTE_DEV_TEST_VENDOR_CWD")" == "$project" ]]
 mapfile -t vendor_args <"$REMOTE_DEV_TEST_VENDOR_ARGS"
 [[ "${vendor_args[*]}" == 'literal space ;not evaluated' ]]
 mapfile -t picker_args <"$REMOTE_DEV_TEST_PICKER_ARGS"
@@ -117,11 +134,12 @@ mapfile -t picker_args <"$REMOTE_DEV_TEST_PICKER_ARGS"
 [[ "${picker_args[6]}" == "$(printf '%064d' 0)" ]]
 [[ "$(wc -l <"$REMOTE_DEV_TEST_HARDENING")" == 1 ]]
 
-rm -f "$REMOTE_DEV_TEST_PICKER_ARGS" "$REMOTE_DEV_TEST_VENDOR_ARGS"
+rm -f "$REMOTE_DEV_TEST_PICKER_ARGS" "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
 unset REMOTE_DEV_TEST_EXPECT_PICKER
 "$runner" normal
 [[ ! -e "$REMOTE_DEV_TEST_PICKER_ARGS" ]]
 [[ "$(<"$REMOTE_DEV_TEST_VENDOR_ARGS")" == normal ]]
+[[ "$(<"$REMOTE_DEV_TEST_VENDOR_CWD")" == "$project" ]]
 [[ "$(wc -l <"$REMOTE_DEV_TEST_HARDENING")" == 2 ]]
 
 set +e
@@ -130,7 +148,7 @@ status=$?
 set -e
 [[ "$status" == 2 ]]
 
-rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS"
+rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
 export REMOTE_DEV_TEST_PICKER_SNAPSHOT_FAIL=1
 set +e
 "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1
@@ -139,6 +157,7 @@ set -e
 unset REMOTE_DEV_TEST_PICKER_SNAPSHOT_FAIL
 [[ "$status" == 1 ]]
 [[ ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
+[[ ! -e "$REMOTE_DEV_TEST_VENDOR_CWD" ]]
 [[ "$(wc -l <"$REMOTE_DEV_TEST_HARDENING")" == 3 ]]
 
-echo 'Antigravity picker launcher: OK'
+echo 'Project-scoped Antigravity picker launcher: OK'
