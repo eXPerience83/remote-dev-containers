@@ -14,6 +14,7 @@ Implemented:
 - navigation from the stateless launcher to the independently authenticated Codex endpoint;
 - optional file-backed launcher Basic authentication and required Codex terminal authentication;
 - one canonical role-neutral persistent-data layout;
+- one bounded role-neutral project resolver/manager below each private agent workspace mount;
 - no agent-state mounts, agent credentials or Docker socket in the launcher.
 
 Still pending:
@@ -29,6 +30,7 @@ Related work:
 - issue #25 tracks the role-neutral runtime and launcher epic;
 - issue #36 records the TrueNAS outer-isolation and no-Bubblewrap decision;
 - issue #70 owns the canonical data layout;
+- issue #126 defines `/workspace` as a role-private project collection root and the common project-scoped launch contract;
 - issue #31 tracks the complete delivery sequence.
 
 ## User-facing contract
@@ -94,15 +96,40 @@ Sharing executable layers does not share mutable state or secrets. Runtime and C
 
 ### Codex
 
-Codex retains device-code authentication, start/resume actions, persistent tmux sessions, autonomous/guarded approval modes, diagnostics and post-session credential hardening.
+Codex retains device-code authentication, start/resume actions, persistent tmux sessions, autonomous/guarded approval modes, diagnostics and post-session credential hardening. Start and Resume resolve a concrete project below `/workspace` and pass that directory through the project-owned `run-codex` wrapper, so repository discovery and repository-scoped instructions are not anchored accidentally at the collection root.
 
 ### Shell
 
-The shell role remains available for direct troubleshooting and uses ttyd/tmux without inspecting Codex-specific state.
+The shell role remains available for direct troubleshooting and uses ttyd/tmux without inspecting Codex-specific state. General shell mode opens at the role workspace collection root rather than requiring an active project.
 
 ### Optional agents
 
 A proprietary optional agent may be installed or updated only through an explicit reviewed action using an official vendor-controlled source. Missing agents are reported as unavailable and are never downloaded during launcher or container startup.
+
+## Project-scoped workspace contract
+
+The host mount for an agent role is exposed inside that container as `/workspace`. That mount is a **project collection root**, not an implicit repository. A normal agent project is one validated immediate child:
+
+```text
+/workspace/
+├── pollenlevels/
+├── remote-dev-containers/
+└── another-project/
+```
+
+The role-neutral runtime owns one bounded resolver/manager:
+
+- discover non-symlink immediate child directories only;
+- validate one-component repository-friendly project names;
+- auto-resolve exactly one project;
+- require explicit selection when several projects exist;
+- create only a validated empty direct child;
+- recursively delete only a validated direct child after exact-name confirmation;
+- reject traversal, arbitrary absolute project selectors and symlink projects.
+
+The interactive selection is transient to the current menu/tmux session. Direct `agent` mode may use `REMOTE_DEV_PROJECT=<name>`; without it, direct mode requires exactly one valid project. It never silently falls back to running an agent at `/workspace` when the project is ambiguous or missing.
+
+This contract is shared code only. Codex, Antigravity and any future supported agent continue to receive separate writable workspace mounts. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
 
 ## Canonical persistence boundaries
 
@@ -118,6 +145,7 @@ The canonical administrative layout is:
 REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
+│       └── <project>/
 ├── state/
 │   └── codex/
 │       ├── agent/
@@ -148,7 +176,7 @@ Before deployment, `scripts/preflight-data-layout.py` validates that every canon
 
 There is no data-layout compatibility alias, automatic migration, copying, symlink or deletion. Existing experimental directories must be recreated or moved manually before deploying the new stack.
 
-Optional SMB sharing is not part of this contract. Only the `workspaces` boundary may be evaluated later under #71; `state` and `secrets` must remain private.
+Optional SMB sharing is not part of this contract. If evaluated later under #71, it should target explicitly selected concrete project directories below the `workspaces` boundary rather than exposing the whole collection root by default; `state` and `secrets` must remain private.
 
 ## Workspace concurrency
 
@@ -159,6 +187,8 @@ The default stack does not mount one writable checkout into two agent services. 
 Each outer container is a separate boundary. Anyone with terminal/root access inside an agent service is trusted for the state mounted into that service. The launcher cannot see or authenticate to agent state because neither the state nor the agent password is mounted there.
 
 The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
+
+Project selection does not broaden that boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment.
 
 ## Versioning and updates
 
@@ -173,6 +203,8 @@ A broken optional agent must not make the launcher or Codex unhealthy. Healthche
 Automated tests cover:
 
 - fixed role/start-mode validation;
+- bounded project-name/path validation, zero/one/multiple resolution, symlink exclusion and create/delete guards;
+- selected-project Codex start/resume and direct-agent launch behavior;
 - launcher optional authentication, origin policy, CSP and fixed navigation;
 - launcher absence of agent mounts and container-engine sockets;
 - one image reference across launcher and Codex;
@@ -183,7 +215,7 @@ Automated tests cover:
 - role-aware health checks;
 - existing Codex start, resume, policy, diagnostics, ttyd and tmux behavior.
 
-Manual TrueNAS validation is performed after the related implementation slices are ready and includes the host preflight, persistence, sessions, credentials, isolation and recreation. Windows/SMB testing remains separate under #71.
+Manual TrueNAS validation is performed after the related implementation slices are ready and includes the host preflight, persistence, sessions, credentials, project selection/create/delete safety, isolation and recreation. Windows/SMB testing remains separate under #71.
 
 ## Non-goals
 
