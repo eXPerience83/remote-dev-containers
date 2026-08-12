@@ -249,8 +249,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
       packages: write
+      pull-requests: write
 
     steps:
       - name: Download the verified candidate artifact
