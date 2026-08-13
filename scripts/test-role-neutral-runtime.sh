@@ -84,9 +84,13 @@ mkdir -p "$workspace"
 
 assert_eq "$workspace" "$(WORKSPACE="$workspace" remote_dev_workspace_root)" "workspace root"
 assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root ../workspace
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$workspace/"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root//workspace"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root/"$'workspace\tcontrol'
 assert_fails_with 2 "too broad" remote_dev_validate_workspace_root /
 ln -s "$workspace" "$test_root/workspace-link"
 assert_fails_with 2 "symlinked path component" remote_dev_validate_workspace_root "$test_root/workspace-link"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root/workspace-link/"
 
 for invalid_name in '' '.hidden' '..' '../escape' 'nested/name' '-option' 'with space' $'line\nbreak'; do
   assert_fails_with 2 "invalid project name" remote_dev_validate_project_name "$invalid_name"
