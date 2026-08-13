@@ -50,6 +50,7 @@ services:
       TZ: ${TZ:-Europe/Madrid}
       REMOTE_DEV_ROLE: codex
       WORKSPACE: /workspace
+      REMOTE_DEV_PROJECT: ${REMOTE_DEV_PROJECT:-}
       CODEX_HOME: /root/.codex
       REMOTE_DEV_CODEX_RUNTIME_ROOT: /root/.local/share/remote-dev/codex-runtime
       GH_CONFIG_DIR: /root/.config/gh
@@ -142,6 +143,7 @@ services:
       REMOTE_DEV_ROLE: antigravity
       REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
       WORKSPACE: /workspace
+      REMOTE_DEV_PROJECT: ${REMOTE_DEV_PROJECT:-}
       GH_CONFIG_DIR: /root/.config/gh
       GIT_CONFIG_GLOBAL: /root/.config/git/config
 
