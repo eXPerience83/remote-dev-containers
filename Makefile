@@ -19,6 +19,7 @@ validate:
 	REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh bash scripts/test-image-name-compat.sh
 	bash scripts/test-compose-image-compat.sh
 	REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py bash scripts/test-remote-dev-launcher.sh
+	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
 	python3 scripts/test_single_stack_compose.py
 	python3 scripts/test_canonical_data_layout.py
 	python3 scripts/test_preflight_data_layout.py
