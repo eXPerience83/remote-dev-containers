@@ -181,7 +181,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-Para una raíz personalizada, ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar. También puedes dejar inicialmente vacía `data/workspaces/codex` y crear el primer proyecto desde **Projects...** después de arrancar el servicio.
+Para una raíz personalizada, define `REMOTE_DEV_DATA_ROOT=/ruta/absoluta/del/host` en `.env` y ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar. También puedes dejar inicialmente vacía `data/workspaces/codex` y crear el primer proyecto desde **Projects...** después de arrancar el servicio.
 
 Define `REMOTE_DEV_IMAGE=remote-dev:local` y el modo de aprobación deseado, y ejecuta:
 

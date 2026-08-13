@@ -132,7 +132,12 @@ refresh_project_selection() {
 
   if (( project_count == 1 )); then
     active_project_name="${projects[0]}"
-    active_project_path="$(remote_dev_project_path "$workspace" "$active_project_name")"
+    if resolved="$(remote_dev_project_path "$workspace" "$active_project_name" 2>/dev/null)"; then
+      active_project_path="$resolved"
+    else
+      active_project_name=""
+      active_project_path=""
+    fi
   fi
 }
 

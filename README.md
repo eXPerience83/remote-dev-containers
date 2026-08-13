@@ -217,7 +217,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-For a custom root, run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.
+For a custom root, set `REMOTE_DEV_DATA_ROOT=/absolute/host/path` in `.env` and run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 

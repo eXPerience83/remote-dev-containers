@@ -42,6 +42,19 @@ remote_dev_project_path() {
   [[ -d "$1/$2" && ! -L "$1/$2" ]] || return 2
   printf '%s/%s\n' "$1" "$2"
 }
+
+remote_dev_create_project() {
+  remote_dev_validate_project_name "$2" >/dev/null || return 2
+  [[ ! -e "$1/$2" && ! -L "$1/$2" ]] || return 2
+  mkdir -- "$1/$2"
+  printf '%s/%s\n' "$1" "$2"
+}
+
+remote_dev_delete_project() {
+  [[ "$2" == "$3" ]] || return 2
+  remote_dev_project_path "$1" "$2" >/dev/null || return 2
+  rm -rf -- "$1/$2"
+}
 RUNTIME
 
 cat >"$bin_dir/run-antigravity" <<'RUNNER'
