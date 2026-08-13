@@ -15,7 +15,9 @@ remote_dev_validate_workspace_root() {
   local previous=""
 
   if [[ -z "$workspace" || "$workspace" != /* || "$workspace" == //* \
-     || "$workspace" == *$'\n'* || "$workspace" == *$'\r'* \
+     || "$workspace" == *'//'* \
+     || ( "$workspace" != / && "$workspace" == */ ) \
+     || "$workspace" == *[[:cntrl:]]* \
      || "$workspace" == *'/../'* || "$workspace" == */.. \
      || "$workspace" == *'/./'* || "$workspace" == */. ]]; then
     remote_dev_runtime_error "WORKSPACE must be a safe absolute path"
