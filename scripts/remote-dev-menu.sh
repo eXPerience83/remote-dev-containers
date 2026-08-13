@@ -142,7 +142,6 @@ refresh_project_selection() {
 }
 
 project_status_summary() {
-  refresh_project_selection
   if [[ -n "$active_project_name" ]]; then
     printf 'Project: %s\n' "$active_project_name"
   elif (( project_count == 0 )); then
@@ -273,6 +272,7 @@ show_projects_menu() {
   local summary=""
 
   while true; do
+    refresh_project_selection
     summary="$(project_status_summary)"
     clear
     cat <<MENU
@@ -499,6 +499,7 @@ show_codex_menu() {
     next_mode_summary="$(next_codex_mode_summary)"
     runtime_summary="$(codex_runtime_status_summary)"
     context7_summary="$(context7_status_summary)"
+    refresh_project_selection
     project_summary="$(project_status_summary)"
     clear
     cat <<MENU
@@ -573,6 +574,7 @@ show_antigravity_menu() {
 
   while true; do
     status_summary="$(antigravity_status_summary)"
+    refresh_project_selection
     project_summary="$(project_status_summary)"
     clear
     cat <<MENU
