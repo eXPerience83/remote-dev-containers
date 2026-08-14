@@ -238,16 +238,31 @@ def validate(path: Path, config: dict[str, object]) -> None:
 
 
 def validate_direct_project_override(env_path: Path) -> None:
-    rendered = compose_config(GENERIC_COMPOSE, env_path, {"REMOTE_DEV_PROJECT": "project-alpha"})
+    override = {"REMOTE_DEV_PROJECT": "project-alpha"}
+
+    rendered = compose_config(GENERIC_COMPOSE, env_path, override)
     services = rendered["services"]
     launcher_env = services["launcher"]["environment"]
     codex_env = services["codex"]["environment"]
     antigravity_env = services["antigravity"]["environment"]
-    require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into launcher")
+    require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into generic launcher")
     require(codex_env.get("REMOTE_DEV_PROJECT") == "project-alpha", "Codex project override missing")
     require(
         antigravity_env.get("REMOTE_DEV_PROJECT") == "project-alpha",
         "Antigravity project override missing",
+    )
+
+    # The TrueNAS reference YAML is edited directly; ambient/.env overrides must not rewrite its literal selector.
+    rendered = compose_config(TRUENAS_COMPOSE, env_path, override)
+    services = rendered["services"]
+    launcher_env = services["launcher"]["environment"]
+    codex_env = services["codex"]["environment"]
+    antigravity_env = services["antigravity"]["environment"]
+    require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into TrueNAS launcher")
+    require(codex_env.get("REMOTE_DEV_PROJECT") == "", "TrueNAS Codex selector must remain YAML-controlled")
+    require(
+        antigravity_env.get("REMOTE_DEV_PROJECT") == "",
+        "TrueNAS Antigravity selector must remain YAML-controlled",
     )
 
 
