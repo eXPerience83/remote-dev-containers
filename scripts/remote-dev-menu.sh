@@ -512,7 +512,7 @@ ${next_mode_summary}
 ${project_summary}
 ==================
 1) Start Codex
-2) Resume a Codex session
+2) Resume a Codex session (current project)
 3) Projects...
 4) Approval mode for next launch...
 5) Update optional Codex runtime from official OpenAI release
@@ -584,7 +584,7 @@ ${status_summary}
 ${project_summary}
 ========================
 1) Start Antigravity
-2) Resume an Antigravity session
+2) Resume an Antigravity session (current project)
 3) Projects...
 4) Launch/approval options [not available]
 5) Install Antigravity from Google
