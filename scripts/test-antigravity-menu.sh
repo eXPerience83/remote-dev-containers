@@ -150,7 +150,7 @@ mapfile -t calls <"$invocations"
 [[ "$(wc -l <"$hardening_calls")" == 4 ]]
 grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Resume an Antigravity session' "$output"
+grep -Fxq '2) Resume an Antigravity session (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
 grep -Fxq '4) Launch/approval options [not available]' "$output"
 grep -Fxq '5) Install Antigravity from Google' "$output"
