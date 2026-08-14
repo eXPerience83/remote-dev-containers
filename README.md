@@ -3,7 +3,7 @@
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose either web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose any web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
 
 ## Goal
 
@@ -302,7 +302,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 ## Important warnings
 
-- Do not publish ports 7680 or 7681 directly to the Internet.
+- Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - The unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale address.
 - The Codex terminal remains independently authenticated.
 - The launcher never embeds or forwards the terminal password.
