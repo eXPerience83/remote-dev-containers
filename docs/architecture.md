@@ -129,7 +129,7 @@ The role-neutral runtime owns one bounded resolver/manager:
 
 The interactive selection is transient to the current menu/tmux session. Direct `agent` mode may use `REMOTE_DEV_PROJECT=<name>`; without it, direct mode requires exactly one valid project. It never silently falls back to running an agent at `/workspace` when the project is ambiguous or missing.
 
-This contract is shared code only. Codex, Antigravity and any future supported agent continue to receive separate writable workspace mounts. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
+This contract is shared code only. Codex and any future supported agent continue to receive separate writable workspace mounts. Antigravity reuses this project wiring only as an experimental integration; that reuse does not establish supported deployment status, and real TrueNAS project/session validation remains deferred to #131. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
 
 ## Canonical persistence boundaries
 
