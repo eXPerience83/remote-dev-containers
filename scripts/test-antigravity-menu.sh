@@ -23,8 +23,10 @@ remote_dev_validate_workspace_root() {
 }
 
 remote_dev_validate_project_name() {
-  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2
-  printf '%s\n' "$1"
+  local name="$1"
+  (( ${#name} >= 1 && ${#name} <= 128 )) || return 2
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2
+  printf '%s\n' "$name"
 }
 
 remote_dev_list_projects() {
