@@ -3,7 +3,7 @@
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]
-> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso y aún no han completado toda la validación de TrueNAS, seguridad y persistencia. No expongas ninguno de los dos puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
+> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso y aún no han completado toda la validación de TrueNAS, seguridad y persistencia. No expongas ningún puerto web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
 
 ## Objetivo
 
@@ -11,18 +11,20 @@ Mantener las herramientas, los repositorios y los agentes de programación en un
 
 ## Implementación actual
 
-El stack edge actual utiliza una única imagen de Remote Dev para dos servicios:
+El stack edge actual mantiene Codex como implementación de referencia y permite Antigravity únicamente como rol experimental habilitado de forma explícita:
 
 ```text
 Stack Remote Dev
-├── launcher  → puerto principal 7680
-└── codex     → terminal autenticado 7681
+├── launcher      → puerto principal 7680
+├── codex         → terminal autenticado 7681
+└── antigravity   → terminal autenticado experimental opcional 7682
 ```
 
 - El launcher es la entrada normal desde el navegador y no requiere contraseña por defecto.
 - Codex se ejecuta en su propio contenedor con montajes privados y separados por rol.
-- Docker reutiliza la misma imagen y sus mismas capas para ambos servicios.
-- El terminal Codex conserva su propia autenticación independiente.
+- Antigravity puede ejecutarse en un contenedor opcional separado, con workspace/estado privados y un runtime del proveedor instalado solo mediante una acción explícita.
+- Docker reutiliza la misma imagen y sus mismas capas para todos los servicios habilitados.
+- Cada terminal de agente conserva su propia autenticación independiente.
 - La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, más una ruta explícita y opcional para instalar un runtime oficial más nuevo manteniendo el Codex incluido como fallback, además de GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
 - La persistencia utiliza un único contrato canónico y neutral.
 - Los agentes seleccionan un proyecto concreto por debajo de su `/workspace` privado en lugar de arrancar en la raíz que agrupa los proyectos.
@@ -45,10 +47,11 @@ Los roles implementados son:
 ```dotenv
 REMOTE_DEV_ROLE=launcher
 # o: codex
+# o: antigravity
 # o: shell
 ```
 
-`antigravity` y `claude` siguen reservados y fallan de forma clara. Nunca provocan una descarga implícita.
+`antigravity` está implementado como **rol opcional experimental** y continúa detrás de una habilitación explícita; la validación real de Start/Resume por proyecto y sesión queda aplazada al issue #131. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
 
 El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOTE_DEV_START_MODE=menu|agent|shell` y la compatibilidad existente con `START_MODE=menu|codex|shell`.
 
@@ -74,13 +77,13 @@ Cada servicio de agente conserva su propio montaje de workspace escribible. Que 
 
 La página del launcher no requiere autenticación por defecto porque es navegación sin estado: no contiene credenciales, no actúa como proxy y no monta datos privados de los agentes. Mantiene la comprobación de origen cuando el navegador envía la cabecera `Origin` y aplica una política CSP restrictiva.
 
-Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal.
+Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal. Cuando se habilita Antigravity experimental, su terminal continúa siendo un endpoint independiente con autenticación, workspace y estado propios.
 
 El terminal Codex se autentica de manera independiente mediante su propia fuente de contraseña. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
 
 La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante el override separado y respaldado por secreto `compose/launcher-auth.yml`. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña, secreto, mount ni dataset del launcher.
 
-Las rutas configuradas se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity/Claude y un proxy de origen único siguen fuera de la implementación actual.
+Las rutas configuradas del launcher y de los agentes se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity sigue siendo experimental y su comportamiento real de proyectos/sesiones se valida en #131; Claude y un proxy de origen único siguen fuera de la implementación actual.
 
 ### Modos de aprobación de Codex
 
@@ -241,9 +244,9 @@ Cuando exista un runtime opcional, el comando también muestra su versión, esta
 
 ## Advertencias importantes
 
-- No expongas los puertos 7680 o 7681 directamente a Internet.
+- No expongas los puertos 7680, 7681 o el 7682 opcional directamente a Internet.
 - El launcher sin contraseña solo debe publicarse en localhost, LAN o Tailscale.
-- Codex sigue autenticado de forma independiente.
+- Cada terminal de agente sigue autenticado de forma independiente.
 - El launcher no reenvía ni incluye en la URL la contraseña de Codex.
 - El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
 - No montes workspaces, credenciales de agente ni estado de runtime opcional en el launcher.

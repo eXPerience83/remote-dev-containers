@@ -168,6 +168,8 @@ ensure_active_project() {
 choose_project_name() {
   local heading="$1"
   local choice=""
+  local normalized_choice=""
+  local max_choice=""
   local index=0
   local -a projects=()
 
@@ -183,13 +185,26 @@ choose_project_name() {
   for index in "${!projects[@]}"; do
     printf '%d) %s\n' "$((index + 1))" "${projects[$index]}"
   done
-  printf '%d) Back\n' "$(( ${#projects[@]} + 1 ))"
+  max_choice="$(( ${#projects[@]} + 1 ))"
+  printf '%s) Back\n' "$max_choice"
   read -r -p "> " choice
 
   if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
     return 1
   fi
-  index=$((10#$choice - 1))
+
+  normalized_choice="${choice#"${choice%%[!0]*}"}"
+  if [[ -z "$normalized_choice" ]]; then
+    normalized_choice=0
+  fi
+  if [[ "$normalized_choice" == 0 ]] || (( ${#normalized_choice} > ${#max_choice} )); then
+    return 1
+  fi
+  if (( ${#normalized_choice} == ${#max_choice} )) && [[ "$normalized_choice" > "$max_choice" ]]; then
+    return 1
+  fi
+
+  index=$((10#$normalized_choice - 1))
   if (( index == ${#projects[@]} )); then
     return 1
   fi

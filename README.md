@@ -11,11 +11,12 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 
 ## Current implementation
 
-The current edge stack is the Codex reference implementation:
+The current edge stack is the Codex reference implementation, with Antigravity available only as an explicitly enabled experimental role:
 
-- one Remote Dev image reused by the launcher and Codex services;
+- one Remote Dev image reused by the launcher, Codex and optional Antigravity services;
 - one stateless launcher as the normal browser entry point, without authentication by default;
 - one isolated, independently authenticated Codex terminal service with private role-scoped mounts;
+- an optional isolated Antigravity terminal service using its own private role state and an explicitly installed vendor runtime;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime-update path with the bundled CLI retained as fallback;
@@ -44,10 +45,11 @@ Implemented roles are:
 ```dotenv
 REMOTE_DEV_ROLE=launcher
 # or: codex
+# or: antigravity
 # or: shell
 ```
 
-`antigravity` and `claude` remain reserved and fail clearly because they are not implemented. They never trigger an implicit download.
+`antigravity` is implemented as an **experimental optional role** and remains behind explicit enablement; its real project/session Start/Resume validation is deferred to issue #131. Its vendor runtime is installed only by explicit user action and normal startup never downloads it implicitly. `claude` remains reserved and unimplemented.
 
 The neutral direct-start selector accepts `menu`, `agent` or `shell` for agent-role services:
 
@@ -77,23 +79,24 @@ Each agent service still owns a separate writable workspace mount. Shared projec
 
 ### Single-stack launcher
 
-The generic and TrueNAS Compose files start two services from the same `REMOTE_DEV_IMAGE` reference:
+The generic and TrueNAS Compose files use the same `REMOTE_DEV_IMAGE` reference for the launcher and Codex services and for the optional Antigravity service when it is enabled:
 
 ```text
 Remote Dev stack
-├── launcher  → primary browser port 7680
-└── codex     → authenticated terminal port 7681
+├── launcher      → primary browser port 7680
+├── codex         → authenticated terminal port 7681
+└── antigravity   → optional experimental authenticated terminal port 7682
 ```
 
-The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
+The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and only fixed links for services enabled by the reviewed stack configuration.
 
-Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password.
+Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password. When experimental Antigravity is enabled, its terminal remains a separate independently authenticated endpoint with its own role-private workspace and state.
 
 The Codex endpoint authenticates independently with its own password source. Credentials are not embedded in the link, passed through the launcher or shared between services.
 
 Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
 
-Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. Antigravity/Claude services and a one-origin reverse proxy remain outside the current implementation.
+Configured launcher and agent paths are restricted to safe URL-path characters before they are placed into the page. Antigravity remains experimental and its real project/session behavior is tracked in #131; Claude and a one-origin reverse proxy remain outside the current implementation.
 
 ### Codex approval modes
 
@@ -351,3 +354,4 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests u
 - GitHub CLI: https://github.com/cli/cli
 - ttyd: https://github.com/tsl0922/ttyd
 - mise: https://github.com/jdx/mise
+- Python Build Standalone: https://github.com/astral-sh/python-build-standalone

@@ -114,3 +114,27 @@ actual="$(<"$invocations")"
 }
 
 echo 'Menu-session single-project auto-selection persistence: OK'
+
+rm -f "$invocations"
+oversized_output="$workdir/oversized-output"
+printf '3\n1\n18446744073709551617\n4\n1\n\n12\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workspace" \
+  REMOTE_DEV_ROLE=codex \
+  REMOTE_DEV_TEST_INVOCATIONS="$invocations" \
+  REMOTE_DEV_TEST_ADD_MARKER="$add_marker" \
+  "$fixture_menu" >"$oversized_output" 2>&1
+
+if [[ -s "$invocations" ]]; then
+  echo 'ERROR: oversized numeric project choice selected a project after integer wraparound' >&2
+  cat "$invocations" >&2
+  exit 1
+fi
+if ! grep -Fq \
+  'ERROR: multiple projects are available; select one in Projects... before starting an agent' \
+  "$oversized_output"; then
+  echo 'ERROR: oversized numeric project choice did not remain rejected' >&2
+  exit 1
+fi
+
+echo 'Oversized numeric project choices are rejected before arithmetic conversion: OK'
