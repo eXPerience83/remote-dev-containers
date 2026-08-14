@@ -354,4 +354,3 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests u
 - GitHub CLI: https://github.com/cli/cli
 - ttyd: https://github.com/tsl0922/ttyd
 - mise: https://github.com/jdx/mise
-- Python Build Standalone: https://github.com/astral-sh/python-build-standalone
