@@ -37,9 +37,11 @@ case "$start_mode" in
         }
         printf -v quoted_project_identity '%q' "$project_identity"
         printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
-        printf -v quoted_project_argument '%q' "$project"
         printf -v quoted_project_error '%q' "ERROR: project path changed during direct launch: $project"
-        session_command="if cd -P $quoted_project && [ \"\$PWD\" = $quoted_project ] && [ \"\$(stat -Lc '%d:%i' -- . 2>/dev/null)\" = $quoted_project_identity ]; then exec /usr/local/bin/run-direct-session $quoted_run_codex_binary --cd $quoted_project_argument; else printf '%s\\n' $quoted_project_error >&2; exit 2; fi"
+        # Direct mode inherits the already verified cwd. Do not pass the mutable
+        # project pathname back through --cd after the identity check, because
+        # that would make Codex resolve the pathname again and reopen the race.
+        session_command="if cd -P $quoted_project && [ \"\$PWD\" = $quoted_project ] && [ \"\$(stat -Lc '%d:%i' -- . 2>/dev/null)\" = $quoted_project_identity ]; then exec /usr/local/bin/run-direct-session $quoted_run_codex_binary; else printf '%s\\n' $quoted_project_error >&2; exit 2; fi"
         ;;
       antigravity)
         printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
