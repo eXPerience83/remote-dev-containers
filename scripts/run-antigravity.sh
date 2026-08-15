@@ -58,7 +58,19 @@ fi
 
 workspace="$(remote_dev_workspace_root)" || exit $?
 project="$(remote_dev_resolve_project "$workspace")" || exit $?
+project_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+  remote_dev_runtime_error "project path changed during launch: $project"
+  exit 2
+}
 if ! cd -P -- "$project" || [[ "$PWD" != "$project" ]]; then
+  remote_dev_runtime_error "project path changed during launch: $project"
+  exit 2
+fi
+entered_project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+  remote_dev_runtime_error "project path changed during launch: $project"
+  exit 2
+}
+if [[ "$entered_project_identity" != "$project_identity" ]]; then
   remote_dev_runtime_error "project path changed during launch: $project"
   exit 2
 fi
