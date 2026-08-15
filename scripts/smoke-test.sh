@@ -127,7 +127,7 @@ if [[ "$image_version" != "$expected_image_version" ]]; then
   exit 1
 fi
 if [[ "$source_revision" != "$expected_source_revision" ]]; then
-  echo "ERROR: image version metadata mismatch: expected $expected_source_revision, got $source_revision" >&2
+  echo "ERROR: source revision metadata mismatch: expected $expected_source_revision, got $source_revision" >&2
   exit 1
 fi
 
