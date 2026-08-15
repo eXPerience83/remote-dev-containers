@@ -74,6 +74,22 @@ if [[ "${REMOTE_DEV_TEST_ADD_ON_CLEAR:-0}" == 1 && ! -e "$REMOTE_DEV_TEST_ADD_MA
 fi
 CLEAR
 
+cat >"$bin_dir/rm" <<'RM'
+#!/usr/bin/env bash
+set -euo pipefail
+/bin/rm "$@"
+if [[ "${REMOTE_DEV_TEST_INVALIDATE_WORKSPACE_AFTER_RM:-0}" == 1 ]]; then
+  marker="${REMOTE_DEV_TEST_INVALIDATE_MARKER:-}"
+  [[ -n "$marker" ]] || exit 8
+  if [[ ! -e "$marker" ]]; then
+    moved="${WORKSPACE}.moved"
+    mv -- "$WORKSPACE" "$moved"
+    ln -s -- "$moved" "$WORKSPACE"
+    : >"$marker"
+  fi
+fi
+RM
+
 chmod 0755 "$bin_dir"/*
 
 python3 - "$menu_source" "$fixture_menu" "$runtime_lib" "$bin_dir" <<'PY'
@@ -183,3 +199,42 @@ if ! grep -Fq \
 fi
 
 echo 'Oversized numeric project choices are rejected before arithmetic conversion: OK'
+
+# If the project collection becomes invalid immediately after a confirmed
+# deletion, the deletion itself may have succeeded but its refresh must remain
+# an action failure. Never print a normal success message from stale menu state.
+delete_refresh_output="$workdir/delete-refresh-output"
+invalidate_marker="$workdir/workspace-invalidated"
+set +e
+printf '3\n3\n2\nsecond-project\n\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workspace" \
+  REMOTE_DEV_ROLE=codex \
+  REMOTE_DEV_TEST_INVOCATIONS="$invocations" \
+  REMOTE_DEV_TEST_ADD_MARKER="$add_marker" \
+  REMOTE_DEV_TEST_INVALIDATE_WORKSPACE_AFTER_RM=1 \
+  REMOTE_DEV_TEST_INVALIDATE_MARKER="$invalidate_marker" \
+  "$fixture_menu" >"$delete_refresh_output" 2>&1
+status=$?
+set -e
+
+[[ "$status" == 2 ]] || {
+  echo "ERROR: post-delete workspace invalidation returned status $status instead of 2" >&2
+  cat "$delete_refresh_output" >&2
+  exit 1
+}
+[[ -e "$invalidate_marker" ]] || {
+  echo 'ERROR: delete-refresh fixture did not invalidate the workspace after rm' >&2
+  exit 1
+}
+[[ ! -e "$workspace.moved/second-project" ]] || {
+  echo 'ERROR: confirmed project deletion did not remove the selected project' >&2
+  exit 1
+}
+grep -Fq 'WORKSPACE contains a symlinked path component' "$delete_refresh_output"
+if grep -Fxq 'Deleted project: second-project' "$delete_refresh_output"; then
+  echo 'ERROR: post-delete refresh failure was reported as an ordinary successful deletion action' >&2
+  exit 1
+fi
+
+echo 'Post-delete project refresh failures remain visible to the menu: OK'
