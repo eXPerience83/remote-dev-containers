@@ -58,7 +58,10 @@ fi
 
 workspace="$(remote_dev_workspace_root)" || exit $?
 project="$(remote_dev_resolve_project "$workspace")" || exit $?
-cd "$project"
+if ! cd -P -- "$project" || [[ "$PWD" != "$project" ]]; then
+  remote_dev_runtime_error "project path changed during launch: $project"
+  exit 2
+fi
 
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
 
