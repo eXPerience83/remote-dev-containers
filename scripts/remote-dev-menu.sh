@@ -293,9 +293,11 @@ DELETE_WARNING
       active_project_name=""
       active_project_path=""
     fi
-    refresh_project_selection
-    echo
-    echo "Deleted project: $project_choice_name"
+    refresh_project_selection || action_status=$?
+    if (( action_status == 0 )); then
+      echo
+      echo "Deleted project: $project_choice_name"
+    fi
   else
     action_status=$?
   fi
