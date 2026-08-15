@@ -116,9 +116,13 @@ run_diagnostics() {
 
 refresh_project_selection() {
   local resolved=""
+  local listing=""
   local -a projects=()
 
-  mapfile -t projects < <(remote_dev_list_projects "$workspace")
+  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  if [[ -n "$listing" ]]; then
+    mapfile -t projects <<<"$listing"
+  fi
   project_count="${#projects[@]}"
 
   if [[ -n "$active_project_name" ]]; then
@@ -170,11 +174,15 @@ choose_project_name() {
   local choice=""
   local normalized_choice=""
   local max_choice=""
+  local listing=""
   local index=0
   local -a projects=()
 
   project_choice_name=""
-  mapfile -t projects < <(remote_dev_list_projects "$workspace")
+  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  if [[ -n "$listing" ]]; then
+    mapfile -t projects <<<"$listing"
+  fi
   if (( ${#projects[@]} == 0 )); then
     echo "No projects are available under $workspace."
     return 1
