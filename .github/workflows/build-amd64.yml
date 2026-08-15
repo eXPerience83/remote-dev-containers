@@ -52,6 +52,7 @@ jobs:
             scripts/validate-standalone-artifact-inspection.py \
             scripts/test_validate_standalone_artifact_inspection.py \
             scripts/validate-release-channel-contract.py
+          make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-remote-dev-context7.py
           python3 scripts/test-remote-dev-context7-ownership.py
