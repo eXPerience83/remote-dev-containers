@@ -13,7 +13,9 @@ runtime_lib="$workdir/remote-dev-runtime.sh"
 binary="$workdir/agy"
 workspace="$workdir/workspace"
 project="$workspace/project"
-mkdir -p "$project"
+tool_bin="$workdir/tool-bin"
+real_stat="$(command -v stat)"
+mkdir -p "$project" "$tool_bin"
 
 cat >"$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
@@ -74,6 +76,7 @@ set -euo pipefail
 case "${1:-}" in
   snapshot)
     [[ "$#" == 3 && "$2" == --pane ]]
+    : >"$REMOTE_DEV_TEST_PICKER_SNAPSHOT"
     if [[ "${REMOTE_DEV_TEST_PICKER_SNAPSHOT_FAIL:-0}" == 1 ]]; then
       exit 1
     fi
@@ -91,7 +94,19 @@ cat >"$secure_state" <<'SECURE'
 set -euo pipefail
 printf 'hardened\n' >>"$REMOTE_DEV_TEST_HARDENING"
 SECURE
-chmod 0755 "$manager" "$binary" "$picker" "$secure_state"
+
+cat >"$tool_bin/stat" <<'STAT'
+#!/usr/bin/env bash
+set -euo pipefail
+output="$("$REMOTE_DEV_TEST_REAL_STAT" "$@")"
+printf '%s\n' "$output"
+if [[ "${REMOTE_DEV_TEST_DIRECTORY_SWAP:-0}" == 1 && ! -e "$REMOTE_DEV_TEST_DIRECTORY_SWAP_MARKER" ]]; then
+  : >"$REMOTE_DEV_TEST_DIRECTORY_SWAP_MARKER"
+  mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_ORIGINAL_PROJECT"
+  mv -- "$REMOTE_DEV_TEST_REPLACEMENT_PROJECT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
+fi
+STAT
+chmod 0755 "$manager" "$binary" "$picker" "$secure_state" "$tool_bin/stat"
 
 python3 - "$source_file" "$runner" "$manager" "$picker" "$secure_state" "$runtime_lib" <<'PY'
 from pathlib import Path
@@ -126,8 +141,10 @@ export TMUX_PANE=%4
 export REMOTE_DEV_TEST_VENDOR_ARGS="$workdir/vendor-args"
 export REMOTE_DEV_TEST_VENDOR_CWD="$workdir/vendor-cwd"
 export REMOTE_DEV_TEST_PICKER_ARGS="$workdir/picker-args"
+export REMOTE_DEV_TEST_PICKER_SNAPSHOT="$workdir/picker-snapshot"
 export REMOTE_DEV_TEST_HARDENING="$workdir/hardening"
 export REMOTE_DEV_TEST_EXPECT_PICKER=1
+export REMOTE_DEV_TEST_REAL_STAT="$real_stat"
 
 "$runner" --remote-dev-open-resume-picker 'literal space' ';not evaluated'
 [[ "$(<"$REMOTE_DEV_TEST_VENDOR_CWD")" == "$project" ]]
@@ -154,23 +171,59 @@ unset REMOTE_DEV_TEST_EXPECT_PICKER
 # Replace the validated project with an outside-workspace symlink inside the
 # resolver fixture, after validation but before the runner enters the path.
 # The vendor process must never start from the swapped location.
-rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
+rm -f "$REMOTE_DEV_TEST_PICKER_ARGS" "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" \
+  "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
 outside_project="$workdir/outside-project"
 mkdir -p "$outside_project"
 export REMOTE_DEV_TEST_SWAP_TARGET="$outside_project"
 swap_output="$workdir/project-swap-output"
 set +e
-"$runner" normal >"$swap_output" 2>&1
+"$runner" --remote-dev-open-resume-picker normal >"$swap_output" 2>&1
 status=$?
 set -e
 unset REMOTE_DEV_TEST_SWAP_TARGET
 [[ "$status" == 2 ]]
 grep -Fq "ERROR: project path changed during launch: $project" "$swap_output"
+[[ ! -e "$REMOTE_DEV_TEST_PICKER_ARGS" ]]
+[[ ! -e "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" ]]
 [[ ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
 [[ ! -e "$REMOTE_DEV_TEST_VENDOR_CWD" ]]
 [[ -L "$project" ]]
 rm -f -- "$project"
 mkdir -p "$project"
+
+# Replace the validated project with another ordinary directory at the exact
+# same pathname after the runner captures device/inode identity but before cd.
+# A pathname/PWD check alone cannot detect this; the identity guard must fail.
+rm -f "$REMOTE_DEV_TEST_PICKER_ARGS" "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" \
+  "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
+replacement_project="$workdir/replacement-project"
+original_project="$workdir/original-project"
+directory_swap_marker="$workdir/directory-swap-marker"
+mkdir -p "$replacement_project"
+export REMOTE_DEV_TEST_DIRECTORY_SWAP=1
+export REMOTE_DEV_TEST_DIRECTORY_SWAP_MARKER="$directory_swap_marker"
+export REMOTE_DEV_TEST_SWAP_PROJECT="$project"
+export REMOTE_DEV_TEST_ORIGINAL_PROJECT="$original_project"
+export REMOTE_DEV_TEST_REPLACEMENT_PROJECT="$replacement_project"
+directory_swap_output="$workdir/directory-swap-output"
+set +e
+PATH="$tool_bin:$PATH" "$runner" --remote-dev-open-resume-picker normal >"$directory_swap_output" 2>&1
+status=$?
+set -e
+unset REMOTE_DEV_TEST_DIRECTORY_SWAP REMOTE_DEV_TEST_DIRECTORY_SWAP_MARKER \
+  REMOTE_DEV_TEST_SWAP_PROJECT REMOTE_DEV_TEST_ORIGINAL_PROJECT \
+  REMOTE_DEV_TEST_REPLACEMENT_PROJECT
+[[ "$status" == 2 ]]
+grep -Fq "ERROR: project path changed during launch: $project" "$directory_swap_output"
+[[ -e "$directory_swap_marker" ]]
+[[ ! -e "$REMOTE_DEV_TEST_PICKER_ARGS" ]]
+[[ ! -e "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" ]]
+[[ ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
+[[ ! -e "$REMOTE_DEV_TEST_VENDOR_CWD" ]]
+[[ -d "$project" && ! -L "$project" ]]
+rm -rf -- "$project"
+mv -- "$original_project" "$project"
 
 set +e
 TMUX_PANE=invalid "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1
@@ -178,7 +231,8 @@ status=$?
 set -e
 [[ "$status" == 2 ]]
 
-rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
+rm -f "$REMOTE_DEV_TEST_PICKER_ARGS" "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" \
+  "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
 export REMOTE_DEV_TEST_PICKER_SNAPSHOT_FAIL=1
 set +e
 "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1
@@ -186,6 +240,7 @@ status=$?
 set -e
 unset REMOTE_DEV_TEST_PICKER_SNAPSHOT_FAIL
 [[ "$status" == 1 ]]
+[[ -e "$REMOTE_DEV_TEST_PICKER_SNAPSHOT" ]]
 [[ ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
 [[ ! -e "$REMOTE_DEV_TEST_VENDOR_CWD" ]]
 [[ "$(wc -l <"$REMOTE_DEV_TEST_HARDENING")" == 3 ]]
