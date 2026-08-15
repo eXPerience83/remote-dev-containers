@@ -18,6 +18,7 @@ github_invocations="$workdir/github-invocations"
 doctor_invocations="$workdir/doctor-invocations"
 shell_invocations="$workdir/shell-invocations"
 hardening_calls="$workdir/hardening-calls"
+list_counter="$workdir/list-projects-counter"
 
 cleanup() {
   rm -rf "$workdir"
@@ -50,10 +51,22 @@ remote_dev_validate_project_name() {
 }
 
 remote_dev_list_projects() {
-  local path name
+  local path name count=0
   if [[ "${REMOTE_DEV_TEST_LIST_PROJECTS_FAIL:-0}" == 1 ]]; then
     echo 'ERROR: synthetic project listing failure' >&2
     return 7
+  fi
+  if [[ -n "${REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL:-}" ]]; then
+    [[ -n "${REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER:-}" ]] || return 8
+    if [[ -f "$REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER" ]]; then
+      read -r count < "$REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER"
+    fi
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER"
+    if [[ "$count" == "$REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL" ]]; then
+      echo 'ERROR: synthetic project listing failure during action' >&2
+      return 7
+    fi
   fi
   for path in "$1"/*; do
     [[ -d "$path" && ! -L "$path" ]] || continue
@@ -433,8 +446,8 @@ run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n12\n' "$output"
 grep -Fxq 'Deleted project: new-project' "$output"
 echo 'Projects menu create/select/delete flow: OK'
 
-# A discovery failure must remain a real menu failure, never degrade into the
-# ordinary zero-project state or permit an agent launch.
+# A discovery failure on initial render must remain a real menu failure, never
+# degrade into the ordinary zero-project state or permit an agent launch.
 export REMOTE_DEV_TEST_LIST_PROJECTS_FAIL=1
 set +e
 run_menu __unset__ $'1\n' "$output"
@@ -445,13 +458,30 @@ unset REMOTE_DEV_TEST_LIST_PROJECTS_FAIL
   echo "ERROR: synthetic project discovery failure returned status $status instead of 7" >&2
   exit 1
 }
-assert_file_lines "$invocations" 'project discovery failure' 
+assert_file_lines "$invocations" 'project discovery failure'
 grep -Fq 'ERROR: synthetic project listing failure' "$output"
 if grep -Fq 'Project: none (create one in Projects...)' "$output"; then
   echo 'ERROR: project discovery failure was presented as an ordinary empty workspace' >&2
   exit 1
 fi
-echo 'Project discovery failures remain fail-closed in the menu: OK'
+echo 'Project discovery failures remain fail-closed during menu render: OK'
+
+# The first render succeeds and persists the sole active project. Fail exactly
+# the second listing, which occurs when Start refreshes that selection. The
+# action must surface the producer error and must not invoke Codex using stale
+# menu-session state.
+rm -f "$list_counter"
+export REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER="$list_counter"
+export REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL=2
+run_menu __unset__ $'1\n\n12\n' "$output"
+unset REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER
+assert_file_lines "$invocations" 'mid-menu project discovery failure'
+grep -Fq 'ERROR: synthetic project listing failure during action' "$output"
+if grep -Fq 'ERROR: no projects are available under' "$output"; then
+  echo 'ERROR: action-time project discovery failure was reinterpreted as zero projects' >&2
+  exit 1
+fi
+echo 'Action-time project discovery failures block stale-project launches: OK'
 
 run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
 assert_file_lines "$shell_invocations" 'Shell login shell' shell
