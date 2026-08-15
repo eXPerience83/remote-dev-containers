@@ -129,6 +129,18 @@ assert_eq alpha "$(remote_dev_list_projects "$workspace")" "project listing afte
 
 echo "Role-neutral project resolver and destructive-operation guards: OK"
 
+case "${REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY:-0}" in
+  0) ;;
+  1)
+    echo "Role-neutral persistent-state boundary checks: skipped for host-safe validation"
+    exit 0
+    ;;
+  *)
+    echo "ERROR: REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
+
 state_root="$test_root/state"
 codex_home="$state_root/codex"
 gh_dir="$state_root/gh"
