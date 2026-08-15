@@ -50,7 +50,10 @@ cat >"$run_codex" <<'CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 pwd >"$REMOTE_DEV_TEST_CODEX_CWD"
-printf '%s\n' "$@" >"$REMOTE_DEV_TEST_CODEX_ARGS"
+: >"$REMOTE_DEV_TEST_CODEX_ARGS"
+if (( $# > 0 )); then
+  printf '%s\n' "$@" >"$REMOTE_DEV_TEST_CODEX_ARGS"
+fi
 CODEX
 
 cat >"$tmux_stub" <<'TMUX'
@@ -151,10 +154,7 @@ run_attach
 [[ "$(<"$REMOTE_DEV_TEST_SESSION_STATUS")" == 0 ]]
 [[ -e "$REMOTE_DEV_TEST_DIRECT_SESSION_MARKER" ]]
 [[ "$(<"$REMOTE_DEV_TEST_CODEX_CWD")" == "$project" ]]
-mapfile -t baseline_args <"$REMOTE_DEV_TEST_CODEX_ARGS"
-[[ "${#baseline_args[@]}" == 2 ]]
-[[ "${baseline_args[0]}" == --cd ]]
-[[ "${baseline_args[1]}" == "$project" ]]
+[[ -e "$REMOTE_DEV_TEST_CODEX_ARGS" && ! -s "$REMOTE_DEV_TEST_CODEX_ARGS" ]]
 
 replacement_project="$workdir/replacement-project"
 original_project="$workdir/original-project"
