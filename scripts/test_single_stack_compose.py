@@ -246,6 +246,10 @@ def validate_direct_project_override(env_path: Path) -> None:
     codex_env = services["codex"]["environment"]
     antigravity_env = services["antigravity"]["environment"]
     require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into generic launcher")
+    require(
+        "project-alpha" not in json.dumps(services["launcher"], sort_keys=True),
+        "project selector value leaked into generic launcher service",
+    )
     require(codex_env.get("REMOTE_DEV_PROJECT") == "project-alpha", "Codex project override missing")
     require(
         antigravity_env.get("REMOTE_DEV_PROJECT") == "project-alpha",
@@ -259,6 +263,10 @@ def validate_direct_project_override(env_path: Path) -> None:
     codex_env = services["codex"]["environment"]
     antigravity_env = services["antigravity"]["environment"]
     require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into TrueNAS launcher")
+    require(
+        "project-alpha" not in json.dumps(services["launcher"], sort_keys=True),
+        "ambient project selector value leaked into TrueNAS launcher service",
+    )
     require(codex_env.get("REMOTE_DEV_PROJECT") == "", "TrueNAS Codex selector must remain YAML-controlled")
     require(
         antigravity_env.get("REMOTE_DEV_PROJECT") == "",
