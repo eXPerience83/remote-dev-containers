@@ -127,7 +127,7 @@ if [[ "$image_version" != "$expected_image_version" ]]; then
   exit 1
 fi
 if [[ "$source_revision" != "$expected_source_revision" ]]; then
-  echo "ERROR: source revision metadata mismatch: expected $expected_source_revision, got $source_revision" >&2
+  echo "ERROR: image version metadata mismatch: expected $expected_source_revision, got $source_revision" >&2
   exit 1
 fi
 
@@ -280,7 +280,10 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
 #!/usr/bin/env bash
 set -euo pipefail
 pwd > "$REMOTE_DEV_TEST_DIRECT_CODEX_CWD"
-printf '%s\n' "$@" > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
+: > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
+if (( $# > 0 )); then
+  printf '%s\n' "$@" > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
+fi
 umask 000
 printf 'token\n' > "$CODEX_HOME/auth.json"
 chmod 0660 "$CODEX_HOME/auth.json"
@@ -344,18 +347,9 @@ FAKE_CODEX
     echo "ERROR: START_MODE=codex did not run from the selected project" >&2
     exit 1
   fi
-  mapfile -t direct_codex_argv < "$direct_codex_args"
-  direct_cd_seen=0
-  for ((index = 0; index + 1 < ${#direct_codex_argv[@]}; index++)); do
-    if [[ "${direct_codex_argv[$index]}" == --cd \
-       && "${direct_codex_argv[$((index + 1))]}" == "$direct_codex_project" ]]; then
-      direct_cd_seen=1
-      break
-    fi
-  done
-  if (( direct_cd_seen != 1 )); then
-    echo "ERROR: START_MODE=codex did not pass --cd with the selected project" >&2
-    printf 'Arguments: %s\n' "${direct_codex_argv[*]}" >&2
+  if [[ ! -e "$direct_codex_args" || -s "$direct_codex_args" ]]; then
+    echo "ERROR: START_MODE=codex reintroduced arguments after the verified cwd entry" >&2
+    printf 'Arguments: %s\n' "$(<"$direct_codex_args" 2>/dev/null || true)" >&2
     exit 1
   fi
 
