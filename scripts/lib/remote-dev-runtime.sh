@@ -105,6 +105,7 @@ remote_dev_list_projects() {
 remote_dev_resolve_project() {
   local workspace="$1"
   local selector="${2:-${REMOTE_DEV_PROJECT:-}}"
+  local listing=""
   local -a projects=()
 
   workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
@@ -114,7 +115,10 @@ remote_dev_resolve_project() {
     return $?
   fi
 
-  mapfile -t projects < <(remote_dev_list_projects "$workspace")
+  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  if [[ -n "$listing" ]]; then
+    mapfile -t projects <<<"$listing"
+  fi
   case "${#projects[@]}" in
     0)
       remote_dev_runtime_error \
