@@ -151,6 +151,9 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(launcher_env.get("REMOTE_DEV_ROLE") == "launcher", f"{path}: launcher role")
     require(codex_env.get("REMOTE_DEV_ROLE") == "codex", f"{path}: Codex role")
     require(antigravity_env.get("REMOTE_DEV_ROLE") == "antigravity", f"{path}: Antigravity role")
+    require("REMOTE_DEV_PROJECT" not in launcher_env, f"{path}: launcher received project selector")
+    require(codex_env.get("REMOTE_DEV_PROJECT") == "", f"{path}: Codex project selector default")
+    require(antigravity_env.get("REMOTE_DEV_PROJECT") == "", f"{path}: Antigravity project selector default")
     require(str(antigravity_env.get("REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY")) == "1", f"{path}: Antigravity gate")
     require(str(antigravity_env.get("AGY_CLI_DISABLE_AUTO_UPDATE")).lower() == "true", f"{path}: auto update")
 
@@ -195,6 +198,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
         "CODEX_HOME",
         "GH_CONFIG_DIR",
         "GIT_CONFIG_GLOBAL",
+        "REMOTE_DEV_PROJECT",
     ):
         require(forbidden not in launcher_text, f"{path}: launcher contains {forbidden}")
 
@@ -231,6 +235,43 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(antigravity.get("container_name") == "antigravity-remote-dev", f"{path}: Antigravity name")
     if path == GENERIC_COMPOSE:
         require(antigravity.get("profiles") == ["antigravity"], f"{path}: Antigravity profile")
+
+
+def validate_direct_project_override(env_path: Path) -> None:
+    override = {"REMOTE_DEV_PROJECT": "project-alpha"}
+
+    rendered = compose_config(GENERIC_COMPOSE, env_path, override)
+    services = rendered["services"]
+    launcher_env = services["launcher"]["environment"]
+    codex_env = services["codex"]["environment"]
+    antigravity_env = services["antigravity"]["environment"]
+    require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into generic launcher")
+    require(
+        "project-alpha" not in json.dumps(services["launcher"], sort_keys=True),
+        "project selector value leaked into generic launcher service",
+    )
+    require(codex_env.get("REMOTE_DEV_PROJECT") == "project-alpha", "Codex project override missing")
+    require(
+        antigravity_env.get("REMOTE_DEV_PROJECT") == "project-alpha",
+        "Antigravity project override missing",
+    )
+
+    # The TrueNAS reference YAML is edited directly; ambient/.env overrides must not rewrite its literal selector.
+    rendered = compose_config(TRUENAS_COMPOSE, env_path, override)
+    services = rendered["services"]
+    launcher_env = services["launcher"]["environment"]
+    codex_env = services["codex"]["environment"]
+    antigravity_env = services["antigravity"]["environment"]
+    require("REMOTE_DEV_PROJECT" not in launcher_env, "project selector leaked into TrueNAS launcher")
+    require(
+        "project-alpha" not in json.dumps(services["launcher"], sort_keys=True),
+        "ambient project selector value leaked into TrueNAS launcher service",
+    )
+    require(codex_env.get("REMOTE_DEV_PROJECT") == "", "TrueNAS Codex selector must remain YAML-controlled")
+    require(
+        antigravity_env.get("REMOTE_DEV_PROJECT") == "",
+        "TrueNAS Antigravity selector must remain YAML-controlled",
+    )
 
 
 def validate_auth_override_separation(env_path: Path) -> None:
@@ -274,8 +315,9 @@ def main() -> int:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
             validate(path, compose_config(path, env_path))
+        validate_direct_project_override(env_path)
         validate_auth_override_separation(env_path)
-    print("Single-stack image, socket, launcher and credential boundaries: OK")
+    print("Single-stack image, socket, launcher, credential and project-selector boundaries: OK")
     return 0
 
 

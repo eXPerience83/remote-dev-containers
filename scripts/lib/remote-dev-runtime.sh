@@ -9,6 +9,181 @@ remote_dev_runtime_error() {
   printf 'ERROR: %s\n' "$*" >&2
 }
 
+remote_dev_validate_workspace_root() {
+  local workspace="$1"
+  local current=""
+  local previous=""
+
+  if [[ -z "$workspace" || "$workspace" != /* || "$workspace" == //* \
+     || "$workspace" == *'//'* \
+     || ( "$workspace" != / && "$workspace" == */ ) \
+     || "$workspace" == *[[:cntrl:]]* \
+     || "$workspace" == *'/../'* || "$workspace" == */.. \
+     || "$workspace" == *'/./'* || "$workspace" == */. ]]; then
+    remote_dev_runtime_error "WORKSPACE must be a safe absolute path"
+    return 2
+  fi
+
+  case "$workspace" in
+    /|/root|/home|/opt|/usr|/usr/local|/etc|/var|/tmp)
+      remote_dev_runtime_error "WORKSPACE is too broad: $workspace"
+      return 2
+      ;;
+  esac
+
+  if [[ ! -d "$workspace" ]]; then
+    remote_dev_runtime_error "WORKSPACE does not exist: $workspace"
+    return 2
+  fi
+
+  current="$workspace"
+  while [[ "$current" != / && "$current" != "$previous" ]]; do
+    if [[ -L "$current" ]]; then
+      remote_dev_runtime_error "WORKSPACE contains a symlinked path component: $current"
+      return 2
+    fi
+    previous="$current"
+    current="$(dirname "$current")"
+  done
+
+  printf '%s\n' "$workspace"
+}
+
+remote_dev_workspace_root() {
+  remote_dev_validate_workspace_root "${WORKSPACE:-/workspace}"
+}
+
+remote_dev_validate_project_name() {
+  local name="$1"
+
+  if (( ${#name} == 0 || ${#name} > 128 )) \
+     || [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    remote_dev_runtime_error \
+      "invalid project name: use 1-128 ASCII letters/digits plus '.', '_' or '-', starting with a letter or digit"
+    return 2
+  fi
+
+  printf '%s\n' "$name"
+}
+
+remote_dev_project_path() {
+  local workspace="$1"
+  local name="$2"
+  local project=""
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  remote_dev_validate_project_name "$name" >/dev/null || return $?
+  project="$workspace/$name"
+
+  if [[ ! -d "$project" ]]; then
+    remote_dev_runtime_error "project does not exist: $name"
+    return 2
+  fi
+  if [[ -L "$project" ]]; then
+    remote_dev_runtime_error "project must not be a symlink: $name"
+    return 2
+  fi
+
+  printf '%s\n' "$project"
+}
+
+remote_dev_list_projects() {
+  local workspace="$1"
+  local path=""
+  local name=""
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+
+  for path in "$workspace"/*; do
+    [[ -d "$path" && ! -L "$path" ]] || continue
+    name="${path##*/}"
+    remote_dev_validate_project_name "$name" >/dev/null 2>&1 || continue
+    printf '%s\n' "$name"
+  done | LC_ALL=C sort
+}
+
+remote_dev_resolve_project() {
+  local workspace="$1"
+  local selector="${2:-${REMOTE_DEV_PROJECT:-}}"
+  local listing=""
+  local -a projects=()
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+
+  if [[ -n "$selector" ]]; then
+    remote_dev_project_path "$workspace" "$selector"
+    return $?
+  fi
+
+  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  if [[ -n "$listing" ]]; then
+    mapfile -t projects <<<"$listing"
+  fi
+  case "${#projects[@]}" in
+    0)
+      remote_dev_runtime_error \
+        "no project directories found under $workspace; create a project before starting an agent"
+      return 2
+      ;;
+    1)
+      remote_dev_project_path "$workspace" "${projects[0]}"
+      ;;
+    *)
+      remote_dev_runtime_error \
+        "multiple projects found under $workspace; select one in the Projects menu or set REMOTE_DEV_PROJECT to one project name"
+      return 2
+      ;;
+  esac
+}
+
+remote_dev_create_project() {
+  local workspace="$1"
+  local name="$2"
+  local project=""
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  remote_dev_validate_project_name "$name" >/dev/null || return $?
+  project="$workspace/$name"
+
+  if [[ -e "$project" || -L "$project" ]]; then
+    remote_dev_runtime_error "project path already exists: $name"
+    return 2
+  fi
+
+  if ! mkdir -- "$project"; then
+    remote_dev_runtime_error "failed to create project: $name"
+    return 1
+  fi
+
+  printf '%s\n' "$project"
+}
+
+remote_dev_delete_project() {
+  local workspace="$1"
+  local name="$2"
+  local confirmation="$3"
+  local project=""
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  remote_dev_validate_project_name "$name" >/dev/null || return $?
+
+  if [[ "$confirmation" != "$name" ]]; then
+    remote_dev_runtime_error "project deletion confirmation did not match the exact project name"
+    return 2
+  fi
+
+  project="$(remote_dev_project_path "$workspace" "$name")" || return $?
+  if ! rm -rf -- "$project"; then
+    remote_dev_runtime_error "failed to delete project: $name"
+    return 1
+  fi
+
+  if [[ -e "$project" || -L "$project" ]]; then
+    remote_dev_runtime_error "project deletion did not remove the expected path: $name"
+    return 1
+  fi
+}
+
 remote_dev_antigravity_experimental_enabled() {
   [[ "${REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY:-0}" == 1 ]]
 }

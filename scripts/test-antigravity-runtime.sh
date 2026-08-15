@@ -106,7 +106,7 @@ export REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1
 
 reset_runtime() {
   rm -rf -- "$temporary/runtime"
-  mkdir -p "$temporary/runtime/workspace"
+  mkdir -p "$temporary/runtime/workspace/project"
   EVIDENCE="$temporary/runtime/evidence.json"
   BIN_DIR="$temporary/runtime/bin"
   BINARY="$BIN_DIR/agy"
@@ -114,6 +114,7 @@ reset_runtime() {
   MANIFEST="$STATE_DIR/install.json"
   VENDOR_STATE_DIR="$temporary/runtime/vendor"
   export WORKSPACE="$temporary/runtime/workspace"
+  export REMOTE_DEV_PROJECT=project
   {
     printf 'readonly ANTIGRAVITY_EVIDENCE=%q\n' "$EVIDENCE"
     printf 'readonly ANTIGRAVITY_BIN_DIR=%q\n' "$BIN_DIR"
@@ -141,6 +142,9 @@ case "\${1:-}" in
     fi
     if [[ -n "\${REMOTE_DEV_TEST_AUTO_UPDATE_FILE:-}" ]]; then
       printf '%s\\n' "\${AGY_CLI_DISABLE_AUTO_UPDATE:-unset}" >"\$REMOTE_DEV_TEST_AUTO_UPDATE_FILE"
+    fi
+    if [[ -n "\${REMOTE_DEV_TEST_CWD_FILE:-}" ]]; then
+      pwd >"\$REMOTE_DEV_TEST_CWD_FILE"
     fi
     exit "\${REMOTE_DEV_TEST_EXIT_CODE:-0}"
     ;;
@@ -270,10 +274,12 @@ test "$(jq -r '.schema_version' "$MANIFEST")" = 2 || fail "new install did not w
 test "$(bash "$MANAGER" status --menu)" = 'Antigravity: 1.0.0 (official and reviewed)' \
   || fail "reviewed status is incorrect"
 
-# The launcher preserves literal arguments, disables vendor self-update and preserves exit status.
+# The launcher preserves literal arguments, disables vendor self-update, uses the
+# selected project working directory and preserves exit status.
 export REMOTE_DEV_TEST_SECURE_MARKER="$temporary/secure-called"
 export REMOTE_DEV_TEST_ARGS_FILE="$temporary/args.log"
 export REMOTE_DEV_TEST_AUTO_UPDATE_FILE="$temporary/auto-update.log"
+export REMOTE_DEV_TEST_CWD_FILE="$temporary/cwd.log"
 export REMOTE_DEV_TEST_EXIT_CODE=0
 pwned="$temporary/pwned"
 bash "$RUNNER" 'literal space' "\$(touch $pwned)" ';echo injected'
@@ -284,6 +290,7 @@ test "${recorded_args[0]}" = 'literal space' || fail "runner changed argument on
 test "${recorded_args[1]}" = "\$(touch $pwned)" || fail "runner changed argument two"
 test "${recorded_args[2]}" = ';echo injected' || fail "runner changed argument three"
 test "$(<"$REMOTE_DEV_TEST_AUTO_UPDATE_FILE")" = true || fail "runner did not disable auto-update"
+test "$(<"$REMOTE_DEV_TEST_CWD_FILE")" = "$WORKSPACE/project" || fail "runner did not use selected project cwd"
 export REMOTE_DEV_TEST_EXIT_CODE=23
 runner_status=0
 bash "$RUNNER" >/dev/null 2>&1 || runner_status=$?

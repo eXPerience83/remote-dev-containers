@@ -77,8 +77,83 @@ assert_eq antigravity "$(remote_dev_default_tmux_session antigravity)" "Antigrav
 assert_eq remote-dev-shell "$(remote_dev_default_tmux_session shell)" "shell role session"
 assert_fails_with 2 "does not use tmux" remote_dev_default_tmux_session launcher
 
-state_root="$(mktemp -d)"
-trap 'rm -rf "$state_root"' EXIT
+test_root="$(mktemp -d)"
+trap 'rm -rf "$test_root"' EXIT
+workspace="$test_root/workspace"
+mkdir -p "$workspace"
+
+assert_eq "$workspace" "$(WORKSPACE="$workspace" remote_dev_workspace_root)" "workspace root"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root ../workspace
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$workspace/"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root//workspace"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root/"$'workspace\tcontrol'
+assert_fails_with 2 "too broad" remote_dev_validate_workspace_root /
+ln -s "$workspace" "$test_root/workspace-link"
+assert_fails_with 2 "symlinked path component" remote_dev_validate_workspace_root "$test_root/workspace-link"
+assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root/workspace-link/"
+
+for invalid_name in '' '.hidden' '..' '../escape' 'nested/name' '-option' 'with space' $'line\nbreak'; do
+  assert_fails_with 2 "invalid project name" remote_dev_validate_project_name "$invalid_name"
+done
+assert_eq pollenlevels "$(remote_dev_validate_project_name pollenlevels)" "valid project name"
+assert_eq repo.v2_test-1 "$(remote_dev_validate_project_name repo.v2_test-1)" "valid punctuation project name"
+
+assert_fails_with 2 "no project directories" remote_dev_resolve_project "$workspace"
+alpha_path="$(remote_dev_create_project "$workspace" alpha)"
+assert_eq "$workspace/alpha" "$alpha_path" "created project path"
+assert_eq alpha "$(remote_dev_list_projects "$workspace")" "single project listing"
+assert_eq "$workspace/alpha" "$(remote_dev_resolve_project "$workspace")" "single project auto-resolution"
+assert_fails_with 2 "already exists" remote_dev_create_project "$workspace" alpha
+
+beta_path="$(remote_dev_create_project "$workspace" beta)"
+assert_eq "$workspace/beta" "$beta_path" "second created project path"
+assert_eq $'alpha\nbeta' "$(remote_dev_list_projects "$workspace")" "sorted project listing"
+assert_fails_with 2 "multiple projects found" remote_dev_resolve_project "$workspace"
+assert_eq "$workspace/beta" "$(remote_dev_resolve_project "$workspace" beta)" "explicit project resolution"
+assert_eq "$workspace/alpha" "$(REMOTE_DEV_PROJECT=alpha remote_dev_resolve_project "$workspace")" "environment project resolution"
+assert_fails_with 2 "project does not exist" remote_dev_resolve_project "$workspace" missing
+
+mkdir "$workspace/.hidden-manual" "$workspace/with space"
+ln -s "$workspace/alpha" "$workspace/linked"
+assert_eq $'alpha\nbeta' "$(remote_dev_list_projects "$workspace")" "invalid and symlink entries excluded"
+assert_fails_with 2 "must not be a symlink" remote_dev_project_path "$workspace" linked
+
+printf 'keep\n' > "$workspace/alpha/keep.txt"
+printf 'delete\n' > "$workspace/beta/delete.txt"
+assert_fails_with 2 "confirmation did not match" remote_dev_delete_project "$workspace" beta wrong
+[[ -f "$workspace/beta/delete.txt" ]] || { echo "ERROR: wrong confirmation deleted project contents" >&2; exit 1; }
+remote_dev_delete_project "$workspace" beta beta
+[[ ! -e "$workspace/beta" ]] || { echo "ERROR: confirmed project deletion left project path" >&2; exit 1; }
+[[ -f "$workspace/alpha/keep.txt" ]] || { echo "ERROR: project deletion modified sibling project" >&2; exit 1; }
+assert_eq alpha "$(remote_dev_list_projects "$workspace")" "project listing after deletion"
+
+# The resolver must preserve the producer's failure status rather than letting
+# mapfile/process substitution reinterpret a failed listing as zero projects.
+assert_fails_with 7 "synthetic project listing failure" \
+  bash -c '
+    source "$1"
+    remote_dev_list_projects() {
+      echo "ERROR: synthetic project listing failure" >&2
+      return 7
+    }
+    remote_dev_resolve_project "$2"
+  ' _ "$runtime_lib" "$workspace"
+
+echo "Role-neutral project resolver and destructive-operation guards: OK"
+
+case "${REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY:-0}" in
+  0) ;;
+  1)
+    echo "Role-neutral persistent-state boundary checks: skipped for host-safe validation"
+    exit 0
+    ;;
+  *)
+    echo "ERROR: REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
+
+state_root="$test_root/state"
 codex_home="$state_root/codex"
 gh_dir="$state_root/gh"
 git_dir="$state_root/git"

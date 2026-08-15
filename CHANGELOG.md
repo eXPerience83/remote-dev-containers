@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
 - Antigravity menu action that opens the full interactive `/resume` conversation picker, matching the Codex start/resume workflow without adding a latest-session-only shortcut.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
+- Role-neutral project discovery and management below each private agent `/workspace`, including select/create/delete menu actions, exact-name destructive confirmation and bounded direct-mode selection through `REMOTE_DEV_PROJECT`.
 
 ### Changed
 
@@ -83,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
+- Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status; real TrueNAS Antigravity project/session validation remains deferred to #131. Shell mode remains at the collection root.
 
 ### Security
 
@@ -101,7 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The supported TrueNAS security boundary is each outer container; the inner Codex sandbox is disabled explicitly in both autonomous and guarded modes.
 - Autonomous mode can act on all state mounted into Codex without confirmations; guarded prompts add friction but are not a sandbox or a substitute for narrow mounts.
 - The Codex command launcher rejects arbitrary sandbox/approval flags, dangerous aliases, relevant config overrides and invalid project-owned mode values before Codex starts.
-- Public availability does not change the warning against exposing ports 7680 or 7681 directly to the Internet.
+- Public availability does not change the warning against exposing ports 7680, 7681 or 7682 directly to the Internet.
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
 - The Ubuntu base image is pinned to an immutable OCI digest.
 - Downloaded Codex, GitHub CLI, ttyd and mise assets are verified against repository-controlled architecture-specific SHA-256 values.
@@ -110,4 +112,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
+- Project selection is a working-directory contract, not an intra-service filesystem sandbox: the full role-private `/workspace` mount remains accessible to processes in that agent container, including sibling projects.
+- Project names/selectors are constrained to direct non-symlink children of the validated role workspace; create/delete cannot target arbitrary paths, and recursive deletion requires exact project-name confirmation.
 - Remote Dev-managed Context7 API keys are kept out of Codex TOML, arguments and diagnostics, stored only in restrictive Codex-private state, and injected only into the Codex process for a healthy Remote Dev-managed integration; unmanaged Context7 configuration is never overwritten and passive lifecycle/status paths do not contact the external service.

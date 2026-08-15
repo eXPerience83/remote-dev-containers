@@ -3,7 +3,7 @@
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose either web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+> **Active development / experimental.** There is no stable release yet. The public `edge` images may change or break without notice and have not completed the full TrueNAS, security or persistence validation checklist. Do not expose any web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
 
 ## Goal
 
@@ -11,11 +11,12 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 
 ## Current implementation
 
-The current edge stack is the Codex reference implementation:
+The current edge stack is the Codex reference implementation, with Antigravity available only as an explicitly enabled experimental role:
 
-- one Remote Dev image reused by the launcher and Codex services;
+- one Remote Dev image reused by the launcher, Codex and optional Antigravity services;
 - one stateless launcher as the normal browser entry point, without authentication by default;
 - one isolated, independently authenticated Codex terminal service with private role-scoped mounts;
+- an optional isolated Antigravity terminal service using its own private role state and an explicitly installed vendor runtime;
 - shared lightweight Ubuntu 26.04 LTS base;
 - root runtime for predictable tool permissions;
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime-update path with the bundled CLI retained as fallback;
@@ -24,6 +25,7 @@ The current edge stack is the Codex reference implementation:
 - browser terminal through ttyd;
 - persistent sessions through tmux;
 - one canonical role-neutral persistent-data contract;
+- role-neutral project selection below each private `/workspace` mount so agents launch from a concrete project rather than the collection root;
 - AMD64 first.
 
 ### Role-neutral entrypoints
@@ -43,10 +45,11 @@ Implemented roles are:
 ```dotenv
 REMOTE_DEV_ROLE=launcher
 # or: codex
+# or: antigravity
 # or: shell
 ```
 
-`antigravity` and `claude` remain reserved and fail clearly because they are not implemented. They never trigger an implicit download.
+`antigravity` is implemented as an **experimental optional role** and remains behind explicit enablement; its real project/session Start/Resume validation is deferred to issue #131. Its vendor runtime is installed only by explicit user action and normal startup never downloads it implicitly. `claude` remains reserved and unimplemented.
 
 The neutral direct-start selector accepts `menu`, `agent` or `shell` for agent-role services:
 
@@ -56,25 +59,46 @@ REMOTE_DEV_START_MODE=menu
 
 The launcher accepts only `menu`. The existing `START_MODE=menu|codex|shell` setting remains compatible for Codex and shell deployments; legacy `codex` maps to neutral `agent`. Unknown roles and modes are rejected without evaluating editable shell fragments.
 
+### Project-scoped workspaces
+
+`/workspace` is the private **project collection root** for the current agent service. Normal agent sessions run from one validated direct child such as `/workspace/pollenlevels`; `/workspace` itself is not treated as an implicit repository.
+
+The agent menu exposes **Projects...** with actions to select, create or delete direct child project directories. Project discovery is intentionally non-recursive. If exactly one valid project exists it is selected automatically; if several exist, choose one before Start/Resume. The current selection lasts only for that menu/tmux session.
+
+Project creation makes an empty direct child directory only. It does not run `git init`, clone a repository or contact a remote service. Deletion is destructive and requires typing the exact project name before the entire directory is removed. Project names are restricted to one conservative path component: ASCII letters/digits plus `.`, `_` and `-`, starting with a letter or digit. Symlink project entries and path traversal are rejected.
+
+For direct `REMOTE_DEV_START_MODE=agent`, set a validated project name when more than one project exists:
+
+```dotenv
+REMOTE_DEV_PROJECT=pollenlevels
+```
+
+With no explicit selector, direct agent mode auto-resolves exactly one project and otherwise fails clearly instead of starting at `/workspace`. General shell mode continues to open at the collection root.
+
+Selecting a project sets the agent's default working directory; it is **not** a filesystem isolation boundary. The complete role-private `/workspace` mount remains available inside that agent container, so sibling projects can still be accessed by processes running there. Use separate role services or mounts if filesystem isolation between those projects is required.
+
+Each agent service still owns a separate writable workspace mount. Shared project-management code does **not** share a checkout between Codex, Antigravity or future roles. Use independent clones/worktrees when the same logical repository is needed by more than one agent; do not mount one writable checkout into several agent services by default.
+
 ### Single-stack launcher
 
-The generic and TrueNAS Compose files start two services from the same `REMOTE_DEV_IMAGE` reference:
+The generic and TrueNAS Compose files use the same `REMOTE_DEV_IMAGE` reference for the launcher and Codex services and for the optional Antigravity service when it is enabled:
 
 ```text
 Remote Dev stack
-├── launcher  → primary browser port 7680
-└── codex     → authenticated terminal port 7681
+├── launcher      → primary browser port 7680
+├── codex         → authenticated terminal port 7681
+└── antigravity   → optional experimental authenticated terminal port 7682
 ```
 
-The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and one fixed link for the built-in Codex service.
+The launcher is navigation only and has no authentication by default. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy. It shows the embedded image/source identity and only fixed links for services enabled by the reviewed stack configuration.
 
-Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password.
+Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password. When experimental Antigravity is enabled, its terminal remains a separate independently authenticated endpoint with its own role-private workspace and state.
 
 The Codex endpoint authenticates independently with its own password source. Credentials are not embedded in the link, passed through the launcher or shared between services.
 
 Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
 
-Configured launcher and Codex paths are restricted to safe URL-path characters before they are placed into the page. Antigravity/Claude services and a one-origin reverse proxy remain outside the current implementation.
+Configured launcher and agent paths are restricted to safe URL-path characters before they are placed into the page. Antigravity remains experimental and its real project/session behavior is tracked in #131; Claude and a one-origin reverse proxy remain outside the current implementation.
 
 ### Codex approval modes
 
@@ -88,13 +112,13 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` is the default and maps to `--ask-for-approval never`.
 - `guarded` maps to `--ask-for-approval untrusted`.
 
-The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. That selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
+The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. Start and Resume pass the selected project to Codex with its working-directory option, so Codex starts in `/workspace/<project>` and uses it as the default working directory for repository discovery and `AGENTS.md` lookup. This working-directory selection does not restrict filesystem access to that child; sibling projects under the same mounted `/workspace` remain reachable. The approval selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
 
 The equivalent command-line interface is:
 
 ```bash
-run-codex --approval-mode autonomous
-run-codex --approval-mode guarded resume
+run-codex --cd /workspace/pollenlevels --approval-mode autonomous
+run-codex --cd /workspace/pollenlevels --approval-mode guarded resume
 run-codex --print-policy
 ```
 
@@ -134,6 +158,7 @@ Paths are resolved relative to `compose/docker-compose.yml`. The canonical layou
 REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
+│       └── <project>/
 ├── state/
 │   └── codex/
 │       ├── agent/
@@ -146,11 +171,11 @@ REMOTE_DEV_DATA_ROOT/
         └── web_password.txt
 ```
 
-The Codex service mounts only the corresponding child paths. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
-There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`.
+There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
 ## Licenses and optional vendor software
 
@@ -188,7 +213,7 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 ```bash
 cp .env.example .env
 mkdir -p \
-  data/workspaces/codex \
+  data/workspaces/codex/example-project \
   data/state/codex/{agent,runtime,gh,git,ssh} \
   data/secrets/codex
 printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
@@ -197,7 +222,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-For a custom root, run `make preflight DATA_ROOT=/absolute/host/path` before deployment.
+For a custom root, set `REMOTE_DEV_DATA_ROOT=/absolute/host/path` in `.env` and run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.
 
 Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
@@ -207,12 +232,13 @@ docker compose -f compose/docker-compose.yml up -d
 
 Open the launcher at published port `7680` and select Codex. The browser then opens the independently authenticated terminal on published port `7681`. Inside the Codex menu you can:
 
-1. start Codex or resume a saved session with the configured deployment mode;
-2. select autonomous or guarded for the next start/resume only;
-3. explicitly update or remove the optional official Codex runtime while retaining the bundled fallback;
-4. use Codex device-code login;
-5. use GitHub CLI login;
-6. run diagnostics.
+1. select, create or explicitly-confirm-delete projects below `/workspace`;
+2. start Codex or resume a saved session in the selected project with the configured deployment mode;
+3. select autonomous or guarded for the next start/resume only;
+4. explicitly update or remove the optional official Codex runtime while retaining the bundled fallback;
+5. use Codex device-code login;
+6. use GitHub CLI login;
+7. run diagnostics.
 
 To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
 
@@ -278,12 +304,15 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 ## Important warnings
 
-- Do not publish ports 7680 or 7681 directly to the Internet.
+- Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - The unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale address.
 - The Codex terminal remains independently authenticated.
 - The launcher never embeds or forwards the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces, credentials or optional runtime state into the launcher.
+- Selecting a project changes the agent working directory; it does not isolate that project from sibling directories mounted under the same `/workspace`.
+- Do not share one writable project checkout between agent services by default; use separate clones/worktrees.
+- Project deletion removes the complete selected `/workspace/<project>` directory after exact-name confirmation; commit or back up anything that must be retained first.
 - Do not mount the Docker socket.
 - Do not use privileged mode.
 - The default Codex command launcher disables the inner sandbox explicitly; the outer Codex container is the supported isolation boundary.

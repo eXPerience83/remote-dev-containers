@@ -26,15 +26,27 @@ case "$start_mode" in
     session_command=/usr/local/bin/remote-dev-menu
     ;;
   agent)
-    printf -v quoted_workspace '%q' "$workspace"
+    project="$(remote_dev_resolve_project "$workspace")" || exit $?
+    project_name="${project##*/}"
+    printf -v quoted_project '%q' "$project"
     case "$role" in
       codex)
+        project_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+          echo "ERROR: project path changed during direct launch: $project" >&2
+          exit 2
+        }
+        printf -v quoted_project_identity '%q' "$project_identity"
         printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
-        session_command="cd $quoted_workspace && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary"
+        printf -v quoted_project_error '%q' "ERROR: project path changed during direct launch: $project"
+        # Direct mode inherits the already verified cwd. Do not pass the mutable
+        # project pathname back through --cd after the identity check, because
+        # that would make Codex resolve the pathname again and reopen the race.
+        session_command="if cd -P $quoted_project && [ \"\$PWD\" = $quoted_project ] && [ \"\$(stat -Lc '%d:%i' -- . 2>/dev/null)\" = $quoted_project_identity ]; then exec /usr/local/bin/run-direct-session $quoted_run_codex_binary; else printf '%s\\n' $quoted_project_error >&2; exit 2; fi"
         ;;
       antigravity)
         printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
-        session_command="cd $quoted_workspace && exec $quoted_run_antigravity_binary"
+        printf -v quoted_project_name '%q' "$project_name"
+        session_command="exec env REMOTE_DEV_PROJECT=$quoted_project_name $quoted_run_antigravity_binary"
         ;;
       *)
         echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2

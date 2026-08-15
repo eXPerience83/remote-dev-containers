@@ -3,7 +3,7 @@
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]
-> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso y aún no han completado toda la validación de TrueNAS, seguridad y persistencia. No expongas ninguno de los dos puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
+> **Desarrollo activo / experimental.** Todavía no existe una versión estable. Las imágenes públicas `edge` pueden cambiar o romperse sin previo aviso y aún no han completado toda la validación de TrueNAS, seguridad y persistencia. No expongas ningún puerto web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
 
 ## Objetivo
 
@@ -11,20 +11,23 @@ Mantener las herramientas, los repositorios y los agentes de programación en un
 
 ## Implementación actual
 
-El stack edge actual utiliza una única imagen de Remote Dev para dos servicios:
+El stack edge actual mantiene Codex como implementación de referencia y permite Antigravity únicamente como rol experimental habilitado de forma explícita:
 
 ```text
 Stack Remote Dev
-├── launcher  → puerto principal 7680
-└── codex     → terminal autenticado 7681
+├── launcher      → puerto principal 7680
+├── codex         → terminal autenticado 7681
+└── antigravity   → terminal autenticado experimental opcional 7682
 ```
 
 - El launcher es la entrada normal desde el navegador y no requiere contraseña por defecto.
 - Codex se ejecuta en su propio contenedor con montajes privados y separados por rol.
-- Docker reutiliza la misma imagen y sus mismas capas para ambos servicios.
-- El terminal Codex conserva su propia autenticación independiente.
+- Antigravity puede ejecutarse en un contenedor opcional separado, con workspace/estado privados y un runtime del proveedor instalado solo mediante una acción explícita.
+- Docker reutiliza la misma imagen y sus mismas capas para todos los servicios habilitados.
+- Cada terminal de agente conserva su propia autenticación independiente.
 - La imagen incluye Ubuntu 26.04 LTS, Codex CLI fijado y verificado, más una ruta explícita y opcional para instalar un runtime oficial más nuevo manteniendo el Codex incluido como fallback, además de GitHub CLI, Python 3.14, Node 24, uv, mise, ttyd y tmux.
 - La persistencia utiliza un único contrato canónico y neutral.
+- Los agentes seleccionan un proyecto concreto por debajo de su `/workspace` privado en lugar de arrancar en la raíz que agrupa los proyectos.
 - AMD64 continúa siendo la arquitectura inicial.
 
 ### Puntos de entrada y roles
@@ -44,24 +47,45 @@ Los roles implementados son:
 ```dotenv
 REMOTE_DEV_ROLE=launcher
 # o: codex
+# o: antigravity
 # o: shell
 ```
 
-`antigravity` y `claude` siguen reservados y fallan de forma clara. Nunca provocan una descarga implícita.
+`antigravity` está implementado como **rol opcional experimental** y continúa detrás de una habilitación explícita; la validación real de Start/Resume por proyecto y sesión queda aplazada al issue #131. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
 
 El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOTE_DEV_START_MODE=menu|agent|shell` y la compatibilidad existente con `START_MODE=menu|codex|shell`.
+
+### Workspaces y proyectos
+
+`/workspace` es la **raíz privada que agrupa proyectos** del servicio de agente actual. Las sesiones normales del agente se ejecutan desde un hijo directo validado, por ejemplo `/workspace/pollenlevels`; `/workspace` ya no se trata implícitamente como si fuera un repositorio.
+
+El menú del agente ofrece **Projects...** con acciones para seleccionar, crear o eliminar directorios de proyecto. La detección es deliberadamente no recursiva. Si existe exactamente un proyecto válido se selecciona automáticamente; si hay varios, debes elegir uno antes de Start/Resume. La selección actual dura únicamente durante esa sesión de menú/tmux.
+
+Crear un proyecto solo crea un directorio hijo vacío. No ejecuta `git init`, no clona repositorios y no contacta con servicios remotos. El borrado es destructivo y exige escribir el nombre exacto del proyecto antes de eliminar todo el directorio. Los nombres se limitan a un único componente conservador: letras/dígitos ASCII y `.`, `_` o `-`, empezando por una letra o un dígito. Se rechazan enlaces simbólicos y rutas con traversal.
+
+Para `REMOTE_DEV_START_MODE=agent` directo, indica un nombre de proyecto validado cuando exista más de uno:
+
+```dotenv
+REMOTE_DEV_PROJECT=pollenlevels
+```
+
+Sin selector explícito, el modo directo resuelve automáticamente un único proyecto y falla de forma clara si no hay ninguno o hay varios, en vez de arrancar en `/workspace`. El modo shell general continúa abriéndose en la raíz que agrupa proyectos.
+
+Seleccionar un proyecto fija el directorio de trabajo predeterminado del agente; **no** crea un límite de aislamiento del sistema de archivos. Todo el montaje `/workspace` privado de ese rol sigue disponible dentro del contenedor del agente, por lo que los procesos que se ejecuten allí pueden acceder también a proyectos hermanos. Si necesitas aislamiento entre esos proyectos, utiliza servicios de rol o montajes separados.
+
+Cada servicio de agente conserva su propio montaje de workspace escribible. Que el gestor de proyectos sea común **no** significa compartir el mismo checkout entre Codex, Antigravity u otros roles futuros. Si el mismo repositorio lógico debe usarse desde varios agentes, utiliza clones/worktrees independientes; no montes por defecto un único checkout escribible en varios servicios.
 
 ### Funcionamiento del launcher
 
 La página del launcher no requiere autenticación por defecto porque es navegación sin estado: no contiene credenciales, no actúa como proxy y no monta datos privados de los agentes. Mantiene la comprobación de origen cuando el navegador envía la cabecera `Origin` y aplica una política CSP restrictiva.
 
-Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal.
+Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal. Cuando se habilita Antigravity experimental, su terminal continúa siendo un endpoint independiente con autenticación, workspace y estado propios.
 
 El terminal Codex se autentica de manera independiente mediante su propia fuente de contraseña. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
 
 La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante el override separado y respaldado por secreto `compose/launcher-auth.yml`. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña, secreto, mount ni dataset del launcher.
 
-Las rutas configuradas se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity/Claude y un proxy de origen único siguen fuera de la implementación actual.
+Las rutas configuradas del launcher y de los agentes se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity sigue siendo experimental y su comportamiento real de proyectos/sesiones se valida en #131; Claude y un proxy de origen único siguen fuera de la implementación actual.
 
 ### Modos de aprobación de Codex
 
@@ -73,13 +97,13 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
 - `guarded` se traduce a `--ask-for-approval untrusted`.
 
-El menú separa **Start Codex** y **Resume a Codex session** y añade **Approval mode for next launch**. Ese selector permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
+El menú separa **Start Codex** y **Resume a Codex session**, añade **Projects...** y mantiene **Approval mode for next launch**. Start y Resume pasan a Codex el proyecto seleccionado como directorio de trabajo, de modo que Codex arranca en `/workspace/<proyecto>` y lo utiliza como directorio predeterminado para detectar el repositorio y localizar `AGENTS.md`. Esta selección del directorio de trabajo no restringe el acceso al sistema de archivos a ese hijo; los proyectos hermanos del mismo `/workspace` montado siguen siendo accesibles. El selector de aprobación permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
 
 La interfaz equivalente es:
 
 ```bash
-run-codex --approval-mode autonomous
-run-codex --approval-mode guarded resume
+run-codex --cd /workspace/pollenlevels --approval-mode autonomous
+run-codex --cd /workspace/pollenlevels --approval-mode guarded resume
 run-codex --print-policy
 ```
 
@@ -117,6 +141,7 @@ Las rutas se resuelven respecto a `compose/docker-compose.yml`. La estructura ca
 REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
+│       └── <proyecto>/
 ├── state/
 │   └── codex/
 │       ├── agent/
@@ -129,11 +154,11 @@ REMOTE_DEV_DATA_ROOT/
         └── web_password.txt
 ```
 
-El servicio Codex monta exclusivamente esos directorios hijo. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
+El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
 Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
-No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`.
+No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 
 ## Licencias y software opcional
 
@@ -152,7 +177,7 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 ```bash
 cp .env.example .env
 mkdir -p \
-  data/workspaces/codex \
+  data/workspaces/codex/proyecto-ejemplo \
   data/state/codex/{agent,runtime,gh,git,ssh} \
   data/secrets/codex
 printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
@@ -161,7 +186,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-Para una raíz personalizada, ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar.
+Para una raíz personalizada, define `REMOTE_DEV_DATA_ROOT=/ruta/absoluta/del/host` en `.env` y ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar. También puedes dejar inicialmente vacía `data/workspaces/codex` y crear el primer proyecto desde **Projects...** después de arrancar el servicio.
 
 Define `REMOTE_DEV_IMAGE=remote-dev:local` y el modo de aprobación deseado, y ejecuta:
 
@@ -172,7 +197,8 @@ docker compose -f compose/docker-compose.yml up -d
 1. Abre el launcher en el puerto publicado `7680`.
 2. Pulsa Codex.
 3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
-4. Desde el menú inicia o reanuda con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional de Codex manteniendo el fallback incluido, inicia sesión en Codex y GitHub y ejecuta diagnósticos.
+4. Desde **Projects...** selecciona o crea el proyecto con el que quieres trabajar; el borrado exige escribir su nombre exacto.
+5. Inicia o reanuda Codex dentro de ese proyecto con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional manteniendo el fallback incluido, inicia sesión en Codex/GitHub o ejecuta diagnósticos.
 
 Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
 
@@ -220,12 +246,15 @@ Cuando exista un runtime opcional, el comando también muestra su versión, esta
 
 ## Advertencias importantes
 
-- No expongas los puertos 7680 o 7681 directamente a Internet.
+- No expongas los puertos 7680, 7681 o el 7682 opcional directamente a Internet.
 - El launcher sin contraseña solo debe publicarse en localhost, LAN o Tailscale.
-- Codex sigue autenticado de forma independiente.
+- Cada terminal de agente sigue autenticado de forma independiente.
 - El launcher no reenvía ni incluye en la URL la contraseña de Codex.
 - El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
 - No montes workspaces, credenciales de agente ni estado de runtime opcional en el launcher.
+- Seleccionar un proyecto cambia el directorio de trabajo del agente; no aísla ese proyecto de los directorios hermanos montados bajo el mismo `/workspace`.
+- No compartas por defecto un mismo checkout escribible entre servicios de agente; utiliza clones/worktrees independientes.
+- El borrado de proyectos elimina por completo `/workspace/<proyecto>` después de confirmar el nombre exacto; haz commit o copia de seguridad de lo que necesites conservar.
 - No montes el socket Docker ni uses modo privilegiado.
 - En modo autónomo, Codex puede actuar sin confirmaciones sobre todo lo montado en su servicio.
 - Las confirmaciones del modo protegido no son un sandbox.

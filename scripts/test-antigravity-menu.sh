@@ -10,11 +10,52 @@ runtime_lib="$workdir/remote-dev-runtime.sh"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
 hardening_calls="$workdir/hardening-calls"
-mkdir -p "$bin_dir" "$workdir/workspace"
+mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat >"$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
   printf '%s\n' antigravity
+}
+
+remote_dev_validate_workspace_root() {
+  [[ "$1" == /* && -d "$1" && ! -L "$1" ]] || return 2
+  printf '%s\n' "$1"
+}
+
+remote_dev_validate_project_name() {
+  local name="$1"
+  (( ${#name} >= 1 && ${#name} <= 128 )) || return 2
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2
+  printf '%s\n' "$name"
+}
+
+remote_dev_list_projects() {
+  local path name
+  for path in "$1"/*; do
+    [[ -d "$path" && ! -L "$path" ]] || continue
+    name="${path##*/}"
+    remote_dev_validate_project_name "$name" >/dev/null 2>&1 || continue
+    printf '%s\n' "$name"
+  done | LC_ALL=C sort
+}
+
+remote_dev_project_path() {
+  remote_dev_validate_project_name "$2" >/dev/null || return 2
+  [[ -d "$1/$2" && ! -L "$1/$2" ]] || return 2
+  printf '%s/%s\n' "$1" "$2"
+}
+
+remote_dev_create_project() {
+  remote_dev_validate_project_name "$2" >/dev/null || return 2
+  [[ ! -e "$1/$2" && ! -L "$1/$2" ]] || return 2
+  mkdir -- "$1/$2"
+  printf '%s/%s\n' "$1" "$2"
+}
+
+remote_dev_delete_project() {
+  [[ "$2" == "$3" ]] || return 2
+  remote_dev_project_path "$1" "$2" >/dev/null || return 2
+  rm -rf -- "$1/$2"
 }
 RUNTIME
 
@@ -22,13 +63,11 @@ cat >"$bin_dir/run-antigravity" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
 {
-  printf '['
-  separator=""
+  printf '[project=%s]' "${REMOTE_DEV_PROJECT:-}"
   for argument in "$@"; do
-    printf '%s%s' "$separator" "$argument"
-    separator=']['
+    printf '[%s]' "$argument"
   done
-  printf ']\n'
+  printf '\n'
 } >>"$REMOTE_DEV_MENU_INVOCATIONS"
 RUNNER
 
@@ -97,9 +136,9 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-# Duplicate action choices must be consumed by the success pause. If any pause
-# disappears, the duplicate triggers another action and the exact counts fail.
-printf '1\n1\n2\n2\n3\n3\n4\n4\n8\n' | env \
+# Duplicate action choices must be consumed by the action-result pause. Placeholder
+# slots also pause and must not accidentally dispatch another action.
+printf '1\n1\n2\n2\n5\n5\n6\n6\n4\n4\n7\n7\n8\n8\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -108,17 +147,28 @@ printf '1\n1\n2\n2\n3\n3\n4\n4\n8\n' | env \
 
 mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 2 ]]
-[[ "${calls[0]}" == '[]' ]]
-[[ "${calls[1]}" == '[--remote-dev-open-resume-picker]' ]]
+[[ "${calls[0]}" == '[project=project]' ]]
+[[ "${calls[1]}" == '[project=project][--remote-dev-open-resume-picker]' ]]
 [[ "$(wc -l <"$hardening_calls")" == 4 ]]
+grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Resume an Antigravity session' "$output"
-grep -Fxq '3) Install Antigravity from Google' "$output"
-grep -Fxq '4) Update Antigravity from Google' "$output"
-grep -Fxq '8) Exit this tmux session' "$output"
+grep -Fxq '2) Resume an Antigravity session (current project)' "$output"
+grep -Fxq '3) Projects...' "$output"
+grep -Fxq '4) Launch/approval options [not available]' "$output"
+grep -Fxq '5) Install Antigravity from Google' "$output"
+grep -Fxq '6) Update Antigravity from Google' "$output"
+grep -Fxq '7) Context7 integration [pending #95]' "$output"
+grep -Fxq '8) Antigravity sign-in [handled during launch]' "$output"
+grep -Fxq '9) Sign in to GitHub CLI' "$output"
+grep -Fxq '10) Run diagnostics' "$output"
+grep -Fxq '11) Open a login shell' "$output"
+grep -Fxq '12) Exit this tmux session' "$output"
+grep -Fxq 'Antigravity does not currently expose a Remote Dev-reviewed launch/approval option.' "$output"
+grep -Fxq 'Context7 for Antigravity is not implemented yet; see #95.' "$output"
+grep -Fxq 'Antigravity authentication is currently handled by the vendor flow during launch.' "$output"
 if grep -EFiq 'continue the last|continue latest|last conversation' "$output"; then
   echo 'ERROR: menu still exposes a latest-conversation shortcut' >&2
   exit 1
 fi
 
-echo 'Antigravity menu result pauses: OK'
+echo 'Project-scoped aligned Antigravity menu result pauses: OK'
