@@ -20,6 +20,10 @@ remote_dev_resolve_role() {
   printf '%s\n' antigravity
 }
 
+remote_dev_runtime_error() {
+  printf 'ERROR: %s\n' "$*" >&2
+}
+
 remote_dev_workspace_root() {
   [[ -d "${WORKSPACE:-}" && ! -L "${WORKSPACE:-}" ]] || return 2
   printf '%s\n' "$WORKSPACE"
@@ -27,9 +31,14 @@ remote_dev_workspace_root() {
 
 remote_dev_resolve_project() {
   local root="$1"
+  local project="$root/project"
   [[ "${REMOTE_DEV_PROJECT:-}" == project ]] || return 2
-  [[ -d "$root/project" && ! -L "$root/project" ]] || return 2
-  printf '%s/project\n' "$root"
+  [[ -d "$project" && ! -L "$project" ]] || return 2
+  if [[ -n "${REMOTE_DEV_TEST_SWAP_TARGET:-}" ]]; then
+    rm -rf -- "$project"
+    ln -s -- "$REMOTE_DEV_TEST_SWAP_TARGET" "$project"
+  fi
+  printf '%s\n' "$project"
 }
 RUNTIME
 
@@ -141,6 +150,27 @@ unset REMOTE_DEV_TEST_EXPECT_PICKER
 [[ "$(<"$REMOTE_DEV_TEST_VENDOR_ARGS")" == normal ]]
 [[ "$(<"$REMOTE_DEV_TEST_VENDOR_CWD")" == "$project" ]]
 [[ "$(wc -l <"$REMOTE_DEV_TEST_HARDENING")" == 2 ]]
+
+# Replace the validated project with an outside-workspace symlink inside the
+# resolver fixture, after validation but before the runner enters the path.
+# The vendor process must never start from the swapped location.
+rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VENDOR_CWD"
+outside_project="$workdir/outside-project"
+mkdir -p "$outside_project"
+export REMOTE_DEV_TEST_SWAP_TARGET="$outside_project"
+swap_output="$workdir/project-swap-output"
+set +e
+"$runner" normal >"$swap_output" 2>&1
+status=$?
+set -e
+unset REMOTE_DEV_TEST_SWAP_TARGET
+[[ "$status" == 2 ]]
+grep -Fq "ERROR: project path changed during launch: $project" "$swap_output"
+[[ ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
+[[ ! -e "$REMOTE_DEV_TEST_VENDOR_CWD" ]]
+[[ -L "$project" ]]
+rm -f -- "$project"
+mkdir -p "$project"
 
 set +e
 TMUX_PANE=invalid "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1
