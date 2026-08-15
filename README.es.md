@@ -295,12 +295,14 @@ Cuando exista un runtime opcional, el comando también muestra su versión, esta
 - No montes el socket Docker ni uses modo privilegiado.
 - En modo autónomo, Codex puede actuar sin confirmaciones sobre todo lo montado en su servicio.
 - Las confirmaciones del modo protegido no son un sandbox.
+- Un runtime opcional de Codex marcado como revisión pendiente ha superado admisión de procedencia, integridad y compatibilidad, pero esa release exacta todavía no ha completado la revisión y validación real de Remote Dev.
+- `edge` sigue siendo experimental.
 
 ## Desarrollo y revisiones
 
-El desarrollo se realiza mediante pull requests. CodeRabbit revisa los archivos sensibles y los workflows de CI validan la configuración, construcción y pruebas antes de fusionar.
+El desarrollo se realiza mediante pull requests. CodeRabbit revisa Dockerfiles, Bash, el launcher Python, GitHub Actions, Compose y cambios sensibles de seguridad. CI y las pruebas manuales siguen siendo obligatorios.
 
-Lee `AGENTS.md` y `CONTRIBUTING.md` antes de proponer cambios.
+Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md`, `docs/codex-runtime-updates.es.md` y `docs/roadmap.md` para el estado y los siguientes pasos.
 
 ## Documentación
 
