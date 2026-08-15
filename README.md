@@ -75,6 +75,8 @@ REMOTE_DEV_PROJECT=pollenlevels
 
 With no explicit selector, direct agent mode auto-resolves exactly one project and otherwise fails clearly instead of starting at `/workspace`. General shell mode continues to open at the collection root.
 
+Selecting a project sets the agent's default working directory; it is **not** a filesystem isolation boundary. The complete role-private `/workspace` mount remains available inside that agent container, so sibling projects can still be accessed by processes running there. Use separate role services or mounts if filesystem isolation between those projects is required.
+
 Each agent service still owns a separate writable workspace mount. Shared project-management code does **not** share a checkout between Codex, Antigravity or future roles. Use independent clones/worktrees when the same logical repository is needed by more than one agent; do not mount one writable checkout into several agent services by default.
 
 ### Single-stack launcher
@@ -110,7 +112,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` is the default and maps to `--ask-for-approval never`.
 - `guarded` maps to `--ask-for-approval untrusted`.
 
-The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. Start and Resume pass the selected project to Codex with its working-directory option, so repository discovery, `AGENTS.md`, commands and diffs are scoped to `/workspace/<project>`. The approval selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
+The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. Start and Resume pass the selected project to Codex with its working-directory option, so Codex starts in `/workspace/<project>` and uses it as the default working directory for repository discovery and `AGENTS.md` lookup. This working-directory selection does not restrict filesystem access to that child; sibling projects under the same mounted `/workspace` remain reachable. The approval selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
 
 The equivalent command-line interface is:
 
@@ -308,6 +310,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - The launcher never embeds or forwards the terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces, credentials or optional runtime state into the launcher.
+- Selecting a project changes the agent working directory; it does not isolate that project from sibling directories mounted under the same `/workspace`.
 - Do not share one writable project checkout between agent services by default; use separate clones/worktrees.
 - Project deletion removes the complete selected `/workspace/<project>` directory after exact-name confirmation; commit or back up anything that must be retained first.
 - Do not mount the Docker socket.

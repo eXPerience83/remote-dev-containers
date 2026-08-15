@@ -129,6 +129,8 @@ The role-neutral runtime owns one bounded resolver/manager:
 
 The interactive selection is transient to the current menu/tmux session. Direct `agent` mode may use `REMOTE_DEV_PROJECT=<name>`; without it, direct mode requires exactly one valid project. It never silently falls back to running an agent at `/workspace` when the project is ambiguous or missing.
 
+Project selection is a working-directory and routing contract, not an intra-service access-control boundary. The entire role-private `/workspace` mount remains visible to processes in that agent container, so selecting one child does not isolate sibling projects. Filesystem isolation is provided by the outer container and its mount set; use separate services or mounts if stronger separation between projects is required.
+
 This contract is shared code only. Codex and any future supported agent continue to receive separate writable workspace mounts. Antigravity reuses this project wiring only as an experimental integration; that reuse does not establish supported deployment status, and real TrueNAS project/session validation remains deferred to #131. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
 
 ## Canonical persistence boundaries
@@ -188,7 +190,7 @@ Each outer container is a separate boundary. Anyone with terminal/root access in
 
 The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
 
-Project selection does not broaden that boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment.
+Project selection neither broadens nor narrows that container boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment; the rest of that mounted workspace remains accessible inside the service.
 
 ## Versioning and updates
 

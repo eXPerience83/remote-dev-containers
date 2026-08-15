@@ -71,6 +71,8 @@ REMOTE_DEV_PROJECT=pollenlevels
 
 Sin selector explícito, el modo directo resuelve automáticamente un único proyecto y falla de forma clara si no hay ninguno o hay varios, en vez de arrancar en `/workspace`. El modo shell general continúa abriéndose en la raíz que agrupa proyectos.
 
+Seleccionar un proyecto fija el directorio de trabajo predeterminado del agente; **no** crea un límite de aislamiento del sistema de archivos. Todo el montaje `/workspace` privado de ese rol sigue disponible dentro del contenedor del agente, por lo que los procesos que se ejecuten allí pueden acceder también a proyectos hermanos. Si necesitas aislamiento entre esos proyectos, utiliza servicios de rol o montajes separados.
+
 Cada servicio de agente conserva su propio montaje de workspace escribible. Que el gestor de proyectos sea común **no** significa compartir el mismo checkout entre Codex, Antigravity u otros roles futuros. Si el mismo repositorio lógico debe usarse desde varios agentes, utiliza clones/worktrees independientes; no montes por defecto un único checkout escribible en varios servicios.
 
 ### Funcionamiento del launcher
@@ -95,7 +97,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
 - `guarded` se traduce a `--ask-for-approval untrusted`.
 
-El menú separa **Start Codex** y **Resume a Codex session**, añade **Projects...** y mantiene **Approval mode for next launch**. Start y Resume pasan a Codex el proyecto seleccionado como directorio de trabajo, de modo que la detección del repositorio, `AGENTS.md`, los comandos y los diffs se resuelven desde `/workspace/<proyecto>`. El selector de aprobación permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
+El menú separa **Start Codex** y **Resume a Codex session**, añade **Projects...** y mantiene **Approval mode for next launch**. Start y Resume pasan a Codex el proyecto seleccionado como directorio de trabajo, de modo que Codex arranca en `/workspace/<proyecto>` y lo utiliza como directorio predeterminado para detectar el repositorio y localizar `AGENTS.md`. Esta selección del directorio de trabajo no restringe el acceso al sistema de archivos a ese hijo; los proyectos hermanos del mismo `/workspace` montado siguen siendo accesibles. El selector de aprobación permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
 
 La interfaz equivalente es:
 
@@ -250,6 +252,7 @@ Cuando exista un runtime opcional, el comando también muestra su versión, esta
 - El launcher no reenvía ni incluye en la URL la contraseña de Codex.
 - El launcher no es un proxy y no convierte el terminal en una aplicación del mismo origen.
 - No montes workspaces, credenciales de agente ni estado de runtime opcional en el launcher.
+- Seleccionar un proyecto cambia el directorio de trabajo del agente; no aísla ese proyecto de los directorios hermanos montados bajo el mismo `/workspace`.
 - No compartas por defecto un mismo checkout escribible entre servicios de agente; utiliza clones/worktrees independientes.
 - El borrado de proyectos elimina por completo `/workspace/<proyecto>` después de confirmar el nombre exacto; haz commit o copia de seguridad de lo que necesites conservar.
 - No montes el socket Docker ni uses modo privilegiado.
