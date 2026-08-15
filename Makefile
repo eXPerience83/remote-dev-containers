@@ -19,6 +19,7 @@ agent-contract-tests:
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-antigravity-menu.sh
 	REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh bash scripts/test-run-antigravity-picker.sh
+	REMOTE_DEV_ATTACH_TMUX=./scripts/attach-remote-dev-tmux.sh bash scripts/test-direct-codex-project-entry.sh
 	bash scripts/test-antigravity-runtime.sh
 
 validate: agent-contract-tests
