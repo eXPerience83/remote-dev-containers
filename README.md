@@ -28,6 +28,43 @@ The current edge stack is the Codex reference implementation, with Antigravity a
 - role-neutral project selection below each private `/workspace` mount so agents launch from a concrete project rather than the collection root;
 - AMD64 first.
 
+## Install on TrueNAS SCALE
+
+Use [`compose/truenas.yml`](compose/truenas.yml) as the **canonical TrueNAS Custom App YAML**. Do not maintain a separate copied stack definition from the README.
+
+Current TrueNAS UI documentation exposes Compose YAML installation from **Apps → Discover Apps → ⋮ → Install via YAML**. Give the Custom App a name, paste the contents of `compose/truenas.yml` into **Custom Config**, review the host-specific values below, and save the app.
+
+Before saving, review at least:
+
+- every example bind IP `192.168.1.10` and replace it with the LAN or Tailscale IP of the TrueNAS host;
+- every `/mnt/Pool1/remote-dev` bind source and replace the dataset root if your pool/path differs;
+- Codex `WEB_PASSWORD` and the independent Antigravity `WEB_PASSWORD` when retaining the experimental Antigravity terminal from the reference YAML;
+- optional timezone, Git identity and Codex approval-mode values if the defaults are not appropriate;
+- `REMOTE_DEV_PROJECT`: leave the literal YAML value empty for normal menu mode. For a fixed direct-agent project, edit the relevant TrueNAS YAML field itself. An ambient `.env` `REMOTE_DEV_PROJECT` does **not** override this literal field in `compose/truenas.yml`.
+
+The reference YAML declares the role-private Codex and experimental Antigravity workspace/state trees. Create the required host directories before deployment and run the repository preflight on the TrueNAS host. For the reference YAML as shipped:
+
+```bash
+python3 scripts/preflight-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity \
+  --password-source environment
+```
+
+`--password-source environment` matches the TrueNAS home-mode YAML, where terminal passwords are entered as `WEB_PASSWORD` values rather than file-backed secrets. If you intentionally maintain a local Codex-only YAML without the Antigravity service, omit `--include-antigravity` and create only the Codex paths.
+
+After TrueNAS reports the Custom App as running, open:
+
+```text
+http://<TrueNAS-LAN-or-Tailscale-IP>:7680
+```
+
+Port `7680` is the launcher. Codex remains independently authenticated on port `7681`; the experimental Antigravity terminal uses its own authentication on port `7682`. Do not expose any of these ports directly to the Internet.
+
+After installation, continue with the [practical user guide](docs/user-guide.md) for projects, Codex sessions/Resume, tmux/browser controls, `AGENTS.md`, persistence and project-local tooling.
+
+TrueNAS Custom App/YAML UI details can change between TrueNAS releases; the current upstream reference is the [TrueNAS Custom App documentation](https://www.truenas.com/docs/scale/apps/installcustomappscreens/).
+
 ### Role-neutral entrypoints
 
 The accepted single-stack architecture uses one canonical runtime implementation:
@@ -346,6 +383,8 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests u
 - `docs/decisions.md`
 - `docs/releases.md`
 - `docs/runtime-locks.md`
+- `docs/user-guide.md`
+- `docs/user-guide.es.md`
 - `docs/codex-runtime-updates.md`
 - `docs/codex-runtime-updates.es.md`
 - `docs/roadmap.md`
