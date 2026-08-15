@@ -280,10 +280,7 @@ if [[ "${REMOTE_DEV_SKIP_TMUX_SMOKE:-0}" != "1" ]]; then
 #!/usr/bin/env bash
 set -euo pipefail
 pwd > "$REMOTE_DEV_TEST_DIRECT_CODEX_CWD"
-: > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
-if (( $# > 0 )); then
-  printf '%s\n' "$@" > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
-fi
+printf '%s\n' "$@" > "$REMOTE_DEV_TEST_DIRECT_CODEX_ARGS"
 umask 000
 printf 'token\n' > "$CODEX_HOME/auth.json"
 chmod 0660 "$CODEX_HOME/auth.json"
@@ -347,11 +344,14 @@ FAKE_CODEX
     echo "ERROR: START_MODE=codex did not run from the selected project" >&2
     exit 1
   fi
-  if [[ ! -e "$direct_codex_args" || -s "$direct_codex_args" ]]; then
-    echo "ERROR: START_MODE=codex reintroduced arguments after the verified cwd entry" >&2
-    printf 'Arguments: %s\n' "$(<"$direct_codex_args" 2>/dev/null || true)" >&2
-    exit 1
-  fi
+  mapfile -t direct_codex_argv < "$direct_codex_args"
+  for argument in "${direct_codex_argv[@]}"; do
+    if [[ "$argument" == --cd || "$argument" == --cd=* || "$argument" == -C || "$argument" == -C=* ]]; then
+      echo "ERROR: START_MODE=codex re-resolved the selected project after verified cwd entry: $argument" >&2
+      printf 'Arguments: %s\n' "${direct_codex_argv[*]}" >&2
+      exit 1
+    fi
+  done
 
   direct_shell_state="$workdir/direct-shell-state"
   mkdir -p "$direct_shell_state"
