@@ -30,6 +30,43 @@ Stack Remote Dev
 - Los agentes seleccionan un proyecto concreto por debajo de su `/workspace` privado en lugar de arrancar en la raíz que agrupa los proyectos.
 - AMD64 continúa siendo la arquitectura inicial.
 
+## Instalar en TrueNAS SCALE
+
+Utiliza [`compose/truenas.yml`](compose/truenas.yml) como **YAML canónico de Custom App para TrueNAS**. No mantengas una copia independiente del stack dentro del README.
+
+La documentación actual de TrueNAS expone la instalación mediante Compose YAML desde **Apps → Discover Apps → ⋮ → Install via YAML**. Pon un nombre a la Custom App, pega el contenido de `compose/truenas.yml` en **Custom Config**, revisa los valores específicos del host indicados abajo y guarda la app.
+
+Antes de guardar, revisa como mínimo:
+
+- todas las IP de ejemplo `192.168.1.10` y sustitúyelas por la IP LAN o Tailscale del host TrueNAS;
+- todas las fuentes bind `/mnt/Pool1/remote-dev` y cámbialas si tu pool/dataset utiliza otra ruta;
+- `WEB_PASSWORD` de Codex y el `WEB_PASSWORD` independiente de Antigravity si mantienes el terminal experimental de Antigravity declarado en el YAML de referencia;
+- zona horaria, identidad Git y modo de aprobación de Codex si los valores predeterminados no son adecuados;
+- `REMOTE_DEV_PROJECT`: deja el valor literal del YAML vacío para el modo normal de menú. Para un proyecto fijo en modo directo, edita ese campo del YAML de TrueNAS. Un `REMOTE_DEV_PROJECT` ambiental de `.env` **no** sustituye este campo literal de `compose/truenas.yml`.
+
+El YAML de referencia declara los árboles privados de workspace/estado de Codex y de Antigravity experimental. Crea los directorios necesarios en el host antes de desplegar y ejecuta el preflight del repositorio en TrueNAS. Para el YAML de referencia tal como está publicado:
+
+```bash
+python3 scripts/preflight-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity \
+  --password-source environment
+```
+
+`--password-source environment` corresponde al modo doméstico del YAML de TrueNAS, donde las contraseñas de terminal se escriben como valores `WEB_PASSWORD` y no como secretos respaldados por archivo. Si mantienes intencionadamente una copia local solo con Codex y sin el servicio Antigravity, omite `--include-antigravity` y crea únicamente las rutas de Codex.
+
+Cuando TrueNAS muestre la Custom App en ejecución, abre:
+
+```text
+http://<IP-LAN-o-Tailscale-de-TrueNAS>:7680
+```
+
+El puerto `7680` es el launcher. Codex continúa autenticándose de forma independiente en `7681`; el terminal experimental de Antigravity tiene su propia autenticación en `7682`. No expongas ninguno de estos puertos directamente a Internet.
+
+Después de instalar, continúa con la [guía práctica de uso](docs/user-guide.es.md) para proyectos, sesiones/Resume de Codex, controles de tmux/navegador, `AGENTS.md`, persistencia y herramientas propias del proyecto.
+
+Los detalles de la UI de Custom App/YAML pueden cambiar entre versiones de TrueNAS; la referencia upstream actual es la [documentación de Custom Apps de TrueNAS](https://www.truenas.com/docs/scale/apps/installcustomappscreens/).
+
 ### Puntos de entrada y roles
 
 La implementación canónica utiliza:
@@ -258,11 +295,33 @@ Cuando exista un runtime opcional, el comando también muestra su versión, esta
 - No montes el socket Docker ni uses modo privilegiado.
 - En modo autónomo, Codex puede actuar sin confirmaciones sobre todo lo montado en su servicio.
 - Las confirmaciones del modo protegido no son un sandbox.
-- Un runtime opcional de Codex marcado como revisión pendiente ha superado admisión de procedencia, integridad y compatibilidad, pero esa release exacta todavía no ha completado la revisión y validación real de Remote Dev.
-- `edge` sigue siendo experimental.
 
 ## Desarrollo y revisiones
 
-El desarrollo se realiza mediante pull requests. CodeRabbit revisa Dockerfiles, Bash, el launcher Python, GitHub Actions, Compose y cambios sensibles de seguridad. CI y las pruebas manuales siguen siendo obligatorios.
+El desarrollo se realiza mediante pull requests. CodeRabbit revisa los archivos sensibles y los workflows de CI validan la configuración, construcción y pruebas antes de fusionar.
 
-Consulta `AGENTS.md`, `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/security.md`, `docs/codex-runtime-updates.es.md` y `docs/roadmap.md` para el estado y los siguientes pasos.
+Lee `AGENTS.md` y `CONTRIBUTING.md` antes de proponer cambios.
+
+## Documentación
+
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `CONTRIBUTING.md`
+- `SECURITY.md`
+- `PROJECT_STATUS.md`
+- `third_party/README.md`
+- `third_party/optional-agents.md`
+- `docs/architecture.md`
+- `docs/tool-matrix.md`
+- `docs/security.md`
+- `docs/decisions.md`
+- `docs/releases.md`
+- `docs/releases.es.md`
+- `docs/runtime-locks.md`
+- `docs/user-guide.md`
+- `docs/user-guide.es.md`
+- `docs/codex-runtime-updates.md`
+- `docs/codex-runtime-updates.es.md`
+- `docs/context7-codex.md`
+- `docs/context7-codex.es.md`
+- `docs/roadmap.md`
