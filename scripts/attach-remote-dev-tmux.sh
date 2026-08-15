@@ -31,14 +31,20 @@ case "$start_mode" in
     printf -v quoted_project '%q' "$project"
     case "$role" in
       codex)
+        project_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+          echo "ERROR: project path changed during direct launch: $project" >&2
+          exit 2
+        }
+        printf -v quoted_project_identity '%q' "$project_identity"
         printf -v quoted_run_codex_binary '%q' "$run_codex_binary"
         printf -v quoted_project_argument '%q' "$project"
-        session_command="cd $quoted_project && exec /usr/local/bin/run-direct-session $quoted_run_codex_binary --cd $quoted_project_argument"
+        printf -v quoted_project_error '%q' "ERROR: project path changed during direct launch: $project"
+        session_command="if cd -P $quoted_project && [ \"\$PWD\" = $quoted_project ] && [ \"\$(stat -Lc '%d:%i' -- . 2>/dev/null)\" = $quoted_project_identity ]; then exec /usr/local/bin/run-direct-session $quoted_run_codex_binary --cd $quoted_project_argument; else printf '%s\\n' $quoted_project_error >&2; exit 2; fi"
         ;;
       antigravity)
         printf -v quoted_run_antigravity_binary '%q' "$run_antigravity_binary"
         printf -v quoted_project_name '%q' "$project_name"
-        session_command="cd $quoted_project && exec env REMOTE_DEV_PROJECT=$quoted_project_name $quoted_run_antigravity_binary"
+        session_command="exec env REMOTE_DEV_PROJECT=$quoted_project_name $quoted_run_antigravity_binary"
         ;;
       *)
         echo "ERROR: direct agent mode is not implemented for REMOTE_DEV_ROLE=$role" >&2
