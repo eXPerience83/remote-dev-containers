@@ -156,7 +156,12 @@ project_status_summary() {
 }
 
 ensure_active_project() {
-  refresh_project_selection
+  local refresh_status=0
+
+  refresh_project_selection || refresh_status=$?
+  if (( refresh_status != 0 )); then
+    return "$refresh_status"
+  fi
   if [[ -n "$active_project_name" ]]; then
     return 0
   fi
@@ -228,9 +233,11 @@ choose_project_name() {
 
 select_project_action() {
   local resolved=""
+  local choose_status=0
 
-  if ! choose_project_name "Select project"; then
-    return 1
+  choose_project_name "Select project" || choose_status=$?
+  if (( choose_status != 0 )); then
+    return "$choose_status"
   fi
   resolved="$(remote_dev_project_path "$workspace" "$project_choice_name")" || return $?
   active_project_name="$project_choice_name"
@@ -263,9 +270,11 @@ delete_project_action() {
   local confirmation=""
   local resolved=""
   local action_status=0
+  local choose_status=0
 
-  if ! choose_project_name "Delete project"; then
-    return 1
+  choose_project_name "Delete project" || choose_status=$?
+  if (( choose_status != 0 )); then
+    return "$choose_status"
   fi
   resolved="$(remote_dev_project_path "$workspace" "$project_choice_name")" || return $?
 
@@ -414,11 +423,13 @@ run_codex_action() {
   local label="$1"
   shift
   local launch_mode=""
+  local project_status=0
   local -a command=(/usr/local/bin/run-codex)
 
-  if ! ensure_active_project; then
+  ensure_active_project || project_status=$?
+  if (( project_status != 0 )); then
     pause_for_menu
-    return 2
+    return "$project_status"
   fi
 
   launch_mode="$next_codex_mode"
@@ -436,11 +447,13 @@ run_codex_action() {
 run_antigravity_action() {
   local label="$1"
   shift
+  local project_status=0
   local -a command=()
 
-  if ! ensure_active_project; then
+  ensure_active_project || project_status=$?
+  if (( project_status != 0 )); then
     pause_for_menu
-    return 2
+    return "$project_status"
   fi
 
   command=(env "REMOTE_DEV_PROJECT=$active_project_name" /usr/local/bin/run-antigravity)
