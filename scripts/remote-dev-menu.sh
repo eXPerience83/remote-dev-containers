@@ -200,6 +200,9 @@ choose_project_name() {
   if [[ "$normalized_choice" == 0 ]] || (( ${#normalized_choice} > ${#max_choice} )); then
     return 1
   fi
+  # Equal-length ASCII digit strings have the same lexicographic and numeric ordering.
+  # Keep this non-arithmetic guard so oversized input is rejected before Bash integer conversion.
+  # shellcheck disable=SC2071
   if (( ${#normalized_choice} == ${#max_choice} )) && [[ "$normalized_choice" > "$max_choice" ]]; then
     return 1
   fi
