@@ -127,6 +127,18 @@ remote_dev_delete_project "$workspace" beta beta
 [[ -f "$workspace/alpha/keep.txt" ]] || { echo "ERROR: project deletion modified sibling project" >&2; exit 1; }
 assert_eq alpha "$(remote_dev_list_projects "$workspace")" "project listing after deletion"
 
+# The resolver must preserve the producer's failure status rather than letting
+# mapfile/process substitution reinterpret a failed listing as zero projects.
+assert_fails_with 7 "synthetic project listing failure" \
+  bash -c '
+    source "$1"
+    remote_dev_list_projects() {
+      echo "ERROR: synthetic project listing failure" >&2
+      return 7
+    }
+    remote_dev_resolve_project "$2"
+  ' _ "$runtime_lib" "$workspace"
+
 echo "Role-neutral project resolver and destructive-operation guards: OK"
 
 case "${REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY:-0}" in
