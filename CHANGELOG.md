@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Antigravity menu action that opens the full interactive `/resume` conversation picker, matching the Codex start/resume workflow without adding a latest-session-only shortcut.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
 - Role-neutral project discovery and management below each private agent `/workspace`, including select/create/delete menu actions, exact-name destructive confirmation and bounded direct-mode selection through `REMOTE_DEV_PROJECT`.
+- Bilingual TrueNAS SCALE YAML quick-start documentation plus a practical user guide for projects, Codex Resume exact-path behavior, browser/tmux controls, `AGENTS.md` verification, persistence and project-owned tooling.
 
 ### Changed
 
