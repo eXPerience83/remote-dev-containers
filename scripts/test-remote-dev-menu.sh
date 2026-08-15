@@ -44,12 +44,17 @@ remote_dev_validate_workspace_root() {
 }
 
 remote_dev_validate_project_name() {
+  (( ${#1} > 0 && ${#1} <= 128 )) || return 2
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2
   printf '%s\n' "$1"
 }
 
 remote_dev_list_projects() {
   local path name
+  if [[ "${REMOTE_DEV_TEST_LIST_PROJECTS_FAIL:-0}" == 1 ]]; then
+    echo 'ERROR: synthetic project listing failure' >&2
+    return 7
+  fi
   for path in "$1"/*; do
     [[ -d "$path" && ! -L "$path" ]] || continue
     name="${path##*/}"
@@ -427,6 +432,26 @@ run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n12\n' "$output"
 [[ ! -e "$workdir/workspace/new-project" ]]
 grep -Fxq 'Deleted project: new-project' "$output"
 echo 'Projects menu create/select/delete flow: OK'
+
+# A discovery failure must remain a real menu failure, never degrade into the
+# ordinary zero-project state or permit an agent launch.
+export REMOTE_DEV_TEST_LIST_PROJECTS_FAIL=1
+set +e
+run_menu __unset__ $'1\n' "$output"
+status=$?
+set -e
+unset REMOTE_DEV_TEST_LIST_PROJECTS_FAIL
+[[ "$status" == 7 ]] || {
+  echo "ERROR: synthetic project discovery failure returned status $status instead of 7" >&2
+  exit 1
+}
+assert_file_lines "$invocations" 'project discovery failure' 
+grep -Fq 'ERROR: synthetic project listing failure' "$output"
+if grep -Fq 'Project: none (create one in Projects...)' "$output"; then
+  echo 'ERROR: project discovery failure was presented as an ordinary empty workspace' >&2
+  exit 1
+fi
+echo 'Project discovery failures remain fail-closed in the menu: OK'
 
 run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
 assert_file_lines "$shell_invocations" 'Shell login shell' shell
