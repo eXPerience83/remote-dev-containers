@@ -30,6 +30,10 @@ for argument in "$@"; do
   separator=']['
 done
 printf ']\n' >>"$REMOTE_DEV_TEST_INVOCATIONS"
+if [[ "${REMOTE_DEV_TEST_ADD_AFTER_LAUNCH:-0}" == 1 && ! -e "$REMOTE_DEV_TEST_ADD_MARKER" ]]; then
+  mkdir -- "$WORKSPACE/second-project"
+  : >"$REMOTE_DEV_TEST_ADD_MARKER"
+fi
 RUN_CODEX
 
 cat >"$bin_dir/remote-dev-codex-runtime" <<'RUNTIME_STATUS'
@@ -64,7 +68,7 @@ VERSION
 cat >"$bin_dir/clear" <<'CLEAR'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ! -e "$REMOTE_DEV_TEST_ADD_MARKER" ]]; then
+if [[ "${REMOTE_DEV_TEST_ADD_ON_CLEAR:-0}" == 1 && ! -e "$REMOTE_DEV_TEST_ADD_MARKER" ]]; then
   mkdir -- "$WORKSPACE/second-project"
   : >"$REMOTE_DEV_TEST_ADD_MARKER"
 fi
@@ -93,12 +97,16 @@ destination.write_text(text, encoding="utf-8")
 PY
 chmod 0755 "$fixture_menu"
 
+# show_codex_menu refreshes the project selection in the parent shell before
+# invoking clear. Inject the second project from clear so it appears after the
+# sole project has been persisted in menu-session state but before Start input.
 printf '1\n\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workspace" \
   REMOTE_DEV_ROLE=codex \
   REMOTE_DEV_TEST_INVOCATIONS="$invocations" \
   REMOTE_DEV_TEST_ADD_MARKER="$add_marker" \
+  REMOTE_DEV_TEST_ADD_ON_CLEAR=1 \
   "$fixture_menu" >/dev/null 2>&1
 
 [[ -d "$workspace/second-project" ]] || {
@@ -108,12 +116,49 @@ printf '1\n\n12\n' | env \
 expected="[--cd][$workspace/project]"
 actual="$(<"$invocations")"
 [[ "$actual" == "$expected" ]] || {
-  printf 'ERROR: auto-selected project was not retained after a second project appeared: expected %q, got %q\n' \
+  printf 'ERROR: auto-selected project was not retained after a second project appeared before Start: expected %q, got %q\n' \
     "$expected" "$actual" >&2
   exit 1
 }
 
-echo 'Menu-session single-project auto-selection persistence: OK'
+echo 'Menu-session auto-selection survives a project appearing before Start: OK'
+
+# Complement the render-to-Start regression with a second timing window: add a
+# sibling only after the first Codex invocation has been recorded, then launch
+# again from the same live menu session. Both launches must retain the original
+# auto-selected project instead of becoming ambiguous.
+rm -rf -- "$workspace/second-project"
+rm -f "$invocations" "$add_marker"
+post_launch_output="$workdir/post-launch-output"
+printf '1\n\n1\n\n12\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workspace" \
+  REMOTE_DEV_ROLE=codex \
+  REMOTE_DEV_TEST_INVOCATIONS="$invocations" \
+  REMOTE_DEV_TEST_ADD_MARKER="$add_marker" \
+  REMOTE_DEV_TEST_ADD_AFTER_LAUNCH=1 \
+  "$fixture_menu" >"$post_launch_output" 2>&1
+
+[[ -d "$workspace/second-project" ]] || {
+  echo 'ERROR: post-launch fixture did not add the second project after the first Codex invocation' >&2
+  exit 1
+}
+expected_two="$expected
+$expected"
+actual="$(<"$invocations")"
+[[ "$actual" == "$expected_two" ]] || {
+  printf 'ERROR: active project was not retained across launches after a sibling appeared: expected %q, got %q\n' \
+    "$expected_two" "$actual" >&2
+  exit 1
+}
+if grep -Fq \
+  'ERROR: multiple projects are available; select one in Projects... before starting an agent' \
+  "$post_launch_output"; then
+  echo 'ERROR: post-launch sibling incorrectly made the active menu project ambiguous' >&2
+  exit 1
+fi
+
+echo 'Menu-session auto-selection persists across launches after a sibling appears: OK'
 
 rm -f "$invocations"
 oversized_output="$workdir/oversized-output"
