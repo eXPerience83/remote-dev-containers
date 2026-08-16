@@ -534,7 +534,6 @@ PY
             ($entry.key | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
             and ($summary.ID == $entry.key)
             and (($summary.Title | type) == "string")
-            and (($summary.Title | length) > 0)
             and (all($summary.WorkspaceURIs[]; type == "string"))
             and (($summary.NumSteps | type) == "number")
             and ($summary.NumSteps >= 0)
@@ -575,7 +574,7 @@ PY
     | reverse[]
     | [
         .key,
-        (.value.summary.Title | terminal_safe(160)),
+        (.value.summary.Title | terminal_safe(160) | if length == 0 then "(untitled conversation)" else . end),
         (.value.summary.NumSteps | tostring),
         (.value.summary.UpdatedAt | terminal_safe(80))
       ]
