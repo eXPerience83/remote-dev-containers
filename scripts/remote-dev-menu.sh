@@ -467,7 +467,7 @@ run_antigravity_action() {
 }
 
 choose_antigravity_conversation() {
-  local metadata_size=""
+  local metadata_json=""
   local project_uri=""
   local candidates=""
   local selected=""
@@ -476,14 +476,35 @@ choose_antigravity_conversation() {
 
   antigravity_conversation_id=""
 
-  if [[ ! -f "$antigravity_conversation_metadata" || -L "$antigravity_conversation_metadata" ]]; then
-    return 3
-  fi
-  metadata_size="$(stat -Lc '%s' -- "$antigravity_conversation_metadata" 2>/dev/null)" || return 3
-  if [[ ! "$metadata_size" =~ ^[0-9]+$ ]] \
-    || (( metadata_size < 1 || metadata_size > antigravity_conversation_metadata_max_bytes )); then
-    return 3
-  fi
+  metadata_json="$(python3 - "$antigravity_conversation_metadata" "$antigravity_conversation_metadata_max_bytes" <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+limit = int(sys.argv[2])
+flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+try:
+    fd = os.open(path, flags)
+except OSError:
+    raise SystemExit(3)
+try:
+    metadata = os.fstat(fd)
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size < 1 or metadata.st_size > limit:
+        raise SystemExit(3)
+    data = bytearray()
+    while len(data) <= limit:
+        chunk = os.read(fd, min(65536, limit + 1 - len(data)))
+        if not chunk:
+            break
+        data.extend(chunk)
+    if not data or len(data) > limit:
+        raise SystemExit(3)
+    sys.stdout.buffer.write(data)
+finally:
+    os.close(fd)
+PY
+)" || return 3
 
   project_uri="$(python3 - "$active_project_path" <<'PY'
 from pathlib import Path
@@ -525,11 +546,17 @@ PY
       ]
       | all
     )
-  ' "$antigravity_conversation_metadata" >/dev/null 2>&1; then
+  ' <<<"$metadata_json" >/dev/null 2>&1; then
     return 3
   fi
 
   candidates="$(jq -r --arg uri "$project_uri" '
+    def terminal_safe($limit):
+      explode
+      | map(if (. < 32 or . == 127) then 32 else . end)
+      | implode
+      | .[0:$limit];
+
     .conversations
     | to_entries
     | map(
@@ -543,12 +570,12 @@ PY
     | reverse[]
     | [
         .key,
-        (.value.summary.Title | gsub("[\\t\\r\\n]"; " ") | .[0:160]),
+        (.value.summary.Title | terminal_safe(160)),
         (.value.summary.NumSteps | tostring),
-        .value.summary.UpdatedAt
+        (.value.summary.UpdatedAt | terminal_safe(80))
       ]
     | @tsv
-  ' "$antigravity_conversation_metadata" 2>/dev/null)" || return 3
+  ' <<<"$metadata_json" 2>/dev/null)" || return 3
 
   [[ -n "$candidates" ]] || return 3
   selected="$(
