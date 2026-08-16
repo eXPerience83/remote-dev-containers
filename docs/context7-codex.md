@@ -60,7 +60,9 @@ The official CLI displays a one-time code and verification URL that can be appro
 - passes that key to the existing Remote Dev manager only over child-process stdin;
 - removes the complete transient CLI/login/cache directory on success, cancellation or failure.
 
-Remote Dev intentionally does **not** run `ctx7 setup`. That upstream command can write agent MCP configuration, rules and skills; Remote Dev keeps those mutation boundaries under its existing project-owned manager instead. The vendor CLI therefore never receives the real `CODEX_HOME` and does not modify `config.toml`, `AGENTS.md` or Codex skills during device onboarding.
+Remote Dev intentionally does **not** run `ctx7 setup`. That upstream command can write agent MCP configuration, rules and skills; Remote Dev keeps those mutation boundaries under its existing project-owned manager instead. The real `CODEX_HOME`, workspace and project instruction paths are not supplied to the vendor CLI as its HOME, working directory or configuration target, and the existing private Codex credential/configuration paths retain their restrictive permissions.
+
+This unprivileged execution is **not a filesystem sandbox**. The transient vendor process still runs inside the Codex container, so any file elsewhere in that container that is readable by UID/GID 65534 is technically readable by that process. Remote Dev does not direct the CLI to inspect project files, but it does not claim that `nobody` makes world-readable workspace content inaccessible. Use the existing manual API-key path instead if you do not want transient Context7 vendor code executing inside the Codex service.
 
 Before downloading the transient package, Remote Dev preflights the existing managed configuration with the normal ownership-safe repair path. A currently working managed API key is not replaced until the new device login has completed successfully and its local credential shape has been validated. Failed, denied, expired or cancelled sign-in leaves the previous working key intact.
 
@@ -138,9 +140,11 @@ Enabling Context7 creates an external-service boundary. Based on the official Co
 - Context7 output can be incomplete or inaccurate and should be verified before production use;
 - the underlying documentation returned by Context7 remains subject to its original copyright and license terms.
 
+The official `ctx7 login` flow may display account identity information such as an email/name or teamspace in the local terminal after authorization. Remote Dev does not store that output, but screenshots or copied validation evidence must redact account identifiers as well as device codes and credentials.
+
 Use of the hosted service and the device-login flow is governed by the current **Context7 Addendum**, **Upstash Terms of Service** and **Upstash Privacy Policy**. Remote Dev is not affiliated with or endorsed by Upstash, Context7 or OpenAI.
 
-The legal/privacy review for the original bounded hosted-MCP design is recorded in standing tracker #53. The new transient CLI/device-authentication path introduced by #123 requires its own out-of-cycle #53 review before merge because it adds a vendor package download and account-side credential-creation flow, even though no Context7 package is retained in the image or persistent state.
+The legal/privacy review for the original bounded hosted-MCP design is recorded in standing tracker #53. The out-of-cycle #123 review for this exact transient `ctx7` device-authentication design was recorded on 2026-08-16. A different CLI version/source, `ctx7 setup`, native MCP OAuth, retained vendor-package state or broader vendor filesystem/credential access requires re-review.
 
 ## Removal and recovery
 
