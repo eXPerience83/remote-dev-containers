@@ -143,7 +143,7 @@ printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  "$fixture_menu" >"$output" 2>&1
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 3 ]]
