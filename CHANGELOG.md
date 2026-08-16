@@ -42,7 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces`, per-role `state` and `secrets` boundaries.
 - Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed paths and unsafe password-file permissions.
 - Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
-- Antigravity menu action that opens the full interactive `/resume` conversation picker, matching the Codex start/resume workflow without adding a latest-session-only shortcut.
+- Antigravity conversation actions using the vendor-supported `--continue` path for the latest conversation and normal-TUI `/resume` for the full conversation picker.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
 - Role-neutral project discovery and management below each private agent `/workspace`, including select/create/delete menu actions, exact-name destructive confirmation and bounded direct-mode selection through `REMOTE_DEV_PROJECT`.
 - Bilingual TrueNAS SCALE YAML quick-start documentation plus a practical user guide for projects, Codex Resume exact-path behavior, browser/tmux controls, `AGENTS.md` verification, persistence and project-owned tooling.
@@ -86,6 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
 - Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status; real TrueNAS Antigravity project/session validation remains deferred to #131. Shell mode remains at the collection root.
+- Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with vendor-documented conversation entry points: `--continue` for the latest conversation and a normal TUI launch with explicit `/resume` guidance for browsing all conversations.
 
 ### Security
 
@@ -111,7 +112,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags; `remote-dev` runtime tags are verified against `REMOTE_DEV_DIGEST`, while `remote-dev-base` promotion metadata is checked separately against `BASE_DIGEST`.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
-- The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
+- The host preflight rejects missing, symlinked or malformed persistent paths and unsafe password-file permissions before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
 - Project selection is a working-directory contract, not an intra-service filesystem sandbox: the full role-private `/workspace` mount remains accessible to processes in that agent container, including sibling projects.
 - Project names/selectors are constrained to direct non-symlink children of the validated role workspace; create/delete cannot target arbitrary paths, and recursive deletion requires exact project-name confirmation.
