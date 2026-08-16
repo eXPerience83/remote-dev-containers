@@ -148,15 +148,15 @@ printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
 mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 3 ]]
 [[ "${calls[0]}" == '[project=project]' ]]
-[[ "${calls[1]}" == '[project=project][--continue]' ]]
-[[ "${calls[2]}" == '[project=project]' ]]
+[[ "${calls[1]}" == '[project=project]' ]]
+[[ "${calls[2]}" == '[project=project][--continue]' ]]
 [[ "$(wc -l <"$hardening_calls")" == 5 ]]
 grep -Fxq 'Project: project' "$output"
 grep -Fxq 'Google exposes the full conversation picker only inside the TUI.' "$output"
-grep -Fxq 'Choose 3, then type /resume after Antigravity opens to browse conversations.' "$output"
+grep -Fxq 'Choose 2, then type /resume after Antigravity opens to browse conversations.' "$output"
 grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
-grep -Fxq '3) Browse/resume Antigravity conversations (current project)' "$output"
+grep -Fxq '2) Browse/resume Antigravity conversations (/resume)' "$output"
+grep -Fxq '3) Continue latest Antigravity conversation (current project)' "$output"
 grep -Fxq '4) Projects...' "$output"
 grep -Fxq '5) Launch/approval options [not available]' "$output"
 grep -Fxq '6) Install Antigravity from Google' "$output"
@@ -175,4 +175,4 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   exit 1
 fi
 
-echo 'Project-scoped supported Antigravity resume menu: OK'
+echo 'Vendor-native supported Antigravity resume menu: OK'

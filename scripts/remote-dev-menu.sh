@@ -625,10 +625,10 @@ ${status_summary}
 ${project_summary}
 ========================
 Google exposes the full conversation picker only inside the TUI.
-Choose 3, then type /resume after Antigravity opens to browse conversations.
+Choose 2, then type /resume after Antigravity opens to browse conversations.
 1) Start Antigravity
-2) Continue latest Antigravity conversation (current project)
-3) Browse/resume Antigravity conversations (current project)
+2) Browse/resume Antigravity conversations (/resume)
+3) Continue latest Antigravity conversation (current project)
 4) Projects...
 5) Launch/approval options [not available]
 6) Install Antigravity from Google
@@ -646,10 +646,10 @@ MENU
         if run_antigravity_action "Antigravity"; then :; fi
         ;;
       2)
-        if run_antigravity_action "Antigravity continue" --continue; then :; fi
+        if run_antigravity_action "Antigravity conversation browser"; then :; fi
         ;;
       3)
-        if run_antigravity_action "Antigravity conversation browser"; then :; fi
+        if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
       4)
         show_projects_menu
