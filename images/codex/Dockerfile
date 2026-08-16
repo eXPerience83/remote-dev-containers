@@ -83,7 +83,9 @@ COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
-COPY scripts/remote-dev-context7.py /usr/local/bin/remote-dev-context7
+COPY scripts/remote-dev-context7.py /usr/local/lib/remote-dev/remote-dev-context7.py
+COPY scripts/remote-dev-context7-entrypoint.sh /usr/local/bin/remote-dev-context7
+COPY scripts/remote-dev-context7-device-login.py /usr/local/bin/remote-dev-context7-device-login
 COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
@@ -125,6 +127,7 @@ RUN --network=none \
       /usr/local/bin/run-codex \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-context7 \
+      /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity \
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
@@ -143,13 +146,15 @@ RUN --network=none \
     && chmod 0644 \
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
+      /usr/local/lib/remote-dev/remote-dev-context7.py \
     && chmod 0444 \
       /usr/local/lib/remote-dev/antigravity-paths.sh \
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
-      /usr/local/bin/remote-dev-context7 \
+      /usr/local/lib/remote-dev/remote-dev-context7.py \
+      /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /tmp/test-codex-code-mode-host.py \
