@@ -25,7 +25,8 @@ cat <<'MENU'
 Context7 authentication
 =======================
 Context7 is an optional external service operated by Upstash.
-Device-code sign-in transiently downloads the pinned official ctx7 CLI package.
+Device-code sign-in transiently downloads/runs the pinned official ctx7 CLI
+inside this Codex container as an unprivileged process; this is not a filesystem sandbox.
 1) Sign in to Context7 with a device code (recommended)
 2) Enter an existing Context7 API key
 3) Keep the current API key, or stay anonymous if none exists
