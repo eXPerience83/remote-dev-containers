@@ -24,7 +24,8 @@ def load_helper():
 
 
 def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: int) -> None:
-    path.parent.mkdir(parents=True, mode=0o700)
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(path.parent, 0o700)
     path.write_text(json.dumps(payload), encoding="utf-8")
     os.chmod(path, 0o600)
     if os.geteuid() == 0:
