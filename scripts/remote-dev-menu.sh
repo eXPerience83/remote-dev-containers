@@ -553,7 +553,12 @@ PY
   candidates="$(jq -r --arg uri "$project_uri" '
     def terminal_safe($limit):
       explode
-      | map(if (. < 32 or . == 127) then 32 else . end)
+      | map(
+          if (. < 32 or . == 127 or (. >= 128 and . <= 159))
+          then 32
+          else .
+          end
+        )
       | implode
       | .[0:$limit];
 
