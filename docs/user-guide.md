@@ -169,7 +169,7 @@ Antigravity remains experimental. The common behavior safe to rely on from the c
 - **Continue latest Antigravity conversation** passes the vendor-supported `--continue` flag and asks Antigravity to load the most recent conversation associated with that workspace;
 - Google does not document a startup flag that opens the full conversation picker; **Browse/resume Antigravity conversations** starts the normal TUI and you then type `/resume` to open Google's picker;
 - Remote Dev does not parse Antigravity conversation storage or its workspace-keyed last-conversation cache to build a competing picker;
-- Remote Dev no longer relies on rendered prompt text to decide when to inject `/resume`, because vendor TUI wording can change independently of the CLI contract.
+- the menu conversation-entry paths no longer rely on rendered prompt text to decide when to inject `/resume`, because vendor TUI wording can change independently of the CLI contract.
 
 Google documents that `--continue` can fall back to a fresh session when the workspace cache has no valid previous conversation. The full `/resume` picker remains the correct path when you need to choose among multiple conversations.
 
