@@ -18,7 +18,7 @@ CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
 NPM_REGISTRY = "https://registry.npmjs.org/"
 NPM = Path("/opt/remote-dev/mise/shims/npm")
 SETPRIV = Path("/usr/bin/setpriv")
-PYTHON = Path("/usr/bin/python3")
+PYTHON = Path("/opt/remote-dev/mise/shims/python")
 MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
 RUN_ROOT = Path("/run")
 MAX_CREDENTIAL_BYTES = 32 * 1024
@@ -107,6 +107,7 @@ def transient_environment(root: Path) -> dict[str, str]:
         "npm_config_cache": str(root / "npm-cache"),
         "npm_config_registry": NPM_REGISTRY,
         "npm_config_userconfig": "/dev/null",
+        "npm_config_globalconfig": "/dev/null",
         "npm_config_ignore_scripts": "true",
         "npm_config_audit": "false",
         "npm_config_fund": "false",
@@ -170,7 +171,16 @@ def read_credentials(path: Path, *, expected_uid: int) -> str:
             raise DeviceLoginError("Context7 login credentials have unsafe ownership or permissions")
         if info.st_size <= 0 or info.st_size > MAX_CREDENTIAL_BYTES:
             raise DeviceLoginError("Context7 login credentials exceed the supported size boundary")
-        data = os.read(fd, MAX_CREDENTIAL_BYTES + 1)
+
+        chunks: list[bytes] = []
+        remaining = MAX_CREDENTIAL_BYTES + 1
+        while remaining > 0:
+            chunk = os.read(fd, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        data = b"".join(chunks)
         if not data or len(data) > MAX_CREDENTIAL_BYTES:
             raise DeviceLoginError("Context7 login credentials exceed the supported size boundary")
     finally:
@@ -211,9 +221,6 @@ def acquire_api_key() -> str:
                 command,
                 cwd=root,
                 env=environment,
-                stdin=None,
-                stdout=None,
-                stderr=None,
                 timeout=LOGIN_TIMEOUT_SECONDS,
                 check=False,
             )
