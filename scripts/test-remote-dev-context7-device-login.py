@@ -5,7 +5,6 @@ import importlib.util
 import json
 import os
 from pathlib import Path
-import stat
 import subprocess
 import tempfile
 
@@ -24,13 +23,13 @@ def load_helper():
     return module
 
 
-def write_credentials(path: Path, payload: dict[str, object], *, uid: int) -> None:
+def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: int) -> None:
     path.parent.mkdir(parents=True, mode=0o700)
     path.write_text(json.dumps(payload), encoding="utf-8")
     os.chmod(path, 0o600)
     if os.geteuid() == 0:
-        os.chown(path.parent, uid, uid)
-        os.chown(path, uid, uid)
+        os.chown(path.parent, uid, gid)
+        os.chown(path, uid, gid)
 
 
 def assert_acquire_uses_isolated_environment(module) -> None:
@@ -50,7 +49,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         def fake_run(command, **kwargs):
             environment = kwargs["env"]
             cwd = Path(kwargs["cwd"])
-            uid, _ = module.sandbox_identity()
+            uid, gid = module.sandbox_identity()
             captured["command"] = list(command)
             captured["environment"] = dict(environment)
             captured["cwd"] = cwd
@@ -62,6 +61,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                 credentials,
                 {"access_token": SYNTHETIC_KEY, "token_type": "bearer"},
                 uid=uid,
+                gid=gid,
             )
             return subprocess.CompletedProcess(command, 0)
 
@@ -98,10 +98,8 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError("transient npm execution did not disable lifecycle scripts")
         if f"--registry={module.NPM_REGISTRY}" not in command:
             raise AssertionError("transient npm execution did not pin the public npm registry")
-        if command[-3:] != ["login", "--no-browser"][-3:]:
-            # The actual tail is ctx7, login, --no-browser.
-            if command[-3:] != ["ctx7", "login", "--no-browser"]:
-                raise AssertionError(f"unexpected Context7 CLI command tail: {command[-3:]!r}")
+        if command[-3:] != ["ctx7", "login", "--no-browser"]:
+            raise AssertionError(f"unexpected Context7 CLI command tail: {command[-3:]!r}")
         for name, secret in sensitive.items():
             if name in environment or secret in "\n".join(command):
                 raise AssertionError(f"sensitive caller state leaked into transient login: {name}")
@@ -109,6 +107,8 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError("Context7 telemetry was not disabled for transient login")
         if environment.get("npm_config_userconfig") != "/dev/null":
             raise AssertionError("transient npm execution can still consume user npm configuration")
+        if environment.get("npm_config_globalconfig") != "/dev/null":
+            raise AssertionError("transient npm execution can still consume global npm configuration")
         if environment.get("HOME") == os.environ.get("HOME"):
             raise AssertionError("transient Context7 login reused the caller HOME")
 
@@ -122,9 +122,10 @@ def assert_credentials_contract(module) -> None:
         root = Path(temp)
         path = root / "credentials.json"
         uid = os.geteuid()
+        gid = os.getegid()
 
         valid = {"access_token": SYNTHETIC_KEY, "token_type": "bearer"}
-        write_credentials(path, valid, uid=uid)
+        write_credentials(path, valid, uid=uid, gid=gid)
         if module.read_credentials(path, expected_uid=uid) != SYNTHETIC_KEY:
             raise AssertionError("valid long-lived Context7 API-key state was rejected")
 
@@ -139,7 +140,7 @@ def assert_credentials_contract(module) -> None:
             {"access_token": SYNTHETIC_KEY, "token_type": "bearer", "expires_in": 60},
         )
         for payload in invalid_payloads:
-            write_credentials(path, payload, uid=uid)
+            write_credentials(path, payload, uid=uid, gid=gid)
             try:
                 module.read_credentials(path, expected_uid=uid)
             except module.DeviceLoginError:
@@ -147,7 +148,7 @@ def assert_credentials_contract(module) -> None:
             else:
                 raise AssertionError(f"unsafe Context7 credential shape was accepted: {payload!r}")
 
-        write_credentials(path, valid, uid=uid)
+        write_credentials(path, valid, uid=uid, gid=gid)
         os.chmod(path, 0o644)
         try:
             module.read_credentials(path, expected_uid=uid)
