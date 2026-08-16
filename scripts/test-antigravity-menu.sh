@@ -245,6 +245,48 @@ if "2026-08-16T05:51:03  Z" not in value:
     raise SystemExit("sanitized timestamp was not presented to fzf")
 PY
 
+# Google can leave Title empty for a valid newly-created conversation. That must
+# remain selectable because the title is display-only; the validated UUID is the
+# only value passed to the vendor CLI.
+cat >"$metadata" <<JSON
+{
+  "conversations": {
+    "$selected_id": {
+      "summary": {
+        "ID": "$selected_id",
+        "Title": "",
+        "WorkspaceURIs": ["$project_uri"],
+        "ProjectID": "default-cli-project",
+        "UpdatedAt": "2026-08-16T11:03:39.958248172Z",
+        "NumSteps": 3
+      }
+    }
+  }
+}
+JSON
+chmod 0600 "$metadata"
+: >"$invocations"
+: >"$hardening_calls"
+: >"$fzf_input"
+untitled_output="$workdir/untitled-output"
+printf '2\n2\n13\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_TEST_FZF_INPUT="$fzf_input" \
+  "$fixture_menu" >"$untitled_output" 2>&1
+
+mapfile -t untitled_calls <"$invocations"
+[[ "${#untitled_calls[@]}" == 1 ]]
+[[ "${untitled_calls[0]}" == "[project=project][--conversation][$selected_id]" ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fq '(untitled conversation)' "$fzf_input"
+if grep -Fq "Remote Dev could not use Antigravity's local conversation index safely." "$untitled_output"; then
+  echo 'ERROR: a valid untitled conversation incorrectly triggered fallback' >&2
+  exit 1
+fi
+
 # If the observed private metadata contract changes, Resume must fail closed and
 # fall back to the vendor-native in-TUI /resume flow instead of guessing an ID.
 printf '%s\n' '{"conversations":[]}' >"$metadata"
