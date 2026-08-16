@@ -10,6 +10,7 @@ runtime_lib="$workdir/remote-dev-runtime.sh"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
 hardening_calls="$workdir/hardening-calls"
+fzf_input="$workdir/fzf-input"
 metadata="$workdir/conversation_metadata.json"
 selected_id=11111111-1111-4111-8111-111111111111
 other_id=22222222-2222-4222-8222-222222222222
@@ -78,6 +79,9 @@ cat >"$bin_dir/fzf" <<'FZF'
 #!/usr/bin/env bash
 set -euo pipefail
 IFS= read -r first_line || exit 1
+if [[ -n "${REMOTE_DEV_TEST_FZF_INPUT:-}" ]]; then
+  printf '%s\n' "$first_line" >"$REMOTE_DEV_TEST_FZF_INPUT"
+fi
 printf '%s\n' "$first_line"
 FZF
 
@@ -133,10 +137,10 @@ cat >"$metadata" <<JSON
       "last_modified_time": "2026-08-16T08:25:00Z",
       "summary": {
         "ID": "$selected_id",
-        "Title": "RD106-resume-test",
+        "Title": "RD106-\u001b[31mresume-test",
         "WorkspaceURIs": ["$project_uri"],
         "ProjectID": "default-cli-project",
-        "UpdatedAt": "2026-08-16T05:51:03.722632741Z",
+        "UpdatedAt": "2026-08-16T05:51:03\u0007Z",
         "NumSteps": 6
       }
     },
@@ -191,6 +195,7 @@ printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_TEST_FZF_INPUT="$fzf_input" \
   "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
@@ -220,6 +225,19 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   echo 'ERROR: menu still invokes the screen-scraping Antigravity picker helper' >&2
   exit 1
 fi
+
+python3 - "$fzf_input" <<'PY'
+from pathlib import Path
+import sys
+
+value = Path(sys.argv[1]).read_text(encoding="utf-8")
+if any(ord(char) < 32 and char not in "\n\t" for char in value) or "\x7f" in value:
+    raise SystemExit("terminal control character reached fzf input")
+if "RD106- [31mresume-test" not in value:
+    raise SystemExit("sanitized title was not presented to fzf")
+if "2026-08-16T05:51:03 Z" not in value:
+    raise SystemExit("sanitized timestamp was not presented to fzf")
+PY
 
 # If the observed private metadata contract changes, Resume must fail closed and
 # fall back to the vendor-native in-TUI /resume flow instead of guessing an ID.
