@@ -10,10 +10,6 @@ runtime_lib="$workdir/remote-dev-runtime.sh"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
 hardening_calls="$workdir/hardening-calls"
-fzf_input="$workdir/fzf-input"
-metadata="$workdir/conversation_metadata.json"
-selected_id=11111111-1111-4111-8111-111111111111
-other_id=22222222-2222-4222-8222-222222222222
 mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat >"$runtime_lib" <<'RUNTIME'
@@ -75,21 +71,11 @@ set -euo pipefail
 } >>"$REMOTE_DEV_MENU_INVOCATIONS"
 RUNNER
 
-cat >"$bin_dir/fzf" <<'FZF'
-#!/usr/bin/env bash
-set -euo pipefail
-IFS= read -r first_line || exit 1
-if [[ -n "${REMOTE_DEV_TEST_FZF_INPUT:-}" ]]; then
-  printf '%s\n' "$first_line" >"$REMOTE_DEV_TEST_FZF_INPUT"
-fi
-printf '%s\n' "$first_line"
-FZF
-
 cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == status && "${2:-}" == --menu ]]
-printf '%s\n' 'Antigravity: 1.1.13 (official and reviewed)'
+printf '%s\n' 'Antigravity: 1.1.10 (official and reviewed)'
 MANAGER
 
 for command in remote-dev-install-antigravity remote-dev-update-antigravity; do
@@ -123,53 +109,15 @@ CLEAR
 
 chmod 0755 "$bin_dir"/*
 
-project_uri="$(python3 - "$workdir/workspace/project" <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).as_uri())
-PY
-)"
-cat >"$metadata" <<JSON
-{
-  "conversations": {
-    "$selected_id": {
-      "is_internal": "false",
-      "last_modified_time": "2026-08-16T08:25:00Z",
-      "summary": {
-        "ID": "$selected_id",
-        "Title": "RD106-\u001b[31m\u009b31mresume-test",
-        "WorkspaceURIs": ["$project_uri"],
-        "ProjectID": "default-cli-project",
-        "UpdatedAt": "2026-08-16T05:51:03\u0007\u009dZ",
-        "NumSteps": 6
-      }
-    },
-    "$other_id": {
-      "summary": {
-        "ID": "$other_id",
-        "Title": "Other project",
-        "WorkspaceURIs": ["file:///workspace/other"],
-        "ProjectID": "default-cli-project",
-        "UpdatedAt": "2026-08-16T05:50:00Z",
-        "NumSteps": 3
-      }
-    }
-  }
-}
-JSON
-chmod 0600 "$metadata"
-
-python3 - "$menu_source" "$fixture_menu" "$runtime_lib" "$bin_dir" "$metadata" <<'PY'
+python3 - "$menu_source" "$fixture_menu" "$runtime_lib" "$bin_dir" <<'PY'
 from pathlib import Path
 import sys
 
-source, destination, runtime_lib, bin_dir, metadata = map(Path, sys.argv[1:])
+source, destination, runtime_lib, bin_dir = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 replacements = {
     "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
         f"runtime_lib={runtime_lib}",
-    "readonly antigravity_conversation_metadata=/root/.gemini/antigravity-cli/cache/conversation_metadata.json":
-        f"readonly antigravity_conversation_metadata={metadata}",
     "/usr/local/bin/run-antigravity": str(bin_dir / "run-antigravity"),
     "/usr/local/bin/remote-dev-antigravity": str(bin_dir / "remote-dev-antigravity"),
     "/usr/local/bin/remote-dev-install-antigravity":
@@ -195,19 +143,20 @@ printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  REMOTE_DEV_TEST_FZF_INPUT="$fzf_input" \
   "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 3 ]]
 [[ "${calls[0]}" == '[project=project]' ]]
-[[ "${calls[1]}" == "[project=project][--conversation][$selected_id]" ]]
-[[ "${calls[2]}" == '[project=project][--continue]' ]]
+[[ "${calls[1]}" == '[project=project][--continue]' ]]
+[[ "${calls[2]}" == '[project=project]' ]]
 [[ "$(wc -l <"$hardening_calls")" == 5 ]]
 grep -Fxq 'Project: project' "$output"
+grep -Fxq 'Google exposes the full conversation picker only inside the TUI.' "$output"
+grep -Fxq 'Choose 3, then type /resume after Antigravity opens to browse conversations.' "$output"
 grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Resume an Antigravity conversation (current project)' "$output"
-grep -Fxq '3) Continue latest Antigravity conversation (current project)' "$output"
+grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
+grep -Fxq '3) Browse/resume Antigravity conversations (current project)' "$output"
 grep -Fxq '4) Projects...' "$output"
 grep -Fxq '5) Launch/approval options [not available]' "$output"
 grep -Fxq '6) Install Antigravity from Google' "$output"
@@ -226,85 +175,4 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   exit 1
 fi
 
-python3 - "$fzf_input" <<'PY'
-from pathlib import Path
-import sys
-
-value = Path(sys.argv[1]).read_text(encoding="utf-8")
-for char in value:
-    codepoint = ord(char)
-    if (
-        (codepoint < 32 and char not in "\n\t")
-        or codepoint == 127
-        or 128 <= codepoint <= 159
-    ):
-        raise SystemExit("terminal control character reached fzf input")
-if "RD106- [31m 31mresume-test" not in value:
-    raise SystemExit("sanitized title was not presented to fzf")
-if "2026-08-16T05:51:03  Z" not in value:
-    raise SystemExit("sanitized timestamp was not presented to fzf")
-PY
-
-# Google can leave Title empty for a valid newly-created conversation. That must
-# remain selectable because the title is display-only; the validated UUID is the
-# only value passed to the vendor CLI.
-cat >"$metadata" <<JSON
-{
-  "conversations": {
-    "$selected_id": {
-      "summary": {
-        "ID": "$selected_id",
-        "Title": "",
-        "WorkspaceURIs": ["$project_uri"],
-        "ProjectID": "default-cli-project",
-        "UpdatedAt": "2026-08-16T11:03:39.958248172Z",
-        "NumSteps": 3
-      }
-    }
-  }
-}
-JSON
-chmod 0600 "$metadata"
-: >"$invocations"
-: >"$hardening_calls"
-: >"$fzf_input"
-untitled_output="$workdir/untitled-output"
-printf '2\n2\n13\n' | env \
-  PATH="$bin_dir:$PATH" \
-  WORKSPACE="$workdir/workspace" \
-  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  REMOTE_DEV_TEST_FZF_INPUT="$fzf_input" \
-  "$fixture_menu" >"$untitled_output" 2>&1
-
-mapfile -t untitled_calls <"$invocations"
-[[ "${#untitled_calls[@]}" == 1 ]]
-[[ "${untitled_calls[0]}" == "[project=project][--conversation][$selected_id]" ]]
-[[ "$(wc -l <"$hardening_calls")" == 1 ]]
-grep -Fq '(untitled conversation)' "$fzf_input"
-if grep -Fq "Remote Dev could not use Antigravity's local conversation index safely." "$untitled_output"; then
-  echo 'ERROR: a valid untitled conversation incorrectly triggered fallback' >&2
-  exit 1
-fi
-
-# If the observed private metadata contract changes, Resume must fail closed and
-# fall back to the vendor-native in-TUI /resume flow instead of guessing an ID.
-printf '%s\n' '{"conversations":[]}' >"$metadata"
-: >"$invocations"
-: >"$hardening_calls"
-fallback_output="$workdir/fallback-output"
-printf '2\n\n\n13\n' | env \
-  PATH="$bin_dir:$PATH" \
-  WORKSPACE="$workdir/workspace" \
-  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  "$fixture_menu" >"$fallback_output" 2>&1
-
-mapfile -t fallback_calls <"$invocations"
-[[ "${#fallback_calls[@]}" == 1 ]]
-[[ "${fallback_calls[0]}" == '[project=project]' ]]
-[[ "$(wc -l <"$hardening_calls")" == 1 ]]
-grep -Fxq "Remote Dev could not use Antigravity's local conversation index safely." "$fallback_output"
-grep -Fq 'Type /resume there to open Google' "$fallback_output"
-
-echo 'Project-scoped Antigravity conversation selector: OK'
+echo 'Project-scoped supported Antigravity resume menu: OK'

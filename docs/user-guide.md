@@ -161,22 +161,19 @@ Recreating the container with the same reviewed mounts should therefore preserve
 
 ## 8. Antigravity: current documented boundary
 
-Antigravity remains experimental. The current Remote Dev conversation behavior has now been exercised with Antigravity CLI `1.1.13` on the TrueNAS validation path, but it still depends on one private vendor metadata file for the pre-launch list and therefore keeps a vendor-native fallback.
+Antigravity remains experimental. The common behavior safe to rely on from the current Remote Dev implementation is the filesystem-selection contract plus the vendor-documented conversation entry points:
 
-- the Antigravity role has its own private `/workspace` and persistent vendor state;
-- select one concrete Remote Dev project before Start/Resume/Continue;
-- every Antigravity launch still starts from the selected project cwd;
-- **Resume an Antigravity conversation** reads only `/root/.gemini/antigravity-cli/cache/conversation_metadata.json` as a bounded, read-only metadata index; it does not read transcripts or message previews;
-- Remote Dev accepts only entries whose validated `WorkspaceURIs` contains the exact selected project `file://` URI, whose map key is a UUID matching `summary.ID`, and whose title/step/date fields have the observed expected types;
-- the picker displays only the title, step count and update timestamp, then passes the selected validated UUID to the vendor-supported `agy --conversation <id>` path through the existing `run-antigravity` wrapper;
-- the real `1.1.13` TrueNAS test confirmed that `--conversation <id>` reopened the disposable project-scoped conversation directly and retained its earlier harmless context;
-- **Continue latest Antigravity conversation** uses the vendor-supported `--continue` path;
-- if the private metadata index is missing, symlinked, oversized, incompatible or contains no compatible conversation for the selected project, Remote Dev does not guess an ID: it starts normal Antigravity and instructs the user to type the vendor-native `/resume` command;
-- the previous prompt-text/tmux automatic `/resume` injection is no longer used by the supported menu path, so TUI wording changes such as `> Describe...` becoming a bare `>` do not decide whether Resume works.
+- the Antigravity role has its own private `/workspace` and state;
+- select a concrete Remote Dev project before Start/Continue/Browse;
+- Remote Dev launches every Antigravity action from the selected project cwd;
+- **Continue latest Antigravity conversation** passes the vendor-supported `--continue` flag and asks Antigravity to load the most recent conversation associated with that workspace;
+- Google does not document a startup flag that opens the full conversation picker; **Browse/resume Antigravity conversations** starts the normal TUI and you then type `/resume` to open Google's picker;
+- Remote Dev does not parse Antigravity conversation storage or its workspace-keyed last-conversation cache to build a competing picker;
+- the menu conversation-entry paths no longer rely on rendered prompt text to decide when to inject `/resume`, because vendor TUI wording can change independently of the CLI contract.
 
-`conversation_metadata.json` is an observed private Antigravity CLI cache, not a documented Google compatibility contract. The stable contract remains the vendor's `--conversation <id>`, `--continue` and in-TUI `/resume` entry points; Remote Dev therefore treats local metadata parsing as optional convenience and fails closed to `/resume` when its observed schema no longer matches.
+Google documents that `--continue` can fall back to a fresh session when the workspace cache has no valid previous conversation. The full `/resume` picker remains the correct path when you need to choose among multiple conversations.
 
-Do **not** infer Codex `[Cwd]/All` filtering, transcript reconstruction or stronger persistence guarantees for Antigravity. Real stop/start and container-recreation continuity remains tracked in [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), with the wider experimental lifecycle tracked by #29/#106.
+Do **not** infer Codex session filtering, preview visibility, thread/path reassociation or persistence semantics for Antigravity. Real TrueNAS project/session validation remains tracked in [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), with the wider experimental lifecycle tracked by #29/#106.
 
 ## 9. Quick troubleshooting
 

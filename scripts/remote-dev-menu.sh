@@ -17,9 +17,6 @@ active_project_name=""
 active_project_path=""
 project_choice_name=""
 project_count=0
-readonly antigravity_conversation_metadata=/root/.gemini/antigravity-cli/cache/conversation_metadata.json
-readonly antigravity_conversation_metadata_max_bytes=$((2 * 1024 * 1024))
-antigravity_conversation_id=""
 
 harden_state_or_exit() {
   if ! /usr/local/bin/secure-persistent-state; then
@@ -466,188 +463,6 @@ run_antigravity_action() {
   run_interactive_and_harden "$label" "${command[@]}"
 }
 
-choose_antigravity_conversation() {
-  local metadata_json=""
-  local project_uri=""
-  local candidates=""
-  local selected=""
-  local selected_id=""
-  local selector_status=0
-
-  antigravity_conversation_id=""
-
-  metadata_json="$(python3 - "$antigravity_conversation_metadata" "$antigravity_conversation_metadata_max_bytes" <<'PY'
-import os
-import stat
-import sys
-
-path = sys.argv[1]
-limit = int(sys.argv[2])
-flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-try:
-    fd = os.open(path, flags)
-except OSError:
-    raise SystemExit(3)
-try:
-    metadata = os.fstat(fd)
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size < 1 or metadata.st_size > limit:
-        raise SystemExit(3)
-    data = bytearray()
-    while len(data) <= limit:
-        chunk = os.read(fd, min(65536, limit + 1 - len(data)))
-        if not chunk:
-            break
-        data.extend(chunk)
-    if not data or len(data) > limit:
-        raise SystemExit(3)
-    sys.stdout.buffer.write(data)
-finally:
-    os.close(fd)
-PY
-)" || return 3
-
-  project_uri="$(python3 - "$active_project_path" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-if not path.is_absolute():
-    raise SystemExit(2)
-print(path.as_uri())
-PY
-)" || return 2
-
-  if ! jq -e --arg uri "$project_uri" '
-    (.conversations | type) == "object"
-    and (
-      [
-        .conversations
-        | to_entries[]
-        | . as $entry
-        | ($entry.value.summary? // null) as $summary
-        | if (
-            ($summary | type) == "object"
-            and (($summary.WorkspaceURIs? | type) == "array")
-            and (($summary.WorkspaceURIs | index($uri)) != null)
-          )
-          then
-            ($entry.key | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
-            and ($summary.ID == $entry.key)
-            and (($summary.Title | type) == "string")
-            and (all($summary.WorkspaceURIs[]; type == "string"))
-            and (($summary.NumSteps | type) == "number")
-            and ($summary.NumSteps >= 0)
-            and (($summary.NumSteps | floor) == $summary.NumSteps)
-            and (($summary.UpdatedAt | type) == "string")
-          else
-            true
-          end
-      ]
-      | all
-    )
-  ' <<<"$metadata_json" >/dev/null 2>&1; then
-    return 3
-  fi
-
-  candidates="$(jq -r --arg uri "$project_uri" '
-    def terminal_safe($limit):
-      explode
-      | map(
-          if (. < 32 or . == 127 or (. >= 128 and . <= 159))
-          then 32
-          else .
-          end
-        )
-      | implode
-      | .[0:$limit];
-
-    .conversations
-    | to_entries
-    | map(
-        select(
-          (.value.summary | type) == "object"
-          and (.value.summary.WorkspaceURIs | type) == "array"
-          and ((.value.summary.WorkspaceURIs | index($uri)) != null)
-        )
-      )
-    | sort_by(.value.summary.UpdatedAt)
-    | reverse[]
-    | [
-        .key,
-        (.value.summary.Title | terminal_safe(160) | if length == 0 then "(untitled conversation)" else . end),
-        (.value.summary.NumSteps | tostring),
-        (.value.summary.UpdatedAt | terminal_safe(80))
-      ]
-    | @tsv
-  ' <<<"$metadata_json" 2>/dev/null)" || return 3
-
-  [[ -n "$candidates" ]] || return 3
-  selected="$(
-    printf '%s\n' "$candidates" \
-      | fzf \
-          --delimiter=$'\t' \
-          --with-nth=2,3,4 \
-          --no-multi \
-          --header="Antigravity conversations — $active_project_name | title · steps · updated" \
-          --prompt='Resume > '
-  )" || selector_status=$?
-
-  if (( selector_status != 0 )); then
-    case "$selector_status" in
-      1|130) return 1 ;;
-      *) return 2 ;;
-    esac
-  fi
-
-  selected_id="${selected%%$'\t'*}"
-  [[ "$selected_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] \
-    || return 2
-  antigravity_conversation_id="$selected_id"
-}
-
-run_antigravity_resume_action() {
-  local project_status=0
-  local selector_status=0
-
-  ensure_active_project || project_status=$?
-  if (( project_status != 0 )); then
-    pause_for_menu
-    return "$project_status"
-  fi
-
-  if choose_antigravity_conversation; then
-    run_antigravity_action \
-      "Antigravity resume" \
-      --conversation "$antigravity_conversation_id"
-    return $?
-  else
-    selector_status=$?
-  fi
-
-  case "$selector_status" in
-    1)
-      return 0
-      ;;
-    3)
-      clear
-      cat <<'FALLBACK'
-Remote Dev could not use Antigravity's local conversation index safely.
-The index may be absent, incompatible, or contain no conversations for this project.
-
-Starting the normal Antigravity TUI instead. Type /resume there to open Google's
-native conversation picker.
-FALLBACK
-      pause_for_menu "Press Enter to start Antigravity..."
-      run_antigravity_action "Antigravity conversation browser"
-      ;;
-    *)
-      echo "ERROR: Antigravity conversation selection failed safely" >&2
-      pause_for_menu
-      return "$selector_status"
-      ;;
-  esac
-}
-
 show_context7_menu() {
   local status_summary=""
   local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
@@ -809,9 +624,11 @@ ${version_summary}
 ${status_summary}
 ${project_summary}
 ========================
+Google exposes the full conversation picker only inside the TUI.
+Choose 3, then type /resume after Antigravity opens to browse conversations.
 1) Start Antigravity
-2) Resume an Antigravity conversation (current project)
-3) Continue latest Antigravity conversation (current project)
+2) Continue latest Antigravity conversation (current project)
+3) Browse/resume Antigravity conversations (current project)
 4) Projects...
 5) Launch/approval options [not available]
 6) Install Antigravity from Google
@@ -829,10 +646,10 @@ MENU
         if run_antigravity_action "Antigravity"; then :; fi
         ;;
       2)
-        if run_antigravity_resume_action; then :; fi
+        if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
       3)
-        if run_antigravity_action "Antigravity continue" --continue; then :; fi
+        if run_antigravity_action "Antigravity conversation browser"; then :; fi
         ;;
       4)
         show_projects_menu
