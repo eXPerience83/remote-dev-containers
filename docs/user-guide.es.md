@@ -181,7 +181,7 @@ Google documenta que `--continue` puede caer en una sesión nueva cuando la cach
 
 Comprueba el filtro del selector de Codex. `[Cwd]` está acotado a la ruta exacta; el proyecto seleccionado puede no tener sesiones aunque otro proyecto sí.
 
-### Una sesión aparece en `All` pero no `[Cwd]`
+### Una sesión aparece en `All` pero no en `[Cwd]`
 
 Su cwd guardado no coincide con la ruta exacta del proyecto actual. Es normal para otros proyectos, worktrees, rutas renombradas y directorios históricos.
 
