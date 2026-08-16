@@ -137,10 +137,10 @@ cat >"$metadata" <<JSON
       "last_modified_time": "2026-08-16T08:25:00Z",
       "summary": {
         "ID": "$selected_id",
-        "Title": "RD106-\u001b[31mresume-test",
+        "Title": "RD106-\u001b[31m\u009b31mresume-test",
         "WorkspaceURIs": ["$project_uri"],
         "ProjectID": "default-cli-project",
-        "UpdatedAt": "2026-08-16T05:51:03\u0007Z",
+        "UpdatedAt": "2026-08-16T05:51:03\u0007\u009dZ",
         "NumSteps": 6
       }
     },
@@ -231,11 +231,17 @@ from pathlib import Path
 import sys
 
 value = Path(sys.argv[1]).read_text(encoding="utf-8")
-if any(ord(char) < 32 and char not in "\n\t" for char in value) or "\x7f" in value:
-    raise SystemExit("terminal control character reached fzf input")
-if "RD106- [31mresume-test" not in value:
+for char in value:
+    codepoint = ord(char)
+    if (
+        (codepoint < 32 and char not in "\n\t")
+        or codepoint == 127
+        or 128 <= codepoint <= 159
+    ):
+        raise SystemExit("terminal control character reached fzf input")
+if "RD106- [31m 31mresume-test" not in value:
     raise SystemExit("sanitized title was not presented to fzf")
-if "2026-08-16T05:51:03 Z" not in value:
+if "2026-08-16T05:51:03  Z" not in value:
     raise SystemExit("sanitized timestamp was not presented to fzf")
 PY
 
