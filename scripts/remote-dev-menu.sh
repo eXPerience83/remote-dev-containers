@@ -624,18 +624,21 @@ ${version_summary}
 ${status_summary}
 ${project_summary}
 ========================
+Google exposes the full conversation picker only inside the TUI.
+Choose 3, then type /resume after Antigravity opens to browse conversations.
 1) Start Antigravity
-2) Resume an Antigravity session (current project)
-3) Projects...
-4) Launch/approval options [not available]
-5) Install Antigravity from Google
-6) Update Antigravity from Google
-7) Context7 integration [pending #95]
-8) Antigravity sign-in [handled during launch]
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
+2) Continue latest Antigravity conversation (current project)
+3) Browse/resume Antigravity conversations (current project)
+4) Projects...
+5) Launch/approval options [not available]
+6) Install Antigravity from Google
+7) Update Antigravity from Google
+8) Context7 integration [pending #95]
+9) Antigravity sign-in [handled during launch]
+10) Sign in to GitHub CLI
+11) Run diagnostics
+12) Open a login shell
+13) Exit this tmux session
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -643,36 +646,39 @@ MENU
         if run_antigravity_action "Antigravity"; then :; fi
         ;;
       2)
-        if run_antigravity_action "Antigravity resume" --remote-dev-open-resume-picker; then :; fi
+        if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
       3)
-        show_projects_menu
+        if run_antigravity_action "Antigravity conversation browser"; then :; fi
         ;;
       4)
-        show_unavailable_action "Antigravity does not currently expose a Remote Dev-reviewed launch/approval option."
+        show_projects_menu
         ;;
       5)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        show_unavailable_action "Antigravity does not currently expose a Remote Dev-reviewed launch/approval option."
         ;;
       6)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
         ;;
       7)
-        show_unavailable_action "Context7 for Antigravity is not implemented yet; see #95."
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
       8)
-        show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
+        show_unavailable_action "Context7 for Antigravity is not implemented yet; see #95."
         ;;
       9)
-        if run_github_login; then :; fi
+        show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
         ;;
       10)
-        run_diagnostics
+        if run_github_login; then :; fi
         ;;
       11)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        run_diagnostics
         ;;
       12)
+        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        ;;
+      13)
         exit 0
         ;;
       *)
