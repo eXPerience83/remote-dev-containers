@@ -92,7 +92,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
 
         command = captured["command"]
         environment = captured["environment"]
-        if module.CONTEXT7_CLI_PACKAGE not in command:
+        if f"--package={module.CONTEXT7_CLI_PACKAGE}" not in command:
             raise AssertionError("device login did not pin the exact Context7 CLI package")
         if "--ignore-scripts" not in command:
             raise AssertionError("transient npm execution did not disable lifecycle scripts")
