@@ -2,7 +2,7 @@
 
 Remote Dev project code is licensed under Apache-2.0. Software bundled into the images keeps its own upstream license, notices, trademarks and terms.
 
-The source of truth is `third_party/inventory.json`. It lists only the components currently distributed by the base and Codex images, their pinned version source and the notice paths shipped with the image. It is intentionally declarative: this project does not attempt to parse every possible Docker, shell or package-manager command.
+The source of truth for **distributed image components** is `third_party/inventory.json`. It lists only the components currently distributed by the base and Codex images, their pinned version source and the notice paths shipped with the image. It is intentionally declarative: this project does not attempt to parse every possible Docker, shell or package-manager command. `versions.env` may additionally carry explicitly documented review metadata for optional software that is **not** distributed; such keys must be excluded deliberately from the image-inventory comparison and must not be represented as image/SBOM content.
 
 ## Inspecting a built image
 
@@ -29,26 +29,30 @@ CI remains offline for this evidence: `scripts/validate-standalone-artifact-insp
 
 `antigravity-cli-inspection.md` and its JSON companion record the separate pre-implementation inspection of Google's optional proprietary CLI. The dedicated read-only workflow downloads the current official installer into an ephemeral credential-free home, records bounded metadata for the installer and resulting executable, and uploads no vendor bytes. This evidence supports the no-redistribution and explicit vendor-install decision in `optional-agents.md`; Antigravity remains outside the image inventory and image SBOM because it is not bundled.
 
+Context7 follows the same non-distribution accounting boundary for its optional authentication CLI. `CONTEXT7_CLI_VERSION` in `versions.env` records only the latest CLI version whose transient `login --no-browser` surface Remote Dev has reviewed. The CLI is resolved/downloaded from the official public npm registry only after explicit user action and is removed afterward; it is intentionally absent from `third_party/inventory.json`, image notices and image SBOM content.
+
 The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change.
 
 ## Maintenance contract
 
-A version update is not complete until the same pull request:
+For a version update to a **distributed image component**, the same pull request must:
 
-1. updates `versions.env`;
-2. updates the matching entry in `third_party/inventory.json`;
-3. reviews and replaces any repository-preserved or artifact-derived license or NOTICE file whose upstream text changed;
-4. refreshes the bounded standalone-artifact report when GitHub CLI, Codex CLI, ttyd, mise or uv changes;
-5. passes `scripts/validate-third-party-inventory.sh` and the component-specific notice validators;
-6. builds both images and passes `remote-dev-notices --check`.
+1. update `versions.env`;
+2. update the matching entry in `third_party/inventory.json`;
+3. review and replace any repository-preserved or artifact-derived license or NOTICE file whose upstream text changed;
+4. refresh the bounded standalone-artifact report when GitHub CLI, Codex CLI, ttyd, mise or uv changes;
+5. pass `scripts/validate-third-party-inventory.sh` and the component-specific notice validators;
+6. build both images and pass `remote-dev-notices --check`.
 
-Renovate owns standard dependency references that it understands directly, such as Dockerfile frontend images, the Ubuntu base image and pinned GitHub Actions. The custom upstream workflow owns Codex, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv because those updates also require architecture-specific digests, runtime-lock regeneration and legal-inventory synchronization. Each dependency has one automation owner.
+Explicit non-distributed review metadata is maintained separately from that image-inventory contract. Changing such a pin still requires the owning legal/privacy/supply-chain review and focused tests, but must not create a fake distributed-component inventory entry.
 
-The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing version pins. For each already inventoried repository-sourced component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. When `mise.lock` changes the Python artifact, `scripts/regenerate-mise-lock.sh` regenerates and compacts the bounded Python legal metadata before the update commit is created. It then runs `scripts/sync-standalone-artifact-inspection.py` to refresh exact packaging evidence for any changed supported standalone asset. Downloads are restricted to explicitly approved HTTPS hosts and preserved notice paths are confined to `third_party/`.
+Renovate owns standard dependency references that it understands directly, such as Dockerfile frontend images, the Ubuntu base image and pinned GitHub Actions. The custom upstream workflow owns Codex, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv because those updates also require architecture-specific digests, runtime-lock regeneration and legal-inventory synchronization. It also owns detection/proposal of reviewed metadata for optional Context7 CLI and, once #83 is complete, Antigravity review evidence without turning either optional agent into image content. Each dependency has one automation owner.
+
+The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing distributed version pins. For each already inventoried repository-sourced component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. When `mise.lock` changes the Python artifact, `scripts/regenerate-mise-lock.sh` regenerates and compacts the bounded Python legal metadata before the update commit is created. It then runs `scripts/sync-standalone-artifact-inspection.py` to refresh exact packaging evidence for any changed supported standalone asset. Downloads are restricted to explicitly approved HTTPS hosts and preserved notice paths are confined to `third_party/`.
 
 Changed legal text and changed packaging evidence are never accepted silently: they remain visible in the pull-request diff for human review. The robot updates `refreshed_on` when it prepares new candidate documents; `reviewed_on` records a human review and is not changed automatically. If a version-specific URL cannot be derived safely, an upstream document cannot be downloaded, an artifact digest disagrees, AMD64 and ARM64 legal-file findings differ or a referenced license is missing, the maintenance workflow fails before creating an incoherent update commit.
 
-CI compares all tool version keys in `versions.env` with the declarative inventory. A new pinned tool therefore requires an explicit inventory entry, but the validator does not implement a general-purpose Docker or shell parser.
+CI compares distributed tool version keys in `versions.env` with the declarative image inventory. Explicitly documented non-distributed review keys such as `CONTEXT7_CLI_VERSION` are excluded from that equality check and validated by their owning feature tests. A new **distributed** pinned tool still requires an explicit inventory entry; the validator does not implement a general-purpose Docker or shell parser.
 
 Generated SPDX SBOM files are uploaded with CI artifacts as a supplementary omission check. They do not replace upstream notices and are not treated as a perfect detector for standalone binaries.
 
@@ -56,7 +60,7 @@ Generated SPDX SBOM files are uploaded with CI artifacts as a supplementary omis
 
 The base image contains Ubuntu packages, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv. The final image adds OpenAI Codex CLI.
 
-Antigravity CLI, Claude Code and similar vendor-governed agents are not downloaded or redistributed by the current images. Their policy is documented in `optional-agents.md`.
+Antigravity CLI, Context7 CLI, Claude Code and similar vendor-governed/optional tools are not downloaded or redistributed by the current images. Context7 CLI may be downloaded transiently from npm only during explicit device authentication and is removed before the resulting key is adopted. Their policy is documented in the relevant optional-agent/integration documentation.
 
 The standard OCI `org.opencontainers.image.licenses` annotation is not set to a project-only value, because the images aggregate software under multiple licenses. Custom labels identify the Remote Dev project license and the notice path without relicensing bundled components.
 
