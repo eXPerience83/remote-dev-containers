@@ -136,23 +136,23 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-# Duplicate action choices must be consumed by the action-result pause. Placeholder
-# slots also pause and must not accidentally dispatch another action.
+# Interactive actions pause before returning to the menu, so each exercised action
+# is followed by one throwaway input consumed by that pause.
 printf '1\n1\n2\n2\n5\n5\n6\n6\n4\n4\n7\n7\n8\n8\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  "$fixture_menu" >"$output" 2>&1
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
 [[ "${#calls[@]}" == 2 ]]
 [[ "${calls[0]}" == '[project=project]' ]]
-[[ "${calls[1]}" == '[project=project][--remote-dev-open-resume-picker]' ]]
+[[ "${calls[1]}" == '[project=project][--continue]' ]]
 [[ "$(wc -l <"$hardening_calls")" == 4 ]]
 grep -Fxq 'Project: project' "$output"
-grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Resume an Antigravity session (current project)' "$output"
+grep -Fxq '1) Start Antigravity (use /resume to browse/resume older conversations)' "$output"
+grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
 grep -Fxq '4) Launch/approval options [not available]' "$output"
 grep -Fxq '5) Install Antigravity from Google' "$output"
@@ -166,9 +166,13 @@ grep -Fxq '12) Exit this tmux session' "$output"
 grep -Fxq 'Antigravity does not currently expose a Remote Dev-reviewed launch/approval option.' "$output"
 grep -Fxq 'Context7 for Antigravity is not implemented yet; see #95.' "$output"
 grep -Fxq 'Antigravity authentication is currently handled by the vendor flow during launch.' "$output"
-if grep -EFiq 'continue the last|continue latest|last conversation' "$output"; then
-  echo 'ERROR: menu still exposes a latest-conversation shortcut' >&2
+if grep -Fq 'Browse/resume Antigravity conversations' "$output"; then
+  echo 'ERROR: menu still exposes a separate Antigravity browse action' >&2
+  exit 1
+fi
+if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
+  echo 'ERROR: menu still invokes the screen-scraping Antigravity picker helper' >&2
   exit 1
 fi
 
-echo 'Project-scoped aligned Antigravity menu result pauses: OK'
+echo 'Codex-aligned vendor-native Antigravity resume menu: OK'

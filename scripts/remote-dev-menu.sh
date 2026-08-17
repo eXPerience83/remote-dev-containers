@@ -624,8 +624,8 @@ ${version_summary}
 ${status_summary}
 ${project_summary}
 ========================
-1) Start Antigravity
-2) Resume an Antigravity session (current project)
+1) Start Antigravity (use /resume to browse/resume older conversations)
+2) Continue latest Antigravity conversation (current project)
 3) Projects...
 4) Launch/approval options [not available]
 5) Install Antigravity from Google
@@ -643,7 +643,7 @@ MENU
         if run_antigravity_action "Antigravity"; then :; fi
         ;;
       2)
-        if run_antigravity_action "Antigravity resume" --remote-dev-open-resume-picker; then :; fi
+        if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
       3)
         show_projects_menu
