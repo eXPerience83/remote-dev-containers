@@ -56,6 +56,7 @@ The official CLI displays a one-time code and verification URL that can be appro
 - disables npm lifecycle scripts and Context7 CLI telemetry for the transient invocation;
 - ignores user/global npm configuration and fixes the npm source to the public npm registry;
 - does not pass Codex, GitHub, OpenAI or existing Context7 credentials into the transient process;
+- allows the official device-authorization request to send the container hostname to Context7 on a best-effort basis so the verification page can identify the device being authorized;
 - validates that the resulting private Context7 credential is the expected long-lived bearer `ctx7sk-...` API-key form;
 - passes that key to the existing Remote Dev manager only over child-process stdin;
 - removes the complete transient CLI/login/cache directory on success, cancellation or failure.
@@ -140,7 +141,7 @@ Enabling Context7 creates an external-service boundary. Based on the official Co
 - Context7 output can be incomplete or inaccurate and should be verified before production use;
 - the underlying documentation returned by Context7 remains subject to its original copyright and license terms.
 
-The official `ctx7 login` flow may display account identity information such as an email/name or teamspace in the local terminal after authorization. Remote Dev does not store that output, but screenshots or copied validation evidence must redact account identifiers as well as device codes and credentials.
+The official `ctx7 login` device flow also sends the container hostname on a best-effort basis with the authorization request so Context7 can show which device is being approved. After approval, the CLI uses the freshly issued key for a Context7 `whoami` request and may display account identity information such as an email/name or teamspace in the local terminal. Remote Dev does not persist that CLI output, but screenshots or copied validation evidence must redact account identifiers as well as device codes and credentials.
 
 Use of the hosted service and the device-login flow is governed by the current **Context7 Addendum**, **Upstash Terms of Service** and **Upstash Privacy Policy**. Remote Dev is not affiliated with or endorsed by Upstash, Context7 or OpenAI.
 
