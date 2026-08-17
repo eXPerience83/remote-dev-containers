@@ -90,11 +90,15 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
         try:
             module.PYTHON = Path(sys.executable)
             module.MANAGER = MANAGER
-            module.acquire_api_key = lambda: SYNTHETIC_NEW_KEY
+            module.acquire_api_key = lambda *, cli_channel: (
+                SYNTHETIC_NEW_KEY,
+                "0.5.8",
+                True,
+            )
             os.environ["CODEX_HOME"] = str(device_home)
             os.environ["REMOTE_DEV_ROLE"] = "codex"
 
-            if module.command_login(yes=True) != 0:
+            if module.command_login(yes=True, cli_channel="reviewed") != 0:
                 raise AssertionError("synthetic device adoption unexpectedly failed")
 
             run_manager(
@@ -118,12 +122,13 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
 
             before_failure = snapshot(device_home)
 
-            def fail_acquire() -> str:
+            def fail_acquire(*, cli_channel):
+                del cli_channel
                 raise module.DeviceLoginError("synthetic device-login failure")
 
             module.acquire_api_key = fail_acquire
             try:
-                module.command_login(yes=True)
+                module.command_login(yes=True, cli_channel="reviewed")
             except module.DeviceLoginError:
                 pass
             else:
