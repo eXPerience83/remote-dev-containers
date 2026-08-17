@@ -138,7 +138,7 @@ chmod 0755 "$fixture_menu"
 output="$workdir/output"
 # Interactive actions pause before returning to the menu, so each exercised action
 # is followed by one throwaway input consumed by that pause.
-printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
+printf '1\n1\n2\n2\n5\n5\n6\n6\n4\n4\n7\n7\n8\n8\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -146,33 +146,33 @@ printf '1\n1\n2\n2\n3\n3\n6\n6\n7\n7\n5\n5\n8\n8\n9\n9\n13\n' | env \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
-[[ "${#calls[@]}" == 3 ]]
+[[ "${#calls[@]}" == 2 ]]
 [[ "${calls[0]}" == '[project=project]' ]]
-[[ "${calls[1]}" == '[project=project]' ]]
-[[ "${calls[2]}" == '[project=project][--continue]' ]]
-[[ "$(wc -l <"$hardening_calls")" == 5 ]]
+[[ "${calls[1]}" == '[project=project][--continue]' ]]
+[[ "$(wc -l <"$hardening_calls")" == 4 ]]
 grep -Fxq 'Project: project' "$output"
-grep -Fxq 'Google exposes the full conversation picker only inside the TUI.' "$output"
-grep -Fxq 'Choose 2, then type /resume after Antigravity opens to browse conversations.' "$output"
-grep -Fxq '1) Start Antigravity' "$output"
-grep -Fxq '2) Browse/resume Antigravity conversations (/resume)' "$output"
-grep -Fxq '3) Continue latest Antigravity conversation (current project)' "$output"
-grep -Fxq '4) Projects...' "$output"
-grep -Fxq '5) Launch/approval options [not available]' "$output"
-grep -Fxq '6) Install Antigravity from Google' "$output"
-grep -Fxq '7) Update Antigravity from Google' "$output"
-grep -Fxq '8) Context7 integration [pending #95]' "$output"
-grep -Fxq '9) Antigravity sign-in [handled during launch]' "$output"
-grep -Fxq '10) Sign in to GitHub CLI' "$output"
-grep -Fxq '11) Run diagnostics' "$output"
-grep -Fxq '12) Open a login shell' "$output"
-grep -Fxq '13) Exit this tmux session' "$output"
+grep -Fxq '1) Start Antigravity (use /resume to browse/resume older conversations)' "$output"
+grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
+grep -Fxq '3) Projects...' "$output"
+grep -Fxq '4) Launch/approval options [not available]' "$output"
+grep -Fxq '5) Install Antigravity from Google' "$output"
+grep -Fxq '6) Update Antigravity from Google' "$output"
+grep -Fxq '7) Context7 integration [pending #95]' "$output"
+grep -Fxq '8) Antigravity sign-in [handled during launch]' "$output"
+grep -Fxq '9) Sign in to GitHub CLI' "$output"
+grep -Fxq '10) Run diagnostics' "$output"
+grep -Fxq '11) Open a login shell' "$output"
+grep -Fxq '12) Exit this tmux session' "$output"
 grep -Fxq 'Antigravity does not currently expose a Remote Dev-reviewed launch/approval option.' "$output"
 grep -Fxq 'Context7 for Antigravity is not implemented yet; see #95.' "$output"
 grep -Fxq 'Antigravity authentication is currently handled by the vendor flow during launch.' "$output"
+if grep -Fq 'Browse/resume Antigravity conversations' "$output"; then
+  echo 'ERROR: menu still exposes a separate Antigravity browse action' >&2
+  exit 1
+fi
 if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   echo 'ERROR: menu still invokes the screen-scraping Antigravity picker helper' >&2
   exit 1
 fi
 
-echo 'Vendor-native supported Antigravity resume menu: OK'
+echo 'Codex-aligned vendor-native Antigravity resume menu: OK'
