@@ -11,8 +11,12 @@ import subprocess
 import tempfile
 
 
-ROOT = Path(__file__).resolve().parents[1]
-HELPER = ROOT / "scripts" / "remote-dev-context7-device-login.py"
+HELPER = Path(
+    os.environ.get(
+        "REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER",
+        Path(__file__).resolve().parents[1] / "scripts" / "remote-dev-context7-device-login.py",
+    )
+)
 SYNTHETIC_KEY = "ctx7sk-test-device-key-do-not-use"
 
 
@@ -37,18 +41,27 @@ def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: 
         os.chown(path, uid, gid)
 
 
+def write_mise_config(path: Path, node_version: str = "24.19.0") -> None:
+    path.write_text(f'[tools]\nnode = "{node_version}"\n', encoding="utf-8")
+
+
 def assert_acquire_uses_isolated_environment(module) -> None:
     original_login_process = module.run_login_process
     original_run_root = module.RUN_ROOT
     original_npm = module.NPM
+    original_mise_config = module.MISE_CONFIG
     original_setpriv = module.SETPRIV
     captured: dict[str, object] = {}
 
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-device-test-") as temp:
-        run_root = Path(temp) / "run"
+        temp_root = Path(temp)
+        run_root = temp_root / "run"
         run_root.mkdir(mode=0o755)
+        mise_config = temp_root / "mise.toml"
+        write_mise_config(mise_config)
         module.RUN_ROOT = run_root
         module.NPM = Path("/bin/true")
+        module.MISE_CONFIG = mise_config
         module.SETPRIV = Path("/bin/true")
 
         def fake_login_process(command, *, cwd, environment):
@@ -82,6 +95,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             module.run_login_process = original_login_process
             module.RUN_ROOT = original_run_root
             module.NPM = original_npm
+            module.MISE_CONFIG = original_mise_config
             module.SETPRIV = original_setpriv
             for name, value_before in previous.items():
                 if value_before is None:
@@ -113,14 +127,46 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError("transient npm execution can still consume global npm configuration")
         if environment.get("HOME") == os.environ.get("HOME"):
             raise AssertionError("transient Context7 login reused the caller HOME")
+        if environment.get("MISE_NODE_VERSION") != "24.19.0":
+            raise AssertionError("transient npm shim did not receive the bundled Node version explicitly")
+        if environment.get("MISE_OFFLINE") != "1":
+            raise AssertionError("mise shim resolution was not forced offline")
+        if "MISE_CONFIG_DIR" in environment or "MISE_GLOBAL_CONFIG_FILE" in environment:
+            raise AssertionError("unprivileged transient login still depends on root-owned mise config")
 
         cwd = captured["cwd"]
         if environment.get("TMPDIR") != str(cwd):
             raise AssertionError("transient Context7 login can use temporary files outside its private root")
         if environment.get("XDG_RUNTIME_DIR") != str(cwd):
             raise AssertionError("transient Context7 login can use XDG runtime state outside its private root")
+        if environment.get("MISE_CACHE_DIR") != str(cwd / "mise-cache"):
+            raise AssertionError("mise cache escaped the transient Context7 login root")
+        if environment.get("MISE_TMP_DIR") != str(cwd):
+            raise AssertionError("mise temporary state escaped the transient Context7 login root")
         if cwd.exists():
             raise AssertionError("transient Context7 login directory was not removed")
+
+
+def assert_node_version_contract(module) -> None:
+    original_mise_config = module.MISE_CONFIG
+    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-mise-test-") as temp:
+        mise_config = Path(temp) / "mise.toml"
+        module.MISE_CONFIG = mise_config
+        try:
+            write_mise_config(mise_config, "24.19.0")
+            if module.configured_node_version() != "24.19.0":
+                raise AssertionError("valid bundled Node version was not resolved")
+
+            for invalid in ("latest", "24", "24.19.x", ""):
+                write_mise_config(mise_config, invalid)
+                try:
+                    module.configured_node_version()
+                except module.DeviceLoginError:
+                    pass
+                else:
+                    raise AssertionError(f"invalid bundled Node version was accepted: {invalid!r}")
+        finally:
+            module.MISE_CONFIG = original_mise_config
 
 
 def assert_success_reaps_process_group(module) -> None:
@@ -226,14 +272,19 @@ def assert_cleanup_failure_is_fatal(module) -> None:
     original_login_process = module.run_login_process
     original_run_root = module.RUN_ROOT
     original_npm = module.NPM
+    original_mise_config = module.MISE_CONFIG
     original_setpriv = module.SETPRIV
     original_rmtree = module.shutil.rmtree
 
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-cleanup-test-") as temp:
-        run_root = Path(temp) / "run"
+        temp_root = Path(temp)
+        run_root = temp_root / "run"
         run_root.mkdir(mode=0o755)
+        mise_config = temp_root / "mise.toml"
+        write_mise_config(mise_config)
         module.RUN_ROOT = run_root
         module.NPM = Path("/bin/true")
+        module.MISE_CONFIG = mise_config
         module.SETPRIV = Path("/bin/true")
 
         def fake_login_process(command, *, cwd, environment):
@@ -268,6 +319,7 @@ def assert_cleanup_failure_is_fatal(module) -> None:
             module.run_login_process = original_login_process
             module.RUN_ROOT = original_run_root
             module.NPM = original_npm
+            module.MISE_CONFIG = original_mise_config
             module.SETPRIV = original_setpriv
             module.shutil.rmtree = original_rmtree
 
@@ -399,6 +451,7 @@ def main() -> int:
     module = load_helper()
     if module.CONTEXT7_CLI_PACKAGE != "ctx7@0.5.7":
         raise AssertionError("Context7 device-login package pin drifted unexpectedly")
+    assert_node_version_contract(module)
     assert_acquire_uses_isolated_environment(module)
     assert_success_reaps_process_group(module)
     assert_timeout_terminates_process_group(module)
