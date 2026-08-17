@@ -20,6 +20,9 @@ fi
 if (( $# > 1 )); then
   delegate_manager "$@"
 fi
+if [[ ! -t 0 || ! -t 1 ]]; then
+  delegate_manager "$@"
+fi
 
 cat <<'MENU'
 Context7 authentication
