@@ -56,6 +56,7 @@ El CLI oficial muestra un código de un solo uso y una URL de verificación que 
 - desactiva los scripts de ciclo de vida de npm y la telemetría del CLI de Context7 para esa invocación transitoria;
 - ignora la configuración npm de usuario/global y fija como origen el registro npm público;
 - no entrega al proceso transitorio credenciales de Codex, GitHub, OpenAI ni la API key Context7 existente;
+- permite que la petición oficial de autorización de dispositivo envíe a Context7 el hostname del contenedor de forma best-effort para que la página de verificación pueda identificar el dispositivo que se está autorizando;
 - valida que la credencial privada resultante tenga el formato esperado de API key bearer de larga duración `ctx7sk-...`;
 - transfiere esa clave al gestor existente de Remote Dev únicamente por stdin del proceso hijo;
 - elimina por completo el directorio transitorio de CLI/login/caché tanto si termina correctamente como si se cancela o falla.
@@ -140,7 +141,7 @@ Habilitar Context7 introduce un límite de servicio externo. Según la documenta
 - la respuesta de Context7 puede ser incompleta o incorrecta y debe verificarse antes de utilizarla en producción;
 - la documentación original devuelta por Context7 conserva sus propios derechos de autor y licencias.
 
-El flujo oficial `ctx7 login` puede mostrar información de identidad de la cuenta, como correo/nombre o teamspace, en el terminal local después de la autorización. Remote Dev no almacena esa salida, pero las capturas de pantalla o la evidencia copiada para validación deben ocultar los identificadores de cuenta además de los códigos de dispositivo y las credenciales.
+El flujo oficial `ctx7 login` por dispositivo también envía el hostname del contenedor de forma best-effort con la petición de autorización para que Context7 pueda mostrar qué dispositivo se está aprobando. Después de la autorización, el CLI utiliza la clave recién emitida para realizar una petición `whoami` a Context7 y puede mostrar en el terminal local información de identidad de la cuenta, como correo/nombre o teamspace. Remote Dev no conserva esa salida del CLI, pero las capturas de pantalla o la evidencia copiada para validación deben ocultar los identificadores de cuenta además de los códigos de dispositivo y las credenciales.
 
 El uso del servicio alojado y del flujo de inicio por dispositivo queda sujeto al **Context7 Addendum**, los **Upstash Terms of Service** y la **Upstash Privacy Policy** vigentes. Remote Dev no está afiliado ni respaldado por Upstash, Context7 u OpenAI.
 
