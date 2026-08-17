@@ -148,8 +148,8 @@ def transient_environment(root: Path, *, node_version: str) -> dict[str, str]:
         "TMPDIR": str(root),
         "npm_config_cache": str(root / "npm-cache"),
         "npm_config_registry": NPM_REGISTRY,
-        "npm_config_userconfig": "/dev/null",
-        "npm_config_globalconfig": "/dev/null",
+        "npm_config_userconfig": str(root / "npm-user.conf"),
+        "npm_config_globalconfig": str(root / "npm-global.conf"),
         "npm_config_ignore_scripts": "true",
         "npm_config_audit": "false",
         "npm_config_fund": "false",
@@ -237,6 +237,9 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 
 
 def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
+    # Vendor-created credential files and directories must be private from the
+    # instant they are created, not tightened only after privileged adoption.
+    previous_umask = os.umask(0o077)
     try:
         process = subprocess.Popen(
             command,
@@ -246,6 +249,8 @@ def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, s
         )
     except OSError as exc:
         raise DeviceLoginError(f"could not start the transient Context7 CLI: errno {exc.errno}") from exc
+    finally:
+        os.umask(previous_umask)
 
     try:
         returncode = process.wait(timeout=LOGIN_TIMEOUT_SECONDS)

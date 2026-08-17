@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib.util
+import os
+from pathlib import Path
+import signal
+import subprocess
+import tempfile
+
+
+HELPER = Path(
+    os.environ.get(
+        "REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER",
+        Path(__file__).resolve().parents[1] / "scripts" / "remote-dev-context7-device-login.py",
+    )
+)
+
+
+def load_helper():
+    spec = importlib.util.spec_from_file_location("remote_dev_context7_device_login_runtime", HELPER)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"could not load {HELPER}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def assert_distinct_private_npm_configs(module) -> None:
+    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-npm-config-test-") as temp:
+        root = Path(temp)
+        environment = module.transient_environment(root, node_version="24.19.0")
+        user_config = Path(environment["npm_config_userconfig"])
+        global_config = Path(environment["npm_config_globalconfig"])
+        if user_config == global_config:
+            raise AssertionError("npm user/global config paths must be distinct")
+        if user_config == Path("/dev/null") or global_config == Path("/dev/null"):
+            raise AssertionError("npm config isolation must not double-load /dev/null")
+        if user_config.parent != root or global_config.parent != root:
+            raise AssertionError("npm config paths escaped the transient Context7 root")
+
+
+def assert_restrictive_vendor_umask(module) -> None:
+    original_popen = module.subprocess.Popen
+    original_killpg = module.os.killpg
+    original_umask = module.os.umask
+    umask_calls: list[int] = []
+
+    class SuccessProcess:
+        pid = 515151
+
+        def wait(self, *, timeout):
+            del timeout
+            return 0
+
+    def fake_popen(command, **kwargs):
+        del command, kwargs
+        return SuccessProcess()
+
+    def fake_killpg(pgid: int, sent_signal: int) -> None:
+        if (pgid, sent_signal) != (SuccessProcess.pid, signal.SIGKILL):
+            raise AssertionError("unexpected process-group signal during umask regression")
+
+    def fake_umask(value: int) -> int:
+        umask_calls.append(value)
+        return 0o022 if len(umask_calls) == 1 else 0o077
+
+    try:
+        module.subprocess.Popen = fake_popen
+        module.os.killpg = fake_killpg
+        module.os.umask = fake_umask
+        module.run_login_process(
+            ["synthetic-ctx7"],
+            cwd=Path("/tmp"),
+            environment={"PATH": "/usr/bin:/bin"},
+        )
+    finally:
+        module.subprocess.Popen = original_popen
+        module.os.killpg = original_killpg
+        module.os.umask = original_umask
+
+    if umask_calls != [0o077, 0o022]:
+        raise AssertionError(f"transient vendor process did not inherit umask 077: {umask_calls!r}")
+
+
+def assert_bundled_npm_accepts_isolated_configs(module) -> None:
+    if not module.NPM.exists() or not module.MISE_CONFIG.exists():
+        return
+
+    module.validate_executable(module.NPM, label="npm")
+    node_version = module.configured_node_version()
+    uid, gid = module.sandbox_identity()
+    root = module.create_login_root(uid, gid)
+    try:
+        environment = module.transient_environment(root, node_version=node_version)
+        command = [str(module.NPM), "--version"]
+        if os.geteuid() == 0:
+            module.validate_executable(module.SETPRIV, label="setpriv")
+            command = [
+                str(module.SETPRIV),
+                "--reuid",
+                str(uid),
+                "--regid",
+                str(gid),
+                "--clear-groups",
+                "--no-new-privs",
+                *command,
+            ]
+        result = subprocess.run(
+            command,
+            cwd=root,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise AssertionError(
+                "bundled npm rejected the isolated user/global config paths: "
+                + result.stderr.strip()
+            )
+    finally:
+        module.remove_login_root(root)
+
+
+def main() -> int:
+    module = load_helper()
+    assert_distinct_private_npm_configs(module)
+    assert_restrictive_vendor_umask(module)
+    assert_bundled_npm_accepts_isolated_configs(module)
+    print("Context7 npm/runtime isolation regressions: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

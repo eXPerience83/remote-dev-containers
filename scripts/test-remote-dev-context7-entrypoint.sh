@@ -48,32 +48,46 @@ run_and_expect() {
   fi
 }
 
+run_interactive_choice() {
+  local choice="$1"
+  local command="$2"
+  printf '%s\n' "$choice" | \
+    CAPTURE="$capture" script -q -e -f -c "$entrypoint $command" /dev/null >/dev/null 2>&1
+}
+
 run_and_expect $'manager\nstatus\n--menu' "$entrypoint" status --menu
 run_and_expect $'manager\ninstall\n--yes\n--anonymous' \
   "$entrypoint" install --yes --anonymous
 
+# Plain install/repair with redirected stdin is automation, not the onboarding menu.
 : >"$capture"
 printf '1\n' | CAPTURE="$capture" "$entrypoint" install >/dev/null 2>&1
+[[ "$(cat -- "$capture")" == $'manager\ninstall' ]]
+
+: >"$capture"
+run_interactive_choice 1 install
 [[ "$(cat -- "$capture")" == $'device-login\n--yes' ]]
 
 : >"$capture"
-printf '2\n' | CAPTURE="$capture" "$entrypoint" repair >/dev/null 2>&1 || true
+run_interactive_choice 2 repair
 [[ "$(cat -- "$capture")" == $'manager\nrepair' ]]
 
 : >"$capture"
-printf '3\n' | CAPTURE="$capture" "$entrypoint" install >/dev/null 2>&1
+run_interactive_choice 3 install
 [[ "$(cat -- "$capture")" == $'manager\ninstall\n--yes' ]]
 
 : >"$capture"
-printf '4\n' | CAPTURE="$capture" "$entrypoint" repair >/dev/null 2>&1
+run_interactive_choice 4 repair
 [[ "$(cat -- "$capture")" == $'manager\nrepair\n--yes\n--anonymous' ]]
 
-if printf '5\n' | CAPTURE="$capture" "$entrypoint" install >/dev/null 2>&1; then
+: >"$capture"
+if run_interactive_choice 5 install; then
   echo 'Context7 entrypoint cancellation unexpectedly succeeded' >&2
   exit 1
 fi
 
-if printf '99\n' | CAPTURE="$capture" "$entrypoint" install >/dev/null 2>&1; then
+: >"$capture"
+if run_interactive_choice 99 install; then
   echo 'Context7 entrypoint accepted an invalid authentication choice' >&2
   exit 1
 fi
