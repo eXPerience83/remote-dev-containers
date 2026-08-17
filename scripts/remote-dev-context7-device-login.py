@@ -29,6 +29,12 @@ LOGIN_TIMEOUT_SECONDS = 15 * 60
 PROCESS_TERMINATION_GRACE_SECONDS = 5
 SANDBOX_UID = 65534
 SANDBOX_GID = 65534
+PREFLIGHT_ALLOWED_STATES = {
+    "Context7: not configured",
+    "Context7: configured (API key stored)",
+    "Context7: configured (anonymous)",
+}
+PREFLIGHT_UNMANAGED_STATE = "Context7: unmanaged configuration (Remote Dev will not modify)"
 
 
 class DeviceLoginError(RuntimeError):
@@ -361,6 +367,28 @@ def read_credentials(root: Path, *, expected_uid: int) -> str:
     return access_token
 
 
+def preflight_manager_state() -> None:
+    validate_executable(PYTHON, label="Python")
+    try:
+        result = subprocess.run(
+            [str(PYTHON), str(MANAGER), "status", "--menu"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise DeviceLoginError(f"could not inspect the current Context7 state: errno {exc.errno}") from exc
+
+    state = result.stdout.strip()
+    if result.returncode != 0:
+        raise DeviceLoginError("existing Context7 managed state is unsafe or damaged")
+    if state == PREFLIGHT_UNMANAGED_STATE:
+        raise DeviceLoginError("existing Context7 configuration is unmanaged; Remote Dev will not overwrite it")
+    if state not in PREFLIGHT_ALLOWED_STATES:
+        raise DeviceLoginError("Context7 manager returned an unexpected preflight state")
+
+
 def acquire_api_key() -> str:
     validate_executable(NPM, label="npm")
     node_version = configured_node_version()
@@ -395,10 +423,9 @@ def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
 def command_login(*, yes: bool) -> int:
     confirm(yes=yes)
 
-    # Preflight the existing ownership/configuration boundary before any vendor
-    # package is downloaded. This preserves a current key and creates only the
-    # already-reviewed anonymous managed block when the integration was absent.
-    run_manager(["repair", "--yes"])
+    # Validate the current ownership/configuration boundary without changing it.
+    # A failed or cancelled vendor login must not rewrite config or authentication state.
+    preflight_manager_state()
 
     api_key = acquire_api_key()
 
