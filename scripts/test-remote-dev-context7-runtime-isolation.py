@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib.machinery
 import importlib.util
 import os
 from pathlib import Path
@@ -17,11 +18,13 @@ HELPER = Path(
 
 
 def load_helper():
-    spec = importlib.util.spec_from_file_location("remote_dev_context7_device_login_runtime", HELPER)
-    if spec is None or spec.loader is None:
+    module_name = "remote_dev_context7_device_login_runtime"
+    loader = importlib.machinery.SourceFileLoader(module_name, str(HELPER))
+    spec = importlib.util.spec_from_loader(module_name, loader)
+    if spec is None:
         raise AssertionError(f"could not load {HELPER}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    loader.exec_module(module)
     return module
 
 
