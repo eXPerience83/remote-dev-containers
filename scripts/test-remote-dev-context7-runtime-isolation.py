@@ -43,8 +43,7 @@ def assert_distinct_private_npm_configs(module) -> None:
 def assert_restrictive_vendor_umask(module) -> None:
     original_popen = module.subprocess.Popen
     original_killpg = module.os.killpg
-    original_umask = module.os.umask
-    umask_calls: list[int] = []
+    captured: dict[str, object] = {}
 
     class SuccessProcess:
         pid = 515151
@@ -54,21 +53,17 @@ def assert_restrictive_vendor_umask(module) -> None:
             return 0
 
     def fake_popen(command, **kwargs):
-        del command, kwargs
+        captured["command"] = list(command)
+        captured["kwargs"] = dict(kwargs)
         return SuccessProcess()
 
     def fake_killpg(pgid: int, sent_signal: int) -> None:
         if (pgid, sent_signal) != (SuccessProcess.pid, signal.SIGKILL):
             raise AssertionError("unexpected process-group signal during umask regression")
 
-    def fake_umask(value: int) -> int:
-        umask_calls.append(value)
-        return 0o022 if len(umask_calls) == 1 else 0o077
-
     try:
         module.subprocess.Popen = fake_popen
         module.os.killpg = fake_killpg
-        module.os.umask = fake_umask
         module.run_login_process(
             ["synthetic-ctx7"],
             cwd=Path("/tmp"),
@@ -77,10 +72,10 @@ def assert_restrictive_vendor_umask(module) -> None:
     finally:
         module.subprocess.Popen = original_popen
         module.os.killpg = original_killpg
-        module.os.umask = original_umask
 
-    if umask_calls != [0o077, 0o022]:
-        raise AssertionError(f"transient vendor process did not inherit umask 077: {umask_calls!r}")
+    kwargs = captured["kwargs"]
+    if kwargs.get("umask") != 0o077:
+        raise AssertionError(f"transient vendor process did not receive umask 077: {kwargs!r}")
 
 
 def assert_bundled_npm_accepts_isolated_configs(module) -> None:
