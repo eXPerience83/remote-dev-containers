@@ -123,6 +123,48 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError("transient Context7 login directory was not removed")
 
 
+def assert_success_reaps_process_group(module) -> None:
+    original_popen = module.subprocess.Popen
+    original_killpg = module.os.killpg
+    captured: dict[str, object] = {}
+    signals: list[tuple[int, int]] = []
+
+    class SuccessProcess:
+        pid = 313131
+
+        def wait(self, *, timeout):
+            del timeout
+            return 0
+
+    process = SuccessProcess()
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = list(command)
+        captured["kwargs"] = dict(kwargs)
+        return process
+
+    def fake_killpg(pgid: int, sent_signal: int) -> None:
+        signals.append((pgid, sent_signal))
+
+    try:
+        module.subprocess.Popen = fake_popen
+        module.os.killpg = fake_killpg
+        module.run_login_process(
+            ["synthetic-ctx7"],
+            cwd=Path("/tmp"),
+            environment={"PATH": "/usr/bin:/bin"},
+        )
+    finally:
+        module.subprocess.Popen = original_popen
+        module.os.killpg = original_killpg
+
+    kwargs = captured["kwargs"]
+    if kwargs.get("start_new_session") is not True:
+        raise AssertionError("successful transient Context7 CLI was not isolated into its own process group")
+    if signals != [(process.pid, signal.SIGKILL)]:
+        raise AssertionError(f"successful Context7 login left a residual process group: {signals!r}")
+
+
 def assert_timeout_terminates_process_group(module) -> None:
     original_popen = module.subprocess.Popen
     original_killpg = module.os.killpg
@@ -275,8 +317,6 @@ def assert_credentials_contract(module) -> None:
         else:
             raise AssertionError("group/world-readable Context7 credentials were accepted")
 
-        # A vendor-controlled parent symlink must not make the privileged helper
-        # traverse outside the private login root when it reads credentials.
         shutil.rmtree(root / "config")
         external = run_root / "external-config"
         external_path = external / module.CONTEXT7_CREDENTIALS_RELATIVE
@@ -360,6 +400,7 @@ def main() -> int:
     if module.CONTEXT7_CLI_PACKAGE != "ctx7@0.5.7":
         raise AssertionError("Context7 device-login package pin drifted unexpectedly")
     assert_acquire_uses_isolated_environment(module)
+    assert_success_reaps_process_group(module)
     assert_timeout_terminates_process_group(module)
     assert_cleanup_failure_is_fatal(module)
     assert_credentials_contract(module)
