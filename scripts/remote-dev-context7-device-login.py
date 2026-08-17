@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 
 CONTEXT7_CLI_PACKAGE = "ctx7@0.5.7"
@@ -18,6 +19,7 @@ CONTEXT7_KEY_PREFIX = "ctx7sk-"
 CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
 NPM_REGISTRY = "https://registry.npmjs.org/"
 NPM = Path("/opt/remote-dev/mise/shims/npm")
+MISE_CONFIG = Path("/etc/mise/mise.toml")
 SETPRIV = Path("/usr/bin/setpriv")
 PYTHON = Path("/opt/remote-dev/mise/shims/python")
 MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
@@ -71,6 +73,23 @@ def validate_executable(path: Path, *, label: str) -> None:
         raise DeviceLoginError(f"{label} is not an executable regular file: {path}")
 
 
+def configured_node_version() -> str:
+    try:
+        with MISE_CONFIG.open("rb") as handle:
+            config = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise DeviceLoginError("bundled Node runtime configuration is unavailable") from exc
+
+    tools = config.get("tools")
+    version = tools.get("node") if isinstance(tools, dict) else None
+    if not isinstance(version, str):
+        raise DeviceLoginError("bundled Node runtime version is missing from mise configuration")
+    parts = version.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        raise DeviceLoginError("bundled Node runtime version has an unexpected format")
+    return version
+
+
 def validate_run_root() -> None:
     try:
         info = RUN_ROOT.lstat()
@@ -113,7 +132,7 @@ def remove_login_root(root: Path) -> None:
         ) from exc
 
 
-def transient_environment(root: Path) -> dict[str, str]:
+def transient_environment(root: Path, *, node_version: str) -> dict[str, str]:
     environment = {
         "HOME": str(root / "home"),
         "XDG_CONFIG_HOME": str(root / "config"),
@@ -133,9 +152,10 @@ def transient_environment(root: Path) -> dict[str, str]:
         "DO_NOT_TRACK": "1",
         "PATH": "/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin",
         "MISE_DATA_DIR": "/opt/remote-dev/mise",
-        "MISE_CACHE_DIR": "/opt/remote-dev/mise-cache",
-        "MISE_CONFIG_DIR": "/etc/mise",
-        "MISE_GLOBAL_CONFIG_FILE": "/etc/mise/mise.toml",
+        "MISE_CACHE_DIR": str(root / "mise-cache"),
+        "MISE_TMP_DIR": str(root),
+        "MISE_NODE_VERSION": node_version,
+        "MISE_OFFLINE": "1",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "TERM": os.environ.get("TERM", "xterm-256color"),
@@ -343,9 +363,10 @@ def read_credentials(root: Path, *, expected_uid: int) -> str:
 
 def acquire_api_key() -> str:
     validate_executable(NPM, label="npm")
+    node_version = configured_node_version()
     uid, gid = sandbox_identity()
     root = create_login_root(uid, gid)
-    environment = transient_environment(root)
+    environment = transient_environment(root, node_version=node_version)
     command = login_command(uid, gid)
     api_key = ""
     try:
