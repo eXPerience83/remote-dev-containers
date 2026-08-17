@@ -35,17 +35,24 @@ printf '\n%s' "$@" >>"$CAPTURE"
 LOGIN
 chmod 0755 "$manager" "$device_login"
 
+assert_capture() {
+  local expected="$1"
+  local label="$2"
+  local actual
+  actual="$(cat -- "$capture")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'Unexpected Context7 entrypoint dispatch (%s).\nExpected:\n%s\nActual:\n%s\n' \
+      "$label" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
 run_and_expect() {
   local expected="$1"
   shift
   : >"$capture"
   CAPTURE="$capture" "$@" >/dev/null 2>&1
-  actual="$(cat -- "$capture")"
-  if [[ "$actual" != "$expected" ]]; then
-    printf 'Unexpected Context7 entrypoint dispatch.\nExpected:\n%s\nActual:\n%s\n' \
-      "$expected" "$actual" >&2
-    exit 1
-  fi
+  assert_capture "$expected" "direct invocation"
 }
 
 run_interactive_choice() {
@@ -55,6 +62,15 @@ run_interactive_choice() {
     CAPTURE="$capture" script -q -e -f -c "$entrypoint $command" /dev/null >/dev/null 2>&1
 }
 
+choose_and_expect() {
+  local choice="$1"
+  local command="$2"
+  local expected="$3"
+  : >"$capture"
+  run_interactive_choice "$choice" "$command"
+  assert_capture "$expected" "interactive choice $choice"
+}
+
 run_and_expect $'manager\nstatus\n--menu' "$entrypoint" status --menu
 run_and_expect $'manager\ninstall\n--yes\n--anonymous' \
   "$entrypoint" install --yes --anonymous
@@ -62,23 +78,12 @@ run_and_expect $'manager\ninstall\n--yes\n--anonymous' \
 # Plain install/repair with redirected stdin is automation, not the onboarding menu.
 : >"$capture"
 printf '1\n' | CAPTURE="$capture" "$entrypoint" install >/dev/null 2>&1
-[[ "$(cat -- "$capture")" == $'manager\ninstall' ]]
+assert_capture $'manager\ninstall' "redirected install"
 
-: >"$capture"
-run_interactive_choice 1 install
-[[ "$(cat -- "$capture")" == $'device-login\n--yes' ]]
-
-: >"$capture"
-run_interactive_choice 2 repair
-[[ "$(cat -- "$capture")" == $'manager\nrepair' ]]
-
-: >"$capture"
-run_interactive_choice 3 install
-[[ "$(cat -- "$capture")" == $'manager\ninstall\n--yes' ]]
-
-: >"$capture"
-run_interactive_choice 4 repair
-[[ "$(cat -- "$capture")" == $'manager\nrepair\n--yes\n--anonymous' ]]
+choose_and_expect 1 install $'device-login\n--yes'
+choose_and_expect 2 repair $'manager\nrepair'
+choose_and_expect 3 install $'manager\ninstall\n--yes'
+choose_and_expect 4 repair $'manager\nrepair\n--yes\n--anonymous'
 
 : >"$capture"
 if run_interactive_choice 5 install; then
