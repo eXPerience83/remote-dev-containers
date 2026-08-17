@@ -184,10 +184,12 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 
     try:
         process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
-        return
     except subprocess.TimeoutExpired:
         pass
 
+    # The npm parent can exit before a descendant. Always address the process
+    # group again so a child that survived SIGTERM cannot keep polling after a
+    # timeout or cancellation.
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
