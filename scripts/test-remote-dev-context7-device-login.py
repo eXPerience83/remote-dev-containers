@@ -378,6 +378,8 @@ def assert_credentials_contract(module) -> None:
         uid = os.geteuid()
         gid = os.getegid()
         path = root / "config" / module.CONTEXT7_CREDENTIALS_RELATIVE
+        config_dir = root / "config"
+        credential_dir = path.parent
 
         valid = {"access_token": SYNTHETIC_KEY, "token_type": "bearer"}
         write_credentials(path, valid, uid=uid, gid=gid)
@@ -405,6 +407,24 @@ def assert_credentials_contract(module) -> None:
                 raise AssertionError(f"unsafe Context7 credential shape was accepted: {payload!r}")
 
         write_credentials(path, valid, uid=uid, gid=gid)
+        os.chmod(config_dir, 0o750)
+        try:
+            module.read_credentials(root, expected_uid=uid)
+        except module.DeviceLoginError:
+            pass
+        else:
+            raise AssertionError("group-accessible Context7 config directory was accepted")
+        os.chmod(config_dir, 0o700)
+
+        os.chmod(credential_dir, 0o705)
+        try:
+            module.read_credentials(root, expected_uid=uid)
+        except module.DeviceLoginError:
+            pass
+        else:
+            raise AssertionError("world-accessible Context7 credential directory was accepted")
+        os.chmod(credential_dir, 0o700)
+
         os.chmod(path, 0o644)
         try:
             module.read_credentials(root, expected_uid=uid)
