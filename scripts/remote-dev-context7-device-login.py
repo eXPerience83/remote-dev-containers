@@ -237,20 +237,16 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 
 
 def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
-    # Vendor-created credential files and directories must be private from the
-    # instant they are created, not tightened only after privileged adoption.
-    previous_umask = os.umask(0o077)
     try:
         process = subprocess.Popen(
             command,
             cwd=cwd,
             env=environment,
             start_new_session=True,
+            umask=0o077,
         )
     except OSError as exc:
         raise DeviceLoginError(f"could not start the transient Context7 CLI: errno {exc.errno}") from exc
-    finally:
-        os.umask(previous_umask)
 
     try:
         returncode = process.wait(timeout=LOGIN_TIMEOUT_SECONDS)
