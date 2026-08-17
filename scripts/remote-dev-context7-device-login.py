@@ -174,6 +174,17 @@ def login_command(uid: int, gid: int) -> list[str]:
     ]
 
 
+def kill_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not kill the transient Context7 CLI process group: errno {exc.errno}"
+        ) from exc
+
+
 def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     try:
         os.killpg(process.pid, signal.SIGTERM)
@@ -192,15 +203,7 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     # The npm parent can exit before a descendant. Always address the process
     # group again so a child that survived SIGTERM cannot keep polling after a
     # timeout or cancellation.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    except OSError as exc:
-        raise DeviceLoginError(
-            f"could not kill the transient Context7 CLI process group: errno {exc.errno}"
-        ) from exc
-
+    kill_process_group(process)
     try:
         process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
     except subprocess.TimeoutExpired as exc:
@@ -227,6 +230,10 @@ def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, s
         terminate_process_group(process)
         raise
 
+    # `npm exec` is expected to wait for ctx7, but the vendor execution boundary
+    # is transient even if changed package code daemonizes a descendant. Kill any
+    # process that remains in the isolated group after the parent exits.
+    kill_process_group(process)
     if returncode != 0:
         raise DeviceLoginError(f"Context7 device login failed (exit {returncode})")
 
