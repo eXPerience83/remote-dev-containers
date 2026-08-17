@@ -9,6 +9,7 @@ build:
 smoke: agent-contract-tests
 	docker run --rm --entrypoint /usr/local/bin/codex-smoke-test remote-dev:local
 	docker run --rm \
+		--network none \
 		--entrypoint /opt/remote-dev/mise/shims/python \
 		-v "$(CURDIR)/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
 		-e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
