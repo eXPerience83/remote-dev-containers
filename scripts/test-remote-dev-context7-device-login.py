@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import builtins
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,10 +21,38 @@ HELPER = Path(
     )
 )
 SYNTHETIC_KEY = "ctx7sk-test-device-key-do-not-use"
+SYNTHETIC_PACKAGE = b"synthetic-context7-package-bytes"
+SYNTHETIC_INTEGRITY = "sha512-" + base64.b64encode(
+    hashlib.sha512(SYNTHETIC_PACKAGE).digest()
+).decode("ascii")
+
+
+class PackageResponse:
+    def __init__(self, data: bytes, url: str):
+        self.data = data
+        self.url = url
+        self.offset = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        del exc_type, exc, traceback
+        return False
+
+    def geturl(self) -> str:
+        return self.url
+
+    def read(self, size: int) -> bytes:
+        chunk = self.data[self.offset : self.offset + size]
+        self.offset += len(chunk)
+        return chunk
 
 
 def load_helper():
-    spec = importlib.util.spec_from_file_location("remote_dev_context7_device_login", HELPER)
+    spec = importlib.util.spec_from_file_location(
+        "remote_dev_context7_device_login", HELPER
+    )
     if spec is None or spec.loader is None:
         raise AssertionError(f"could not load {HELPER}")
     module = importlib.util.module_from_spec(spec)
@@ -30,7 +60,30 @@ def load_helper():
     return module
 
 
-def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: int) -> None:
+def package_metadata(module, version: str = "0.5.8") -> dict[str, str]:
+    return {
+        "name": "ctx7",
+        "version": version,
+        "license": "MIT",
+        "integrity": SYNTHETIC_INTEGRITY,
+        "tarball": module.exact_tarball_url(version),
+    }
+
+
+def package_registry_payload(module, version: str = "0.5.8") -> dict[str, str]:
+    metadata = package_metadata(module, version)
+    return {
+        "name": metadata["name"],
+        "version": metadata["version"],
+        "license": metadata["license"],
+        "dist.integrity": metadata["integrity"],
+        "dist.tarball": metadata["tarball"],
+    }
+
+
+def write_credentials(
+    path: Path, payload: dict[str, object], *, uid: int, gid: int
+) -> None:
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     for directory in (path.parent.parent, path.parent):
         os.chmod(directory, 0o700)
@@ -57,7 +110,9 @@ def assert_reviewed_version_contract(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError(f"mutable/invalid Context7 CLI version was accepted: {invalid!r}")
+            raise AssertionError(
+                f"mutable/invalid Context7 CLI version was accepted: {invalid!r}"
+            )
 
 
 def assert_repo_version_pin_sync(module) -> None:
@@ -72,7 +127,10 @@ def assert_repo_version_pin_sync(module) -> None:
             continue
         name, value = line.split("=", 1)
         values[name] = value
-    if values.get("CONTEXT7_CLI_VERSION") != module.REVIEWED_CONTEXT7_CLI_VERSION:
+    if (
+        values.get("CONTEXT7_CLI_VERSION")
+        != module.REVIEWED_CONTEXT7_CLI_VERSION
+    ):
         raise AssertionError(
             "versions.env and the Context7 reviewed CLI runtime pin are inconsistent"
         )
@@ -81,12 +139,7 @@ def assert_repo_version_pin_sync(module) -> None:
 def assert_package_metadata_contract(module) -> None:
     original = module.npm_json
     try:
-        module.npm_json = lambda *args, **kwargs: {
-            "name": "ctx7",
-            "version": "0.5.8",
-            "license": "MIT",
-            "dist.integrity": "sha512-synthetic-integrity",
-        }
+        module.npm_json = lambda *args, **kwargs: package_registry_payload(module)
         metadata = module.resolve_package_metadata(
             "0.5.8",
             uid=os.geteuid(),
@@ -94,14 +147,34 @@ def assert_package_metadata_contract(module) -> None:
             cwd=Path("/tmp"),
             environment={},
         )
-        if metadata["version"] != "0.5.8":
+        if metadata != package_metadata(module):
             raise AssertionError("valid Context7 npm package metadata was not accepted")
 
         bad_payloads = (
-            {"name": "other", "version": "0.5.8", "license": "MIT", "dist.integrity": "sha512-x"},
-            {"name": "ctx7", "version": "latest", "license": "MIT", "dist.integrity": "sha512-x"},
-            {"name": "ctx7", "version": "0.5.8", "license": "GPL-3.0", "dist.integrity": "sha512-x"},
-            {"name": "ctx7", "version": "0.5.8", "license": "MIT", "dist.integrity": ""},
+            {
+                **package_registry_payload(module),
+                "name": "other",
+            },
+            {
+                **package_registry_payload(module),
+                "version": "latest",
+            },
+            {
+                **package_registry_payload(module),
+                "license": "GPL-3.0",
+            },
+            {
+                **package_registry_payload(module),
+                "dist.integrity": "",
+            },
+            {
+                **package_registry_payload(module),
+                "dist.integrity": "sha512-not-valid-base64***",
+            },
+            {
+                **package_registry_payload(module),
+                "dist.tarball": "https://evil.example/ctx7.tgz",
+            },
         )
         for payload in bad_payloads:
             module.npm_json = lambda *args, payload=payload, **kwargs: payload
@@ -116,7 +189,9 @@ def assert_package_metadata_contract(module) -> None:
             except module.DeviceLoginError:
                 pass
             else:
-                raise AssertionError(f"unsafe Context7 npm metadata was accepted: {payload!r}")
+                raise AssertionError(
+                    f"unsafe Context7 npm metadata was accepted: {payload!r}"
+                )
     finally:
         module.npm_json = original
 
@@ -131,14 +206,6 @@ def assert_reviewed_latest_selection(module) -> None:
         def isatty(self):
             return True
 
-    def metadata(version: str) -> dict[str, str]:
-        return {
-            "name": "ctx7",
-            "version": version,
-            "license": "MIT",
-            "integrity": "sha512-synthetic",
-        }
-
     try:
         module.reviewed_cli_version = lambda: "0.5.8"
         module.sys.stdin = Tty()
@@ -146,8 +213,8 @@ def assert_reviewed_latest_selection(module) -> None:
         def resolve(specifier, **kwargs):
             del kwargs
             if specifier == "latest":
-                return metadata("0.5.9")
-            return metadata(specifier)
+                return package_metadata(module, "0.5.9")
+            return package_metadata(module, specifier)
 
         module.resolve_package_metadata = resolve
 
@@ -163,7 +230,9 @@ def assert_reviewed_latest_selection(module) -> None:
             "auto", uid=1, gid=1, cwd=Path("/tmp"), environment={}
         )
         if selected["version"] != "0.5.9" or reviewed is not False:
-            raise AssertionError("latest review-pending Context7 CLI selection failed")
+            raise AssertionError(
+                "latest review-pending Context7 CLI selection failed"
+            )
 
         selected, reviewed = module.choose_cli_metadata(
             "latest", uid=1, gid=1, cwd=Path("/tmp"), environment={}
@@ -180,13 +249,16 @@ def assert_reviewed_latest_selection(module) -> None:
 def assert_acquire_uses_isolated_environment(module) -> None:
     original_login_process = module.run_login_process
     original_choose = module.choose_cli_metadata
+    original_open_package = module.open_package_url
     original_run_root = module.RUN_ROOT
     original_npm = module.NPM
     original_mise_config = module.MISE_CONFIG
     original_setpriv = module.SETPRIV
     captured: dict[str, object] = {}
 
-    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-device-test-") as temp:
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-device-test-"
+    ) as temp:
         temp_root = Path(temp)
         run_root = temp_root / "run"
         run_root.mkdir(mode=0o755)
@@ -197,16 +269,16 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         module.MISE_CONFIG = mise_config
         module.SETPRIV = Path("/bin/true")
         module.choose_cli_metadata = lambda *args, **kwargs: (
-            {
-                "name": "ctx7",
-                "version": "0.5.8",
-                "license": "MIT",
-                "integrity": "sha512-synthetic",
-            },
+            package_metadata(module),
             True,
         )
+        module.open_package_url = lambda url, *, environment: PackageResponse(
+            SYNTHETIC_PACKAGE, url
+        )
 
-        def fake_login_process(command, *, cwd, environment, cancel_stream=None):
+        def fake_login_process(
+            command, *, cwd, environment, cancel_stream=None
+        ):
             del cancel_stream
             uid, gid = module.sandbox_identity()
             captured["command"] = list(command)
@@ -233,10 +305,13 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         os.environ.update(sensitive)
         try:
             module.run_login_process = fake_login_process
-            value, version, reviewed = module.acquire_api_key(cli_channel="reviewed")
+            value, version, reviewed = module.acquire_api_key(
+                cli_channel="reviewed"
+            )
         finally:
             module.run_login_process = original_login_process
             module.choose_cli_metadata = original_choose
+            module.open_package_url = original_open_package
             module.RUN_ROOT = original_run_root
             module.NPM = original_npm
             module.MISE_CONFIG = original_mise_config
@@ -247,56 +322,173 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                 else:
                     os.environ[name] = value_before
 
-        if (value, version, reviewed) != (SYNTHETIC_KEY, "0.5.8", True):
-            raise AssertionError("device login did not return the synthetic reviewed Context7 result")
+        if (value, version, reviewed) != (
+            SYNTHETIC_KEY,
+            "0.5.8",
+            True,
+        ):
+            raise AssertionError(
+                "device login did not return the synthetic reviewed Context7 result"
+            )
 
         command = captured["command"]
         environment = captured["environment"]
         cwd = captured["cwd"]
-        if "--package=ctx7@0.5.8" not in command:
-            raise AssertionError("device login did not use the exact selected Context7 CLI package")
+        package_arguments = [
+            item for item in command if item.startswith("--package=")
+        ]
+        expected_package = f"--package={cwd / 'ctx7-0.5.8.tgz'}"
+        if package_arguments != [expected_package]:
+            raise AssertionError(
+                "device login did not execute the locally verified Context7 tarball: "
+                f"{package_arguments!r}"
+            )
+        if any("ctx7@" in item for item in command):
+            raise AssertionError(
+                "device login re-resolved Context7 from npm after integrity verification"
+            )
         if "--ignore-scripts" not in command:
-            raise AssertionError("transient npm execution did not disable lifecycle scripts")
+            raise AssertionError(
+                "transient npm execution did not disable lifecycle scripts"
+            )
         if f"--registry={module.NPM_REGISTRY}" not in command:
-            raise AssertionError("transient npm execution did not pin the public npm registry")
+            raise AssertionError(
+                "transient npm execution did not pin the public npm registry"
+            )
         if command[-3:] != ["ctx7", "login", "--no-browser"]:
-            raise AssertionError(f"unexpected Context7 CLI command tail: {command[-3:]!r}")
+            raise AssertionError(
+                f"unexpected Context7 CLI command tail: {command[-3:]!r}"
+            )
         for name, secret in sensitive.items():
             if name in environment or secret in "\n".join(command):
-                raise AssertionError(f"sensitive caller state leaked into transient login: {name}")
+                raise AssertionError(
+                    f"sensitive caller state leaked into transient login: {name}"
+                )
         if environment.get("CTX7_TELEMETRY_DISABLED") != "1":
-            raise AssertionError("Context7 telemetry was not disabled for transient login")
+            raise AssertionError(
+                "Context7 telemetry was not disabled for transient login"
+            )
         user_config = Path(environment["npm_config_userconfig"])
         global_config = Path(environment["npm_config_globalconfig"])
         if user_config == global_config:
-            raise AssertionError("transient npm user/global configuration paths are not distinct")
-        if user_config == Path("/dev/null") or global_config == Path("/dev/null"):
-            raise AssertionError("transient npm config isolation still relies on /dev/null")
+            raise AssertionError(
+                "transient npm user/global configuration paths are not distinct"
+            )
+        if user_config == Path("/dev/null") or global_config == Path(
+            "/dev/null"
+        ):
+            raise AssertionError(
+                "transient npm config isolation still relies on /dev/null"
+            )
         if user_config.parent != cwd or global_config.parent != cwd:
-            raise AssertionError("transient npm config paths escaped the private login root")
+            raise AssertionError(
+                "transient npm config paths escaped the private login root"
+            )
         if environment.get("HOME") == os.environ.get("HOME"):
             raise AssertionError("transient Context7 login reused the caller HOME")
         if environment.get("MISE_NODE_VERSION") != "24.19.0":
-            raise AssertionError("transient npm shim did not receive the bundled Node version explicitly")
+            raise AssertionError(
+                "transient npm shim did not receive the bundled Node version explicitly"
+            )
         if environment.get("MISE_OFFLINE") != "1":
             raise AssertionError("mise shim resolution was not forced offline")
-        if "MISE_CONFIG_DIR" in environment or "MISE_GLOBAL_CONFIG_FILE" in environment:
-            raise AssertionError("unprivileged transient login still depends on root-owned mise config")
+        if (
+            "MISE_CONFIG_DIR" in environment
+            or "MISE_GLOBAL_CONFIG_FILE" in environment
+        ):
+            raise AssertionError(
+                "unprivileged transient login still depends on root-owned mise config"
+            )
         if environment.get("TMPDIR") != str(cwd):
-            raise AssertionError("transient Context7 login can use temporary files outside its private root")
+            raise AssertionError(
+                "transient Context7 login can use temporary files outside its private root"
+            )
         if environment.get("XDG_RUNTIME_DIR") != str(cwd):
-            raise AssertionError("transient Context7 login can use XDG runtime state outside its private root")
+            raise AssertionError(
+                "transient Context7 login can use XDG runtime state outside its private root"
+            )
         if environment.get("MISE_CACHE_DIR") != str(cwd / "mise-cache"):
-            raise AssertionError("mise cache escaped the transient Context7 login root")
+            raise AssertionError(
+                "mise cache escaped the transient Context7 login root"
+            )
         if environment.get("MISE_TMP_DIR") != str(cwd):
-            raise AssertionError("mise temporary state escaped the transient Context7 login root")
+            raise AssertionError(
+                "mise temporary state escaped the transient Context7 login root"
+            )
         if cwd.exists():
-            raise AssertionError("transient Context7 login directory was not removed")
+            raise AssertionError(
+                "transient Context7 login directory was not removed"
+            )
+
+
+def assert_integrity_mismatch_blocks_vendor_execution(module) -> None:
+    original_login_process = module.run_login_process
+    original_choose = module.choose_cli_metadata
+    original_open_package = module.open_package_url
+    original_run_root = module.RUN_ROOT
+    original_npm = module.NPM
+    original_mise_config = module.MISE_CONFIG
+    original_setpriv = module.SETPRIV
+    executed = False
+
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-integrity-test-"
+    ) as temp:
+        temp_root = Path(temp)
+        run_root = temp_root / "run"
+        run_root.mkdir(mode=0o755)
+        mise_config = temp_root / "mise.toml"
+        write_mise_config(mise_config)
+        module.RUN_ROOT = run_root
+        module.NPM = Path("/bin/true")
+        module.MISE_CONFIG = mise_config
+        module.SETPRIV = Path("/bin/true")
+        module.choose_cli_metadata = lambda *args, **kwargs: (
+            package_metadata(module),
+            True,
+        )
+        module.open_package_url = lambda url, *, environment: PackageResponse(
+            b"changed-package-bytes-after-metadata-resolution", url
+        )
+
+        def unexpected_execution(*args, **kwargs):
+            nonlocal executed
+            del args, kwargs
+            executed = True
+
+        try:
+            module.run_login_process = unexpected_execution
+            try:
+                module.acquire_api_key(cli_channel="reviewed")
+            except module.DeviceLoginError as exc:
+                if "sha512 integrity check" not in str(exc):
+                    raise AssertionError(
+                        f"unexpected integrity mismatch error: {exc}"
+                    ) from exc
+            else:
+                raise AssertionError(
+                    "changed Context7 tarball bytes unexpectedly passed integrity verification"
+                )
+        finally:
+            module.run_login_process = original_login_process
+            module.choose_cli_metadata = original_choose
+            module.open_package_url = original_open_package
+            module.RUN_ROOT = original_run_root
+            module.NPM = original_npm
+            module.MISE_CONFIG = original_mise_config
+            module.SETPRIV = original_setpriv
+
+    if executed:
+        raise AssertionError(
+            "Context7 vendor code executed after the selected tarball failed integrity"
+        )
 
 
 def assert_node_version_contract(module) -> None:
     original_mise_config = module.MISE_CONFIG
-    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-mise-test-") as temp:
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-mise-test-"
+    ) as temp:
         mise_config = Path(temp) / "mise.toml"
         module.MISE_CONFIG = mise_config
         try:
@@ -310,7 +502,9 @@ def assert_node_version_contract(module) -> None:
                 except module.DeviceLoginError:
                     pass
                 else:
-                    raise AssertionError(f"invalid bundled Node version was accepted: {invalid!r}")
+                    raise AssertionError(
+                        f"invalid bundled Node version was accepted: {invalid!r}"
+                    )
         finally:
             module.MISE_CONFIG = original_mise_config
 
@@ -324,8 +518,16 @@ def assert_manager_preflight_is_read_only(module) -> None:
         def fake_run(command, **kwargs):
             captured.append(list(command))
             if "input" in kwargs:
-                raise AssertionError("read-only Context7 preflight unexpectedly supplied stdin")
-            return subprocess.CompletedProcess(command, returncode, stdout=state + "\n", stderr="")
+                raise AssertionError(
+                    "read-only Context7 preflight unexpectedly supplied stdin"
+                )
+            return subprocess.CompletedProcess(
+                command,
+                returncode,
+                stdout=state + "\n",
+                stderr="",
+            )
+
         return fake_run
 
     try:
@@ -346,7 +548,10 @@ def assert_manager_preflight_is_read_only(module) -> None:
             except module.DeviceLoginError:
                 pass
             else:
-                raise AssertionError(f"unsafe/unexpected Context7 preflight state was accepted: {state!r}")
+                raise AssertionError(
+                    "unsafe/unexpected Context7 preflight state was accepted: "
+                    f"{state!r}"
+                )
     finally:
         module.subprocess.run = original_run
         module.PYTHON = original_python
@@ -355,7 +560,9 @@ def assert_manager_preflight_is_read_only(module) -> None:
         raise AssertionError("Context7 preflight did not invoke the manager")
     for command in captured:
         if command[-2:] != ["status", "--menu"]:
-            raise AssertionError(f"Context7 preflight was not read-only: {command!r}")
+            raise AssertionError(
+                f"Context7 preflight was not read-only: {command!r}"
+            )
 
 
 def assert_success_reaps_process_group(module) -> None:
@@ -366,6 +573,7 @@ def assert_success_reaps_process_group(module) -> None:
 
     class SuccessProcess:
         pid = 313131
+
         def poll(self):
             return 0
 
@@ -394,13 +602,19 @@ def assert_success_reaps_process_group(module) -> None:
 
     kwargs = captured["kwargs"]
     if kwargs.get("start_new_session") is not True:
-        raise AssertionError("successful transient Context7 CLI was not isolated into its own process group")
+        raise AssertionError(
+            "successful transient Context7 CLI was not isolated into its own process group"
+        )
     if kwargs.get("stdin") != subprocess.DEVNULL:
-        raise AssertionError("vendor CLI inherited terminal stdin instead of Remote Dev owning cancellation")
+        raise AssertionError(
+            "vendor CLI inherited terminal stdin instead of Remote Dev owning cancellation"
+        )
     if kwargs.get("umask") != 0o077:
         raise AssertionError("vendor CLI did not receive umask 077")
     if signals != [(process.pid, signal.SIGKILL)]:
-        raise AssertionError(f"successful Context7 login left a residual process group: {signals!r}")
+        raise AssertionError(
+            f"successful Context7 login left a residual process group: {signals!r}"
+        )
 
 
 def assert_timeout_terminates_process_group(module) -> None:
@@ -411,8 +625,10 @@ def assert_timeout_terminates_process_group(module) -> None:
 
     class TimeoutProcess:
         pid = 424242
+
         def poll(self):
             return None
+
         def wait(self, *, timeout):
             del timeout
             return -signal.SIGTERM
@@ -434,15 +650,23 @@ def assert_timeout_terminates_process_group(module) -> None:
             if "timed out" not in str(exc):
                 raise AssertionError(f"unexpected timeout error: {exc}") from exc
         else:
-            raise AssertionError("timed-out Context7 device login unexpectedly succeeded")
+            raise AssertionError(
+                "timed-out Context7 device login unexpectedly succeeded"
+            )
     finally:
         module.subprocess.Popen = original_popen
         module.os.killpg = original_killpg
         module.LOGIN_TIMEOUT_SECONDS = original_timeout
 
-    expected = [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
+    expected = [
+        (process.pid, signal.SIGTERM),
+        (process.pid, signal.SIGKILL),
+    ]
     if signals != expected:
-        raise AssertionError(f"timed-out Context7 process group was not fully terminated: {signals!r}")
+        raise AssertionError(
+            "timed-out Context7 process group was not fully terminated: "
+            f"{signals!r}"
+        )
 
 
 def assert_q_cancels_process_group(module) -> None:
@@ -453,8 +677,10 @@ def assert_q_cancels_process_group(module) -> None:
 
     class WaitingProcess:
         pid = 434343
+
         def poll(self):
             return None
+
         def wait(self, *, timeout):
             del timeout
             return -signal.SIGTERM
@@ -469,7 +695,9 @@ def assert_q_cancels_process_group(module) -> None:
     try:
         module.subprocess.Popen = lambda command, **kwargs: process
         module.os.killpg = lambda pgid, sig: signals.append((pgid, sig))
-        module.select.select = lambda read, write, error, timeout: ([stream], [], [])
+        module.select.select = (
+            lambda read, write, error, timeout: ([stream], [], [])
+        )
         try:
             module.run_login_process(
                 ["synthetic-ctx7"],
@@ -479,29 +707,42 @@ def assert_q_cancels_process_group(module) -> None:
             )
         except module.DeviceLoginError as exc:
             if str(exc) != "cancelled":
-                raise AssertionError(f"unexpected cancellation error: {exc}") from exc
+                raise AssertionError(
+                    f"unexpected cancellation error: {exc}"
+                ) from exc
         else:
-            raise AssertionError("q cancellation unexpectedly allowed device login to continue")
+            raise AssertionError(
+                "q cancellation unexpectedly allowed device login to continue"
+            )
     finally:
         module.subprocess.Popen = original_popen
         module.os.killpg = original_killpg
         module.select.select = original_select
 
-    expected = [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
+    expected = [
+        (process.pid, signal.SIGTERM),
+        (process.pid, signal.SIGKILL),
+    ]
     if signals != expected:
-        raise AssertionError(f"cancelled Context7 process group was not fully terminated: {signals!r}")
+        raise AssertionError(
+            "cancelled Context7 process group was not fully terminated: "
+            f"{signals!r}"
+        )
 
 
 def assert_cleanup_failure_is_fatal(module) -> None:
     original_login_process = module.run_login_process
     original_choose = module.choose_cli_metadata
+    original_open_package = module.open_package_url
     original_run_root = module.RUN_ROOT
     original_npm = module.NPM
     original_mise_config = module.MISE_CONFIG
     original_setpriv = module.SETPRIV
     original_rmtree = module.shutil.rmtree
 
-    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-cleanup-test-") as temp:
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-cleanup-test-"
+    ) as temp:
         temp_root = Path(temp)
         run_root = temp_root / "run"
         run_root.mkdir(mode=0o755)
@@ -512,14 +753,22 @@ def assert_cleanup_failure_is_fatal(module) -> None:
         module.MISE_CONFIG = mise_config
         module.SETPRIV = Path("/bin/true")
         module.choose_cli_metadata = lambda *args, **kwargs: (
-            {"name": "ctx7", "version": "0.5.8", "license": "MIT", "integrity": "sha512-x"},
+            package_metadata(module),
             True,
         )
+        module.open_package_url = lambda url, *, environment: PackageResponse(
+            SYNTHETIC_PACKAGE, url
+        )
 
-        def fake_login_process(command, *, cwd, environment, cancel_stream=None):
+        def fake_login_process(
+            command, *, cwd, environment, cancel_stream=None
+        ):
             del command, cwd, cancel_stream
             uid, gid = module.sandbox_identity()
-            credentials = Path(environment["XDG_CONFIG_HOME"]) / module.CONTEXT7_CREDENTIALS_RELATIVE
+            credentials = (
+                Path(environment["XDG_CONFIG_HOME"])
+                / module.CONTEXT7_CREDENTIALS_RELATIVE
+            )
             write_credentials(
                 credentials,
                 {"access_token": SYNTHETIC_KEY, "token_type": "bearer"},
@@ -537,13 +786,21 @@ def assert_cleanup_failure_is_fatal(module) -> None:
             try:
                 module.acquire_api_key(cli_channel="reviewed")
             except module.DeviceLoginError as exc:
-                if "could not remove transient Context7 CLI/login state" not in str(exc):
-                    raise AssertionError(f"unexpected cleanup error: {exc}") from exc
+                if (
+                    "could not remove transient Context7 CLI/login state"
+                    not in str(exc)
+                ):
+                    raise AssertionError(
+                        f"unexpected cleanup error: {exc}"
+                    ) from exc
             else:
-                raise AssertionError("Context7 login accepted a failed transient-state cleanup")
+                raise AssertionError(
+                    "Context7 login accepted a failed transient-state cleanup"
+                )
         finally:
             module.run_login_process = original_login_process
             module.choose_cli_metadata = original_choose
+            module.open_package_url = original_open_package
             module.RUN_ROOT = original_run_root
             module.NPM = original_npm
             module.MISE_CONFIG = original_mise_config
@@ -553,7 +810,9 @@ def assert_cleanup_failure_is_fatal(module) -> None:
 
 def assert_credentials_contract(module) -> None:
     original_run_root = module.RUN_ROOT
-    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-credentials-test-") as temp:
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-credentials-test-"
+    ) as temp:
         root = Path(temp) / "remote-dev-context7-login-test"
         root.mkdir(mode=0o700)
         run_root = root.parent
@@ -567,14 +826,24 @@ def assert_credentials_contract(module) -> None:
         valid = {"access_token": SYNTHETIC_KEY, "token_type": "bearer"}
         write_credentials(path, valid, uid=uid, gid=gid)
         if module.read_credentials(root, expected_uid=uid) != SYNTHETIC_KEY:
-            raise AssertionError("valid long-lived Context7 API-key state was rejected")
+            raise AssertionError(
+                "valid long-lived Context7 API-key state was rejected"
+            )
 
         invalid_payloads = (
             {"access_token": "not-a-context7-key", "token_type": "bearer"},
             {"access_token": "ctx7sk-", "token_type": "bearer"},
             {"access_token": SYNTHETIC_KEY, "token_type": "oauth"},
-            {"access_token": SYNTHETIC_KEY, "token_type": "bearer", "refresh_token": "synthetic"},
-            {"access_token": SYNTHETIC_KEY, "token_type": "bearer", "expires_in": 60},
+            {
+                "access_token": SYNTHETIC_KEY,
+                "token_type": "bearer",
+                "refresh_token": "synthetic",
+            },
+            {
+                "access_token": SYNTHETIC_KEY,
+                "token_type": "bearer",
+                "expires_in": 60,
+            },
         )
         for payload in invalid_payloads:
             write_credentials(path, payload, uid=uid, gid=gid)
@@ -583,7 +852,9 @@ def assert_credentials_contract(module) -> None:
             except module.DeviceLoginError:
                 pass
             else:
-                raise AssertionError(f"unsafe Context7 credential shape was accepted: {payload!r}")
+                raise AssertionError(
+                    f"unsafe Context7 credential shape was accepted: {payload!r}"
+                )
 
         write_credentials(path, valid, uid=uid, gid=gid)
         os.chmod(config_dir, 0o750)
@@ -592,7 +863,9 @@ def assert_credentials_contract(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("group-accessible Context7 config directory was accepted")
+            raise AssertionError(
+                "group-accessible Context7 config directory was accepted"
+            )
         os.chmod(config_dir, 0o700)
 
         os.chmod(credential_dir, 0o705)
@@ -601,7 +874,9 @@ def assert_credentials_contract(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("world-accessible Context7 credential directory was accepted")
+            raise AssertionError(
+                "world-accessible Context7 credential directory was accepted"
+            )
         os.chmod(credential_dir, 0o700)
 
         os.chmod(path, 0o644)
@@ -610,7 +885,9 @@ def assert_credentials_contract(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("group/world-readable Context7 credentials were accepted")
+            raise AssertionError(
+                "group/world-readable Context7 credentials were accepted"
+            )
 
         shutil.rmtree(root / "config")
         external = run_root / "external-config"
@@ -622,7 +899,9 @@ def assert_credentials_contract(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("Context7 credential reader followed a vendor-controlled parent symlink")
+            raise AssertionError(
+                "Context7 credential reader followed a vendor-controlled parent symlink"
+            )
     module.RUN_ROOT = original_run_root
 
 
@@ -633,7 +912,9 @@ def assert_adoption_order_and_failure(module) -> None:
     calls: list[tuple[list[str], str | None]] = []
     preflight_calls = 0
 
-    def fake_manager(arguments: list[str], *, input_text: str | None = None) -> None:
+    def fake_manager(
+        arguments: list[str], *, input_text: str | None = None
+    ) -> None:
         calls.append((list(arguments), input_text))
 
     def fake_preflight() -> None:
@@ -643,18 +924,27 @@ def assert_adoption_order_and_failure(module) -> None:
     try:
         module.run_manager = fake_manager
         module.preflight_manager_state = fake_preflight
-        module.acquire_api_key = lambda *, cli_channel: (SYNTHETIC_KEY, "0.5.8", True)
+        module.acquire_api_key = lambda *, cli_channel: (
+            SYNTHETIC_KEY,
+            "0.5.8",
+            True,
+        )
         if module.command_login(yes=True, cli_channel="reviewed") != 0:
-            raise AssertionError("synthetic device login command unexpectedly failed")
+            raise AssertionError(
+                "synthetic device login command unexpectedly failed"
+            )
     finally:
         module.run_manager = original_run_manager
         module.preflight_manager_state = original_preflight
         module.acquire_api_key = original_acquire
 
-    expected = [(["repair", "--yes", "--api-key-stdin"], SYNTHETIC_KEY + "\n")]
+    expected = [
+        (["repair", "--yes", "--api-key-stdin"], SYNTHETIC_KEY + "\n")
+    ]
     if calls != expected or preflight_calls != 1:
         raise AssertionError(
-            f"unexpected device-login adoption sequence: preflight={preflight_calls}, calls={calls!r}"
+            "unexpected device-login adoption sequence: "
+            f"preflight={preflight_calls}, calls={calls!r}"
         )
 
     calls.clear()
@@ -673,7 +963,9 @@ def assert_adoption_order_and_failure(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("synthetic device-login failure unexpectedly succeeded")
+            raise AssertionError(
+                "synthetic device-login failure unexpectedly succeeded"
+            )
     finally:
         module.run_manager = original_run_manager
         module.preflight_manager_state = original_preflight
@@ -681,7 +973,8 @@ def assert_adoption_order_and_failure(module) -> None:
 
     if calls or preflight_calls != 1:
         raise AssertionError(
-            "failed/cancelled device login mutated managed Context7 state instead of preserving it"
+            "failed/cancelled device login mutated managed Context7 state "
+            "instead of preserving it"
         )
 
 
@@ -694,7 +987,9 @@ def assert_role_gate(module) -> None:
         except module.DeviceLoginError:
             pass
         else:
-            raise AssertionError("Context7 device login accepted a non-Codex role")
+            raise AssertionError(
+                "Context7 device login accepted a non-Codex role"
+            )
     finally:
         if previous is None:
             os.environ.pop("REMOTE_DEV_ROLE", None)
@@ -711,6 +1006,7 @@ def main() -> int:
     assert_reviewed_latest_selection(module)
     assert_manager_preflight_is_read_only(module)
     assert_acquire_uses_isolated_environment(module)
+    assert_integrity_mismatch_blocks_vendor_execution(module)
     assert_success_reaps_process_group(module)
     assert_timeout_terminates_process_group(module)
     assert_q_cancels_process_group(module)
@@ -718,7 +1014,9 @@ def main() -> int:
     assert_credentials_contract(module)
     assert_adoption_order_and_failure(module)
     assert_role_gate(module)
-    print("Context7 device-login isolation/version/cancellation regressions: OK")
+    print(
+        "Context7 device-login isolation/version/integrity/cancellation regressions: OK"
+    )
     return 0
 
 
