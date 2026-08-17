@@ -164,14 +164,14 @@ Recrear el contenedor con los mismos mounts revisados debería conservar los dir
 Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev es el contrato de selección del sistema de archivos junto con los puntos de entrada de conversación documentados por el proveedor:
 
 - el rol Antigravity tiene su propio `/workspace` y estado privados;
-- selecciona un proyecto concreto de Remote Dev antes de Start/Continue/Browse;
+- selecciona un proyecto concreto de Remote Dev antes de Start/Continue;
 - Remote Dev inicia todas las acciones de Antigravity desde el cwd del proyecto seleccionado;
+- **Start Antigravity** abre la TUI normal; usa `/resume` dentro de ella para explorar/reanudar conversaciones anteriores mediante el selector nativo de Google;
 - **Continue latest Antigravity conversation** pasa el flag `--continue` soportado por el proveedor y pide a Antigravity cargar la conversación más reciente asociada a ese workspace;
-- Google no documenta un flag de arranque que abra el selector completo de conversaciones; **Browse/resume Antigravity conversations** inicia la TUI normal y después debes escribir `/resume` para abrir el selector de Google;
-- Remote Dev no interpreta el almacenamiento de conversaciones de Antigravity ni su caché de última conversación por workspace para construir un selector alternativo;
+- Remote Dev no expone una acción separada para explorar conversaciones ni interpreta el almacenamiento/caché de Antigravity para construir un selector alternativo;
 - las rutas de reanudación del menú ya no dependen del texto renderizado del prompt para decidir cuándo inyectar `/resume`, porque la apariencia de la TUI del proveedor puede cambiar de forma independiente al contrato CLI.
 
-Google documenta que `--continue` puede caer en una sesión nueva cuando la caché del workspace no contiene una conversación previa válida. El selector completo `/resume` sigue siendo la vía correcta cuando necesitas elegir entre varias conversaciones.
+Google documenta que `--continue` puede caer en una sesión nueva cuando la caché del workspace no contiene una conversación previa válida. El selector `/resume` dentro de la TUI sigue siendo la vía correcta cuando necesitas elegir entre varias conversaciones o conversaciones anteriores.
 
 **No** extrapoles a Antigravity el filtrado de sesiones, visibilidad de previews, reasociación hilo/ruta ni semántica de persistencia de Codex. La validación real de proyectos/sesiones en TrueNAS sigue en [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), dentro del ciclo experimental más amplio de #29/#106.
 
