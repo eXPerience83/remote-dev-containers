@@ -2,18 +2,26 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import select
 import shutil
 import signal
+import ssl
 import stat
 import subprocess
 import sys
 import tempfile
 import time
 import tomllib
+import urllib.error
+import urllib.parse
+import urllib.request
 
 
 CONTEXT7_CLI_NAME = "ctx7"
@@ -22,6 +30,7 @@ CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
 REVIEWED_CONTEXT7_CLI_VERSION = "0.5.8"
 EXPECTED_PACKAGE_LICENSE = "MIT"
 NPM_REGISTRY = "https://registry.npmjs.org/"
+NPM_REGISTRY_HOST = "registry.npmjs.org"
 NPM = Path("/opt/remote-dev/mise/shims/npm")
 MISE_CONFIG = Path("/etc/mise/mise.toml")
 SETPRIV = Path("/usr/bin/setpriv")
@@ -30,8 +39,10 @@ MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
 RUN_ROOT = Path("/run")
 MAX_CREDENTIAL_BYTES = 32 * 1024
 MAX_METADATA_BYTES = 32 * 1024
+MAX_PACKAGE_BYTES = 16 * 1024 * 1024
 LOGIN_TIMEOUT_SECONDS = 15 * 60
 METADATA_TIMEOUT_SECONDS = 30
+PACKAGE_TIMEOUT_SECONDS = 60
 PROCESS_TERMINATION_GRACE_SECONDS = 5
 PROCESS_POLL_SECONDS = 0.25
 SANDBOX_UID = 65534
@@ -46,6 +57,14 @@ PREFLIGHT_UNMANAGED_STATE = "Context7: unmanaged configuration (Remote Dev will 
 
 class DeviceLoginError(RuntimeError):
     pass
+
+
+class NoPackageRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject package redirects so selected npm metadata stays authoritative."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        del req, fp, code, msg, headers, newurl
+        return None
 
 
 def validate_role() -> None:
@@ -250,6 +269,26 @@ def npm_json(
         raise DeviceLoginError("official Context7 npm metadata is not valid JSON") from exc
 
 
+def parse_sha512_integrity(value: object) -> bytes:
+    if not isinstance(value, str) or not value.startswith("sha512-"):
+        raise DeviceLoginError("official Context7 npm metadata has no supported package integrity")
+    encoded = value.removeprefix("sha512-")
+    if not encoded or any(character.isspace() for character in encoded):
+        raise DeviceLoginError("official Context7 npm metadata has no supported package integrity")
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise DeviceLoginError("official Context7 npm metadata has malformed sha512 integrity") from exc
+    if len(decoded) != hashlib.sha512().digest_size:
+        raise DeviceLoginError("official Context7 npm metadata has malformed sha512 integrity")
+    return decoded
+
+
+def exact_tarball_url(version: str) -> str:
+    exact_version(version)
+    return f"{NPM_REGISTRY}{CONTEXT7_CLI_NAME}/-/{CONTEXT7_CLI_NAME}-{version}.tgz"
+
+
 def resolve_package_metadata(
     specifier: str,
     *,
@@ -266,6 +305,7 @@ def resolve_package_metadata(
             "version",
             "license",
             "dist.integrity",
+            "dist.tarball",
             "--json",
         ],
         uid=uid,
@@ -279,6 +319,7 @@ def resolve_package_metadata(
     version = payload.get("version")
     license_name = payload.get("license")
     integrity = payload.get("dist.integrity")
+    tarball = payload.get("dist.tarball")
     if name != CONTEXT7_CLI_NAME or not isinstance(version, str):
         raise DeviceLoginError("official Context7 npm metadata has an unexpected package identity")
     exact_version(version)
@@ -286,13 +327,9 @@ def resolve_package_metadata(
         raise DeviceLoginError(
             f"Context7 CLI package license changed from the reviewed {EXPECTED_PACKAGE_LICENSE} contract"
         )
-    if (
-        not isinstance(integrity, str)
-        or not integrity.startswith("sha512-")
-        or len(integrity) <= len("sha512-")
-        or any(character.isspace() for character in integrity)
-    ):
-        raise DeviceLoginError("official Context7 npm metadata has no supported package integrity")
+    parse_sha512_integrity(integrity)
+    if not isinstance(tarball, str) or tarball != exact_tarball_url(version):
+        raise DeviceLoginError("official Context7 npm metadata has an unexpected package tarball URL")
     if specifier != "latest" and version != exact_version(specifier):
         raise DeviceLoginError("official Context7 npm registry did not resolve the requested exact version")
     return {
@@ -300,6 +337,7 @@ def resolve_package_metadata(
         "version": version,
         "license": license_name,
         "integrity": integrity,
+        "tarball": tarball,
     }
 
 
@@ -377,15 +415,127 @@ def choose_cli_metadata(
     raise DeviceLoginError("invalid Context7 CLI version choice")
 
 
-def login_command(uid: int, gid: int, *, version: str) -> list[str]:
-    exact_version(version)
+def package_ssl_context(environment: dict[str, str]) -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    ca_certificate = environment.get("NODE_EXTRA_CA_CERTS", "")
+    if ca_certificate:
+        try:
+            context.load_verify_locations(cafile=ca_certificate)
+        except (OSError, ssl.SSLError) as exc:
+            raise DeviceLoginError("configured extra CA certificate is unavailable or invalid") from exc
+    return context
+
+
+def open_package_url(url: str, *, environment: dict[str, str]):
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != NPM_REGISTRY_HOST
+        or parsed.port not in {None, 443}
+    ):
+        raise DeviceLoginError("refusing to download Context7 package outside the fixed npm origin")
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "remote-dev-containers-context7-device-login"},
+    )
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        NoPackageRedirectHandler(),
+        urllib.request.HTTPSHandler(context=package_ssl_context(environment)),
+    )
+    try:
+        return opener.open(request, timeout=PACKAGE_TIMEOUT_SECONDS)
+    except (OSError, urllib.error.URLError, ssl.SSLError) as exc:
+        raise DeviceLoginError("could not download the selected Context7 npm package") from exc
+
+
+def download_verified_package(
+    metadata: dict[str, str],
+    *,
+    root: Path,
+    uid: int,
+    gid: int,
+    environment: dict[str, str],
+) -> Path:
+    version = exact_version(metadata["version"])
+    tarball_url = metadata.get("tarball", "")
+    if tarball_url != exact_tarball_url(version):
+        raise DeviceLoginError("selected Context7 package tarball no longer matches validated metadata")
+    expected_digest = parse_sha512_integrity(metadata.get("integrity"))
+    destination = root / f"{CONTEXT7_CLI_NAME}-{version}.tgz"
+    digest = hashlib.sha512()
+    total = 0
+    try:
+        response = open_package_url(tarball_url, environment=environment)
+        with response:
+            if response.geturl() != tarball_url:
+                raise DeviceLoginError("selected Context7 package redirected unexpectedly")
+            with destination.open("xb") as handle:
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_PACKAGE_BYTES:
+                        raise DeviceLoginError(
+                            "selected Context7 package exceeded the supported size boundary"
+                        )
+                    digest.update(chunk)
+                    handle.write(chunk)
+    except DeviceLoginError:
+        destination.unlink(missing_ok=True)
+        raise
+    except OSError as exc:
+        destination.unlink(missing_ok=True)
+        raise DeviceLoginError(
+            f"could not stage the selected Context7 npm package: errno {exc.errno}"
+        ) from exc
+
+    if total <= 0:
+        destination.unlink(missing_ok=True)
+        raise DeviceLoginError("selected Context7 npm package was empty")
+    if not hmac.compare_digest(digest.digest(), expected_digest):
+        destination.unlink(missing_ok=True)
+        raise DeviceLoginError(
+            "selected Context7 npm package failed the validated sha512 integrity check"
+        )
+    try:
+        os.chmod(destination, 0o600)
+        if os.geteuid() == 0:
+            os.chown(destination, uid, gid)
+    except OSError as exc:
+        destination.unlink(missing_ok=True)
+        raise DeviceLoginError(
+            f"could not secure the selected Context7 npm package: errno {exc.errno}"
+        ) from exc
+    return destination
+
+
+def validate_package_tarball(path: Path, *, expected_uid: int) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise DeviceLoginError(f"verified Context7 package is unavailable: errno {exc.errno}") from exc
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_uid != expected_uid
+        or stat.S_IMODE(info.st_mode) & 0o077
+        or info.st_size <= 0
+        or info.st_size > MAX_PACKAGE_BYTES
+    ):
+        raise DeviceLoginError("verified Context7 package has unsafe ownership, type, permissions or size")
+
+
+def login_command(uid: int, gid: int, *, package_tarball: Path) -> list[str]:
+    validate_package_tarball(package_tarball, expected_uid=uid)
     command = [
         str(NPM),
         "exec",
         "--yes",
         "--ignore-scripts",
         f"--registry={NPM_REGISTRY}",
-        f"--package={CONTEXT7_CLI_NAME}@{version}",
+        f"--package={package_tarball}",
         "--",
         "ctx7",
         "login",
@@ -646,6 +796,13 @@ def acquire_api_key(*, cli_channel: str) -> tuple[str, str, bool]:
             environment=environment,
         )
         version = metadata["version"]
+        package_tarball = download_verified_package(
+            metadata,
+            root=root,
+            uid=uid,
+            gid=gid,
+            environment=environment,
+        )
         if reviewed:
             print(f"Context7 CLI selected: {version} (official npm; reviewed by Remote Dev)")
         else:
@@ -654,7 +811,7 @@ def acquire_api_key(*, cli_channel: str) -> tuple[str, str, bool]:
                 "(official npm; Remote Dev review pending)",
                 file=sys.stderr,
             )
-        command = login_command(uid, gid, version=version)
+        command = login_command(uid, gid, package_tarball=package_tarball)
         run_login_process(command, cwd=root, environment=environment)
         api_key = read_credentials(root, expected_uid=uid)
     finally:
