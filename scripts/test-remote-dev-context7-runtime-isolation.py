@@ -9,11 +9,10 @@ import subprocess
 import tempfile
 
 
+HELPER_OVERRIDE = os.environ.get("REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER")
 HELPER = Path(
-    os.environ.get(
-        "REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER",
-        Path(__file__).resolve().parents[1] / "scripts" / "remote-dev-context7-device-login.py",
-    )
+    HELPER_OVERRIDE
+    or Path(__file__).resolve().parents[1] / "scripts" / "remote-dev-context7-device-login.py"
 )
 
 
@@ -80,6 +79,12 @@ def assert_restrictive_vendor_umask(module) -> None:
 
 def assert_bundled_npm_accepts_isolated_configs(module) -> None:
     if not module.NPM.exists() or not module.MISE_CONFIG.exists():
+        if HELPER_OVERRIDE:
+            raise AssertionError(
+                "in-image Context7 npm/setpriv regression could not run: "
+                f"npm={module.NPM} mise_config={module.MISE_CONFIG}"
+            )
+        print("Context7 bundled npm regression skipped: not running inside the image")
         return
 
     module.validate_executable(module.NPM, label="npm")
