@@ -64,7 +64,7 @@ Remote Dev intentionally does **not** run `ctx7 setup`. That upstream command ca
 
 This unprivileged execution is **not a filesystem sandbox**. The transient vendor process still runs inside the Codex container, so any file elsewhere in that container that is readable by UID/GID 65534 is technically readable by that process. Remote Dev does not direct the CLI to inspect project files, but it does not claim that `nobody` makes world-readable workspace content inaccessible. Use the existing manual API-key path instead if you do not want transient Context7 vendor code executing inside the Codex service.
 
-Before downloading the transient package, Remote Dev preflights the existing managed configuration with the normal ownership-safe repair path. A currently working managed API key is not replaced until the new device login has completed successfully and its local credential shape has been validated. Failed, denied, expired or cancelled sign-in leaves the previous working key intact.
+Before downloading the transient package, Remote Dev performs only the read-only `status --menu` check through the existing manager. That preflight rejects unmanaged, unsafe, damaged or unexpected managed state without running `install` or `repair`. A currently working managed API key is not replaced until the new device login has completed successfully, its local credential shape has been validated and transient state has been cleaned up. Failed, denied, expired or cancelled sign-in performs no manager mutation and leaves the previous working key intact.
 
 ## Managed Codex configuration
 
