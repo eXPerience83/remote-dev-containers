@@ -10,7 +10,7 @@ Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. La in
 https://mcp.context7.com/mcp
 ```
 
-Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni un runtime de servidor MCP. El inicio mediante código de dispositivo descarga de forma transitoria una versión oficial y exacta del paquete npm `ctx7`, la ejecuta solo para la autenticación y después elimina paquete, caché npm y estado temporal del proveedor. Solo persiste la API key que se adopta en el estado privado de Context7 ya existente en Remote Dev.
+Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni un runtime de servidor MCP. El inicio mediante código de dispositivo resuelve una versión oficial y exacta del paquete npm `ctx7`, descarga el tarball top-level exacto desde el origen npm público fijado, verifica su SRI SHA-512 contra los metadatos seleccionados del registro, ejecuta ese tarball local verificado solo para la autenticación y después elimina paquete, caché npm y estado temporal del proveedor. Solo persiste la API key que se adopta en el estado privado de Context7 ya existente en Remote Dev.
 
 ## Ciclo de vida explícito
 
@@ -43,15 +43,16 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 Remote Dev mantiene en su código una versión exacta **revisada** de `ctx7`. La automatización de upstream del repositorio se encarga de proponer versiones revisadas más nuevas; nunca debe cambiar estable de forma silenciosa.
 
-En un device login interactivo, Remote Dev resuelve primero el `latest` actual desde el registro npm público fijado. Antes de ejecutar código del proveedor valida identidad del paquete, versión semántica estable exacta, contrato de licencia MIT revisado y metadatos de integridad de npm.
+En un device login interactivo, Remote Dev resuelve primero el `latest` actual desde el registro npm público fijado. Antes de ejecutar código del proveedor valida identidad del paquete, versión semántica estable exacta, contrato de licencia MIT revisado, URL exacta del tarball y metadatos de integridad SHA-512 de npm.
 
 - Si `latest` coincide con la versión revisada por Remote Dev, se utiliza esa versión exacta.
 - Si npm tiene una versión más nueva, Remote Dev muestra ambas y permite elegir:
   - la versión revisada (recomendada); o
   - la última versión oficial exacta, marcada como **`official source; Remote Dev review pending`**.
 - Una versión nueva **no se bloquea solo por no haber sido revisada todavía**. Debe superar igualmente los gates de origen/metadatos/integridad y los de credencial/limpieza posteriores al login.
-- Primero se resuelve `latest` y después se ejecuta `ctx7@X.Y.Z`; Remote Dev nunca pide a npm que ejecute directamente el selector mutable `ctx7@latest`.
-- Un origen, identidad, formato de versión, licencia, integridad o modelo de credenciales incompatible falla de forma segura.
+- Primero se resuelve `latest`. Después Remote Dev descarga el `ctx7-X.Y.Z.tgz` exacto elegido, verifica sus bytes contra el `dist.integrity` seleccionado y entrega a npm únicamente ese tarball local verificado para `ctx7 login --no-browser`; nunca pide a npm ejecutar el selector mutable `ctx7@latest` ni volver a resolver `ctx7@X.Y.Z` después de verificarlo.
+- Esta vinculación cubre el tarball top-level seleccionado de `ctx7`. No constituye un lock inmutable de todas las dependencias transitivas de npm que npm pueda resolver al ejecutar el paquete.
+- Un origen, identidad, formato de versión, licencia, URL de tarball, integridad o modelo de credenciales incompatible falla de forma segura.
 
 Es el mismo principio de runtimes opcionales que usamos con Codex y Antigravity: la evidencia de revisión describe versiones conocidas, no es una allowlist de disponibilidad.
 
@@ -70,6 +71,7 @@ Durante el device login, Remote Dev:
 - crea un árbol privado nuevo `/run/remote-dev-context7-login-*`;
 - utiliza HOME, configuración/estado/caché/runtime XDG, temporales, caché npm y configuraciones npm user/global nuevas;
 - fija el registro npm público y desactiva scripts de ciclo de vida, audit/fund/update noise y telemetría de Context7;
+- resuelve metadatos exactos del paquete, descarga el tarball top-level elegido sin configuración proxy ambiental ni redirecciones entre orígenes, verifica su SRI SHA-512 y ejecuta únicamente ese tarball local verificado;
 - pasa explícitamente la versión de Node fijada por la imagen al shim npm/mise incluido, con resolución mise offline;
 - no entrega credenciales existentes de Codex, OpenAI, GitHub o Context7 ni usa el `CODEX_HOME` real o el proyecto como HOME/config/cwd del proveedor;
 - cuando el servicio corre como root, ejecuta npm/Context7 como UID/GID 65534, sin grupos suplementarios y con `no-new-privs`;
@@ -126,7 +128,7 @@ Límites de red:
 
 - arranque y `status`: sin petición de setup/descarga a Context7;
 - `install`/`repair` manual o anónimo: solo estado local;
-- device login: consulta explícita de metadatos del npm público y descarga del paquete exacto, seguida de autorización por dispositivo en Context7;
+- device login: consulta explícita de metadatos del npm público y descarga/verificación transitoria del paquete top-level exacto, seguida de la resolución npm necesaria para ejecutar el paquete verificado y de la autorización por dispositivo en Context7;
 - `update`/`remove`: solo estado local;
 - `test`: comprobación explícita de configuración + `https://mcp.context7.com/ping`;
 - sesión Codex con Context7 habilitado: Codex puede contactar el MCP alojado para inicialización y herramientas.
