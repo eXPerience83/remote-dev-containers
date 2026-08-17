@@ -169,6 +169,50 @@ def assert_node_version_contract(module) -> None:
             module.MISE_CONFIG = original_mise_config
 
 
+def assert_manager_preflight_is_read_only(module) -> None:
+    original_run = module.subprocess.run
+    original_python = module.PYTHON
+    captured: list[list[str]] = []
+
+    def response(state: str, returncode: int = 0):
+        def fake_run(command, **kwargs):
+            captured.append(list(command))
+            if "input" in kwargs:
+                raise AssertionError("read-only Context7 preflight unexpectedly supplied stdin")
+            return subprocess.CompletedProcess(command, returncode, stdout=state + "\n", stderr="")
+
+        return fake_run
+
+    try:
+        module.PYTHON = Path("/bin/true")
+        for state in module.PREFLIGHT_ALLOWED_STATES:
+            module.subprocess.run = response(state)
+            module.preflight_manager_state()
+
+        rejected = (
+            (module.PREFLIGHT_UNMANAGED_STATE, 0),
+            ("Context7: configured but API-key state is unsafe", 3),
+            ("unexpected synthetic state", 0),
+        )
+        for state, returncode in rejected:
+            module.subprocess.run = response(state, returncode)
+            try:
+                module.preflight_manager_state()
+            except module.DeviceLoginError:
+                pass
+            else:
+                raise AssertionError(f"unsafe/unexpected Context7 preflight state was accepted: {state!r}")
+    finally:
+        module.subprocess.run = original_run
+        module.PYTHON = original_python
+
+    if not captured:
+        raise AssertionError("Context7 preflight did not invoke the manager")
+    for command in captured:
+        if command[-2:] != ["status", "--menu"]:
+            raise AssertionError(f"Context7 preflight was not read-only: {command!r}")
+
+
 def assert_success_reaps_process_group(module) -> None:
     original_popen = module.subprocess.Popen
     original_killpg = module.os.killpg
@@ -386,35 +430,46 @@ def assert_credentials_contract(module) -> None:
 
 def assert_adoption_order_and_failure(module) -> None:
     original_run_manager = module.run_manager
+    original_preflight = module.preflight_manager_state
     original_acquire = module.acquire_api_key
     calls: list[tuple[list[str], str | None]] = []
+    preflight_calls = 0
 
     def fake_manager(arguments: list[str], *, input_text: str | None = None) -> None:
         calls.append((list(arguments), input_text))
 
+    def fake_preflight() -> None:
+        nonlocal preflight_calls
+        preflight_calls += 1
+
     try:
         module.run_manager = fake_manager
+        module.preflight_manager_state = fake_preflight
         module.acquire_api_key = lambda: SYNTHETIC_KEY
         if module.command_login(yes=True) != 0:
             raise AssertionError("synthetic device login command unexpectedly failed")
     finally:
         module.run_manager = original_run_manager
+        module.preflight_manager_state = original_preflight
         module.acquire_api_key = original_acquire
 
     expected = [
-        (["repair", "--yes"], None),
         (["repair", "--yes", "--api-key-stdin"], SYNTHETIC_KEY + "\n"),
     ]
-    if calls != expected:
-        raise AssertionError(f"unexpected device-login adoption sequence: {calls!r}")
+    if calls != expected or preflight_calls != 1:
+        raise AssertionError(
+            f"unexpected device-login adoption sequence: preflight={preflight_calls}, calls={calls!r}"
+        )
 
     calls.clear()
+    preflight_calls = 0
 
     def fail_acquire() -> str:
         raise module.DeviceLoginError("synthetic login failure")
 
     try:
         module.run_manager = fake_manager
+        module.preflight_manager_state = fake_preflight
         module.acquire_api_key = fail_acquire
         try:
             module.command_login(yes=True)
@@ -424,10 +479,13 @@ def assert_adoption_order_and_failure(module) -> None:
             raise AssertionError("synthetic device-login failure unexpectedly succeeded")
     finally:
         module.run_manager = original_run_manager
+        module.preflight_manager_state = original_preflight
         module.acquire_api_key = original_acquire
 
-    if calls != [(["repair", "--yes"], None)]:
-        raise AssertionError("failed device login attempted to replace the existing managed key")
+    if calls or preflight_calls != 1:
+        raise AssertionError(
+            "failed device login mutated managed Context7 state instead of preserving the existing key/config"
+        )
 
 
 def assert_role_gate(module) -> None:
@@ -452,6 +510,7 @@ def main() -> int:
     if module.CONTEXT7_CLI_PACKAGE != "ctx7@0.5.7":
         raise AssertionError("Context7 device-login package pin drifted unexpectedly")
     assert_node_version_contract(module)
+    assert_manager_preflight_is_read_only(module)
     assert_acquire_uses_isolated_environment(module)
     assert_success_reaps_process_group(module)
     assert_timeout_terminates_process_group(module)
