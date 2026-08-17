@@ -119,6 +119,8 @@ def transient_environment(root: Path) -> dict[str, str]:
         "XDG_CONFIG_HOME": str(root / "config"),
         "XDG_STATE_HOME": str(root / "state"),
         "XDG_CACHE_HOME": str(root / "cache"),
+        "XDG_RUNTIME_DIR": str(root),
+        "TMPDIR": str(root),
         "npm_config_cache": str(root / "npm-cache"),
         "npm_config_registry": NPM_REGISTRY,
         "npm_config_userconfig": "/dev/null",
@@ -229,14 +231,60 @@ def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, s
         raise DeviceLoginError(f"Context7 device login failed (exit {returncode})")
 
 
-def read_credentials(path: Path, *, expected_uid: int) -> str:
-    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+def open_owned_directory_at(parent_fd: int, name: str, *, expected_uid: int, label: str) -> int:
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
-        fd = os.open(path, flags)
+        fd = os.open(name, flags, dir_fd=parent_fd)
     except OSError as exc:
-        raise DeviceLoginError(f"Context7 login credentials are unavailable: errno {exc.errno}") from exc
+        raise DeviceLoginError(f"{label} is unavailable or unsafe: errno {exc.errno}") from exc
+    info = os.fstat(fd)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != expected_uid:
+        os.close(fd)
+        raise DeviceLoginError(f"{label} has unsafe ownership or type")
+    return fd
+
+
+def read_credentials(root: Path, *, expected_uid: int) -> str:
+    if root.parent != RUN_ROOT or not root.name.startswith("remote-dev-context7-login-"):
+        raise DeviceLoginError("refusing an unexpected transient Context7 credential root")
+
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    root_fd: int | None = None
+    config_fd: int | None = None
+    context7_fd: int | None = None
+    key_fd: int | None = None
     try:
-        info = os.fstat(fd)
+        try:
+            root_fd = os.open(root, directory_flags)
+        except OSError as exc:
+            raise DeviceLoginError(f"Context7 login root is unavailable or unsafe: errno {exc.errno}") from exc
+        root_info = os.fstat(root_fd)
+        if (
+            not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != expected_uid
+            or stat.S_IMODE(root_info.st_mode) & 0o077
+        ):
+            raise DeviceLoginError("Context7 login root has unsafe ownership, type or permissions")
+
+        config_fd = open_owned_directory_at(
+            root_fd,
+            "config",
+            expected_uid=expected_uid,
+            label="Context7 login config directory",
+        )
+        context7_fd = open_owned_directory_at(
+            config_fd,
+            "context7",
+            expected_uid=expected_uid,
+            label="Context7 login credential directory",
+        )
+        try:
+            key_fd = os.open("credentials.json", key_flags, dir_fd=context7_fd)
+        except OSError as exc:
+            raise DeviceLoginError(f"Context7 login credentials are unavailable or unsafe: errno {exc.errno}") from exc
+
+        info = os.fstat(key_fd)
         if not stat.S_ISREG(info.st_mode):
             raise DeviceLoginError("Context7 login credentials are not a regular file")
         if info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) & 0o077:
@@ -247,7 +295,7 @@ def read_credentials(path: Path, *, expected_uid: int) -> str:
         chunks: list[bytes] = []
         remaining = MAX_CREDENTIAL_BYTES + 1
         while remaining > 0:
-            chunk = os.read(fd, remaining)
+            chunk = os.read(key_fd, remaining)
             if not chunk:
                 break
             chunks.append(chunk)
@@ -256,7 +304,9 @@ def read_credentials(path: Path, *, expected_uid: int) -> str:
         if not data or len(data) > MAX_CREDENTIAL_BYTES:
             raise DeviceLoginError("Context7 login credentials exceed the supported size boundary")
     finally:
-        os.close(fd)
+        for fd in (key_fd, context7_fd, config_fd, root_fd):
+            if fd is not None:
+                os.close(fd)
 
     try:
         decoded = json.loads(data.decode("utf-8"))
@@ -267,7 +317,11 @@ def read_credentials(path: Path, *, expected_uid: int) -> str:
 
     access_token = decoded.get("access_token")
     token_type = decoded.get("token_type")
-    if not isinstance(access_token, str) or not access_token.startswith(CONTEXT7_KEY_PREFIX):
+    if (
+        not isinstance(access_token, str)
+        or not access_token.startswith(CONTEXT7_KEY_PREFIX)
+        or len(access_token) <= len(CONTEXT7_KEY_PREFIX)
+    ):
         raise DeviceLoginError("Context7 login did not return the expected long-lived API-key format")
     if not isinstance(token_type, str) or token_type.lower() != "bearer":
         raise DeviceLoginError("Context7 login returned an unexpected credential type")
@@ -285,12 +339,11 @@ def acquire_api_key() -> str:
     uid, gid = sandbox_identity()
     root = create_login_root(uid, gid)
     environment = transient_environment(root)
-    credentials = Path(environment["XDG_CONFIG_HOME"]) / CONTEXT7_CREDENTIALS_RELATIVE
     command = login_command(uid, gid)
     api_key = ""
     try:
         run_login_process(command, cwd=root, environment=environment)
-        api_key = read_credentials(credentials, expected_uid=uid)
+        api_key = read_credentials(root, expected_uid=uid)
     finally:
         remove_login_root(root)
     return api_key
