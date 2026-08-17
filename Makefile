@@ -8,6 +8,11 @@ build:
 
 smoke: agent-contract-tests
 	docker run --rm --entrypoint /usr/local/bin/codex-smoke-test remote-dev:local
+	docker run --rm \
+		--entrypoint /opt/remote-dev/mise/shims/python \
+		-v "$(CURDIR)/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
+		-e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
+		remote-dev:local /tmp/test-remote-dev-context7-runtime-isolation.py
 	bash scripts/runtime-smoke-test.sh remote-dev:local
 
 preflight:
@@ -22,11 +27,12 @@ agent-contract-tests:
 	REMOTE_DEV_ATTACH_TMUX=./scripts/attach-remote-dev-tmux.sh bash scripts/test-direct-codex-project-entry.sh
 	bash scripts/test-antigravity-runtime.sh
 	python3 scripts/test-remote-dev-context7-device-login.py
+	python3 scripts/test-remote-dev-context7-runtime-isolation.py
 	bash scripts/test-remote-dev-context7-entrypoint.sh
 
 validate: agent-contract-tests
 	bash -n scripts/*.sh scripts/lib/*.sh scripts/fixtures/*.sh
-	python3 -m py_compile scripts/remote-dev-launcher.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py
+	python3 -m py_compile scripts/remote-dev-launcher.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py
 	REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh bash scripts/test-image-name-compat.sh
 	bash scripts/test-compose-image-compat.sh
 	REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py bash scripts/test-remote-dev-launcher.sh
