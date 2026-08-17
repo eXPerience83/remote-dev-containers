@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -26,11 +27,13 @@ def load_helper():
 
 def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: int) -> None:
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-    os.chmod(path.parent, 0o700)
+    for directory in (path.parent.parent, path.parent):
+        os.chmod(directory, 0o700)
+        if os.geteuid() == 0:
+            os.chown(directory, uid, gid)
     path.write_text(json.dumps(payload), encoding="utf-8")
     os.chmod(path, 0o600)
     if os.geteuid() == 0:
-        os.chown(path.parent, uid, gid)
         os.chown(path, uid, gid)
 
 
@@ -112,6 +115,10 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError("transient Context7 login reused the caller HOME")
 
         cwd = captured["cwd"]
+        if environment.get("TMPDIR") != str(cwd):
+            raise AssertionError("transient Context7 login can use temporary files outside its private root")
+        if environment.get("XDG_RUNTIME_DIR") != str(cwd):
+            raise AssertionError("transient Context7 login can use XDG runtime state outside its private root")
         if cwd.exists():
             raise AssertionError("transient Context7 login directory was not removed")
 
@@ -224,19 +231,24 @@ def assert_cleanup_failure_is_fatal(module) -> None:
 
 
 def assert_credentials_contract(module) -> None:
+    original_run_root = module.RUN_ROOT
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-credentials-test-") as temp:
-        root = Path(temp)
-        path = root / "credentials.json"
+        root = Path(temp) / "login-root"
+        root.mkdir(mode=0o700)
+        run_root = root.parent
+        module.RUN_ROOT = run_root
         uid = os.geteuid()
         gid = os.getegid()
+        path = root / "config" / module.CONTEXT7_CREDENTIALS_RELATIVE
 
         valid = {"access_token": SYNTHETIC_KEY, "token_type": "bearer"}
         write_credentials(path, valid, uid=uid, gid=gid)
-        if module.read_credentials(path, expected_uid=uid) != SYNTHETIC_KEY:
+        if module.read_credentials(root, expected_uid=uid) != SYNTHETIC_KEY:
             raise AssertionError("valid long-lived Context7 API-key state was rejected")
 
         invalid_payloads = (
             {"access_token": "not-a-context7-key", "token_type": "bearer"},
+            {"access_token": "ctx7sk-", "token_type": "bearer"},
             {"access_token": SYNTHETIC_KEY, "token_type": "oauth"},
             {
                 "access_token": SYNTHETIC_KEY,
@@ -248,7 +260,7 @@ def assert_credentials_contract(module) -> None:
         for payload in invalid_payloads:
             write_credentials(path, payload, uid=uid, gid=gid)
             try:
-                module.read_credentials(path, expected_uid=uid)
+                module.read_credentials(root, expected_uid=uid)
             except module.DeviceLoginError:
                 pass
             else:
@@ -257,11 +269,27 @@ def assert_credentials_contract(module) -> None:
         write_credentials(path, valid, uid=uid, gid=gid)
         os.chmod(path, 0o644)
         try:
-            module.read_credentials(path, expected_uid=uid)
+            module.read_credentials(root, expected_uid=uid)
         except module.DeviceLoginError:
             pass
         else:
             raise AssertionError("group/world-readable Context7 credentials were accepted")
+
+        # A vendor-controlled parent symlink must not make the privileged helper
+        # traverse outside the private login root when it reads credentials.
+        shutil.rmtree(root / "config")
+        external = run_root / "external-config"
+        external_path = external / module.CONTEXT7_CREDENTIALS_RELATIVE
+        write_credentials(external_path, valid, uid=uid, gid=gid)
+        (root / "config").symlink_to(external, target_is_directory=True)
+        try:
+            module.read_credentials(root, expected_uid=uid)
+        except module.DeviceLoginError:
+            pass
+        else:
+            raise AssertionError("Context7 credential reader followed a vendor-controlled parent symlink")
+
+    module.RUN_ROOT = original_run_root
 
 
 def assert_adoption_order_and_failure(module) -> None:
