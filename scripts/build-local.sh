@@ -96,6 +96,12 @@ remote_dev_tag_compatibility_aliases \
   codex-remote-dev:local
 
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$remote_dev_image"
+docker run --rm \
+  --network none \
+  --entrypoint /opt/remote-dev/mise/shims/python \
+  -v "$ROOT/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
+  -e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
+  "$remote_dev_image" /tmp/test-remote-dev-context7-runtime-isolation.py
 bash "$ROOT/scripts/runtime-smoke-test.sh" "$remote_dev_image"
 
 canonical_base_id="$(docker image inspect remote-dev-base:local --format '{{.Id}}')"
