@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 
@@ -34,7 +35,7 @@ def write_credentials(path: Path, payload: dict[str, object], *, uid: int, gid: 
 
 
 def assert_acquire_uses_isolated_environment(module) -> None:
-    original_run = module.subprocess.run
+    original_login_process = module.run_login_process
     original_run_root = module.RUN_ROOT
     original_npm = module.NPM
     original_setpriv = module.SETPRIV
@@ -47,13 +48,11 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         module.NPM = Path("/bin/true")
         module.SETPRIV = Path("/bin/true")
 
-        def fake_run(command, **kwargs):
-            environment = kwargs["env"]
-            cwd = Path(kwargs["cwd"])
+        def fake_login_process(command, *, cwd, environment):
             uid, gid = module.sandbox_identity()
             captured["command"] = list(command)
             captured["environment"] = dict(environment)
-            captured["cwd"] = cwd
+            captured["cwd"] = Path(cwd)
             credentials = (
                 Path(environment["XDG_CONFIG_HOME"])
                 / module.CONTEXT7_CREDENTIALS_RELATIVE
@@ -64,7 +63,6 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                 uid=uid,
                 gid=gid,
             )
-            return subprocess.CompletedProcess(command, 0)
 
         sensitive = {
             "OPENAI_API_KEY": "openai-test-secret",
@@ -75,10 +73,10 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         previous = {name: os.environ.get(name) for name in sensitive}
         os.environ.update(sensitive)
         try:
-            module.subprocess.run = fake_run
+            module.run_login_process = fake_login_process
             value = module.acquire_api_key()
         finally:
-            module.subprocess.run = original_run
+            module.run_login_process = original_login_process
             module.RUN_ROOT = original_run_root
             module.NPM = original_npm
             module.SETPRIV = original_setpriv
@@ -116,6 +114,109 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         cwd = captured["cwd"]
         if cwd.exists():
             raise AssertionError("transient Context7 login directory was not removed")
+
+
+def assert_timeout_terminates_process_group(module) -> None:
+    original_popen = module.subprocess.Popen
+    original_killpg = module.os.killpg
+    captured: dict[str, object] = {}
+    signals: list[tuple[int, int]] = []
+
+    class TimeoutProcess:
+        pid = 424242
+
+        def __init__(self) -> None:
+            self.wait_calls = 0
+
+        def wait(self, *, timeout):
+            self.wait_calls += 1
+            if self.wait_calls == 1:
+                raise subprocess.TimeoutExpired(["synthetic-ctx7"], timeout)
+            return -signal.SIGTERM
+
+    process = TimeoutProcess()
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = list(command)
+        captured["kwargs"] = dict(kwargs)
+        return process
+
+    def fake_killpg(pgid: int, sent_signal: int) -> None:
+        signals.append((pgid, sent_signal))
+
+    try:
+        module.subprocess.Popen = fake_popen
+        module.os.killpg = fake_killpg
+        try:
+            module.run_login_process(
+                ["synthetic-ctx7"],
+                cwd=Path("/tmp"),
+                environment={"PATH": "/usr/bin:/bin"},
+            )
+        except module.DeviceLoginError as exc:
+            if "timed out" not in str(exc):
+                raise AssertionError(f"unexpected timeout error: {exc}") from exc
+        else:
+            raise AssertionError("timed-out Context7 device login unexpectedly succeeded")
+    finally:
+        module.subprocess.Popen = original_popen
+        module.os.killpg = original_killpg
+
+    kwargs = captured["kwargs"]
+    if kwargs.get("start_new_session") is not True:
+        raise AssertionError("transient Context7 CLI was not isolated into its own process group")
+    if signals != [(process.pid, signal.SIGTERM)]:
+        raise AssertionError(f"timed-out Context7 process group was not terminated: {signals!r}")
+
+
+def assert_cleanup_failure_is_fatal(module) -> None:
+    original_login_process = module.run_login_process
+    original_run_root = module.RUN_ROOT
+    original_npm = module.NPM
+    original_setpriv = module.SETPRIV
+    original_rmtree = module.shutil.rmtree
+
+    with tempfile.TemporaryDirectory(prefix="remote-dev-context7-cleanup-test-") as temp:
+        run_root = Path(temp) / "run"
+        run_root.mkdir(mode=0o755)
+        module.RUN_ROOT = run_root
+        module.NPM = Path("/bin/true")
+        module.SETPRIV = Path("/bin/true")
+
+        def fake_login_process(command, *, cwd, environment):
+            del command, cwd
+            uid, gid = module.sandbox_identity()
+            credentials = (
+                Path(environment["XDG_CONFIG_HOME"])
+                / module.CONTEXT7_CREDENTIALS_RELATIVE
+            )
+            write_credentials(
+                credentials,
+                {"access_token": SYNTHETIC_KEY, "token_type": "bearer"},
+                uid=uid,
+                gid=gid,
+            )
+
+        def fail_rmtree(path):
+            del path
+            raise OSError(13, "synthetic cleanup failure")
+
+        try:
+            module.run_login_process = fake_login_process
+            module.shutil.rmtree = fail_rmtree
+            try:
+                module.acquire_api_key()
+            except module.DeviceLoginError as exc:
+                if "could not remove transient Context7 CLI/login state" not in str(exc):
+                    raise AssertionError(f"unexpected cleanup error: {exc}") from exc
+            else:
+                raise AssertionError("Context7 login accepted a failed transient-state cleanup")
+        finally:
+            module.run_login_process = original_login_process
+            module.RUN_ROOT = original_run_root
+            module.NPM = original_npm
+            module.SETPRIV = original_setpriv
+            module.shutil.rmtree = original_rmtree
 
 
 def assert_credentials_contract(module) -> None:
@@ -227,6 +328,8 @@ def main() -> int:
     if module.CONTEXT7_CLI_PACKAGE != "ctx7@0.5.7":
         raise AssertionError("Context7 device-login package pin drifted unexpectedly")
     assert_acquire_uses_isolated_environment(module)
+    assert_timeout_terminates_process_group(module)
+    assert_cleanup_failure_is_fatal(module)
     assert_credentials_contract(module)
     assert_adoption_order_and_failure(module)
     assert_role_gate(module)

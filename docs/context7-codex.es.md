@@ -60,7 +60,9 @@ El CLI oficial muestra un código de un solo uso y una URL de verificación que 
 - transfiere esa clave al gestor existente de Remote Dev únicamente por stdin del proceso hijo;
 - elimina por completo el directorio transitorio de CLI/login/caché tanto si termina correctamente como si se cancela o falla.
 
-Remote Dev **no** ejecuta `ctx7 setup`. Ese comando de upstream puede escribir configuración MCP del agente, reglas y skills; Remote Dev mantiene esas mutaciones dentro de su gestor propio ya revisado. Por ello el CLI del proveedor nunca recibe el `CODEX_HOME` real ni modifica `config.toml`, `AGENTS.md` o las skills de Codex durante el alta por dispositivo.
+Remote Dev **no** ejecuta `ctx7 setup`. Ese comando de upstream puede escribir configuración MCP del agente, reglas y skills; Remote Dev mantiene esas mutaciones dentro de su gestor propio ya revisado. El `CODEX_HOME` real, el workspace y las rutas de instrucciones del proyecto no se proporcionan al CLI del proveedor como HOME, directorio de trabajo ni destino de configuración, y las rutas privadas existentes de credenciales/configuración de Codex conservan sus permisos restrictivos.
+
+Esta ejecución sin privilegios **no es un sandbox de sistema de archivos**. El proceso transitorio del proveedor sigue ejecutándose dentro del contenedor Codex, por lo que cualquier archivo de ese contenedor que sea legible por el UID/GID 65534 es técnicamente legible por ese proceso. Remote Dev no dirige al CLI para que inspeccione archivos del proyecto, pero no afirma que `nobody` haga inaccesible el contenido del workspace que sea legible para todos. Utiliza la ruta existente de API key manual si no quieres ejecutar código transitorio de Context7 dentro del servicio Codex.
 
 Antes de descargar el paquete transitorio, Remote Dev valida el límite de propiedad de la configuración existente mediante la ruta normal y segura de `repair`. Una API key gestionada que ya funciona no se sustituye hasta que el nuevo inicio de sesión haya terminado correctamente y se haya validado el formato local de la credencial. Un inicio de sesión fallido, denegado, caducado o cancelado conserva la clave anterior.
 
@@ -138,9 +140,11 @@ Habilitar Context7 introduce un límite de servicio externo. Según la documenta
 - la respuesta de Context7 puede ser incompleta o incorrecta y debe verificarse antes de utilizarla en producción;
 - la documentación original devuelta por Context7 conserva sus propios derechos de autor y licencias.
 
+El flujo oficial `ctx7 login` puede mostrar información de identidad de la cuenta, como correo/nombre o teamspace, en el terminal local después de la autorización. Remote Dev no almacena esa salida, pero las capturas de pantalla o la evidencia copiada para validación deben ocultar los identificadores de cuenta además de los códigos de dispositivo y las credenciales.
+
 El uso del servicio alojado y del flujo de inicio por dispositivo queda sujeto al **Context7 Addendum**, los **Upstash Terms of Service** y la **Upstash Privacy Policy** vigentes. Remote Dev no está afiliado ni respaldado por Upstash, Context7 u OpenAI.
 
-La revisión legal/de privacidad del diseño MCP alojado original está registrada en el tracker permanente #53. La nueva ruta de CLI transitorio/autenticación por dispositivo introducida por #123 exige una nueva revisión extraordinaria en #53 antes del merge, porque añade una descarga de paquete de proveedor y un flujo de creación de credencial en la cuenta, aunque ningún paquete Context7 quede retenido en la imagen o en el estado persistente.
+La revisión legal/de privacidad del diseño MCP alojado original está registrada en el tracker permanente #53. La revisión extraordinaria de #123 para este diseño exacto de autenticación mediante el CLI transitorio `ctx7` quedó registrada el 16/08/2026. Cambiar la versión/origen del CLI, usar `ctx7 setup`, pasar a OAuth MCP nativo, conservar estado del paquete/proveedor o ampliar el acceso del proveedor a filesystem/credenciales exige una nueva revisión.
 
 ## Eliminación y recuperación
 

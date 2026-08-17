@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -23,6 +24,7 @@ MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
 RUN_ROOT = Path("/run")
 MAX_CREDENTIAL_BYTES = 32 * 1024
 LOGIN_TIMEOUT_SECONDS = 15 * 60
+PROCESS_TERMINATION_GRACE_SECONDS = 5
 SANDBOX_UID = 65534
 SANDBOX_GID = 65534
 
@@ -98,6 +100,19 @@ def create_login_root(uid: int, gid: int) -> Path:
     return root
 
 
+def remove_login_root(root: Path) -> None:
+    if root.parent != RUN_ROOT or not root.name.startswith("remote-dev-context7-login-"):
+        raise DeviceLoginError("refusing to remove an unexpected transient Context7 login path")
+    try:
+        shutil.rmtree(root)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not remove transient Context7 CLI/login state: errno {exc.errno}"
+        ) from exc
+
+
 def transient_environment(root: Path) -> dict[str, str]:
     environment = {
         "HOME": str(root / "home"),
@@ -155,6 +170,61 @@ def login_command(uid: int, gid: int) -> list[str]:
         "--no-new-privs",
         *command,
     ]
+
+
+def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not terminate the transient Context7 CLI process group: errno {exc.errno}"
+        ) from exc
+
+    try:
+        process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not kill the transient Context7 CLI process group: errno {exc.errno}"
+        ) from exc
+
+    try:
+        process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        raise DeviceLoginError("transient Context7 CLI did not terminate after SIGKILL") from exc
+
+
+def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise DeviceLoginError(f"could not start the transient Context7 CLI: errno {exc.errno}") from exc
+
+    try:
+        returncode = process.wait(timeout=LOGIN_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        terminate_process_group(process)
+        raise DeviceLoginError("Context7 device login timed out") from exc
+    except KeyboardInterrupt:
+        terminate_process_group(process)
+        raise
+
+    if returncode != 0:
+        raise DeviceLoginError(f"Context7 device login failed (exit {returncode})")
 
 
 def read_credentials(path: Path, *, expected_uid: int) -> str:
@@ -215,28 +285,13 @@ def acquire_api_key() -> str:
     environment = transient_environment(root)
     credentials = Path(environment["XDG_CONFIG_HOME"]) / CONTEXT7_CREDENTIALS_RELATIVE
     command = login_command(uid, gid)
+    api_key = ""
     try:
-        try:
-            result = subprocess.run(
-                command,
-                cwd=root,
-                env=environment,
-                timeout=LOGIN_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise DeviceLoginError("Context7 device login timed out") from exc
-        except OSError as exc:
-            raise DeviceLoginError(f"could not start the transient Context7 CLI: errno {exc.errno}") from exc
-        if result.returncode != 0:
-            raise DeviceLoginError(f"Context7 device login failed (exit {result.returncode})")
-        return read_credentials(credentials, expected_uid=uid)
+        run_login_process(command, cwd=root, environment=environment)
+        api_key = read_credentials(credentials, expected_uid=uid)
     finally:
-        try:
-            if root.parent == RUN_ROOT and root.name.startswith("remote-dev-context7-login-"):
-                shutil.rmtree(root)
-        except OSError:
-            pass
+        remove_login_root(root)
+    return api_key
 
 
 def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
