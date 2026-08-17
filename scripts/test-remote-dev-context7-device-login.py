@@ -233,7 +233,7 @@ def assert_cleanup_failure_is_fatal(module) -> None:
 def assert_credentials_contract(module) -> None:
     original_run_root = module.RUN_ROOT
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-credentials-test-") as temp:
-        root = Path(temp) / "login-root"
+        root = Path(temp) / "remote-dev-context7-login-test"
         root.mkdir(mode=0o700)
         run_root = root.parent
         module.RUN_ROOT = run_root
