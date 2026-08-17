@@ -108,6 +108,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
 
         command = captured["command"]
         environment = captured["environment"]
+        cwd = captured["cwd"]
         if f"--package={module.CONTEXT7_CLI_PACKAGE}" not in command:
             raise AssertionError("device login did not pin the exact Context7 CLI package")
         if "--ignore-scripts" not in command:
@@ -121,10 +122,14 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                 raise AssertionError(f"sensitive caller state leaked into transient login: {name}")
         if environment.get("CTX7_TELEMETRY_DISABLED") != "1":
             raise AssertionError("Context7 telemetry was not disabled for transient login")
-        if environment.get("npm_config_userconfig") != "/dev/null":
-            raise AssertionError("transient npm execution can still consume user npm configuration")
-        if environment.get("npm_config_globalconfig") != "/dev/null":
-            raise AssertionError("transient npm execution can still consume global npm configuration")
+        user_config = Path(environment["npm_config_userconfig"])
+        global_config = Path(environment["npm_config_globalconfig"])
+        if user_config == global_config:
+            raise AssertionError("transient npm user/global configuration paths are not distinct")
+        if user_config == Path("/dev/null") or global_config == Path("/dev/null"):
+            raise AssertionError("transient npm config isolation still relies on /dev/null")
+        if user_config.parent != cwd or global_config.parent != cwd:
+            raise AssertionError("transient npm config paths escaped the private login root")
         if environment.get("HOME") == os.environ.get("HOME"):
             raise AssertionError("transient Context7 login reused the caller HOME")
         if environment.get("MISE_NODE_VERSION") != "24.19.0":
@@ -134,7 +139,6 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         if "MISE_CONFIG_DIR" in environment or "MISE_GLOBAL_CONFIG_FILE" in environment:
             raise AssertionError("unprivileged transient login still depends on root-owned mise config")
 
-        cwd = captured["cwd"]
         if environment.get("TMPDIR") != str(cwd):
             raise AssertionError("transient Context7 login can use temporary files outside its private root")
         if environment.get("XDG_RUNTIME_DIR") != str(cwd):
