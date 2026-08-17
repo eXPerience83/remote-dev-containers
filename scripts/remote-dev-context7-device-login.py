@@ -271,9 +271,13 @@ def open_owned_directory_at(parent_fd: int, name: str, *, expected_uid: int, lab
     except OSError as exc:
         raise DeviceLoginError(f"{label} is unavailable or unsafe: errno {exc.errno}") from exc
     info = os.fstat(fd)
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != expected_uid:
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != expected_uid
+        or stat.S_IMODE(info.st_mode) & 0o077
+    ):
         os.close(fd)
-        raise DeviceLoginError(f"{label} has unsafe ownership or type")
+        raise DeviceLoginError(f"{label} has unsafe ownership, type or permissions")
     return fd
 
 
