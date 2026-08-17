@@ -10,7 +10,7 @@ Context7 is operated by **Upstash** and is external to Remote Dev and OpenAI. Th
 https://mcp.context7.com/mcp
 ```
 
-Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runtime. Device-code sign-in downloads an exact official `ctx7` npm package transiently, runs it only for authentication, and removes the package, npm cache and temporary vendor state afterward. Only the API key adopted into Remote Dev's existing private Context7 state persists.
+Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runtime. Device-code sign-in resolves an exact official `ctx7` npm package, downloads the exact top-level tarball from the fixed public npm origin, verifies its SHA-512 SRI against the selected registry metadata, runs that verified local tarball only for authentication, and removes the package, npm cache and temporary vendor state afterward. Only the API key adopted into Remote Dev's existing private Context7 state persists.
 
 ## Explicit lifecycle
 
@@ -43,15 +43,16 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 Remote Dev keeps one exact **reviewed** `ctx7` version in the image source. The repository's upstream-maintenance automation is responsible for proposing newer reviewed pins; it must not silently change stable state.
 
-For an interactive device login Remote Dev first resolves the current `latest` metadata from the fixed public npm registry. It validates the package identity, exact stable semantic version, reviewed MIT license contract and npm integrity metadata before any vendor package is executed.
+For an interactive device login Remote Dev first resolves the current `latest` metadata from the fixed public npm registry. It validates the package identity, exact stable semantic version, reviewed MIT license contract, exact tarball URL and npm SHA-512 integrity metadata before any vendor package is executed.
 
 - If `latest` equals the Remote Dev-reviewed version, that exact version is used.
 - If npm has a newer version, Remote Dev shows both versions and lets the user choose:
   - the reviewed version (recommended); or
   - the exact current latest official version, labelled **`official source; Remote Dev review pending`**.
 - A newer version is **not blocked merely because Remote Dev review is pending**. It must still pass the origin/metadata/integrity and post-login credential/cleanup gates.
-- `latest` is resolved first and Remote Dev then executes `ctx7@X.Y.Z`; it never asks npm to execute a mutable `ctx7@latest` specifier.
-- An incompatible source, package identity, version format, license contract, integrity record or credential model fails closed.
+- `latest` is resolved first. Remote Dev then downloads the selected exact `ctx7-X.Y.Z.tgz`, verifies its bytes against the selected `dist.integrity`, and gives npm only that verified local tarball for `ctx7 login --no-browser`; it never asks npm to execute a mutable `ctx7@latest` or re-resolve `ctx7@X.Y.Z` after verification.
+- This binding covers the selected top-level `ctx7` tarball. It is not an immutable lock of every transitive npm dependency that npm may resolve while executing that package.
+- An incompatible source, package identity, version format, license contract, tarball URL, integrity record or credential model fails closed.
 
 This matches the optional-runtime principle used for Codex and Antigravity: review evidence describes known-good versions but is not an availability allowlist.
 
@@ -70,6 +71,7 @@ During device login Remote Dev:
 - creates a fresh private `/run/remote-dev-context7-login-*` subtree;
 - uses fresh HOME, XDG config/state/cache/runtime, temp, npm cache and npm user/global config paths;
 - pins the public npm registry, disables npm lifecycle scripts, audit/fund/update noise and Context7 telemetry;
+- resolves exact package metadata, downloads the selected top-level tarball without ambient proxy configuration or cross-origin redirects, verifies its SHA-512 SRI, and executes only that verified local tarball;
 - passes the image-pinned Node version explicitly to the bundled mise/npm shim with offline mise resolution;
 - does not pass existing Codex, OpenAI, GitHub or Context7 credentials, the real `CODEX_HOME`, or project paths as vendor HOME/config/working-directory targets;
 - when running as root, executes npm/Context7 as UID/GID 65534 with cleared groups and `no-new-privs`;
@@ -126,7 +128,7 @@ Network boundaries:
 
 - startup and `status`: no Context7 setup/download request;
 - manual-key/anonymous `install` or `repair`: local state only;
-- device login: explicit public-npm metadata lookup and exact transient package download, then Context7 device authorization;
+- device login: explicit public-npm metadata lookup and exact transient top-level package download/verification, then npm resolution needed to execute the verified package and Context7 device authorization;
 - `update`/`remove`: local state only;
 - `test`: explicit live config + `https://mcp.context7.com/ping` check;
 - normal enabled Codex sessions: Codex may contact the hosted MCP endpoint for initialization and tool use.
