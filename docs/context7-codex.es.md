@@ -64,7 +64,7 @@ Remote Dev **no** ejecuta `ctx7 setup`. Ese comando de upstream puede escribir c
 
 Esta ejecución sin privilegios **no es un sandbox de sistema de archivos**. El proceso transitorio del proveedor sigue ejecutándose dentro del contenedor Codex, por lo que cualquier archivo de ese contenedor que sea legible por el UID/GID 65534 es técnicamente legible por ese proceso. Remote Dev no dirige al CLI para que inspeccione archivos del proyecto, pero no afirma que `nobody` haga inaccesible el contenido del workspace que sea legible para todos. Utiliza la ruta existente de API key manual si no quieres ejecutar código transitorio de Context7 dentro del servicio Codex.
 
-Antes de descargar el paquete transitorio, Remote Dev valida el límite de propiedad de la configuración existente mediante la ruta normal y segura de `repair`. Una API key gestionada que ya funciona no se sustituye hasta que el nuevo inicio de sesión haya terminado correctamente y se haya validado el formato local de la credencial. Un inicio de sesión fallido, denegado, caducado o cancelado conserva la clave anterior.
+Antes de descargar el paquete transitorio, Remote Dev realiza únicamente la comprobación de solo lectura `status --menu` mediante el gestor existente. Ese preflight rechaza estados no gestionados, inseguros, dañados o inesperados sin ejecutar `install` ni `repair`. Una API key gestionada que ya funciona no se sustituye hasta que el nuevo inicio de sesión haya terminado correctamente, se haya validado el formato local de la credencial y se haya eliminado el estado transitorio. Un inicio de sesión fallido, denegado, caducado o cancelado no realiza ninguna mutación mediante el gestor y conserva la clave anterior.
 
 ## Configuración de Codex gestionada
 
