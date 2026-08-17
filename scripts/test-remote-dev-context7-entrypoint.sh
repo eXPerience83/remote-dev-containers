@@ -90,12 +90,14 @@ if run_interactive_choice 5 install; then
   echo 'Context7 entrypoint cancellation unexpectedly succeeded' >&2
   exit 1
 fi
+assert_capture '' "cancelled choice 5"
 
 : >"$capture"
 if run_interactive_choice 99 install; then
   echo 'Context7 entrypoint accepted an invalid authentication choice' >&2
   exit 1
 fi
+assert_capture '' "invalid choice 99"
 
 bash -n "$source_entrypoint"
 echo 'Context7 onboarding entrypoint regressions: OK'
