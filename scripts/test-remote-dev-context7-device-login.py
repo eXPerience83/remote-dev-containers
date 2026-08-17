@@ -165,8 +165,12 @@ def assert_timeout_terminates_process_group(module) -> None:
     kwargs = captured["kwargs"]
     if kwargs.get("start_new_session") is not True:
         raise AssertionError("transient Context7 CLI was not isolated into its own process group")
-    if signals != [(process.pid, signal.SIGTERM)]:
-        raise AssertionError(f"timed-out Context7 process group was not terminated: {signals!r}")
+    expected_signals = [
+        (process.pid, signal.SIGTERM),
+        (process.pid, signal.SIGKILL),
+    ]
+    if signals != expected_signals:
+        raise AssertionError(f"timed-out Context7 process group was not fully terminated: {signals!r}")
 
 
 def assert_cleanup_failure_is_fatal(module) -> None:
