@@ -42,7 +42,7 @@ def assert_distinct_private_npm_configs(module) -> None:
             raise AssertionError("npm config paths escaped the transient Context7 root")
 
 
-def assert_restrictive_vendor_umask(module) -> None:
+def assert_restrictive_vendor_process_contract(module) -> None:
     original_popen = module.subprocess.Popen
     original_killpg = module.os.killpg
     captured: dict[str, object] = {}
@@ -50,8 +50,7 @@ def assert_restrictive_vendor_umask(module) -> None:
     class SuccessProcess:
         pid = 515151
 
-        def wait(self, *, timeout):
-            del timeout
+        def poll(self):
             return 0
 
     def fake_popen(command, **kwargs):
@@ -61,7 +60,7 @@ def assert_restrictive_vendor_umask(module) -> None:
 
     def fake_killpg(pgid: int, sent_signal: int) -> None:
         if (pgid, sent_signal) != (SuccessProcess.pid, signal.SIGKILL):
-            raise AssertionError("unexpected process-group signal during umask regression")
+            raise AssertionError("unexpected process-group signal during runtime regression")
 
     try:
         module.subprocess.Popen = fake_popen
@@ -70,6 +69,7 @@ def assert_restrictive_vendor_umask(module) -> None:
             ["synthetic-ctx7"],
             cwd=Path("/tmp"),
             environment={"PATH": "/usr/bin:/bin"},
+            cancel_stream=False,
         )
     finally:
         module.subprocess.Popen = original_popen
@@ -78,6 +78,10 @@ def assert_restrictive_vendor_umask(module) -> None:
     kwargs = captured["kwargs"]
     if kwargs.get("umask") != 0o077:
         raise AssertionError(f"transient vendor process did not receive umask 077: {kwargs!r}")
+    if kwargs.get("stdin") != subprocess.DEVNULL:
+        raise AssertionError("transient vendor process still owns terminal stdin")
+    if kwargs.get("start_new_session") is not True:
+        raise AssertionError("transient vendor process is not isolated in its own process group")
 
 
 def assert_bundled_npm_accepts_isolated_configs(module) -> None:
@@ -113,6 +117,7 @@ def assert_bundled_npm_accepts_isolated_configs(module) -> None:
             command,
             cwd=root,
             env=environment,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -131,7 +136,7 @@ def assert_bundled_npm_accepts_isolated_configs(module) -> None:
 def main() -> int:
     module = load_helper()
     assert_distinct_private_npm_configs(module)
-    assert_restrictive_vendor_umask(module)
+    assert_restrictive_vendor_process_contract(module)
     assert_bundled_npm_accepts_isolated_configs(module)
     print("Context7 npm/runtime isolation regressions: OK")
     return 0

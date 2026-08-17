@@ -5,18 +5,22 @@ import argparse
 import json
 import os
 from pathlib import Path
+import select
 import shutil
 import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 
-CONTEXT7_CLI_PACKAGE = "ctx7@0.5.7"
+CONTEXT7_CLI_NAME = "ctx7"
 CONTEXT7_KEY_PREFIX = "ctx7sk-"
 CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
+REVIEWED_CONTEXT7_CLI_VERSION = "0.5.8"
+EXPECTED_PACKAGE_LICENSE = "MIT"
 NPM_REGISTRY = "https://registry.npmjs.org/"
 NPM = Path("/opt/remote-dev/mise/shims/npm")
 MISE_CONFIG = Path("/etc/mise/mise.toml")
@@ -25,8 +29,11 @@ PYTHON = Path("/opt/remote-dev/mise/shims/python")
 MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
 RUN_ROOT = Path("/run")
 MAX_CREDENTIAL_BYTES = 32 * 1024
+MAX_METADATA_BYTES = 32 * 1024
 LOGIN_TIMEOUT_SECONDS = 15 * 60
+METADATA_TIMEOUT_SECONDS = 30
 PROCESS_TERMINATION_GRACE_SECONDS = 5
+PROCESS_POLL_SECONDS = 0.25
 SANDBOX_UID = 65534
 SANDBOX_GID = 65534
 PREFLIGHT_ALLOWED_STATES = {
@@ -68,6 +75,23 @@ def confirm(*, yes: bool) -> None:
     answer = input("Sign in to Context7? [y/N] ").strip().lower()
     if answer not in {"y", "yes"}:
         raise DeviceLoginError("cancelled")
+
+
+def exact_version(value: str) -> str:
+    parts = value.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        raise DeviceLoginError(f"Context7 CLI version has an unexpected format: {value!r}")
+    return value
+
+
+def version_tuple(value: str) -> tuple[int, int, int]:
+    exact_version(value)
+    major, minor, patch = value.split(".")
+    return int(major), int(minor), int(patch)
+
+
+def reviewed_cli_version() -> str:
+    return exact_version(REVIEWED_CONTEXT7_CLI_VERSION)
 
 
 def validate_executable(path: Path, *, label: str) -> None:
@@ -172,21 +196,9 @@ def transient_environment(root: Path, *, node_version: str) -> dict[str, str]:
     return environment
 
 
-def login_command(uid: int, gid: int) -> list[str]:
-    command = [
-        str(NPM),
-        "exec",
-        "--yes",
-        "--ignore-scripts",
-        f"--registry={NPM_REGISTRY}",
-        f"--package={CONTEXT7_CLI_PACKAGE}",
-        "--",
-        "ctx7",
-        "login",
-        "--no-browser",
-    ]
+def privileged_prefix(uid: int, gid: int) -> list[str]:
     if os.geteuid() != 0:
-        return command
+        return []
     validate_executable(SETPRIV, label="setpriv")
     return [
         str(SETPRIV),
@@ -196,8 +208,190 @@ def login_command(uid: int, gid: int) -> list[str]:
         str(gid),
         "--clear-groups",
         "--no-new-privs",
-        *command,
     ]
+
+
+def npm_json(
+    arguments: list[str],
+    *,
+    uid: int,
+    gid: int,
+    cwd: Path,
+    environment: dict[str, str],
+) -> object:
+    command = [
+        *privileged_prefix(uid, gid),
+        str(NPM),
+        *arguments,
+        f"--registry={NPM_REGISTRY}",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=METADATA_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise DeviceLoginError("could not resolve official Context7 npm metadata") from exc
+    if result.returncode != 0:
+        raise DeviceLoginError(
+            f"official Context7 npm metadata lookup failed (exit {result.returncode})"
+        )
+    if len(result.stdout) > MAX_METADATA_BYTES or len(result.stderr) > MAX_METADATA_BYTES:
+        raise DeviceLoginError("official Context7 npm metadata exceeded the supported size boundary")
+    try:
+        return json.loads(result.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DeviceLoginError("official Context7 npm metadata is not valid JSON") from exc
+
+
+def resolve_package_metadata(
+    specifier: str,
+    *,
+    uid: int,
+    gid: int,
+    cwd: Path,
+    environment: dict[str, str],
+) -> dict[str, str]:
+    payload = npm_json(
+        [
+            "view",
+            f"{CONTEXT7_CLI_NAME}@{specifier}",
+            "name",
+            "version",
+            "license",
+            "dist.integrity",
+            "--json",
+        ],
+        uid=uid,
+        gid=gid,
+        cwd=cwd,
+        environment=environment,
+    )
+    if not isinstance(payload, dict):
+        raise DeviceLoginError("official Context7 npm metadata has an unexpected shape")
+    name = payload.get("name")
+    version = payload.get("version")
+    license_name = payload.get("license")
+    integrity = payload.get("dist.integrity")
+    if name != CONTEXT7_CLI_NAME or not isinstance(version, str):
+        raise DeviceLoginError("official Context7 npm metadata has an unexpected package identity")
+    exact_version(version)
+    if license_name != EXPECTED_PACKAGE_LICENSE:
+        raise DeviceLoginError(
+            f"Context7 CLI package license changed from the reviewed {EXPECTED_PACKAGE_LICENSE} contract"
+        )
+    if (
+        not isinstance(integrity, str)
+        or not integrity.startswith("sha512-")
+        or len(integrity) <= len("sha512-")
+        or any(character.isspace() for character in integrity)
+    ):
+        raise DeviceLoginError("official Context7 npm metadata has no supported package integrity")
+    if specifier != "latest" and version != exact_version(specifier):
+        raise DeviceLoginError("official Context7 npm registry did not resolve the requested exact version")
+    return {
+        "name": name,
+        "version": version,
+        "license": license_name,
+        "integrity": integrity,
+    }
+
+
+def choose_cli_metadata(
+    channel: str,
+    *,
+    uid: int,
+    gid: int,
+    cwd: Path,
+    environment: dict[str, str],
+) -> tuple[dict[str, str], bool]:
+    reviewed = reviewed_cli_version()
+
+    if channel == "reviewed":
+        metadata = resolve_package_metadata(
+            reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+        return metadata, True
+
+    latest = resolve_package_metadata(
+        "latest", uid=uid, gid=gid, cwd=cwd, environment=environment
+    )
+    latest_version = latest["version"]
+    if channel == "latest":
+        return latest, latest_version == reviewed
+
+    if latest_version == reviewed:
+        print(f"Context7 CLI: {reviewed} (latest official; reviewed by Remote Dev)")
+        return latest, True
+
+    if version_tuple(latest_version) < version_tuple(reviewed):
+        print(
+            f"Context7 CLI: official npm latest {latest_version} is older than "
+            f"Remote Dev-reviewed {reviewed}; using reviewed {reviewed}.",
+            file=sys.stderr,
+        )
+        metadata = resolve_package_metadata(
+            reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+        return metadata, True
+
+    print("Context7 CLI version")
+    print("====================")
+    print(f"Reviewed by Remote Dev: {reviewed}")
+    print(f"Latest official npm:   {latest_version}")
+    print("")
+    print(f"1) Use reviewed {reviewed} (recommended)")
+    print(
+        f"2) Use latest official {latest_version} "
+        "[official source; Remote Dev review pending]"
+    )
+    print("3) Cancel")
+
+    if not sys.stdin.isatty():
+        print(
+            f"Non-interactive device login defaults to reviewed {reviewed}; "
+            "use --cli-channel latest to request the latest official version.",
+            file=sys.stderr,
+        )
+        metadata = resolve_package_metadata(
+            reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+        return metadata, True
+
+    choice = input("> ").strip()
+    if choice == "1":
+        metadata = resolve_package_metadata(
+            reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+        return metadata, True
+    if choice == "2":
+        return latest, False
+    if choice == "3":
+        raise DeviceLoginError("cancelled")
+    raise DeviceLoginError("invalid Context7 CLI version choice")
+
+
+def login_command(uid: int, gid: int, *, version: str) -> list[str]:
+    exact_version(version)
+    command = [
+        str(NPM),
+        "exec",
+        "--yes",
+        "--ignore-scripts",
+        f"--registry={NPM_REGISTRY}",
+        f"--package={CONTEXT7_CLI_NAME}@{version}",
+        "--",
+        "ctx7",
+        "login",
+        "--no-browser",
+    ]
+    return [*privileged_prefix(uid, gid), *command]
 
 
 def kill_process_group(process: subprocess.Popen[bytes]) -> None:
@@ -236,23 +430,63 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
         raise DeviceLoginError("transient Context7 CLI did not terminate after SIGKILL") from exc
 
 
-def run_login_process(command: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
+def run_login_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    cancel_stream=None,
+) -> None:
+    if cancel_stream is None and sys.stdin.isatty():
+        cancel_stream = sys.stdin
+
+    if cancel_stream is not None:
+        print("Remote Dev cancellation: type q and press Enter while waiting for authorization.")
+
     try:
         process = subprocess.Popen(
             command,
             cwd=cwd,
             env=environment,
+            stdin=subprocess.DEVNULL,
             start_new_session=True,
             umask=0o077,
         )
     except OSError as exc:
         raise DeviceLoginError(f"could not start the transient Context7 CLI: errno {exc.errno}") from exc
 
+    deadline = time.monotonic() + LOGIN_TIMEOUT_SECONDS
     try:
-        returncode = process.wait(timeout=LOGIN_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired as exc:
-        terminate_process_group(process)
-        raise DeviceLoginError("Context7 device login timed out") from exc
+        while True:
+            returncode = process.poll()
+            if returncode is not None:
+                break
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                terminate_process_group(process)
+                raise DeviceLoginError("Context7 device login timed out")
+            wait_seconds = min(PROCESS_POLL_SECONDS, remaining)
+
+            if cancel_stream is None:
+                time.sleep(wait_seconds)
+                continue
+
+            try:
+                ready, _, _ = select.select([cancel_stream], [], [], wait_seconds)
+            except (OSError, ValueError):
+                cancel_stream = None
+                continue
+            if not ready:
+                continue
+
+            line = cancel_stream.readline()
+            if line == "":
+                cancel_stream = None
+                continue
+            if line.strip().lower() in {"q", "quit", "c", "cancel"}:
+                terminate_process_group(process)
+                raise DeviceLoginError("cancelled")
     except KeyboardInterrupt:
         terminate_process_group(process)
         raise
@@ -394,20 +628,38 @@ def preflight_manager_state() -> None:
         raise DeviceLoginError("Context7 manager returned an unexpected preflight state")
 
 
-def acquire_api_key() -> str:
+def acquire_api_key(*, cli_channel: str) -> tuple[str, str, bool]:
     validate_executable(NPM, label="npm")
     node_version = configured_node_version()
     uid, gid = sandbox_identity()
     root = create_login_root(uid, gid)
     environment = transient_environment(root, node_version=node_version)
-    command = login_command(uid, gid)
     api_key = ""
+    version = ""
+    reviewed = False
     try:
+        metadata, reviewed = choose_cli_metadata(
+            cli_channel,
+            uid=uid,
+            gid=gid,
+            cwd=root,
+            environment=environment,
+        )
+        version = metadata["version"]
+        if reviewed:
+            print(f"Context7 CLI selected: {version} (official npm; reviewed by Remote Dev)")
+        else:
+            print(
+                f"Context7 CLI selected: {version} "
+                "(official npm; Remote Dev review pending)",
+                file=sys.stderr,
+            )
+        command = login_command(uid, gid, version=version)
         run_login_process(command, cwd=root, environment=environment)
         api_key = read_credentials(root, expected_uid=uid)
     finally:
         remove_login_root(root)
-    return api_key
+    return api_key, version, reviewed
 
 
 def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
@@ -425,19 +677,23 @@ def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
         raise DeviceLoginError(f"Context7 manager rejected the operation (exit {result.returncode})")
 
 
-def command_login(*, yes: bool) -> int:
+def command_login(*, yes: bool, cli_channel: str = "auto") -> int:
     confirm(yes=yes)
 
     # Validate the current ownership/configuration boundary without changing it.
     # A failed or cancelled vendor login must not rewrite config or authentication state.
     preflight_manager_state()
 
-    api_key = acquire_api_key()
+    api_key, version, reviewed = acquire_api_key(cli_channel=cli_channel)
 
     # The key is transferred only over the child process stdin. It is never a
     # command-line argument, environment variable, log line or temporary TOML value.
     run_manager(["repair", "--yes", "--api-key-stdin"], input_text=api_key + "\n")
-    print("Context7 device login: API key adopted into Remote Dev private state")
+    review_text = "reviewed" if reviewed else "review pending"
+    print(
+        f"Context7 device login: API key adopted into Remote Dev private state "
+        f"(ctx7 {version}, {review_text})"
+    )
     print("Transient Context7 CLI/login state: removed")
     return 0
 
@@ -448,6 +704,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Sign in to Context7 through a transient isolated device-code flow.",
     )
     parser.add_argument("--yes", action="store_true")
+    parser.add_argument(
+        "--cli-channel",
+        choices=("auto", "reviewed", "latest"),
+        default="auto",
+        help="choose the reviewed CLI, current latest official CLI, or interactive auto selection",
+    )
     return parser
 
 
@@ -455,7 +717,7 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         validate_role()
-        return command_login(yes=args.yes)
+        return command_login(yes=args.yes, cli_channel=args.cli_channel)
     except DeviceLoginError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
