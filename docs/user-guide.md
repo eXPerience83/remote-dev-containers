@@ -161,14 +161,19 @@ Recreating the container with the same reviewed mounts should therefore preserve
 
 ## 8. Antigravity: current documented boundary
 
-Antigravity remains experimental. The common behavior safe to rely on from the current Remote Dev implementation is the filesystem-selection contract:
+Antigravity remains experimental. The common behavior safe to rely on from the current Remote Dev implementation is the filesystem-selection contract plus the vendor-documented conversation entry points:
 
 - the Antigravity role has its own private `/workspace` and state;
-- select a concrete Remote Dev project before Start/Resume;
-- Remote Dev's bounded wiring launches the vendor flow from the selected project cwd;
-- Resume uses the Antigravity vendor-native resume flow, not Codex's `[Cwd]` / `All` picker.
+- select a concrete Remote Dev project before Start/Continue;
+- Remote Dev launches every Antigravity action from the selected project cwd;
+- **Start Antigravity** opens the normal TUI; use `/resume` there to browse/resume older conversations with Google's native picker;
+- **Continue latest Antigravity conversation** passes the vendor-supported `--continue` flag and asks Antigravity to load the most recent conversation associated with that workspace;
+- Remote Dev does not expose a separate conversation-browser action or parse Antigravity conversation storage/cache to build a competing picker;
+- the menu conversation-entry paths no longer rely on rendered prompt text to decide when to inject `/resume`, because vendor TUI wording can change independently of the CLI contract.
 
-Do **not** infer Codex session filtering, preview visibility, thread/path reassociation or persistence semantics for Antigravity. Real TrueNAS project/session validation remains deferred to [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), with the wider experimental lifecycle tracked by #29/#106.
+Google documents that `--continue` can fall back to a fresh session when the workspace cache has no valid previous conversation. The in-TUI `/resume` picker remains the correct path when you need to choose among multiple or older conversations.
+
+Do **not** infer Codex session filtering, preview visibility, thread/path reassociation or persistence semantics for Antigravity. Real TrueNAS project/session validation remains tracked in [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), with the wider experimental lifecycle tracked by #29/#106.
 
 ## 9. Quick troubleshooting
 

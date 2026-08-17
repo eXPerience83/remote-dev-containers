@@ -161,14 +161,19 @@ Recrear el contenedor con los mismos mounts revisados debería conservar los dir
 
 ## 8. Antigravity: límite documental actual
 
-Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev es el contrato de selección del sistema de archivos:
+Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev es el contrato de selección del sistema de archivos junto con los puntos de entrada de conversación documentados por el proveedor:
 
 - el rol Antigravity tiene su propio `/workspace` y estado privados;
-- selecciona un proyecto concreto de Remote Dev antes de Start/Resume;
-- el cableado acotado de Remote Dev inicia el flujo del proveedor desde el cwd del proyecto seleccionado;
-- Resume usa el flujo nativo del proveedor Antigravity, no el selector `[Cwd]` / `All` de Codex.
+- selecciona un proyecto concreto de Remote Dev antes de Start/Continue;
+- Remote Dev inicia todas las acciones de Antigravity desde el cwd del proyecto seleccionado;
+- **Start Antigravity** abre la TUI normal; usa `/resume` dentro de ella para explorar/reanudar conversaciones anteriores mediante el selector nativo de Google;
+- **Continue latest Antigravity conversation** pasa el flag `--continue` soportado por el proveedor y pide a Antigravity cargar la conversación más reciente asociada a ese workspace;
+- Remote Dev no expone una acción separada para explorar conversaciones ni interpreta el almacenamiento/caché de Antigravity para construir un selector alternativo;
+- las rutas de reanudación del menú ya no dependen del texto renderizado del prompt para decidir cuándo inyectar `/resume`, porque la apariencia de la TUI del proveedor puede cambiar de forma independiente al contrato CLI.
 
-**No** extrapoles a Antigravity el filtrado de sesiones, visibilidad de previews, reasociación hilo/ruta ni semántica de persistencia de Codex. La validación real de proyectos/sesiones en TrueNAS sigue aplazada a [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), dentro del ciclo experimental más amplio de #29/#106.
+Google documenta que `--continue` puede caer en una sesión nueva cuando la caché del workspace no contiene una conversación previa válida. El selector `/resume` dentro de la TUI sigue siendo la vía correcta cuando necesitas elegir entre varias conversaciones o conversaciones anteriores.
+
+**No** extrapoles a Antigravity el filtrado de sesiones, visibilidad de previews, reasociación hilo/ruta ni semántica de persistencia de Codex. La validación real de proyectos/sesiones en TrueNAS sigue en [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), dentro del ciclo experimental más amplio de #29/#106.
 
 ## 9. Resolución rápida de problemas
 
