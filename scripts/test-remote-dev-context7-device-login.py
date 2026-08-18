@@ -428,28 +428,26 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                     "--clear-groups",
                     "--no-new-privs",
                 ]
-            else:
-                prefix = []
-            overwrite = subprocess.run(
-                [*prefix, "/bin/cp", str(replacement), str(package_path)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            rename = subprocess.run(
-                [*prefix, "/bin/mv", str(replacement), str(package_path)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            if overwrite.returncode == 0 or rename.returncode == 0:
-                raise AssertionError(
-                    "the vendor UID could replace the verified Context7 tarball"
+                overwrite = subprocess.run(
+                    [*prefix, "/bin/cp", str(replacement), str(package_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
                 )
-            if package_path.read_bytes() != SYNTHETIC_PACKAGE:
-                raise AssertionError(
-                    "the verified Context7 tarball changed before vendor execution"
+                rename = subprocess.run(
+                    [*prefix, "/bin/mv", str(replacement), str(package_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
                 )
+                if overwrite.returncode == 0 or rename.returncode == 0:
+                    raise AssertionError(
+                        "the vendor UID could replace the verified Context7 tarball"
+                    )
+                if package_path.read_bytes() != SYNTHETIC_PACKAGE:
+                    raise AssertionError(
+                        "the verified Context7 tarball changed before vendor execution"
+                    )
             credentials = (
                 Path(environment["XDG_CONFIG_HOME"])
                 / module.CONTEXT7_CREDENTIALS_RELATIVE
