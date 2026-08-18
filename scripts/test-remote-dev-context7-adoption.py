@@ -15,6 +15,7 @@ DEVICE_HELPER = REPO_ROOT / "scripts" / "remote-dev-context7-device-login.py"
 MANAGER = REPO_ROOT / "scripts" / "remote-dev-context7.py"
 SYNTHETIC_OLD_KEY = "ctx7sk-test-existing-key-do-not-use"
 SYNTHETIC_NEW_KEY = "ctx7sk-test-device-key-do-not-use"
+MANAGER_TIMEOUT_SECONDS = 30
 
 
 def load_device_helper():
@@ -34,15 +35,22 @@ def manager_environment(codex_home: Path) -> dict[str, str]:
 
 
 def run_manager(codex_home: Path, arguments: list[str], *, input_text: str | None = None) -> str:
-    result = subprocess.run(
-        [sys.executable, str(MANAGER), *arguments],
-        input=input_text,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=manager_environment(codex_home),
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, str(MANAGER), *arguments],
+            input=input_text,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=manager_environment(codex_home),
+            timeout=MANAGER_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"Context7 manager timed out after {MANAGER_TIMEOUT_SECONDS}s "
+            f"for {arguments!r}"
+        ) from exc
     if result.returncode != 0:
         raise AssertionError(
             f"Context7 manager failed for {arguments!r}: "
@@ -62,6 +70,28 @@ def snapshot(codex_home: Path) -> tuple[bytes, bytes, int, int, str]:
         stat.S_IMODE(key_file.stat().st_mode),
         run_manager(codex_home, ["status", "--menu"]),
     )
+
+
+def assert_manager_timeout_is_actionable() -> None:
+    original_run = subprocess.run
+
+    def timeout(*args, **kwargs):
+        del args, kwargs
+        raise subprocess.TimeoutExpired(["synthetic-manager"], MANAGER_TIMEOUT_SECONDS)
+
+    try:
+        subprocess.run = timeout
+        try:
+            run_manager(Path("/synthetic-codex-home"), ["status", "--menu"])
+        except AssertionError as exc:
+            if "timed out" not in str(exc) or "status" not in str(exc):
+                raise AssertionError(
+                    f"manager timeout diagnostic was not actionable: {exc}"
+                ) from exc
+        else:
+            raise AssertionError("manager timeout unexpectedly succeeded")
+    finally:
+        subprocess.run = original_run
 
 
 def assert_device_adoption_matches_manual_api_key_path(module) -> None:
@@ -154,6 +184,7 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
 
 def main() -> int:
     module = load_device_helper()
+    assert_manager_timeout_is_actionable()
     assert_device_adoption_matches_manual_api_key_path(module)
     print("Context7 device-login/manual-key convergence regressions: OK")
     return 0

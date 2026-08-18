@@ -41,7 +41,7 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 ## Reviewed and latest official Context7 CLI
 
-Remote Dev keeps one exact **reviewed** `ctx7` version in the image source. The repository's upstream-maintenance automation is responsible for proposing newer reviewed pins; it must not silently change stable state.
+Remote Dev keeps one exact **reviewed** `ctx7` version and its reviewed top-level SHA-512 SRI in the image source as review metadata. The repository's upstream-maintenance automation is responsible for proposing newer reviewed pins; it must not silently change stable state. This metadata does not bundle or distribute the package.
 
 For an interactive device login Remote Dev first resolves the current `latest` metadata from the fixed public npm registry. It validates the package identity, exact stable semantic version, reviewed MIT license contract, exact tarball URL and npm SHA-512 integrity metadata before any vendor package is executed.
 
@@ -50,8 +50,10 @@ For an interactive device login Remote Dev first resolves the current `latest` m
   - the reviewed version (recommended); or
   - the exact current latest official version, labelled **`official source; Remote Dev review pending`**.
 - A newer version is **not blocked merely because Remote Dev review is pending**. It must still pass the origin/metadata/integrity and post-login credential/cleanup gates.
+- If current `latest` metadata fails a mandatory origin, provenance, integrity or compatibility check, Remote Dev marks that candidate unavailable and keeps the reviewed version usable. It never executes a rejected latest candidate.
 - `latest` is resolved first. Remote Dev then downloads the selected exact `ctx7-X.Y.Z.tgz`, verifies its bytes against the selected `dist.integrity`, and gives npm only that verified local tarball for `ctx7 login --no-browser`; it never asks npm to execute a mutable `ctx7@latest` or re-resolve `ctx7@X.Y.Z` after verification.
-- This binding covers the selected top-level `ctx7` tarball. It is not an immutable lock of every transitive npm dependency that npm may resolve while executing that package.
+- For the reviewed version, live official metadata must match both the committed reviewed version and the committed reviewed SRI. A mismatch is fatal for the reviewed choice.
+- This binding covers only the selected top-level `ctx7` tarball. npm can still resolve and download ephemeral transitive dependencies according to the ranges declared by that package. Remote Dev does not have a complete transitive lockfile and does not claim that every byte npm later executes is covered by the top-level SRI.
 - An incompatible source, package identity, version format, license contract, tarball URL, integrity record or credential model fails closed.
 
 This matches the optional-runtime principle used for Codex and Antigravity: review evidence describes known-good versions but is not an availability allowlist.
@@ -68,10 +70,12 @@ It intentionally never runs `ctx7 setup`, which can modify agent MCP configurati
 
 During device login Remote Dev:
 
-- creates a fresh private `/run/remote-dev-context7-login-*` subtree;
+- creates separate fresh `/run` subtrees for vendor-writable login/HOME/XDG/npm state and for the root-controlled verified package;
 - uses fresh HOME, XDG config/state/cache/runtime, temp, npm cache and npm user/global config paths;
 - pins the public npm registry, disables npm lifecycle scripts, audit/fund/update noise and Context7 telemetry;
-- resolves exact package metadata, downloads the selected top-level tarball without ambient proxy configuration or cross-origin redirects, verifies its SHA-512 SRI, and executes only that verified local tarball;
+- resolves exact package metadata under a total subprocess deadline and downloads the selected top-level tarball without ambient proxy configuration or redirects under a monotonic total download deadline;
+- verifies the top-level tarball's SHA-512 SRI, keeps it root-controlled and non-writable by UID/GID 65534, then rechecks its regular-file identity, owner/group, mode, size and SRI immediately before giving that concrete local package spec to npm;
+- allows npm to resolve ephemeral transitive dependencies from the verified top-level package's declared ranges; those dependencies are not covered by Remote Dev's top-level SRI and are not a complete locked graph;
 - passes the image-pinned Node version explicitly to the bundled mise/npm shim with offline mise resolution;
 - does not pass existing Codex, OpenAI, GitHub or Context7 credentials, the real `CODEX_HOME`, or project paths as vendor HOME/config/working-directory targets;
 - when running as root, executes npm/Context7 as UID/GID 65534 with cleared groups and `no-new-privs`;
@@ -80,7 +84,7 @@ During device login Remote Dev:
 - terminates/reaps the entire process group on cancellation or timeout, with bounded TERM/KILL cleanup;
 - validates every credential-path component without following symlinks, with expected ownership/private modes and bounded file size;
 - accepts only the long-lived bearer `ctx7sk-...` API-key form already used by the reviewed flow; refresh/expiry credential state is rejected;
-- removes the complete transient CLI/login/cache tree before handing the resulting API key to the existing manager over child-process stdin.
+- removes both the root-controlled package subtree and the complete transient CLI/login/cache subtree before handing the resulting API key to the existing manager over child-process stdin.
 
 This UID/GID drop is **not a filesystem sandbox**. Files elsewhere in the Codex container that are readable by UID/GID 65534 remain technically readable by the transient process. Use the manual API-key path if you do not want transient Context7 vendor code executing inside the Codex service.
 

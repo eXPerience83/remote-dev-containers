@@ -41,7 +41,7 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 ## CLI de Context7 revisado y última versión oficial
 
-Remote Dev mantiene en su código una versión exacta **revisada** de `ctx7`. La automatización de upstream del repositorio se encarga de proponer versiones revisadas más nuevas; nunca debe cambiar estable de forma silenciosa.
+Remote Dev mantiene en su código una versión exacta **revisada** de `ctx7` y su SRI SHA-512 top-level revisado como metadatos de revisión. La automatización de upstream del repositorio se encarga de proponer versiones revisadas más nuevas; nunca debe cambiar estable de forma silenciosa. Estos metadatos no incluyen ni distribuyen el paquete.
 
 En un device login interactivo, Remote Dev resuelve primero el `latest` actual desde el registro npm público fijado. Antes de ejecutar código del proveedor valida identidad del paquete, versión semántica estable exacta, contrato de licencia MIT revisado, URL exacta del tarball y metadatos de integridad SHA-512 de npm.
 
@@ -50,8 +50,10 @@ En un device login interactivo, Remote Dev resuelve primero el `latest` actual d
   - la versión revisada (recomendada); o
   - la última versión oficial exacta, marcada como **`official source; Remote Dev review pending`**.
 - Una versión nueva **no se bloquea solo por no haber sido revisada todavía**. Debe superar igualmente los gates de origen/metadatos/integridad y los de credencial/limpieza posteriores al login.
+- Si los metadatos del `latest` actual no superan una comprobación obligatoria de origen, procedencia, integridad o compatibilidad, Remote Dev marca ese candidate como no disponible y mantiene utilizable la versión revisada. Nunca ejecuta un latest rechazado.
 - Primero se resuelve `latest`. Después Remote Dev descarga el `ctx7-X.Y.Z.tgz` exacto elegido, verifica sus bytes contra el `dist.integrity` seleccionado y entrega a npm únicamente ese tarball local verificado para `ctx7 login --no-browser`; nunca pide a npm ejecutar el selector mutable `ctx7@latest` ni volver a resolver `ctx7@X.Y.Z` después de verificarlo.
-- Esta vinculación cubre el tarball top-level seleccionado de `ctx7`. No constituye un lock inmutable de todas las dependencias transitivas de npm que npm pueda resolver al ejecutar el paquete.
+- Para la versión revisada, los metadatos oficiales actuales deben coincidir tanto con la versión revisada guardada como con su SRI revisado guardado. Una diferencia hace fallar la opción reviewed.
+- Esta vinculación cubre únicamente el tarball top-level seleccionado de `ctx7`. npm todavía puede resolver y descargar dependencias transitivas efímeras según los rangos declarados por ese paquete. Remote Dev no dispone de un lockfile transitivo completo ni afirma que todos los bytes que npm ejecute posteriormente estén cubiertos por el SRI top-level.
 - Un origen, identidad, formato de versión, licencia, URL de tarball, integridad o modelo de credenciales incompatible falla de forma segura.
 
 Es el mismo principio de runtimes opcionales que usamos con Codex y Antigravity: la evidencia de revisión describe versiones conocidas, no es una allowlist de disponibilidad.
@@ -68,10 +70,12 @@ No ejecuta `ctx7 setup`, porque ese comando puede modificar configuración MCP d
 
 Durante el device login, Remote Dev:
 
-- crea un árbol privado nuevo `/run/remote-dev-context7-login-*`;
+- crea árboles nuevos y separados bajo `/run` para el estado de login/HOME/XDG/npm escribible por el proveedor y para el paquete verificado controlado por root;
 - utiliza HOME, configuración/estado/caché/runtime XDG, temporales, caché npm y configuraciones npm user/global nuevas;
 - fija el registro npm público y desactiva scripts de ciclo de vida, audit/fund/update noise y telemetría de Context7;
-- resuelve metadatos exactos del paquete, descarga el tarball top-level elegido sin configuración proxy ambiental ni redirecciones entre orígenes, verifica su SRI SHA-512 y ejecuta únicamente ese tarball local verificado;
+- resuelve metadatos exactos del paquete bajo una deadline total del subproceso y descarga el tarball top-level elegido sin configuración proxy ambiental ni redirecciones bajo una deadline monotónica total de descarga;
+- verifica el SRI SHA-512 del tarball top-level, lo mantiene bajo control de root y no escribible por UID/GID 65534, y justo antes de entregar ese package spec local concreto a npm vuelve a comprobar tipo de fichero regular, propietario/grupo, modo, tamaño y SRI;
+- permite que npm resuelva dependencias transitivas efímeras desde los rangos declarados por el paquete top-level verificado; esas dependencias no están cubiertas por el SRI top-level de Remote Dev ni forman un grafo completamente bloqueado;
 - pasa explícitamente la versión de Node fijada por la imagen al shim npm/mise incluido, con resolución mise offline;
 - no entrega credenciales existentes de Codex, OpenAI, GitHub o Context7 ni usa el `CODEX_HOME` real o el proyecto como HOME/config/cwd del proveedor;
 - cuando el servicio corre como root, ejecuta npm/Context7 como UID/GID 65534, sin grupos suplementarios y con `no-new-privs`;
@@ -80,7 +84,7 @@ Durante el device login, Remote Dev:
 - termina y recoge todo el grupo de procesos al cancelar o agotar tiempo, con TERM/KILL acotados;
 - valida cada componente de la ruta de credenciales sin seguir symlinks, con propietario/permisos privados y tamaño limitado;
 - acepta únicamente la API key bearer de larga duración `ctx7sk-...` que usa el flujo revisado; se rechaza estado con refresh/expiry;
-- elimina todo el árbol transitorio de CLI/login/caché antes de pasar la clave resultante por stdin al gestor existente.
+- elimina tanto el árbol del paquete controlado por root como todo el árbol transitorio de CLI/login/caché antes de pasar la clave resultante por stdin al gestor existente.
 
 La bajada a UID/GID 65534 **no es un sandbox de sistema de archivos**. Los archivos del contenedor Codex que sean legibles por ese UID/GID siguen siendo técnicamente legibles para el proceso transitorio. Utiliza la ruta manual de API key si no quieres ejecutar código transitorio de Context7 dentro del servicio Codex.
 

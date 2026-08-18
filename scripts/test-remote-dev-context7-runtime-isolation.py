@@ -65,12 +65,13 @@ def assert_restrictive_vendor_process_contract(module) -> None:
     try:
         module.subprocess.Popen = fake_popen
         module.os.killpg = fake_killpg
-        module.run_login_process(
-            ["synthetic-ctx7"],
-            cwd=Path("/tmp"),
-            environment={"PATH": "/usr/bin:/bin"},
-            cancel_stream=False,
-        )
+        with open(os.devnull, encoding="utf-8") as cancel_stream:
+            module.run_login_process(
+                ["synthetic-ctx7"],
+                cwd=Path("/tmp"),
+                environment={"PATH": "/usr/bin:/bin"},
+                cancel_stream=cancel_stream,
+            )
     finally:
         module.subprocess.Popen = original_popen
         module.os.killpg = original_killpg

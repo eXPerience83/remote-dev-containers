@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import time
 
 
 HELPER = Path(
@@ -104,6 +105,8 @@ def assert_reviewed_version_contract(module) -> None:
         raise AssertionError("Context7 reviewed CLI version drifted unexpectedly")
     if module.reviewed_cli_version() != "0.5.8":
         raise AssertionError("reviewed Context7 CLI version was not resolved")
+    if module.reviewed_cli_integrity() != module.REVIEWED_CONTEXT7_CLI_INTEGRITY:
+        raise AssertionError("reviewed Context7 CLI integrity was not resolved")
     for invalid in ("latest", "0.5", "0.5.x", ""):
         try:
             module.exact_version(invalid)
@@ -134,6 +137,13 @@ def assert_repo_version_pin_sync(module) -> None:
         raise AssertionError(
             "versions.env and the Context7 reviewed CLI runtime pin are inconsistent"
         )
+    if (
+        values.get("CONTEXT7_CLI_SRI_SHA512")
+        != module.REVIEWED_CONTEXT7_CLI_INTEGRITY
+    ):
+        raise AssertionError(
+            "versions.env and the Context7 reviewed CLI integrity are inconsistent"
+        )
 
 
 def assert_package_metadata_contract(module) -> None:
@@ -149,6 +159,37 @@ def assert_package_metadata_contract(module) -> None:
         )
         if metadata != package_metadata(module):
             raise AssertionError("valid Context7 npm package metadata was not accepted")
+
+        module.npm_json = lambda *args, **kwargs: [package_registry_payload(module)]
+        metadata = module.resolve_package_metadata(
+            "0.5.8",
+            uid=os.geteuid(),
+            gid=os.getegid(),
+            cwd=Path("/tmp"),
+            environment={},
+        )
+        if metadata != package_metadata(module):
+            raise AssertionError("npm 12 singleton-array metadata was not accepted")
+
+        for payload in ([], [{}, {}], ["not-an-object"], "not-an-object"):
+            module.npm_json = lambda *args, payload=payload, **kwargs: payload
+            try:
+                module.resolve_package_metadata(
+                    "0.5.8",
+                    uid=os.geteuid(),
+                    gid=os.getegid(),
+                    cwd=Path("/tmp"),
+                    environment={},
+                )
+            except module.DeviceLoginError as exc:
+                if "unexpected shape" not in str(exc):
+                    raise AssertionError(
+                        f"unexpected metadata-shape error: {exc}"
+                    ) from exc
+            else:
+                raise AssertionError(
+                    f"unsupported npm metadata shape was accepted: {payload!r}"
+                )
 
         bad_payloads = (
             {
@@ -196,8 +237,49 @@ def assert_package_metadata_contract(module) -> None:
         module.npm_json = original
 
 
+def assert_metadata_timeout_is_bounded(module) -> None:
+    original_run = module.subprocess.run
+    captured: dict[str, object] = {}
+
+    def timeout(command, **kwargs):
+        captured["command"] = command
+        captured["timeout"] = kwargs.get("timeout")
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+
+    try:
+        module.subprocess.run = timeout
+        try:
+            module.npm_json(
+                ["view", "ctx7@0.5.8", "--json"],
+                uid=os.geteuid(),
+                gid=os.getegid(),
+                cwd=Path("/tmp"),
+                environment={},
+            )
+        except module.DeviceLoginError as exc:
+            if "could not resolve" not in str(exc):
+                raise AssertionError(
+                    f"unexpected npm metadata timeout error: {exc}"
+                ) from exc
+        else:
+            raise AssertionError("timed-out npm metadata lookup unexpectedly succeeded")
+    finally:
+        module.subprocess.run = original_run
+
+    timeout_value = captured.get("timeout")
+    if (
+        not isinstance(timeout_value, float)
+        or timeout_value <= 0
+        or timeout_value > module.METADATA_TIMEOUT_SECONDS
+    ):
+        raise AssertionError(
+            "npm metadata lookup does not have the configured total subprocess timeout"
+        )
+
+
 def assert_reviewed_latest_selection(module) -> None:
     original_reviewed = module.reviewed_cli_version
+    original_integrity = module.reviewed_cli_integrity
     original_resolve = module.resolve_package_metadata
     original_input = builtins.input
     original_stdin = module.sys.stdin
@@ -208,6 +290,7 @@ def assert_reviewed_latest_selection(module) -> None:
 
     try:
         module.reviewed_cli_version = lambda: "0.5.8"
+        module.reviewed_cli_integrity = lambda: SYNTHETIC_INTEGRITY
         module.sys.stdin = Tty()
 
         def resolve(specifier, **kwargs):
@@ -217,6 +300,18 @@ def assert_reviewed_latest_selection(module) -> None:
             return package_metadata(module, specifier)
 
         module.resolve_package_metadata = resolve
+
+        try:
+            module.validate_reviewed_metadata(
+                {**package_metadata(module), "integrity": "sha512-" + "A" * 88}
+            )
+        except module.DeviceLoginError as exc:
+            if "reviewed artifact" not in str(exc):
+                raise AssertionError(
+                    f"unexpected reviewed-integrity mismatch error: {exc}"
+                ) from exc
+        else:
+            raise AssertionError("reviewed Context7 metadata accepted a changed SRI")
 
         builtins.input = lambda prompt="": "1"
         selected, reviewed = module.choose_cli_metadata(
@@ -239,8 +334,32 @@ def assert_reviewed_latest_selection(module) -> None:
         )
         if selected["version"] != "0.5.9" or reviewed is not False:
             raise AssertionError("explicit latest Context7 CLI selection failed")
+
+        def reject_latest(specifier, **kwargs):
+            del kwargs
+            if specifier == "latest":
+                raise module.DeviceLoginError("synthetic latest rejection")
+            return package_metadata(module, specifier)
+
+        module.resolve_package_metadata = reject_latest
+        selected, reviewed = module.choose_cli_metadata(
+            "auto", uid=1, gid=1, cwd=Path("/tmp"), environment={}
+        )
+        if selected["version"] != "0.5.8" or reviewed is not True:
+            raise AssertionError(
+                "rejected latest prevented use of the reviewed Context7 CLI"
+            )
+        try:
+            module.choose_cli_metadata(
+                "latest", uid=1, gid=1, cwd=Path("/tmp"), environment={}
+            )
+        except module.DeviceLoginError:
+            pass
+        else:
+            raise AssertionError("explicit latest accepted rejected metadata")
     finally:
         module.reviewed_cli_version = original_reviewed
+        module.reviewed_cli_integrity = original_integrity
         module.resolve_package_metadata = original_resolve
         builtins.input = original_input
         module.sys.stdin = original_stdin
@@ -260,6 +379,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         prefix="remote-dev-context7-device-test-"
     ) as temp:
         temp_root = Path(temp)
+        os.chmod(temp_root, 0o755)
         run_root = temp_root / "run"
         run_root.mkdir(mode=0o755)
         mise_config = temp_root / "mise.toml"
@@ -284,6 +404,52 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             captured["command"] = list(command)
             captured["environment"] = dict(environment)
             captured["cwd"] = Path(cwd)
+            package_argument = next(
+                item for item in command if item.startswith("--package=")
+            )
+            package_path = Path(package_argument.removeprefix("--package="))
+            package_info = package_path.stat()
+            captured["package_path"] = package_path
+            captured["package_mode"] = package_info.st_mode & 0o777
+            captured["package_uid"] = package_info.st_uid
+            captured["package_gid"] = package_info.st_gid
+
+            replacement = Path(cwd) / "replacement.tgz"
+            replacement.write_bytes(b"synthetic-unverified-replacement")
+            os.chmod(replacement, 0o600)
+            if os.geteuid() == 0:
+                os.chown(replacement, uid, gid)
+                prefix = [
+                    str(original_setpriv),
+                    "--reuid",
+                    str(uid),
+                    "--regid",
+                    str(gid),
+                    "--clear-groups",
+                    "--no-new-privs",
+                ]
+            else:
+                prefix = []
+            overwrite = subprocess.run(
+                [*prefix, "/bin/cp", str(replacement), str(package_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            rename = subprocess.run(
+                [*prefix, "/bin/mv", str(replacement), str(package_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if overwrite.returncode == 0 or rename.returncode == 0:
+                raise AssertionError(
+                    "the vendor UID could replace the verified Context7 tarball"
+                )
+            if package_path.read_bytes() != SYNTHETIC_PACKAGE:
+                raise AssertionError(
+                    "the verified Context7 tarball changed before vendor execution"
+                )
             credentials = (
                 Path(environment["XDG_CONFIG_HOME"])
                 / module.CONTEXT7_CREDENTIALS_RELATIVE
@@ -337,11 +503,29 @@ def assert_acquire_uses_isolated_environment(module) -> None:
         package_arguments = [
             item for item in command if item.startswith("--package=")
         ]
-        expected_package = f"--package={cwd / 'ctx7-0.5.8.tgz'}"
-        if package_arguments != [expected_package]:
+        if len(package_arguments) != 1:
             raise AssertionError(
                 "device login did not execute the locally verified Context7 tarball: "
                 f"{package_arguments!r}"
+            )
+        package_path = captured["package_path"]
+        if package_path.parent == cwd or not package_path.parent.name.startswith(
+            "remote-dev-context7-package-"
+        ):
+            raise AssertionError(
+                "verified Context7 package was not separated from vendor-writable state"
+            )
+        expected_owner = 0 if os.geteuid() == 0 else os.geteuid()
+        expected_group = module.SANDBOX_GID if os.geteuid() == 0 else os.getegid()
+        if (
+            captured["package_uid"] != expected_owner
+            or captured["package_gid"] != expected_group
+            or captured["package_mode"] != 0o440
+        ):
+            raise AssertionError(
+                "verified Context7 package ownership/mode boundary is unsafe: "
+                f"uid={captured['package_uid']} gid={captured['package_gid']} "
+                f"mode={captured['package_mode']!r}"
             )
         if any("ctx7@" in item for item in command):
             raise AssertionError(
@@ -419,6 +603,10 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             raise AssertionError(
                 "transient Context7 login directory was not removed"
             )
+        if package_path.parent.exists():
+            raise AssertionError(
+                "transient root-controlled Context7 package directory was not removed"
+            )
 
 
 def assert_integrity_mismatch_blocks_vendor_execution(module) -> None:
@@ -482,6 +670,49 @@ def assert_integrity_mismatch_blocks_vendor_execution(module) -> None:
         raise AssertionError(
             "Context7 vendor code executed after the selected tarball failed integrity"
         )
+
+
+def assert_preexec_package_revalidation(module) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-preexec-test-"
+    ) as temp:
+        tarball = Path(temp) / "ctx7-0.5.8.tgz"
+        tarball.write_bytes(SYNTHETIC_PACKAGE)
+        os.chmod(tarball, 0o440)
+        if os.geteuid() == 0:
+            os.chown(tarball, 0, module.SANDBOX_GID)
+            expected_uid = 0
+            expected_gid = module.SANDBOX_GID
+        else:
+            expected_uid = os.geteuid()
+            expected_gid = os.getegid()
+
+        module.validate_package_tarball(
+            tarball,
+            expected_uid=expected_uid,
+            expected_gid=expected_gid,
+            expected_integrity=SYNTHETIC_INTEGRITY,
+        )
+
+        os.chmod(tarball, 0o640)
+        tarball.write_bytes(b"X" * len(SYNTHETIC_PACKAGE))
+        os.chmod(tarball, 0o440)
+        try:
+            module.validate_package_tarball(
+                tarball,
+                expected_uid=expected_uid,
+                expected_gid=expected_gid,
+                expected_integrity=SYNTHETIC_INTEGRITY,
+            )
+        except module.DeviceLoginError as exc:
+            if "changed after integrity validation" not in str(exc):
+                raise AssertionError(
+                    f"unexpected pre-execution package error: {exc}"
+                ) from exc
+        else:
+            raise AssertionError(
+                "pre-execution verification accepted changed Context7 package bytes"
+            )
 
 
 def assert_node_version_contract(module) -> None:
@@ -590,12 +821,13 @@ def assert_success_reaps_process_group(module) -> None:
     try:
         module.subprocess.Popen = fake_popen
         module.os.killpg = fake_killpg
-        module.run_login_process(
-            ["synthetic-ctx7"],
-            cwd=Path("/tmp"),
-            environment={"PATH": "/usr/bin:/bin"},
-            cancel_stream=False,
-        )
+        with open(os.devnull, encoding="utf-8") as cancel_stream:
+            module.run_login_process(
+                ["synthetic-ctx7"],
+                cwd=Path("/tmp"),
+                environment={"PATH": "/usr/bin:/bin"},
+                cancel_stream=cancel_stream,
+            )
     finally:
         module.subprocess.Popen = original_popen
         module.os.killpg = original_killpg
@@ -640,12 +872,13 @@ def assert_timeout_terminates_process_group(module) -> None:
         module.os.killpg = lambda pgid, sig: signals.append((pgid, sig))
         module.LOGIN_TIMEOUT_SECONDS = 0
         try:
-            module.run_login_process(
-                ["synthetic-ctx7"],
-                cwd=Path("/tmp"),
-                environment={"PATH": "/usr/bin:/bin"},
-                cancel_stream=False,
-            )
+            with open(os.devnull, encoding="utf-8") as cancel_stream:
+                module.run_login_process(
+                    ["synthetic-ctx7"],
+                    cwd=Path("/tmp"),
+                    environment={"PATH": "/usr/bin:/bin"},
+                    cancel_stream=cancel_stream,
+                )
         except module.DeviceLoginError as exc:
             if "timed out" not in str(exc):
                 raise AssertionError(f"unexpected timeout error: {exc}") from exc
@@ -739,6 +972,7 @@ def assert_cleanup_failure_is_fatal(module) -> None:
     original_mise_config = module.MISE_CONFIG
     original_setpriv = module.SETPRIV
     original_rmtree = module.shutil.rmtree
+    cleanup_attempts: list[Path] = []
 
     with tempfile.TemporaryDirectory(
         prefix="remote-dev-context7-cleanup-test-"
@@ -777,7 +1011,7 @@ def assert_cleanup_failure_is_fatal(module) -> None:
             )
 
         def fail_rmtree(path):
-            del path
+            cleanup_attempts.append(Path(path))
             raise OSError(13, "synthetic cleanup failure")
 
         try:
@@ -806,6 +1040,12 @@ def assert_cleanup_failure_is_fatal(module) -> None:
             module.MISE_CONFIG = original_mise_config
             module.SETPRIV = original_setpriv
             module.shutil.rmtree = original_rmtree
+
+    if len(cleanup_attempts) != 2:
+        raise AssertionError(
+            "cleanup failure prevented an attempt to remove every transient root: "
+            f"{cleanup_attempts!r}"
+        )
 
 
 def assert_credentials_contract(module) -> None:
@@ -997,22 +1237,74 @@ def assert_role_gate(module) -> None:
             os.environ["REMOTE_DEV_ROLE"] = previous
 
 
+def assert_package_download_total_deadline(module) -> None:
+    original_open = module.open_package_url
+    original_timeout = module.PACKAGE_TIMEOUT_SECONDS
+
+    class SlowResponse(PackageResponse):
+        def read(self, size: int) -> bytes:
+            time.sleep(0.2)
+            return super().read(size)
+
+    with tempfile.TemporaryDirectory(
+        prefix="remote-dev-context7-deadline-test-"
+    ) as temp:
+        root = Path(temp)
+        metadata = package_metadata(module)
+        module.open_package_url = lambda url, *, environment: SlowResponse(
+            SYNTHETIC_PACKAGE, url
+        )
+        module.PACKAGE_TIMEOUT_SECONDS = 0.05
+        started = time.monotonic()
+        try:
+            try:
+                module.download_verified_package(
+                    metadata,
+                    root=root,
+                    gid=os.getegid(),
+                    environment={},
+                )
+            except module.DeviceLoginError as exc:
+                if "total deadline" not in str(exc):
+                    raise AssertionError(
+                        f"unexpected package deadline error: {exc}"
+                    ) from exc
+            else:
+                raise AssertionError(
+                    "slow Context7 package download exceeded its total deadline"
+                )
+        finally:
+            module.open_package_url = original_open
+            module.PACKAGE_TIMEOUT_SECONDS = original_timeout
+        if time.monotonic() - started >= 0.15:
+            raise AssertionError(
+                "Context7 package deadline did not interrupt a blocking slow read"
+            )
+        if any(root.iterdir()):
+            raise AssertionError(
+                "timed-out Context7 package download left partial bytes"
+            )
+
+
 def main() -> int:
     module = load_helper()
     assert_reviewed_version_contract(module)
     assert_repo_version_pin_sync(module)
     assert_node_version_contract(module)
     assert_package_metadata_contract(module)
+    assert_metadata_timeout_is_bounded(module)
     assert_reviewed_latest_selection(module)
     assert_manager_preflight_is_read_only(module)
     assert_acquire_uses_isolated_environment(module)
     assert_integrity_mismatch_blocks_vendor_execution(module)
+    assert_preexec_package_revalidation(module)
     assert_success_reaps_process_group(module)
     assert_timeout_terminates_process_group(module)
     assert_q_cancels_process_group(module)
     assert_cleanup_failure_is_fatal(module)
     assert_credentials_contract(module)
     assert_adoption_order_and_failure(module)
+    assert_package_download_total_deadline(module)
     assert_role_gate(module)
     print(
         "Context7 device-login isolation/version/integrity/cancellation regressions: OK"

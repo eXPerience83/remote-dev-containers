@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import contextlib
 import hashlib
 import hmac
 import json
@@ -28,6 +29,9 @@ CONTEXT7_CLI_NAME = "ctx7"
 CONTEXT7_KEY_PREFIX = "ctx7sk-"
 CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
 REVIEWED_CONTEXT7_CLI_VERSION = "0.5.8"
+REVIEWED_CONTEXT7_CLI_INTEGRITY = (
+    "sha512-D7yDKDH1K8f4A4e0N8pFx3sfFi0IwiLt167P2p3yp++ruHeo3i2yycH8WdcG35VCzFF95XDWmyPcdOjX9xxtoA=="
+)
 EXPECTED_PACKAGE_LICENSE = "MIT"
 NPM_REGISTRY = "https://registry.npmjs.org/"
 NPM_REGISTRY_HOST = "registry.npmjs.org"
@@ -65,6 +69,35 @@ class NoPackageRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         del req, fp, code, msg, headers, newurl
         return None
+
+
+@contextlib.contextmanager
+def package_download_deadline():
+    deadline = time.monotonic() + PACKAGE_TIMEOUT_SECONDS
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    started = time.monotonic()
+
+    def deadline_expired(signum, frame):
+        del signum, frame
+        raise DeviceLoginError("selected Context7 package download exceeded the total deadline")
+
+    signal.signal(signal.SIGALRM, deadline_expired)
+    signal.setitimer(signal.ITIMER_REAL, PACKAGE_TIMEOUT_SECONDS)
+    try:
+        yield deadline
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            elapsed = time.monotonic() - started
+            restored = max(0.000001, previous_timer[0] - elapsed)
+            signal.setitimer(signal.ITIMER_REAL, restored, previous_timer[1])
+
+
+def require_deadline_remaining(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise DeviceLoginError("selected Context7 package download exceeded the total deadline")
 
 
 def validate_role() -> None:
@@ -111,6 +144,11 @@ def version_tuple(value: str) -> tuple[int, int, int]:
 
 def reviewed_cli_version() -> str:
     return exact_version(REVIEWED_CONTEXT7_CLI_VERSION)
+
+
+def reviewed_cli_integrity() -> str:
+    parse_sha512_integrity(REVIEWED_CONTEXT7_CLI_INTEGRITY)
+    return REVIEWED_CONTEXT7_CLI_INTEGRITY
 
 
 def validate_executable(path: Path, *, label: str) -> None:
@@ -168,6 +206,21 @@ def create_login_root(uid: int, gid: int) -> Path:
     return root
 
 
+def create_package_root(gid: int) -> Path:
+    validate_run_root()
+    owner_uid = 0 if os.geteuid() == 0 else os.geteuid()
+    try:
+        root = Path(tempfile.mkdtemp(prefix="remote-dev-context7-package-", dir=RUN_ROOT))
+        os.chmod(root, 0o750)
+        if os.geteuid() == 0:
+            os.chown(root, owner_uid, gid)
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not create transient Context7 package state: errno {exc.errno}"
+        ) from exc
+    return root
+
+
 def remove_login_root(root: Path) -> None:
     if root.parent != RUN_ROOT or not root.name.startswith("remote-dev-context7-login-"):
         raise DeviceLoginError("refusing to remove an unexpected transient Context7 login path")
@@ -179,6 +232,33 @@ def remove_login_root(root: Path) -> None:
         raise DeviceLoginError(
             f"could not remove transient Context7 CLI/login state: errno {exc.errno}"
         ) from exc
+
+
+def remove_package_root(root: Path) -> None:
+    if root.parent != RUN_ROOT or not root.name.startswith("remote-dev-context7-package-"):
+        raise DeviceLoginError("refusing to remove an unexpected transient Context7 package path")
+    try:
+        shutil.rmtree(root)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise DeviceLoginError(
+            f"could not remove transient Context7 package state: errno {exc.errno}"
+        ) from exc
+
+
+def remove_transient_roots(login_root: Path, package_root: Path) -> None:
+    errors: list[DeviceLoginError] = []
+    for remover, root in (
+        (remove_login_root, login_root),
+        (remove_package_root, package_root),
+    ):
+        try:
+            remover(root)
+        except DeviceLoginError as exc:
+            errors.append(exc)
+    if errors:
+        raise errors[0]
 
 
 def transient_environment(root: Path, *, node_version: str) -> dict[str, str]:
@@ -238,6 +318,7 @@ def npm_json(
     cwd: Path,
     environment: dict[str, str],
 ) -> object:
+    deadline = time.monotonic() + METADATA_TIMEOUT_SECONDS
     command = [
         *privileged_prefix(uid, gid),
         str(NPM),
@@ -252,7 +333,7 @@ def npm_json(
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=METADATA_TIMEOUT_SECONDS,
+            timeout=max(0.001, deadline - time.monotonic()),
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -261,6 +342,8 @@ def npm_json(
         raise DeviceLoginError(
             f"official Context7 npm metadata lookup failed (exit {result.returncode})"
         )
+    if time.monotonic() >= deadline:
+        raise DeviceLoginError("official Context7 npm metadata lookup exceeded the total deadline")
     if len(result.stdout) > MAX_METADATA_BYTES or len(result.stderr) > MAX_METADATA_BYTES:
         raise DeviceLoginError("official Context7 npm metadata exceeded the supported size boundary")
     try:
@@ -313,6 +396,10 @@ def resolve_package_metadata(
         cwd=cwd,
         environment=environment,
     )
+    if isinstance(payload, list):
+        if len(payload) != 1 or not isinstance(payload[0], dict):
+            raise DeviceLoginError("official Context7 npm metadata has an unexpected shape")
+        payload = payload[0]
     if not isinstance(payload, dict):
         raise DeviceLoginError("official Context7 npm metadata has an unexpected shape")
     name = payload.get("name")
@@ -341,6 +428,15 @@ def resolve_package_metadata(
     }
 
 
+def validate_reviewed_metadata(metadata: dict[str, str]) -> None:
+    if metadata.get("version") != reviewed_cli_version():
+        raise DeviceLoginError("official Context7 npm metadata does not match the reviewed version")
+    if metadata.get("integrity") != reviewed_cli_integrity():
+        raise DeviceLoginError(
+            "official Context7 npm integrity does not match the Remote Dev-reviewed artifact"
+        )
+
+
 def choose_cli_metadata(
     channel: str,
     *,
@@ -355,16 +451,35 @@ def choose_cli_metadata(
         metadata = resolve_package_metadata(
             reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
         )
+        validate_reviewed_metadata(metadata)
         return metadata, True
 
-    latest = resolve_package_metadata(
-        "latest", uid=uid, gid=gid, cwd=cwd, environment=environment
-    )
+    try:
+        latest = resolve_package_metadata(
+            "latest", uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+    except DeviceLoginError:
+        if channel == "latest":
+            raise
+        print(
+            "Context7 CLI: latest official is unavailable because its metadata failed "
+            "mandatory validation; using the Remote Dev-reviewed version.",
+            file=sys.stderr,
+        )
+        metadata = resolve_package_metadata(
+            reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
+        )
+        validate_reviewed_metadata(metadata)
+        return metadata, True
     latest_version = latest["version"]
     if channel == "latest":
-        return latest, latest_version == reviewed
+        is_reviewed = latest_version == reviewed
+        if is_reviewed:
+            validate_reviewed_metadata(latest)
+        return latest, is_reviewed
 
     if latest_version == reviewed:
+        validate_reviewed_metadata(latest)
         print(f"Context7 CLI: {reviewed} (latest official; reviewed by Remote Dev)")
         return latest, True
 
@@ -377,6 +492,7 @@ def choose_cli_metadata(
         metadata = resolve_package_metadata(
             reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
         )
+        validate_reviewed_metadata(metadata)
         return metadata, True
 
     print("Context7 CLI version")
@@ -400,6 +516,7 @@ def choose_cli_metadata(
         metadata = resolve_package_metadata(
             reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
         )
+        validate_reviewed_metadata(metadata)
         return metadata, True
 
     choice = input("> ").strip()
@@ -407,6 +524,7 @@ def choose_cli_metadata(
         metadata = resolve_package_metadata(
             reviewed, uid=uid, gid=gid, cwd=cwd, environment=environment
         )
+        validate_reviewed_metadata(metadata)
         return metadata, True
     if choice == "2":
         return latest, False
@@ -453,7 +571,6 @@ def download_verified_package(
     metadata: dict[str, str],
     *,
     root: Path,
-    uid: int,
     gid: int,
     environment: dict[str, str],
 ) -> Path:
@@ -466,22 +583,25 @@ def download_verified_package(
     digest = hashlib.sha512()
     total = 0
     try:
-        response = open_package_url(tarball_url, environment=environment)
-        with response:
-            if response.geturl() != tarball_url:
-                raise DeviceLoginError("selected Context7 package redirected unexpectedly")
-            with destination.open("xb") as handle:
-                while True:
-                    chunk = response.read(64 * 1024)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > MAX_PACKAGE_BYTES:
-                        raise DeviceLoginError(
-                            "selected Context7 package exceeded the supported size boundary"
-                        )
-                    digest.update(chunk)
-                    handle.write(chunk)
+        with package_download_deadline() as deadline:
+            response = open_package_url(tarball_url, environment=environment)
+            with response:
+                if response.geturl() != tarball_url:
+                    raise DeviceLoginError("selected Context7 package redirected unexpectedly")
+                with destination.open("xb") as handle:
+                    while True:
+                        require_deadline_remaining(deadline)
+                        chunk = response.read(64 * 1024)
+                        require_deadline_remaining(deadline)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > MAX_PACKAGE_BYTES:
+                            raise DeviceLoginError(
+                                "selected Context7 package exceeded the supported size boundary"
+                            )
+                        digest.update(chunk)
+                        handle.write(chunk)
     except DeviceLoginError:
         destination.unlink(missing_ok=True)
         raise
@@ -500,9 +620,9 @@ def download_verified_package(
             "selected Context7 npm package failed the validated sha512 integrity check"
         )
     try:
-        os.chmod(destination, 0o600)
+        os.chmod(destination, 0o440)
         if os.geteuid() == 0:
-            os.chown(destination, uid, gid)
+            os.chown(destination, 0, gid)
     except OSError as exc:
         destination.unlink(missing_ok=True)
         raise DeviceLoginError(
@@ -511,7 +631,14 @@ def download_verified_package(
     return destination
 
 
-def validate_package_tarball(path: Path, *, expected_uid: int) -> None:
+def validate_package_tarball(
+    path: Path,
+    *,
+    expected_uid: int,
+    expected_gid: int,
+    expected_integrity: str,
+) -> None:
+    expected_digest = parse_sha512_integrity(expected_integrity)
     try:
         info = path.lstat()
     except OSError as exc:
@@ -520,15 +647,43 @@ def validate_package_tarball(path: Path, *, expected_uid: int) -> None:
         stat.S_ISLNK(info.st_mode)
         or not stat.S_ISREG(info.st_mode)
         or info.st_uid != expected_uid
-        or stat.S_IMODE(info.st_mode) & 0o077
+        or info.st_gid != expected_gid
+        or stat.S_IMODE(info.st_mode) != 0o440
         or info.st_size <= 0
         or info.st_size > MAX_PACKAGE_BYTES
     ):
         raise DeviceLoginError("verified Context7 package has unsafe ownership, type, permissions or size")
 
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise DeviceLoginError(f"verified Context7 package is unavailable: errno {exc.errno}") from exc
+    try:
+        opened = os.fstat(fd)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_dev != info.st_dev
+            or opened.st_ino != info.st_ino
+            or opened.st_uid != expected_uid
+            or opened.st_gid != expected_gid
+            or stat.S_IMODE(opened.st_mode) != 0o440
+            or opened.st_size != info.st_size
+        ):
+            raise DeviceLoginError("verified Context7 package changed before execution")
+        digest = hashlib.sha512()
+        while True:
+            chunk = os.read(fd, 64 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    finally:
+        os.close(fd)
+    if not hmac.compare_digest(digest.digest(), expected_digest):
+        raise DeviceLoginError("verified Context7 package changed after integrity validation")
+
 
 def login_command(uid: int, gid: int, *, package_tarball: Path) -> list[str]:
-    validate_package_tarball(package_tarball, expected_uid=uid)
     command = [
         str(NPM),
         "exec",
@@ -782,24 +937,25 @@ def acquire_api_key(*, cli_channel: str) -> tuple[str, str, bool]:
     validate_executable(NPM, label="npm")
     node_version = configured_node_version()
     uid, gid = sandbox_identity()
-    root = create_login_root(uid, gid)
-    environment = transient_environment(root, node_version=node_version)
+    login_root = create_login_root(uid, gid)
+    package_root: Path | None = None
+    environment = transient_environment(login_root, node_version=node_version)
     api_key = ""
     version = ""
     reviewed = False
     try:
+        package_root = create_package_root(gid)
         metadata, reviewed = choose_cli_metadata(
             cli_channel,
             uid=uid,
             gid=gid,
-            cwd=root,
+            cwd=login_root,
             environment=environment,
         )
         version = metadata["version"]
         package_tarball = download_verified_package(
             metadata,
-            root=root,
-            uid=uid,
+            root=package_root,
             gid=gid,
             environment=environment,
         )
@@ -812,10 +968,20 @@ def acquire_api_key(*, cli_channel: str) -> tuple[str, str, bool]:
                 file=sys.stderr,
             )
         command = login_command(uid, gid, package_tarball=package_tarball)
-        run_login_process(command, cwd=root, environment=environment)
-        api_key = read_credentials(root, expected_uid=uid)
+        artifact_owner = 0 if os.geteuid() == 0 else os.geteuid()
+        validate_package_tarball(
+            package_tarball,
+            expected_uid=artifact_owner,
+            expected_gid=gid,
+            expected_integrity=metadata["integrity"],
+        )
+        run_login_process(command, cwd=login_root, environment=environment)
+        api_key = read_credentials(login_root, expected_uid=uid)
     finally:
-        remove_login_root(root)
+        if package_root is None:
+            remove_login_root(login_root)
+        else:
+            remove_transient_roots(login_root, package_root)
     return api_key, version, reviewed
 
 
