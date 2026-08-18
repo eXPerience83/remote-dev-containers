@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.8.6",
+      "version": "2026.8.8",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.6/mise-v2026.8.6-linux-x64",
-          "asset_sha256": "96f6f1f416d868b78addd22746eefc7f4bf7820c6a3afa392a9f653f708c1644",
-          "asset_size": 116053680,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.8/mise-v2026.8.8-linux-x64",
+          "asset_sha256": "1fce52a3656cf14bef6feeb9f0b90d545126a0bb598f0a69afbb9e4702f8f3e3",
+          "asset_size": 116200640,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.6/mise-v2026.8.6-linux-arm64",
-          "asset_sha256": "f9bd051912beb8861bf248289bfb2d8c281ff00fcdf1e44d730b8ea7e859e9a4",
-          "asset_size": 97049696,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.8/mise-v2026.8.8-linux-arm64",
+          "asset_sha256": "76f570105249348a228af9411ca8c7869cfb4ca59de2d1dc025ac53305c5f1d5",
+          "asset_size": 97464432,
           "archive_member_count": null,
           "legal_members": []
         }
