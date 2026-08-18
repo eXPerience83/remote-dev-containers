@@ -2,17 +2,19 @@
 
 Remote Dev puede configurar el servicio Codex incluido para utilizar Context7 como servicio MCP alojado y opcional de documentación.
 
-> **Estado de publicación:** esta integración se introduce mediante la ruta experimental actual `dev -> edge` de Remote Dev que sigue #31. Los candidatos revisados antes del merge pueden publicarse en `dev`; `edge` contiene únicamente cambios integrados en `main`. No forma parte de ninguna versión estable publicada anteriormente; no debe anunciarse como disponible en estable hasta que una versión estable que incluya este cambio complete sus gates de publicación.
+> **Estado de publicación:** esta integración se introduce mediante la ruta experimental actual `dev -> edge` de Remote Dev que sigue #31. Los candidatos revisados antes del merge pueden publicarse en `dev`; `edge` contiene únicamente cambios integrados en `main`. No debe anunciarse disponibilidad estable hasta que una versión estable que incluya este cambio complete sus gates de publicación.
 
-Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. Remote Dev no incluye, redistribuye, instala ni persiste el CLI, paquete npm o runtime de servidor MCP de Context7 para esta integración. Se utiliza el cliente MCP mediante Streamable HTTP nativo de Codex contra el endpoint alojado revisado:
+Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
 
 ```text
 https://mcp.context7.com/mcp
 ```
 
+Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni un runtime de servidor MCP. El inicio mediante código de dispositivo resuelve una versión oficial y exacta del paquete npm `ctx7`, descarga el tarball top-level exacto desde el origen npm público fijado, verifica su SRI SHA-512 contra los metadatos seleccionados del registro, ejecuta ese tarball local verificado solo para la autenticación y después elimina paquete, caché npm y estado temporal del proveedor. Solo persiste la API key que se adopta en el estado privado de Context7 ya existente en Remote Dev.
+
 ## Ciclo de vida explícito
 
-Construir o arrancar Remote Dev no configura ni contacta Context7. Utiliza **Context7 integration...** en el menú de Codex o el comando propio del proyecto:
+Utiliza **Context7 integration...** en el menú de Codex o:
 
 ```bash
 remote-dev-context7 status
@@ -23,15 +25,74 @@ remote-dev-context7 update
 remote-dev-context7 remove
 ```
 
-`status` es pasivo y no realiza ninguna petición de red a Context7. `install`, `repair`, `update` y `remove` pueden modificar archivos persistentes privados de Codex y por eso exigen confirmación explícita. `test` también exige confirmación porque realiza una comprobación real contra el endpoint `/ping` documentado por Context7.
+`status` es pasivo. `install`, `repair`, `update` y `remove` pueden modificar estado persistente privado de Codex y exigen confirmación explícita. `test` también pide confirmación porque realiza una comprobación real contra el endpoint `/ping` documentado por Context7.
 
-Para automatización no interactiva revisada, las acciones aceptan `--yes`. `install` y `repair` permiten además `--anonymous` o `--api-key-stdin`; el uso de stdin requiere `--yes` para que la entrada de la clave no pueda confundirse con la confirmación interactiva.
+Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 
-`update` **no** actualiza el servicio Context7 alojado ni descarga un runtime de Context7. Vuelve a validar y aplicar el contrato MCP alojado incluido en la imagen Remote Dev actual. Si Context7 cambia en el futuro su endpoint o su contrato de autenticación, Remote Dev deberá incorporar y revisar primero ese nuevo contrato; después, `update` sobre esa imagen más nueva podrá volver a aplicarlo.
+1. **Iniciar sesión en Context7 con un código de dispositivo (recomendado)**.
+2. **Introducir una API key existente de Context7** mediante la ruta manual enmascarada.
+3. **Conservar la API key gestionada actual**, o seguir anónimo si no existe.
+4. **Usar acceso anónimo**, eliminando solo la API key gestionada por Remote Dev.
+5. **Cancelar**.
+
+El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous` y `--api-key-stdin`. La automatización del device login puede elegir además `--cli-channel reviewed` o `--cli-channel latest`; el menú interactivo utiliza `auto`.
+
+`remote-dev-context7 update` vuelve a validar/aplicar la configuración MCP alojada que incluye la imagen. Es independiente de la versión transitoria de `ctx7`, que solo se utiliza para la autenticación por dispositivo.
+
+## CLI de Context7 revisado y última versión oficial
+
+Remote Dev mantiene en su código una versión exacta **revisada** de `ctx7` y su SRI SHA-512 top-level revisado como metadatos de revisión. La automatización de upstream del repositorio se encarga de proponer versiones revisadas más nuevas; nunca debe cambiar estable de forma silenciosa. Estos metadatos no incluyen ni distribuyen el paquete.
+
+En un device login interactivo, Remote Dev resuelve primero el `latest` actual desde el registro npm público fijado. Antes de ejecutar código del proveedor valida identidad del paquete, versión semántica estable exacta, contrato de licencia MIT revisado, URL exacta del tarball y metadatos de integridad SHA-512 de npm.
+
+- Si `latest` coincide con la versión revisada por Remote Dev, se utiliza esa versión exacta.
+- Si npm tiene una versión más nueva, Remote Dev muestra ambas y permite elegir:
+  - la versión revisada (recomendada); o
+  - la última versión oficial exacta, marcada como **`official source; Remote Dev review pending`**.
+- Una versión nueva **no se bloquea solo por no haber sido revisada todavía**. Debe superar igualmente los gates de origen/metadatos/integridad y los de credencial/limpieza posteriores al login.
+- Si los metadatos del `latest` actual no superan una comprobación obligatoria de origen, procedencia, integridad o compatibilidad, Remote Dev marca ese candidate como no disponible y mantiene utilizable la versión revisada. Nunca ejecuta un latest rechazado.
+- Primero se resuelve `latest`. Después Remote Dev descarga el `ctx7-X.Y.Z.tgz` exacto elegido, verifica sus bytes contra el `dist.integrity` seleccionado y entrega a npm únicamente ese tarball local verificado para `ctx7 login --no-browser`; nunca pide a npm ejecutar el selector mutable `ctx7@latest` ni volver a resolver `ctx7@X.Y.Z` después de verificarlo.
+- Para la versión revisada, los metadatos oficiales actuales deben coincidir tanto con la versión revisada guardada como con su SRI revisado guardado. Una diferencia hace fallar la opción reviewed.
+- Esta vinculación cubre únicamente el tarball top-level seleccionado de `ctx7`. npm todavía puede resolver y descargar dependencias transitivas efímeras según los rangos declarados por ese paquete. Remote Dev no dispone de un lockfile transitivo completo ni afirma que todos los bytes que npm ejecute posteriormente estén cubiertos por el SRI top-level.
+- Un origen, identidad, formato de versión, licencia, URL de tarball, integridad o modelo de credenciales incompatible falla de forma segura.
+
+Es el mismo principio de runtimes opcionales que usamos con Codex y Antigravity: la evidencia de revisión describe versiones conocidas, no es una allowlist de disponibilidad.
+
+## Alta mediante código de dispositivo
+
+Remote Dev invoca únicamente:
+
+```text
+ctx7 login --no-browser
+```
+
+No ejecuta `ctx7 setup`, porque ese comando puede modificar configuración MCP del agente, reglas y skills fuera del modelo de propiedad ya revisado por Remote Dev.
+
+Durante el device login, Remote Dev:
+
+- crea árboles nuevos y separados bajo `/run` para el estado de login/HOME/XDG/npm escribible por el proveedor y para el paquete verificado controlado por root;
+- utiliza HOME, configuración/estado/caché/runtime XDG, temporales, caché npm y configuraciones npm user/global nuevas;
+- fija el registro npm público y desactiva scripts de ciclo de vida, audit/fund/update noise y telemetría de Context7;
+- resuelve metadatos exactos del paquete bajo una deadline total del subproceso y descarga el tarball top-level elegido sin configuración proxy ambiental ni redirecciones bajo una deadline monotónica total de descarga;
+- verifica el SRI SHA-512 del tarball top-level, lo mantiene bajo control de root y no escribible por UID/GID 65534, y justo antes de entregar ese package spec local concreto a npm vuelve a comprobar tipo de fichero regular, propietario/grupo, modo, tamaño y SRI;
+- permite que npm resuelva dependencias transitivas efímeras desde los rangos declarados por el paquete top-level verificado; esas dependencias no están cubiertas por el SRI top-level de Remote Dev ni forman un grafo completamente bloqueado;
+- pasa explícitamente la versión de Node fijada por la imagen al shim npm/mise incluido, con resolución mise offline;
+- no entrega credenciales existentes de Codex, OpenAI, GitHub o Context7 ni usa el `CODEX_HOME` real o el proyecto como HOME/config/cwd del proveedor;
+- cuando el servicio corre como root, ejecuta npm/Context7 como UID/GID 65534, sin grupos suplementarios y con `no-new-privs`;
+- crea el proceso del proveedor en su propio grupo y con `umask 077`;
+- entrega `/dev/null` como stdin al CLI del proveedor. Remote Dev conserva el teclado y muestra **`type q and press Enter`** como método soportado de cancelación mientras espera la autorización del navegador. `Ctrl+C` queda solo como fallback porque no dependemos de cómo ttyd/tmux propaguen esa señal;
+- termina y recoge todo el grupo de procesos al cancelar o agotar tiempo, con TERM/KILL acotados;
+- valida cada componente de la ruta de credenciales sin seguir symlinks, con propietario/permisos privados y tamaño limitado;
+- acepta únicamente la API key bearer de larga duración `ctx7sk-...` que usa el flujo revisado; se rechaza estado con refresh/expiry;
+- elimina tanto el árbol del paquete controlado por root como todo el árbol transitorio de CLI/login/caché antes de pasar la clave resultante por stdin al gestor existente.
+
+La bajada a UID/GID 65534 **no es un sandbox de sistema de archivos**. Los archivos del contenedor Codex que sean legibles por ese UID/GID siguen siendo técnicamente legibles para el proceso transitorio. Utiliza la ruta manual de API key si no quieres ejecutar código transitorio de Context7 dentro del servicio Codex.
+
+Antes de cualquier trabajo transitorio de npm/proveedor, Remote Dev ejecuta únicamente el preflight de solo lectura `status --menu` del gestor existente. Un login fallido, denegado, caducado o cancelado no muta el gestor, por lo que una API key gestionada que ya funcionaba permanece intacta.
 
 ## Configuración de Codex gestionada
 
-Remote Dev solo es propietario de un bloque marcado de forma explícita dentro de `CODEX_HOME/config.toml`, que ya es persistente:
+Remote Dev solo es propietario de este bloque marcado de `CODEX_HOME/config.toml`:
 
 ```toml
 # BEGIN REMOTE DEV MANAGED CONTEXT7
@@ -43,70 +104,51 @@ required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
 
-La documentación actual de Context7 para el cliente Codex exige una cabecera HTTP llamada `CONTEXT7_API_KEY` para la autenticación mediante API key. La opción `env_http_headers` de Codex relaciona esa cabecera con el nombre de una variable de entorno, de forma que el valor secreto queda fuera del TOML y Codex envía la cabecera que espera el MCP alojado.
-
-Todo lo que quede fuera de esos marcadores se conserva. Antes de escribir, el gestor analiza el TOML existente y se niega a sobrescribir un `mcp_servers.context7` previo que no sea propiedad de Remote Dev. Si faltan marcadores, están duplicados o son ambiguos, también falla de forma segura en lugar de adivinar qué contenido puede modificar.
-
-Cuando cambia el bloque gestionado, la configuración completa anterior se guarda de forma privada en:
+Todo lo demás se conserva. Un `mcp_servers.context7` previo no gestionado, marcadores ambiguos o estado inseguro fallan de forma segura. Antes de sustituir un bloque gestionado, se guarda la configuración anterior completa y privada en:
 
 ```text
 $CODEX_HOME/config.toml.remote-dev-context7.bak
 ```
 
-El reemplazo utiliza un archivo temporal en el mismo directorio y un renombrado atómico. La configuración y la copia se restringen al usuario del servicio Codex.
-
 ## Tratamiento de la API key
 
-Context7 puede configurarse sin API key, sujeto a los límites del servicio para acceso anónimo. Si se proporciona una clave, Remote Dev solo la guarda dentro del estado persistente privado de Codex:
+Una clave gestionada, tanto manual como obtenida por device login, se almacena únicamente en:
 
 ```text
 $CODEX_HOME/.remote-dev-context7/api-key
 ```
 
-El directorio utiliza modo `0700` y la clave `0600`. Se rechazan enlaces simbólicos, archivos no regulares, propietarios incorrectos o permisos demasiado amplios.
+El directorio es `0700` y el archivo `0600`. Se rechazan symlinks, archivos no regulares, propietarios incorrectos o permisos excesivos.
 
-La clave **no** se escribe en TOML, argumentos, diagnósticos, estado del menú, issues/PR ni logs normales. Justo antes de iniciar Codex con una integración Context7 gestionada por Remote Dev, `run-codex` valida la ruta privada y exporta `CONTEXT7_API_KEY` únicamente al entorno del proceso Codex. Codex resuelve después esa variable mediante `env_http_headers` y envía su valor en la cabecera HTTP `CONTEXT7_API_KEY`. Si la integración gestionada es anónima, se elimina cualquier valor heredado accidental con ese nombre. Cuando Context7 no está gestionado por Remote Dev, el wrapper no modifica el entorno ni la configuración que pueda mantener el usuario por su cuenta.
+La clave no se escribe en TOML, argumentos, diagnósticos, estado del menú ni logs normales. `run-codex` inyecta `CONTEXT7_API_KEY` únicamente al proceso hijo Codex cuando la integración gestionada está sana. El modo anónimo gestionado elimina del hijo un valor heredado accidental del mismo nombre. La configuración Context7 no gestionada se deja intacta.
+
+El device login crea una API key en la cuenta de Context7. `remote-dev-context7 remove` elimina la copia local y el bloque gestionado, pero **no** revoca la clave en la cuenta.
 
 ## Disponibilidad y comportamiento de red
 
-La entrada MCP gestionada fija:
+La entrada MCP utiliza `required = false`, por lo que una caída de Context7 no puede convertir el contenedor Remote Dev en no saludable.
 
-```toml
-required = false
-```
+Límites de red:
 
-por lo que Context7 no es una dependencia obligatoria para arrancar Codex. Una caída de Context7 puede dejar sus herramientas de documentación sin servicio, pero no debe convertir el contenedor Remote Dev en no saludable.
+- arranque y `status`: sin petición de setup/descarga a Context7;
+- `install`/`repair` manual o anónimo: solo estado local;
+- device login: consulta explícita de metadatos del npm público y descarga/verificación transitoria del paquete top-level exacto, seguida de la resolución npm necesaria para ejecutar el paquete verificado y de la autorización por dispositivo en Context7;
+- `update`/`remove`: solo estado local;
+- `test`: comprobación explícita de configuración + `https://mcp.context7.com/ping`;
+- sesión Codex con Context7 habilitado: Codex puede contactar el MCP alojado para inicialización y herramientas.
 
-Los límites de red dependen de la acción:
+## Privacidad, términos y evidencia
 
-- arranque del contenedor sin Context7 gestionado: ninguna petición de instalación/configuración a Context7;
-- `remote-dev-context7 status`: sin red hacia Context7;
-- `install`, `repair`, `update`, `remove`: solo configuración/estado; no descargan paquetes Context7;
-- `test`: comprobación explícita de la configuración con el Codex incluido y de `https://mcp.context7.com/ping`;
-- una sesión normal de Codex después de habilitar Context7: Codex puede contactar el MCP alojado durante la inicialización y el uso normal de sus herramientas.
+Context7 es un servicio externo. Las consultas de documentación generadas por MCP deben considerarse datos comunicados a Context7/Upstash; no envíes datos sensibles, sanitarios, de pago u otros regulados mediante esta integración. La salida de Context7 puede ser incompleta o incorrecta y la documentación subyacente conserva sus propias licencias.
 
-La build de imagen crea además una configuración temporal anónima y exige que el binario exacto de Codex incluido analice y describa ese único servidor mediante la ruta exclusivamente local `codex mcp get context7 --json`. Así se evita tanto el descubrimiento de autenticación MCP con capacidad de red como depender de `codex mcp add --url` como primitiva de escritura de confianza.
+El flujo oficial de dispositivo envía el hostname del contenedor de forma best-effort con la autorización para que la página del navegador identifique el dispositivo. Tras aprobarlo, el CLI usa la nueva clave para `whoami` y puede mostrar identidad/teamspace localmente. Remote Dev no persiste esa salida.
 
-## Privacidad, términos y licencias de documentación
+**Nunca incluyas códigos de dispositivo, URLs únicas de autorización, API keys, identificadores de cuenta, emails ni nombres de teamspace en evidencia de issues/PR.**
 
-Habilitar Context7 introduce un límite de servicio externo. Según la documentación oficial de Context7/Upstash revisada para el issue #94:
-
-- Remote Dev no envía intencionadamente a Context7 el prompt original completo, archivos de código ni la conversación; Codex formula peticiones MCP de documentación y el texto de consulta que envía debe considerarse igualmente dato comunicado a un servicio externo;
-- una petición MCP mediante Streamable HTTP puede incluir la consulta de documentación y los identificadores de librería, además de metadatos HTTP/MCP normales generados por el cliente Codex configurado, como identidad/versión del cliente y cabeceras de protocolo/transporte; en modo autenticado se envía además la cabecera `CONTEXT7_API_KEY`;
-- esas consultas generadas por MCP pueden procesarse para recuperación/reranking y almacenarse de forma anónima para evaluar la calidad de recuperación;
-- Context7 documenta una retención de 30 días para logs de API;
-- no se deben enviar datos sensibles, sanitarios, de pago u otros datos regulados mediante el servicio;
-- la respuesta de Context7 puede ser incompleta o incorrecta y debe verificarse antes de utilizarla en producción;
-- la documentación original devuelta por Context7 conserva sus propios derechos de autor y licencias.
-
-El uso del servicio alojado queda sujeto al **Context7 Addendum**, los **Upstash Terms of Service** y la **Upstash Privacy Policy** vigentes. Remote Dev no está afiliado ni respaldado por Upstash, Context7 u OpenAI.
-
-La revisión legal/de privacidad de este diseño MCP alojado y acotado está registrada en el tracker permanente #53. Será necesaria una nueva revisión si Remote Dev empieza a redistribuir código/paquetes de Context7, cambia el transporte/autenticación o amplía materialmente los datos enviados al servicio.
+El uso del servicio/flujo de dispositivo sigue sujeto al Context7 Addendum, Upstash Terms of Service y Upstash Privacy Policy vigentes. El registro legal/de privacidad permanente está en #53. La revisión del 17/08/2026 acepta `ctx7@0.5.8` como versión revisada para login y registra el modelo explícito revisada-vs-última-oficial. Un cambio material de origen, licencia, autenticación/ciclo de credenciales, estado retenido, divulgación o acceso a filesystem/credenciales sigue exigiendo revisión en #53.
 
 ## Eliminación y recuperación
 
-Como no se instala ningún runtime/paquete local de Context7, `remote-dev-context7 remove` es el equivalente a desinstalar esta integración. Elimina únicamente el bloque marcado como propiedad de Remote Dev y el archivo de API key propiedad de Remote Dev. No borra otros servidores MCP, `AGENTS.md`, instrucciones de Codex, skills, sesiones, autenticación ni una configuración Context7 no gestionada.
+Como no se conserva ningún CLI/runtime de Context7, `remote-dev-context7 remove` es el equivalente local a desinstalarlo. Solo elimina configuración/clave de Context7 propiedad de Remote Dev y no toca otros servidores MCP, sesiones, proyectos, skills ni configuración no gestionada.
 
-Si los marcadores de propiedad son ambiguos, la eliminación se detiene. Revisa la configuración y, si corresponde, restaura la copia privada antes de volver a intentarlo.
-
-Eliminar Context7 no afecta al Codex CLI inmutable incluido ni al runtime opcional separado que gestiona `remote-dev-codex-runtime`.
+Eliminar Context7 no afecta al Codex CLI inmutable incluido ni al runtime opcional de Codex gestionado por `remote-dev-codex-runtime`.

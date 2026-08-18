@@ -63,10 +63,11 @@ if [[ -s "$versions" ]]; then
   version_keys="$(
     sed -nE 's/^([A-Z0-9_]+_(VERSION|RELEASE_TAG))=.*/\1/p' "$versions" \
       | grep -v '^BASE_VERSION$' \
+      | grep -v '^CONTEXT7_CLI_VERSION$' \
       | LC_ALL=C sort -u
   )"
   if [[ "$inventory_keys" != "$version_keys" ]]; then
-    echo "ERROR: tool version keys in versions.env and third_party/inventory.json differ" >&2
+    echo "ERROR: distributed tool version keys in versions.env and third_party/inventory.json differ" >&2
     diff -u <(printf '%s\n' "$version_keys") <(printf '%s\n' "$inventory_keys") >&2 || true
     exit 1
   fi
@@ -109,4 +110,4 @@ done < <(
   ' "$inventory"
 )
 
-printf 'Third-party inventory: OK (%s components)\n' "$(jq '.components | length' "$inventory")"
+printf 'Third-party inventory: OK (%s distributed components)\n' "$(jq '.components | length' "$inventory")"
