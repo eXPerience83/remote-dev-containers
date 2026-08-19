@@ -13,6 +13,7 @@ from typing import Any
 EXPECTED_MANAGERS = ["dockerfile", "github-actions", "custom.regex"]
 UBUNTU_NAMES = ["ubuntu", "docker.io/library/ubuntu"]
 UBUNTU_FILES = ["versions.env", "images/base/Dockerfile"]
+UBUNTU_FROM = "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}"
 DOCKERFILE_FRONTEND_PACKAGE = "docker/dockerfile"
 DOCKERFILE_DEFAULT_DENY = {
     "description": "Deny native Dockerfile ownership unless a later repository rule explicitly allows it",
@@ -123,6 +124,10 @@ def validate_repository(root: Path, config: dict[str, Any]) -> None:
     require(len(set(ubuntu_matches)) == 1, "Ubuntu version/digest sources are not synchronized")
 
     dockerfile = (root / "images/base/Dockerfile").read_text(encoding="utf-8")
+    require(
+        dockerfile.splitlines().count(UBUNTU_FROM) == 1,
+        "the synchronized Ubuntu base-image consumer must appear exactly once",
+    )
     require(re.search(r"^# syntax=docker/dockerfile:[^\s@]+@sha256:[a-f0-9]{64}$", dockerfile, re.MULTILINE) is not None,
             "pinned Dockerfile frontend discovery anchor is missing")
 

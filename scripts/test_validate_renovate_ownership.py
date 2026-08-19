@@ -74,6 +74,17 @@ class RenovateOwnershipTests(unittest.TestCase):
             )
         )
 
+    def test_frontend_allow_is_required(self) -> None:
+        self.assert_rejected(
+            lambda config: config.update(
+                packageRules=[
+                    rule
+                    for rule in config["packageRules"]
+                    if rule != VALIDATOR.DOCKERFILE_FRONTEND_ALLOW
+                ]
+            )
+        )
+
     def test_frontend_allow_cannot_be_broadened(self) -> None:
         def broaden_frontend_allow(config) -> None:
             rule = next(rule for rule in config["packageRules"] if rule.get("enabled") is True)
@@ -140,6 +151,28 @@ class RenovateOwnershipTests(unittest.TestCase):
             dockerfile = root / "images/base/Dockerfile"
             dockerfile.write_text(
                 dockerfile.read_text(encoding="utf-8").replace("ARG UBUNTU_VERSION=", "ARG DISTRO_VERSION="),
+                encoding="utf-8",
+            )
+            with self.assertRaises(VALIDATOR.OwnershipError):
+                VALIDATOR.validate(root)
+
+    def test_ubuntu_from_must_consume_synchronized_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "images/base").mkdir(parents=True)
+            (root / ".github/workflows").mkdir(parents=True)
+            for relative in ("renovate.json", "versions.env", "images/base/Dockerfile"):
+                source = ROOT / relative
+                target = root / relative
+                target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            (root / ".github/workflows/test.yml").write_text(
+                "steps:\n  - uses: actions/checkout@" + "a" * 40 + " # v4\n", encoding="utf-8"
+            )
+            dockerfile = root / "images/base/Dockerfile"
+            dockerfile.write_text(
+                dockerfile.read_text(encoding="utf-8").replace(
+                    VALIDATOR.UBUNTU_FROM, "FROM example/unowned-image:fixed"
+                ),
                 encoding="utf-8",
             )
             with self.assertRaises(VALIDATOR.OwnershipError):
