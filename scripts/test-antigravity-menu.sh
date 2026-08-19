@@ -176,3 +176,19 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
 fi
 
 echo 'Codex-aligned vendor-native Antigravity resume menu: OK'
+
+mkdir -p "$workdir/workspace/second-project"
+rm -f "$invocations" "$hardening_calls"
+printf '3\n1\n2\n1\n1\n12\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+
+mapfile -t calls <"$invocations"
+[[ "${#calls[@]}" == 1 ]]
+[[ "${calls[0]}" == '[project=second-project]' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq 'Project: second-project' "$output"
+echo 'Successful project selection returns to Antigravity for immediate Start: OK'
