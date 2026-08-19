@@ -136,7 +136,7 @@ class RenovateOwnershipTests(unittest.TestCase):
     def test_extra_custom_runtime_manager_is_rejected(self) -> None:
         self.assert_rejected(lambda config: config["customManagers"].append({"customType": "regex"}))
 
-    def test_ubuntu_regex_must_match_both_sources(self) -> None:
+    def test_ubuntu_values_must_remain_synchronized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "images/base").mkdir(parents=True)
@@ -149,8 +149,15 @@ class RenovateOwnershipTests(unittest.TestCase):
                 "steps:\n  - uses: actions/checkout@" + "a" * 40 + " # v4\n", encoding="utf-8"
             )
             dockerfile = root / "images/base/Dockerfile"
+            version_line = next(
+                line
+                for line in (root / "versions.env").read_text(encoding="utf-8").splitlines()
+                if line.startswith("UBUNTU_VERSION=")
+            )
             dockerfile.write_text(
-                dockerfile.read_text(encoding="utf-8").replace("ARG UBUNTU_VERSION=", "ARG DISTRO_VERSION="),
+                dockerfile.read_text(encoding="utf-8").replace(
+                    f"ARG {version_line}", "ARG UBUNTU_VERSION=99.98", 1
+                ),
                 encoding="utf-8",
             )
             with self.assertRaises(VALIDATOR.OwnershipError):
