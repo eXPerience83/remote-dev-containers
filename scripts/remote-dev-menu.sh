@@ -262,7 +262,7 @@ create_project_action() {
   else
     action_status=$?
   fi
-  pause_for_menu "Press Enter to return to the Projects menu..."
+  pause_for_menu "Press Enter to continue..."
   return "$action_status"
 }
 
@@ -324,10 +324,14 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if select_project_action; then :; fi
+        if select_project_action; then
+          return 0
+        fi
         ;;
       2)
-        if create_project_action; then :; fi
+        if create_project_action; then
+          return 0
+        fi
         ;;
       3)
         if delete_project_action; then :; fi
