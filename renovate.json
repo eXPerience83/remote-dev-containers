@@ -4,6 +4,12 @@
     "config:recommended",
     "helpers:pinGitHubActionDigests"
   ],
+  "automerge": false,
+  "enabledManagers": [
+    "dockerfile",
+    "github-actions",
+    "custom.regex"
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -20,6 +26,17 @@
     }
   ],
   "packageRules": [
+    {
+      "description": "Ubuntu is owned by the synchronized custom manager, not the native Dockerfile manager",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "ubuntu",
+        "docker.io/library/ubuntu"
+      ],
+      "enabled": false
+    },
     {
       "description": "Track Ubuntu LTS releases only and group all base-image references",
       "matchDatasources": [

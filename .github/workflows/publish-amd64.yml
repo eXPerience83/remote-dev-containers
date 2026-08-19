@@ -49,6 +49,7 @@ jobs:
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
+          python3 scripts/validate-renovate-ownership.py --root .
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
