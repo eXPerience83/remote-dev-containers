@@ -325,9 +325,9 @@ run_menu() {
     REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls"
   )
   if [[ "$deployment_mode" == __unset__ ]]; then
-    printf '%s' "$input" | env -u REMOTE_DEV_CODEX_APPROVAL_MODE "${common_env[@]}" "$fixture_menu" > "$output_file" 2>&1
+    printf '%s' "$input" | env -u REMOTE_DEV_CODEX_APPROVAL_MODE "${common_env[@]}" timeout --foreground 30s "$fixture_menu" > "$output_file" 2>&1
   else
-    printf '%s' "$input" | env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" "${common_env[@]}" "$fixture_menu" > "$output_file" 2>&1
+    printf '%s' "$input" | env REMOTE_DEV_CODEX_APPROVAL_MODE="$deployment_mode" "${common_env[@]}" timeout --foreground 30s "$fixture_menu" > "$output_file" 2>&1
   fi
 }
 
