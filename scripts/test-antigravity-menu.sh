@@ -192,3 +192,21 @@ mapfile -t calls <"$invocations"
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Antigravity for immediate Start: OK'
+
+rm -f "$invocations" "$hardening_calls"
+printf '3\n2\ncreated-project\n\n1\n1\n12\n' | env \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+
+created_project_path="$workdir/workspace/created-project"
+[[ -d "$created_project_path" ]]
+mapfile -t calls <"$invocations"
+[[ "${#calls[@]}" == 1 ]]
+[[ "${calls[0]}" == '[project=created-project]' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fq "Created project: $created_project_path" "$output"
+grep -Fxq 'Project: created-project' "$output"
+echo 'Successful project creation returns to Antigravity for immediate Start: OK'
