@@ -29,8 +29,10 @@ The normal Codex flow is:
 1. Open the Remote Dev launcher and then the Codex terminal.
 2. Open **Projects...** from the Codex menu.
 3. Select an existing project or create a new one.
-4. Return to the Codex menu and verify the `Project:` line.
+4. After a successful selection or creation, Remote Dev returns to the Codex menu; verify the `Project:` line.
 5. Choose **Start Codex** or **Resume a Codex session (current project)**.
+
+Cancelled, invalid or failed Select/Create actions stay in **Projects...** so you can retry or go Back deliberately. Delete also stays in **Projects...** after the operation so you can inspect or continue managing the remaining projects.
 
 Project discovery is intentionally non-recursive:
 
