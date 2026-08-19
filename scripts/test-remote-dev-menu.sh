@@ -434,17 +434,55 @@ grep -Fq 'ERROR: Codex (guarded) exited with status 42' "$output"
 
 echo 'Failed and successful action result pauses: OK'
 
-# Exercise create, explicit selection, and exact-name deletion through the shared
-# Projects menu without changing the persistent active-project contract.
-run_menu __unset__ $'3\n2\nnew-project\n\n1\n2\n4\n1\n1\n12\n' "$output"
-assert_file_lines "$invocations" 'selected existing project after create' "[--cd][$project_path]"
-[[ -d "$workdir/workspace/new-project" ]]
-grep -Fq "Created project: $workdir/workspace/new-project" "$output"
+new_project_path="$workdir/workspace/new-project"
+run_menu __unset__ $'3\n2\nnew-project\n\n1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'created project immediate start' "[--cd][$new_project_path]"
+[[ -d "$new_project_path" ]]
+grep -Fq "Created project: $new_project_path" "$output"
+grep -Fq 'Press Enter to continue...' "$fixture_menu"
+echo 'Successful project create returns to Codex with the new project active: OK'
+
+second_project_path="$workdir/workspace/second-project"
+mkdir -p "$second_project_path"
+run_menu __unset__ $'3\n1\n3\n1\n1\n12\n' "$output"
+assert_file_lines "$invocations" 'selected project immediate start' "[--cd][$second_project_path]"
+grep -Fxq 'Project: second-project' "$output"
+echo 'Successful project selection returns to Codex for immediate Start: OK'
+rm -rf -- "$second_project_path"
 
 run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n12\n' "$output"
-[[ ! -e "$workdir/workspace/new-project" ]]
+assert_file_lines "$invocations" 'project deletion navigation'
+[[ ! -e "$new_project_path" ]]
 grep -Fxq 'Deleted project: new-project' "$output"
-echo 'Projects menu create/select/delete flow: OK'
+if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
+  echo 'ERROR: successful deletion did not remain in the Projects menu' >&2
+  exit 1
+fi
+echo 'Successful project deletion remains in Projects: OK'
+
+run_menu __unset__ $'3\n1\n2\n4\n12\n' "$output"
+assert_file_lines "$invocations" 'cancelled project selection'
+if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
+  echo 'ERROR: cancelled project selection did not remain in Projects' >&2
+  exit 1
+fi
+echo 'Cancelled project selection remains in Projects: OK'
+
+run_menu __unset__ $'3\n1\ninvalid\n4\n12\n' "$output"
+assert_file_lines "$invocations" 'invalid project selection'
+if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
+  echo 'ERROR: invalid project selection did not remain in Projects' >&2
+  exit 1
+fi
+echo 'Invalid project selection remains in Projects: OK'
+
+run_menu __unset__ $'3\n2\nproject\n\n4\n12\n' "$output"
+assert_file_lines "$invocations" 'failed project creation'
+if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
+  echo 'ERROR: failed project creation did not remain in Projects' >&2
+  exit 1
+fi
+echo 'Failed project creation remains in Projects: OK'
 
 # A discovery failure on initial render must remain a real menu failure, never
 # degrade into the ordinary zero-project state or permit an agent launch.
