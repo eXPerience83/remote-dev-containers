@@ -27,15 +27,21 @@
   ],
   "packageRules": [
     {
-      "description": "Ubuntu is owned by the synchronized custom manager, not the native Dockerfile manager",
+      "description": "Deny native Dockerfile ownership unless a later repository rule explicitly allows it",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Allow only the pinned Dockerfile frontend through the native Dockerfile manager",
       "matchManagers": [
         "dockerfile"
       ],
       "matchPackageNames": [
-        "ubuntu",
-        "docker.io/library/ubuntu"
+        "docker/dockerfile"
       ],
-      "enabled": false
+      "enabled": true
     },
     {
       "description": "Track Ubuntu LTS releases only and group all base-image references",
@@ -56,6 +62,13 @@
         "mise"
       ],
       "enabled": false
+    },
+    {
+      "description": "Repository policy requires human merge review for every Renovate dependency",
+      "matchPackageNames": [
+        "*"
+      ],
+      "automerge": false
     }
   ]
 }

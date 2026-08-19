@@ -35,6 +35,22 @@ class RenovateOwnershipTests(unittest.TestCase):
     def test_automerge_cannot_be_enabled(self) -> None:
         self.assert_rejected(lambda config: config.update(automerge=True))
 
+    def test_terminal_automerge_guard_is_required(self) -> None:
+        self.assert_rejected(lambda config: config["packageRules"].pop())
+
+    def test_terminal_automerge_guard_must_be_last(self) -> None:
+        self.assert_rejected(lambda config: config["packageRules"].append({"matchManagers": ["github-actions"]}))
+
+    def test_terminal_automerge_guard_cannot_enable_automerge(self) -> None:
+        self.assert_rejected(lambda config: config["packageRules"][-1].update(automerge=True))
+
+    def test_local_package_rule_cannot_enable_automerge(self) -> None:
+        self.assert_rejected(
+            lambda config: config["packageRules"].insert(
+                -1, {"matchManagers": ["github-actions"], "automerge": True}
+            )
+        )
+
     def test_unapproved_managers_are_rejected(self) -> None:
         for manager in ("npm", "mise", "docker-compose"):
             with self.subTest(manager=manager):
@@ -47,17 +63,61 @@ class RenovateOwnershipTests(unittest.TestCase):
             )
         )
 
-    def test_native_ubuntu_overlap_is_rejected(self) -> None:
-        def enable_native(config) -> None:
-            rule = next(
-                rule
-                for rule in config["packageRules"]
-                if rule.get("matchManagers") == ["dockerfile"]
-                and rule.get("matchPackageNames") == VALIDATOR.UBUNTU_NAMES
+    def test_native_dockerfile_default_deny_is_required(self) -> None:
+        self.assert_rejected(
+            lambda config: config.update(
+                packageRules=[
+                    rule
+                    for rule in config["packageRules"]
+                    if rule != VALIDATOR.DOCKERFILE_DEFAULT_DENY
+                ]
             )
-            rule["enabled"] = True
+        )
 
-        self.assert_rejected(enable_native)
+    def test_frontend_allow_cannot_be_broadened(self) -> None:
+        def broaden_frontend_allow(config) -> None:
+            rule = next(rule for rule in config["packageRules"] if rule.get("enabled") is True)
+            rule["matchPackageNames"].append("example/unapproved-image")
+
+        self.assert_rejected(broaden_frontend_allow)
+
+    def test_unapproved_native_dockerfile_dependency_cannot_be_enabled(self) -> None:
+        self.assert_rejected(
+            lambda config: config["packageRules"].insert(
+                -1,
+                {
+                    "matchManagers": ["dockerfile"],
+                    "matchPackageNames": ["example/unapproved-image"],
+                    "enabled": True,
+                },
+            )
+        )
+
+    def test_ubuntu_cannot_be_enabled_through_native_dockerfile_manager(self) -> None:
+        self.assert_rejected(
+            lambda config: config["packageRules"].insert(
+                -1,
+                {
+                    "matchManagers": ["dockerfile"],
+                    "matchPackageNames": ["ubuntu"],
+                    "enabled": True,
+                },
+            )
+        )
+
+    def test_frontend_allow_must_follow_default_deny(self) -> None:
+        def move_default_deny_after_allow(config) -> None:
+            rules = config["packageRules"]
+            default_deny = next(
+                rule
+                for rule in rules
+                if rule == VALIDATOR.DOCKERFILE_DEFAULT_DENY
+            )
+            rules.remove(default_deny)
+            allow_index = next(index for index, rule in enumerate(rules) if rule.get("enabled") is True)
+            rules.insert(allow_index + 1, default_deny)
+
+        self.assert_rejected(move_default_deny_after_allow)
 
     def test_non_object_custom_manager_is_rejected(self) -> None:
         self.assert_rejected(lambda config: config.update(customManagers=[None]))

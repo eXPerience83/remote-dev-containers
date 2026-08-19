@@ -13,6 +13,23 @@ from typing import Any
 EXPECTED_MANAGERS = ["dockerfile", "github-actions", "custom.regex"]
 UBUNTU_NAMES = ["ubuntu", "docker.io/library/ubuntu"]
 UBUNTU_FILES = ["versions.env", "images/base/Dockerfile"]
+DOCKERFILE_FRONTEND_PACKAGE = "docker/dockerfile"
+DOCKERFILE_DEFAULT_DENY = {
+    "description": "Deny native Dockerfile ownership unless a later repository rule explicitly allows it",
+    "matchManagers": ["dockerfile"],
+    "enabled": False,
+}
+DOCKERFILE_FRONTEND_ALLOW = {
+    "description": "Allow only the pinned Dockerfile frontend through the native Dockerfile manager",
+    "matchManagers": ["dockerfile"],
+    "matchPackageNames": [DOCKERFILE_FRONTEND_PACKAGE],
+    "enabled": True,
+}
+TERMINAL_AUTOMERGE_GUARD = {
+    "description": "Repository policy requires human merge review for every Renovate dependency",
+    "matchPackageNames": ["*"],
+    "automerge": False,
+}
 UBUNTU_PATTERN = (
     r"(?:# renovate: datasource=docker depName=ubuntu versioning=ubuntu\n)?"
     r"(?:ARG )?UBUNTU_VERSION=(?<currentValue>\d+\.\d+)\n"
@@ -50,16 +67,46 @@ def validate_config(config: dict[str, Any]) -> None:
     require(manager.get("depNameTemplate") == "ubuntu", "Ubuntu dependency name changed")
     require(manager.get("versioningTemplate") == "ubuntu", "Ubuntu versioning must be ubuntu")
 
-    native_exclusions = matching_rules(
-        config,
-        matchManagers=["dockerfile"],
-        matchPackageNames=UBUNTU_NAMES,
-        enabled=False,
-    )
-    require(len(native_exclusions) == 1, "native Dockerfile Ubuntu ownership must be disabled exactly once")
-
     mise_exclusions = matching_rules(config, matchManagers=["mise"], enabled=False)
     require(len(mise_exclusions) == 1, "native mise ownership must remain disabled exactly once")
+
+    rules = config.get("packageRules")
+    require(isinstance(rules, list) and len(rules) > 0, "packageRules must be a non-empty list")
+
+    default_deny_indexes = [
+        index
+        for index, rule in enumerate(rules)
+        if isinstance(rule, dict) and rule == DOCKERFILE_DEFAULT_DENY
+    ]
+    require(len(default_deny_indexes) == 1, "native Dockerfile ownership must be denied by default exactly once")
+
+    frontend_allow_indexes = [
+        index
+        for index, rule in enumerate(rules)
+        if isinstance(rule, dict) and rule == DOCKERFILE_FRONTEND_ALLOW
+    ]
+    require(len(frontend_allow_indexes) == 1, "the pinned Dockerfile frontend must be explicitly enabled exactly once")
+    require(
+        default_deny_indexes[0] < frontend_allow_indexes[0],
+        "the native Dockerfile default-deny rule must precede the frontend allow rule",
+    )
+
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("enabled") is not True:
+            continue
+        require(
+            rule == DOCKERFILE_FRONTEND_ALLOW,
+            "only the pinned Dockerfile frontend may be explicitly enabled",
+        )
+
+    require(
+        all(rule.get("automerge") is not True for rule in rules if isinstance(rule, dict)),
+        "no packageRule may enable automerge",
+    )
+    require(
+        isinstance(rules[-1], dict) and rules[-1] == TERMINAL_AUTOMERGE_GUARD,
+        "the terminal match-all no-automerge guard must be the final package rule",
+    )
 
 
 def validate_repository(root: Path, config: dict[str, Any]) -> None:
