@@ -42,6 +42,7 @@ def validate_config(config: dict[str, Any]) -> None:
     managers = config.get("customManagers")
     require(isinstance(managers, list) and len(managers) == 1, "exactly one custom manager is allowed")
     manager = managers[0]
+    require(isinstance(manager, dict), "the custom manager must be an object")
     require(manager.get("customType") == "regex", "the custom manager must be regex")
     require(manager.get("managerFilePatterns") == [r"/^(?:versions\.env|images/base/Dockerfile)$/"], "Ubuntu manager file scope changed")
     require(manager.get("matchStrings") == [UBUNTU_PATTERN], "Ubuntu manager match contract changed")

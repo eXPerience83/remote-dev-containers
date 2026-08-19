@@ -41,12 +41,26 @@ class RenovateOwnershipTests(unittest.TestCase):
                 self.assert_rejected(lambda config, value=manager: config["enabledManagers"].append(value))
 
     def test_missing_mise_exclusion_is_rejected(self) -> None:
-        self.assert_rejected(lambda config: config.update(packageRules=config["packageRules"][:-1]))
+        self.assert_rejected(
+            lambda config: config.update(
+                packageRules=[rule for rule in config["packageRules"] if rule.get("matchManagers") != ["mise"]]
+            )
+        )
 
     def test_native_ubuntu_overlap_is_rejected(self) -> None:
         def enable_native(config) -> None:
-            config["packageRules"][0]["enabled"] = True
+            rule = next(
+                rule
+                for rule in config["packageRules"]
+                if rule.get("matchManagers") == ["dockerfile"]
+                and rule.get("matchPackageNames") == VALIDATOR.UBUNTU_NAMES
+            )
+            rule["enabled"] = True
+
         self.assert_rejected(enable_native)
+
+    def test_non_object_custom_manager_is_rejected(self) -> None:
+        self.assert_rejected(lambda config: config.update(customManagers=[None]))
 
     def test_extra_custom_runtime_manager_is_rejected(self) -> None:
         self.assert_rejected(lambda config: config["customManagers"].append({"customType": "regex"}))
