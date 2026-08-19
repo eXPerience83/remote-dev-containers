@@ -383,6 +383,7 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes. Pull requests u
 - `docs/decisions.md`
 - `docs/releases.md`
 - `docs/runtime-locks.md`
+- `docs/dependency-automation.md`
 - `docs/user-guide.md`
 - `docs/user-guide.es.md`
 - `docs/codex-runtime-updates.md`

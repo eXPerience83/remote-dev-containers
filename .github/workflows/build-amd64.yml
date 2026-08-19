@@ -51,7 +51,9 @@ jobs:
             scripts/test_sync_standalone_artifact_inspection.py \
             scripts/validate-standalone-artifact-inspection.py \
             scripts/test_validate_standalone_artifact_inspection.py \
-            scripts/validate-release-channel-contract.py
+            scripts/validate-release-channel-contract.py \
+            scripts/validate-renovate-ownership.py \
+            scripts/test_validate_renovate_ownership.py
           make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-remote-dev-context7.py
@@ -78,6 +80,8 @@ jobs:
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
+          python3 scripts/validate-renovate-ownership.py --root .
+          python3 scripts/test_validate_renovate_ownership.py
           jq -e '.schema_version == 2 and .blocking_findings == []' \
             third_party/antigravity-cli-inspection.json >/dev/null
           for file in compose/*.yml; do

@@ -51,6 +51,7 @@ jobs:
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
+          python3 scripts/validate-renovate-ownership.py --root .
           for file in compose/*.yml; do
             docker compose -f "$file" config --quiet
             echo "OK $file"

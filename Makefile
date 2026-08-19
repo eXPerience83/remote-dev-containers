@@ -34,7 +34,7 @@ agent-contract-tests:
 
 validate: agent-contract-tests
 	bash -n scripts/*.sh scripts/lib/*.sh scripts/fixtures/*.sh
-	python3 -m py_compile scripts/remote-dev-launcher.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py
+	python3 -m py_compile scripts/remote-dev-launcher.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py
 	REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh bash scripts/test-image-name-compat.sh
 	bash scripts/test-compose-image-compat.sh
 	REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py bash scripts/test-remote-dev-launcher.sh
@@ -44,6 +44,8 @@ validate: agent-contract-tests
 	python3 scripts/test_inspect_antigravity_cli.py
 	bash scripts/validate-version-pins.sh
 	jq -e . renovate.json >/dev/null
+	python3 scripts/validate-renovate-ownership.py --root .
+	python3 scripts/test_validate_renovate_ownership.py
 	jq -e '.schema_version == 2 and .blocking_findings == []' third_party/antigravity-cli-inspection.json >/dev/null
 	@for file in compose/*.yml; do docker compose -f "$$file" config --quiet; echo "OK $$file"; done
 
