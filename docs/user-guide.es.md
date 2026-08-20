@@ -29,8 +29,12 @@ El flujo normal de Codex es:
 1. Abre el launcher de Remote Dev y después el terminal de Codex.
 2. Entra en **Projects...** desde el menú de Codex.
 3. Selecciona un proyecto existente o crea uno nuevo.
-4. Vuelve al menú de Codex y comprueba la línea `Project:`.
+4. Tras seleccionar o crear correctamente el proyecto, Remote Dev vuelve al menú de Codex; comprueba la línea `Project:`.
 5. Elige **Start Codex** o **Resume a Codex session (current project)**.
+
+Antigravity usa el mismo contrato de navegación de **Projects...**: tras una acción Select/Create correcta, Remote Dev vuelve al menú de Antigravity con ese proyecto activo para que puedas elegir **Start Antigravity** o **Continue latest Antigravity conversation (current project)**.
+
+Las acciones Select/Create canceladas, inválidas o fallidas permanecen en **Projects...** para que puedas reintentarlas o usar Back de forma explícita. Delete también permanece en **Projects...** después de la operación para que puedas revisar o seguir gestionando los proyectos restantes.
 
 La detección de proyectos es deliberadamente no recursiva:
 

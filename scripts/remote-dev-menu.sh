@@ -262,7 +262,7 @@ create_project_action() {
   else
     action_status=$?
   fi
-  pause_for_menu "Press Enter to return to the Projects menu..."
+  pause_for_menu "Press Enter to continue..."
   return "$action_status"
 }
 
@@ -324,10 +324,14 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if select_project_action; then :; fi
+        if select_project_action; then
+          return 0
+        fi
         ;;
       2)
-        if create_project_action; then :; fi
+        if create_project_action; then
+          return 0
+        fi
         ;;
       3)
         if delete_project_action; then :; fi
@@ -556,8 +560,8 @@ ${project_summary}
 2) Resume a Codex session (current project)
 3) Projects...
 4) Approval mode for next launch...
-5) Update optional Codex runtime from official OpenAI release
-6) Remove optional Codex runtime (use bundled fallback)
+5) Update Codex from official OpenAI release
+6) Remove Codex update (use bundled fallback)
 7) Context7 integration...
 8) Sign in to Codex with device code
 9) Sign in to GitHub CLI
