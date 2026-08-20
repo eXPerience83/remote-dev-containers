@@ -88,6 +88,17 @@ def mount_sources(service: dict[str, object], target: str | None = None) -> list
     return sources
 
 
+def mount_targets(service: dict[str, object]) -> list[str]:
+    targets: list[str] = []
+    for mount in service.get("volumes", []):
+        if not isinstance(mount, dict):
+            continue
+        target = mount.get("target")
+        if target is not None:
+            targets.append(str(target))
+    return targets
+
+
 def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
     sources: list[str] = []
     expected_name = target.removeprefix("/run/secrets/")
@@ -226,9 +237,16 @@ def validate(path: Path, config: dict[str, object]) -> None:
         require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
         require(service.get("network_mode") != "host", f"{path}: {name} host network")
         require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
+        environment = service.get("environment")
+        require(isinstance(environment, dict), f"{path}: {name} environment")
+        require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
         for source in mount_sources(service):
             lowered = source.lower()
             require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
+        for target in mount_targets(service):
+            require(target not in {"/", "/root", "/home", "/opt", "/usr/local"}, f"{path}: {name} broad mount target {target}")
+            require("tmux" not in target.lower(), f"{path}: {name} tmux mount {target}")
+            require("control" not in target.lower(), f"{path}: {name} control mount {target}")
 
     require(launcher.get("container_name") == "remote-dev-launcher", f"{path}: launcher name")
     require(codex.get("container_name") == "codex-remote-dev", f"{path}: Codex name")
