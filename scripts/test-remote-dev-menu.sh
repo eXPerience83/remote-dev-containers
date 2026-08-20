@@ -439,7 +439,7 @@ run_menu __unset__ $'3\n2\nnew-project\n\n1\n1\n12\n' "$output"
 assert_file_lines "$invocations" 'created project immediate start' "[--cd][$new_project_path]"
 [[ -d "$new_project_path" ]]
 grep -Fq "Created project: $new_project_path" "$output"
-grep -Fq 'Press Enter to continue...' "$fixture_menu"
+grep -Fq 'Press Enter to continue...' "$output"
 echo 'Successful project create returns to Codex with the new project active: OK'
 
 second_project_path="$workdir/workspace/second-project"
