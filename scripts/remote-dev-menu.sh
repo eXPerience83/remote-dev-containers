@@ -560,8 +560,8 @@ ${project_summary}
 2) Resume a Codex session (current project)
 3) Projects...
 4) Approval mode for next launch...
-5) Update optional Codex runtime from official OpenAI release
-6) Remove optional Codex runtime (use bundled fallback)
+5) Update Codex from official OpenAI release
+6) Remove Codex update (use bundled fallback)
 7) Context7 integration...
 8) Sign in to Codex with device code
 9) Sign in to GitHub CLI
