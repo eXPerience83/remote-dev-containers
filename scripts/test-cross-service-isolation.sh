@@ -45,6 +45,7 @@ launcher_id=""
 codex_id=""
 antigravity_id=""
 cleanup_helper_id=""
+readonly cleanup_helper_timeout_seconds=30
 
 validate_test_root() {
   case "$test_root" in
@@ -138,22 +139,29 @@ prepare_network_name() {
   }
 }
 
-remove_owned_container() {
+owned_container_matches() {
   local name="$1"
   local expected_id="$2"
   local actual_id=""
   local observed_label=""
+  [[ -n "$expected_id" ]] || return 1
+  actual_id="$(docker container inspect --format '{{.Id}}' "$name" 2>/dev/null)" || return 1
+  observed_label="$(container_label "$name")" || return 1
+  [[ "$actual_id" == "$expected_id" && "$observed_label" == "$run_id" ]]
+}
+
+remove_owned_container() {
+  local name="$1"
+  local expected_id="$2"
   [[ -n "$expected_id" ]] || return 0
   if ! docker container inspect "$name" >/dev/null 2>&1; then
     return 0
   fi
-  actual_id="$(docker container inspect --format '{{.Id}}' "$name")" || return 1
-  observed_label="$(container_label "$name")" || return 1
-  [[ "$actual_id" == "$expected_id" && "$observed_label" == "$run_id" ]] || {
+  owned_container_matches "$name" "$expected_id" || {
     echo "ERROR: refusing to remove a fixture container without matching ID and ownership" >&2
     return 1
   }
-  docker rm -f "$actual_id" >/dev/null
+  docker rm -f "$expected_id" >/dev/null
 }
 
 remove_owned_network() {
@@ -170,6 +178,61 @@ remove_owned_network() {
     return 1
   }
   docker network rm "$actual_id" >/dev/null
+}
+
+run_cleanup_helper() {
+  local helper_state=""
+  local attempt=0
+
+  owned_container_matches "$cleanup_name" "$cleanup_helper_id" || {
+    echo "ERROR: synthetic-root cleanup helper ownership could not be verified before start" >&2
+    return 1
+  }
+  docker start "$cleanup_helper_id" >/dev/null || {
+    echo "ERROR: failed to start the owned synthetic-root cleanup helper" >&2
+    return 1
+  }
+
+  for ((attempt = 0; attempt < cleanup_helper_timeout_seconds; attempt++)); do
+    helper_state="$(docker container inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$cleanup_helper_id" 2>/dev/null)" || {
+      echo "ERROR: synthetic-root cleanup helper state could not be inspected" >&2
+      return 1
+    }
+    case "$helper_state" in
+      exited:0) return 0 ;;
+      exited:*)
+        echo "ERROR: owned synthetic-root cleanup helper exited unsuccessfully" >&2
+        return 1
+        ;;
+      created:*|running:*) sleep 1 ;;
+      *)
+        echo "ERROR: owned synthetic-root cleanup helper entered an unexpected state" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  helper_state="$(docker container inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$cleanup_helper_id" 2>/dev/null)" || {
+    echo "ERROR: synthetic-root cleanup helper state could not be inspected after timeout" >&2
+    return 1
+  }
+  case "$helper_state" in
+    exited:0) return 0 ;;
+    exited:*)
+      echo "ERROR: owned synthetic-root cleanup helper exited unsuccessfully" >&2
+      return 1
+      ;;
+  esac
+  owned_container_matches "$cleanup_name" "$cleanup_helper_id" || {
+    echo "ERROR: synthetic-root cleanup helper ownership could not be verified before timeout kill" >&2
+    return 1
+  }
+  docker kill "$cleanup_helper_id" >/dev/null || {
+    echo "ERROR: failed to stop the timed-out owned synthetic-root cleanup helper" >&2
+    return 1
+  }
+  echo "ERROR: owned synthetic-root cleanup helper timed out" >&2
+  return 1
 }
 
 cleanup_test_root() {
@@ -190,12 +253,11 @@ cleanup_test_root() {
       echo "ERROR: failed to create the owned synthetic-root cleanup helper" >&2
       return 1
     }
-  [[ "$(docker container inspect --format '{{.Id}}' "$cleanup_name")" == "$cleanup_helper_id" \
-     && "$(container_label "$cleanup_name")" == "$run_id" ]] || {
+  owned_container_matches "$cleanup_name" "$cleanup_helper_id" || {
     echo "ERROR: synthetic-root cleanup helper ownership could not be verified" >&2
     return 1
   }
-  if ! docker start -a "$cleanup_helper_id" >/dev/null; then
+  if ! run_cleanup_helper; then
     remove_owned_container "$cleanup_name" "$cleanup_helper_id" || true
     echo "ERROR: failed to clean the owned synthetic test root" >&2
     return 1
@@ -221,9 +283,9 @@ cleanup() {
   cleanup_test_root || cleanup_status=1
   if (( cleanup_status )); then
     echo "ERROR: cross-service isolation cleanup left owned resources behind" >&2
-    return "$cleanup_status"
+    exit 1
   fi
-  return "$prior_status"
+  exit "$prior_status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -406,6 +468,21 @@ assert_terminal_password_canary() {
   local actual_measurement=""
   actual_measurement="$(measure_canary "$name" "$role terminal password" "/run/secrets/web_password")"
   assert_equal "$role terminal password canary" "$expected_measurement" "$actual_measurement"
+}
+
+assert_antigravity_missing_runtime_rejection() {
+  local output=""
+  local status=0
+  output="$(docker exec "$antigravity_name" run-antigravity 2>&1)" || status=$?
+  if (( status == 0 )); then
+    fail "missing synthetic Antigravity runtime unexpectedly launched"
+  fi
+  if (( status == 126 || status == 127 )); then
+    fail "Antigravity rejection command could not execute"
+  fi
+  (( status == 1 )) || fail "missing synthetic Antigravity runtime returned an unexpected status"
+  grep -Fq -- 'ERROR: Antigravity is absent, damaged or incomplete at the canonical path:' <<<"$output" \
+    || fail "Antigravity rejection did not report the expected admission state"
 }
 
 record_canary() {
@@ -655,9 +732,7 @@ antigravity_socket="$(start_tmux_fixture "$antigravity_name" antigravity)"
 assert_tmux_socket_private "$codex_name" "$codex_socket" Codex
 assert_tmux_socket_private "$antigravity_name" "$antigravity_socket" Antigravity
 
-if docker exec "$antigravity_name" run-antigravity >/dev/null 2>&1; then
-  fail "missing synthetic Antigravity runtime unexpectedly launched"
-fi
+assert_antigravity_missing_runtime_rejection
 verify_canaries codex_invariants "$codex_name"
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
 assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
