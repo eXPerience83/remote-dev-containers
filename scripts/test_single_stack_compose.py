@@ -244,7 +244,9 @@ def validate(path: Path, config: dict[str, object]) -> None:
             lowered = source.lower()
             require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
         for target in mount_targets(service):
+            lowered_target = target.lower()
             require(target not in {"/", "/root", "/home", "/opt", "/usr/local"}, f"{path}: {name} broad mount target {target}")
+            require(not any(marker in lowered_target for marker in SOCKET_MARKERS), f"{path}: {name} engine socket target {target}")
             require("tmux" not in target.lower(), f"{path}: {name} tmux mount {target}")
             require("control" not in target.lower(), f"{path}: {name} control mount {target}")
 
