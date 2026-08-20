@@ -399,6 +399,15 @@ measure_host_canary() {
   printf '%s:%s\n' "$size" "$digest"
 }
 
+assert_terminal_password_canary() {
+  local name="$1"
+  local role="$2"
+  local expected_measurement="$3"
+  local actual_measurement=""
+  actual_measurement="$(measure_canary "$name" "$role terminal password" "/run/secrets/web_password")"
+  assert_equal "$role terminal password canary" "$expected_measurement" "$actual_measurement"
+}
+
 record_canary() {
   local records_name="$1"
   local name="$2"
@@ -498,11 +507,13 @@ codex_password_marker="$(marker_name codex-password)"
 antigravity_password_marker="$(marker_name antigravity-password)"
 codex_password_source="$test_root/codex/password/$codex_password_marker"
 antigravity_password_source="$test_root/antigravity/password/$antigravity_password_marker"
-printf 'synthetic-terminal-password\n' >"$codex_password_source"
-printf 'synthetic-terminal-password\n' >"$antigravity_password_source"
+printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$codex_password_source"
+printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$antigravity_password_source"
 chmod 0600 -- "$codex_password_source" "$antigravity_password_source"
 codex_password_measurement="$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 antigravity_password_measurement="$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
+[[ "$codex_password_measurement" != "$antigravity_password_measurement" ]] \
+  || fail "role terminal password canaries are not distinct"
 
 prepare_network_name || fail "fixture network name is already owned by another resource"
 if ! network_id="$(docker network create --label "$ownership_label=$run_id" "$network_name")"; then
@@ -524,7 +535,7 @@ start_launcher() {
     --env REMOTE_DEV_START_MODE=menu \
     --env WEB_PORT=7680 \
     --env ALLOW_INSECURE_WEB=1 \
-    "$image")"; then
+    "$image_id")"; then
     launcher_id="$(capture_owned_container_id "$launcher_name" || true)"
     fail "failed to start launcher fixture"
   fi
@@ -555,7 +566,7 @@ start_codex() {
     --mount "type=bind,src=$test_root/codex/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/codex/ssh,dst=/root/.ssh" \
     --mount "type=bind,src=$codex_password_source,dst=/run/secrets/web_password,readonly" \
-    "$image")"; then
+    "$image_id")"; then
     codex_id="$(capture_owned_container_id "$codex_name" || true)"
     fail "failed to start Codex fixture"
   fi
@@ -587,7 +598,7 @@ start_antigravity() {
     --mount "type=bind,src=$test_root/antigravity/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/antigravity/ssh,dst=/root/.ssh" \
     --mount "type=bind,src=$antigravity_password_source,dst=/run/secrets/web_password,readonly" \
-    "$image")"; then
+    "$image_id")"; then
     antigravity_id="$(capture_owned_container_id "$antigravity_name" || true)"
     fail "failed to start Antigravity fixture"
   fi
@@ -610,6 +621,8 @@ assert_mount_contract "$launcher_name" launcher
 assert_mount_contract "$codex_name" codex
 assert_mount_contract "$antigravity_name" antigravity
 assert_distinct_agent_sources
+assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
+assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 
 for index in "${!codex_targets[@]}"; do
   target="${codex_targets[$index]}"
@@ -642,16 +655,16 @@ antigravity_socket="$(start_tmux_fixture "$antigravity_name" antigravity)"
 assert_tmux_socket_private "$codex_name" "$codex_socket" Codex
 assert_tmux_socket_private "$antigravity_name" "$antigravity_socket" Antigravity
 
-launcher_health_before_failure="$(docker inspect --format '{{.State.Running}}' "$launcher_name")"
 if docker exec "$antigravity_name" run-antigravity >/dev/null 2>&1; then
   fail "missing synthetic Antigravity runtime unexpectedly launched"
 fi
 verify_canaries codex_invariants "$codex_name"
+assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
+assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 assert_equal "Codex terminal password canary" "$codex_password_measurement" \
   "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 assert_equal "Antigravity terminal password canary" "$antigravity_password_measurement" \
   "$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
-assert_equal "launcher availability after failed Antigravity launch" true "$launcher_health_before_failure"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 wait_for_health_command "$antigravity_name"
@@ -664,6 +677,8 @@ assert_image_id "$codex_name"
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_mount_contract "$codex_name" codex
 verify_canaries codex_invariants "$codex_name"
+assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
+assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 assert_equal "Codex terminal password canary" "$codex_password_measurement" \
   "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 verify_canaries antigravity_invariants "$antigravity_name"
@@ -681,6 +696,8 @@ assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
 assert_mount_contract "$antigravity_name" antigravity
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
+assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
+assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 assert_equal "Codex terminal password canary" "$codex_password_measurement" \
   "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 assert_equal "Antigravity terminal password canary" "$antigravity_password_measurement" \
