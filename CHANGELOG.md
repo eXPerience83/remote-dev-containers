@@ -87,7 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
 - Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status; real TrueNAS Antigravity project/session validation remains deferred to #131. Shell mode remains at the collection root.
-- Changed successful project Select/Create actions to return directly to the calling Codex/Antigravity menu with the active project ready for Start/Resume/Continue, while Delete and recoverable failed/cancelled project actions remain in `Projects...`.
+- Changed successful project Select/Create actions to return directly to the calling Codex/Antigravity menu with the active project ready for Start/Resume/Continue, while Delete and recoverable invalid/failed/cancelled project actions remain in `Projects...`.
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
 ### Security
