@@ -397,14 +397,17 @@ class CodexRuntimeTests(unittest.TestCase):
                     candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
                     candidate.chmod(0o755)
                     package_bin.chmod(0o600)
-                    expected = (
-                        "candidate path parent is not traversable by the probe "
-                        f"identity: {package_bin}"
-                    )
-                    with self.assertRaisesRegex(
-                        self.m.ManagerError, rf"^{re.escape(expected)}$"
-                    ):
-                        self.m.require_candidate_path(candidate, executable=True)
+                    try:
+                        expected = (
+                            "candidate path parent is not traversable by the probe "
+                            f"identity: {package_bin}"
+                        )
+                        with self.assertRaisesRegex(
+                            self.m.ManagerError, rf"^{re.escape(expected)}$"
+                        ):
+                            self.m.require_candidate_path(candidate, executable=True)
+                    finally:
+                        package_bin.chmod(0o755)
 
     @unittest.skipUnless(os.geteuid() == 0, "root is required to verify identity")
     def test_all_candidate_processes_share_the_nobody_identity_contract(self):
