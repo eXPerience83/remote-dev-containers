@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import signal
 import sys
 import tarfile
@@ -396,10 +397,55 @@ class CodexRuntimeTests(unittest.TestCase):
                     candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
                     candidate.chmod(0o755)
                     package_bin.chmod(0o600)
+                    expected = (
+                        "candidate path parent is not traversable by the probe "
+                        f"identity: {package_bin}"
+                    )
                     with self.assertRaisesRegex(
-                        self.m.ManagerError, "parent is not traversable"
+                        self.m.ManagerError, rf"^{re.escape(expected)}$"
                     ):
                         self.m.require_candidate_path(candidate, executable=True)
+
+    @unittest.skipUnless(os.geteuid() == 0, "root is required to verify identity")
+    def test_all_candidate_processes_share_the_nobody_identity_contract(self):
+        with tempfile.TemporaryDirectory() as text:
+            fixed = self.staging_root(Path(text))
+            fixed.mkdir(mode=0o711)
+            fixed.chmod(0o711)
+            completed = self.m.subprocess.CompletedProcess([], 0)
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m, "require_candidate_path"
+            ), mock.patch.object(
+                self.m.subprocess, "run", return_value=completed
+            ) as run, mock.patch.object(
+                self.m.subprocess, "Popen", side_effect=OSError("stop after launch")
+            ) as popen:
+                self.m.probe_staging_execution()
+                with self.assertRaisesRegex(self.m.ManagerError, "Codex probe"):
+                    self.m.candidate_run(
+                        ["/candidate/bin/codex"],
+                        Path("/candidate/cwd"),
+                        Path("/candidate/home"),
+                    )
+                with self.assertRaisesRegex(self.m.ManagerError, "code-mode host"):
+                    self.m.probe_host(
+                        Path("/candidate/bin/codex-code-mode-host"),
+                        Path("/candidate/cwd"),
+                        Path("/candidate/home"),
+                    )
+
+            calls = [run.call_args, *popen.call_args_list]
+            self.assertEqual(len(calls), 3)
+            expected = {"user": 65534, "group": 65534, "extra_groups": []}
+            for call in calls:
+                self.assertEqual(
+                    {name: call.kwargs[name] for name in expected}, expected
+                )
+                self.assertNotIn("preexec_fn", call.kwargs)
+
+    def test_candidate_identity_contract_does_not_force_nonroot(self):
+        with mock.patch.object(self.m.os, "geteuid", return_value=1234):
+            self.assertEqual(self.m.candidate_identity_kwargs(), {})
 
     @unittest.skipUnless(os.geteuid() == 0, "root is required to verify privilege drop")
     def test_candidate_uses_nobody_and_synthetic_state(self):
@@ -432,6 +478,8 @@ class CodexRuntimeTests(unittest.TestCase):
                         "set -eu\n"
                         "printf 'uid=%s\\n' \"$(id -u)\"\n"
                         "printf 'gid=%s\\n' \"$(id -g)\"\n"
+                        "printf 'groups=%s\\n' \"$(sed -n "
+                        "'s/^Groups:[[:space:]]*//p' /proc/self/status)\"\n"
                         "printf 'home=%s\\n' \"$HOME\"\n"
                         "printf 'codex_home=%s\\n' \"$CODEX_HOME\"\n"
                         "printf 'cwd=%s\\n' \"$(pwd -P)\"\n"
@@ -455,6 +503,7 @@ class CodexRuntimeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0)
                     self.assertEqual(lines["uid"], str(self.m.NOBODY))
                     self.assertEqual(lines["gid"], str(self.m.NOBODY))
+                    self.assertEqual(lines["groups"], "")
                     self.assertEqual(lines["home"], str(home))
                     self.assertEqual(lines["codex_home"], str(home / ".codex"))
                     self.assertEqual(lines["cwd"], str(cwd))

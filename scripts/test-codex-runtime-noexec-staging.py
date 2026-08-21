@@ -108,8 +108,9 @@ def run_regression() -> int:
             archive_path = staging / "synthetic-candidate.tar.gz"
             candidate_content = (
                 "#!/bin/sh\n"
-                "printf '%s:%s:%s:%s\\n' \"$(id -u)\" \"$(id -g)\" "
-                '"$HOME" "$(pwd -P)"\n'
+                "groups=$(sed -n 's/^Groups:[[:space:]]*//p' /proc/self/status)\n"
+                "printf '%s:%s:%s:%s:%s\\n' \"$(id -u)\" \"$(id -g)\" "
+                '"$groups" "$HOME" "$(pwd -P)"\n'
             ).encode()
             with tarfile.open(archive_path, "w:gz") as archive:
                 for path, content, mode in (
@@ -152,7 +153,7 @@ def run_regression() -> int:
                 if info.st_mode & 0o777 != 0o700:
                     raise AssertionError(f"synthetic state has wrong mode: {private}")
             result = manager.candidate_run([str(candidate)], cwd, home)
-            expected = f"{manager.NOBODY}:{manager.NOBODY}:{home}:{cwd}"
+            expected = f"{manager.NOBODY}:{manager.NOBODY}::{home}:{cwd}"
             if result.returncode != 0 or result.stdout.strip() != expected:
                 raise AssertionError(
                     f"candidate identity/state mismatch: {result.returncode} {result.stdout!r}"

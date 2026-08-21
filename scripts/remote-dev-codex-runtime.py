@@ -208,7 +208,7 @@ def probe_staging_execution() -> None:
                     stderr=subprocess.DEVNULL,
                     timeout=5,
                     check=False,
-                    preexec_fn=drop_privileges if os.name == "posix" else None,
+                    **candidate_identity_kwargs(),
                 )
             except subprocess.TimeoutExpired:
                 fail("Codex update staging execution probe timed out")
@@ -567,11 +567,10 @@ def package_metadata(
     return data
 
 
-def drop_privileges() -> None:
-    if os.geteuid() == 0:
-        os.setgroups([])
-        os.setgid(NOBODY)
-        os.setuid(NOBODY)
+def candidate_identity_kwargs() -> dict[str, Any]:
+    if os.name != "posix" or os.geteuid() != 0:
+        return {}
+    return {"user": NOBODY, "group": NOBODY, "extra_groups": []}
 
 
 def candidate_identity() -> tuple[int, int]:
@@ -674,7 +673,7 @@ def candidate_run(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
-            preexec_fn=drop_privileges if os.name == "posix" else None,
+            **candidate_identity_kwargs(),
         )
     except OSError as exc:
         fail(f"cannot execute candidate Codex probe: {exc}")
@@ -736,7 +735,7 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
-            preexec_fn=drop_privileges if os.name == "posix" else None,
+            **candidate_identity_kwargs(),
         )
     except OSError as exc:
         fail(f"cannot execute candidate code-mode host probe: {exc}")
