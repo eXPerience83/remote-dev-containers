@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -38,7 +41,7 @@ def mount_options(path: Path) -> set[str]:
     raise AssertionError(f"{path} is not an explicit mount")
 
 
-def main() -> int:
+def run_regression() -> int:
     if os.geteuid() != 0:
         raise AssertionError("the noexec regression must run as root")
     options = mount_options(Path("/tmp"))
@@ -46,10 +49,15 @@ def main() -> int:
         if required not in options:
             raise AssertionError(f"/tmp is missing mount option {required}: {options}")
 
-    control = Path(f"/tmp/remote-dev-noexec-control-{os.getpid()}")
-    control.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    control.chmod(0o755)
+    descriptor, name = tempfile.mkstemp(
+        prefix="remote-dev-noexec-control-", dir="/tmp"
+    )
+    control = Path(name)
     try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write("#!/bin/sh\nexit 0\n")
+            output.flush()
+            os.fchmod(output.fileno(), 0o755)
         try:
             subprocess.run([str(control)], check=True)
         except PermissionError:
@@ -63,6 +71,24 @@ def main() -> int:
     if manager.STAGING_ROOT.is_relative_to(Path("/tmp")):
         raise AssertionError("Codex update staging remains below /tmp")
 
+    unsafe_parent = Path(
+        tempfile.mkdtemp(prefix="codex-noexec-probe-", dir="/tmp")
+    )
+    unsafe_parent.chmod(0o711)
+    configured_staging_root = manager.STAGING_ROOT
+    manager.STAGING_ROOT = unsafe_parent / "staging"
+    try:
+        try:
+            manager.prepare_staging_root()
+        except manager.ManagerError as exc:
+            if "does not permit candidate execution" not in str(exc):
+                raise AssertionError(f"unexpected noexec probe failure: {exc}") from exc
+        else:
+            raise AssertionError("the staging execution probe accepted noexec /tmp")
+    finally:
+        manager.STAGING_ROOT = configured_staging_root
+        shutil.rmtree(unsafe_parent, ignore_errors=True)
+
     caller_tmp = Path(tempfile.mkdtemp(prefix="caller-controlled-codex-tmp-", dir="/tmp"))
     old_tmpdir = os.environ.get("TMPDIR")
     os.environ["TMPDIR"] = str(caller_tmp)
@@ -71,18 +97,53 @@ def main() -> int:
         with manager.update_staging() as staging:
             if staging.parent != manager.STAGING_ROOT:
                 raise AssertionError(f"unexpected staging parent: {staging.parent}")
-            package_bin = staging / "package" / "bin"
-            package_bin.mkdir(parents=True)
-            (staging / "package").chmod(0o755)
-            package_bin.chmod(0o755)
-            candidate = package_bin / "codex"
-            candidate.write_text(
+            if staging.is_relative_to(Path("/tmp")):
+                raise AssertionError(f"staging unexpectedly uses /tmp: {staging}")
+            for transient in (manager.STAGING_ROOT, staging):
+                info = transient.stat()
+                if (info.st_uid, info.st_gid) != (0, 0):
+                    raise AssertionError(f"staging has wrong owner: {transient}")
+                if info.st_mode & 0o777 != 0o711:
+                    raise AssertionError(f"staging has wrong mode: {transient}")
+            archive_path = staging / "synthetic-candidate.tar.gz"
+            candidate_content = (
                 "#!/bin/sh\n"
                 "printf '%s:%s:%s:%s\\n' \"$(id -u)\" \"$(id -g)\" "
-                '"$HOME" "$(pwd -P)"\n',
-                encoding="utf-8",
-            )
-            candidate.chmod(0o755)
+                '"$HOME" "$(pwd -P)"\n'
+            ).encode()
+            with tarfile.open(archive_path, "w:gz") as archive:
+                for path, content, mode in (
+                    ("bin/codex", candidate_content, 0o755),
+                    ("codex-resources/implicit/nested/data", b"fixture\n", 0o644),
+                ):
+                    info = tarfile.TarInfo(path)
+                    info.mode = mode
+                    info.size = len(content)
+                    archive.addfile(info, io.BytesIO(content))
+            package = staging / "package"
+            manager.extract(archive_path, package)
+            candidate = package / "bin/codex"
+            data_file = package / "codex-resources/implicit/nested/data"
+            for directory in (
+                package,
+                package / "bin",
+                package / "codex-resources",
+                package / "codex-resources/implicit",
+                package / "codex-resources/implicit/nested",
+            ):
+                info = directory.stat()
+                if (info.st_uid, info.st_gid) != (0, 0):
+                    raise AssertionError(f"candidate directory has wrong owner: {directory}")
+                if info.st_mode & 0o777 != 0o755:
+                    raise AssertionError(f"candidate directory has wrong mode: {directory}")
+            if (candidate.stat().st_uid, candidate.stat().st_gid) != (0, 0):
+                raise AssertionError("candidate executable is not root-owned")
+            if candidate.stat().st_mode & 0o777 != 0o755:
+                raise AssertionError("candidate executable is not mode 0755")
+            if (data_file.stat().st_uid, data_file.stat().st_gid) != (0, 0):
+                raise AssertionError("candidate data file is not root-owned")
+            if data_file.stat().st_mode & 0o777 != 0o644:
+                raise AssertionError("candidate data file is not mode 0644")
             home, cwd = manager.prepare_candidate_directories(staging)
             for private in (home, cwd):
                 info = private.stat()
@@ -97,11 +158,18 @@ def main() -> int:
                     f"candidate identity/state mismatch: {result.returncode} {result.stdout!r}"
                 )
     finally:
+        active_error = sys.exception()
         if old_tmpdir is None:
             os.environ.pop("TMPDIR", None)
         else:
             os.environ["TMPDIR"] = old_tmpdir
-        caller_tmp.rmdir()
+        leaked = sorted(entry.name for entry in caller_tmp.iterdir())
+        shutil.rmtree(caller_tmp, ignore_errors=True)
+        if leaked:
+            message = f"staging honoured caller TMPDIR; leaked entries: {leaked}"
+            if active_error is None:
+                raise AssertionError(message)
+            active_error.add_note(message)
 
     if staging is None or staging.exists():
         raise AssertionError("Codex update staging was not cleaned")
@@ -109,6 +177,14 @@ def main() -> int:
         raise AssertionError("Codex update staging root contains leftovers")
     print("Codex runtime noexec /tmp staging regression: OK")
     return 0
+
+
+def main() -> int:
+    previous_umask = os.umask(0o077)
+    try:
+        return run_regression()
+    finally:
+        os.umask(previous_umask)
 
 
 if __name__ == "__main__":

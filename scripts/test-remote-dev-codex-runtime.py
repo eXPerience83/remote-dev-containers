@@ -154,6 +154,33 @@ class CodexRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(self.m.ManagerError, "unsupported"):
                 self.m.extract(archive, root / "out2")
 
+    def test_extract_normalizes_implicit_directories_under_umask_077(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            root.chmod(0o711)
+            archive = root / "candidate.tar.gz"
+            with tarfile.open(archive, "w:gz") as output:
+                content = b"#!/bin/sh\nexit 0\n"
+                info = tarfile.TarInfo("bin/implicit/codex")
+                info.mode = 0o755
+                info.size = len(content)
+                output.addfile(info, io.BytesIO(content))
+
+            previous_umask = os.umask(0o077)
+            try:
+                package = root / "package"
+                self.m.extract(archive, package)
+            finally:
+                os.umask(previous_umask)
+
+            for directory in (package, package / "bin", package / "bin/implicit"):
+                info = directory.stat()
+                self.assertEqual(info.st_uid, os.geteuid())
+                self.assertEqual(info.st_mode & 0o777, 0o755)
+            candidate = package / "bin/implicit/codex"
+            self.assertEqual(candidate.stat().st_mode & 0o777, 0o755)
+            self.m.require_candidate_path(candidate, executable=True)
+
     def test_package_metadata_is_exact(self):
         with tempfile.TemporaryDirectory() as text:
             package = self.package(Path(text))
@@ -291,9 +318,9 @@ class CodexRuntimeTests(unittest.TestCase):
                 self.m.STAGING_ROOT, Path("/run/remote-dev-codex-update")
             )
             self.assertFalse(self.m.STAGING_ROOT.is_relative_to(Path("/tmp")))
-            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.dict(
-                os.environ, {"TMPDIR": str(caller_tmp)}
-            ):
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m, "probe_staging_execution"
+            ), mock.patch.dict(os.environ, {"TMPDIR": str(caller_tmp)}):
                 with self.m.update_staging() as staging:
                     created = staging
                     self.assertEqual(staging.parent, fixed)
@@ -305,7 +332,17 @@ class CodexRuntimeTests(unittest.TestCase):
     def test_update_staging_cleans_after_error_and_signal(self):
         with tempfile.TemporaryDirectory() as text:
             fixed = self.staging_root(Path(text))
-            with mock.patch.object(self.m, "STAGING_ROOT", fixed):
+            previous_handlers = {
+                signum: signal.getsignal(signum)
+                for signum in (
+                    getattr(signal, "SIGHUP", None),
+                    getattr(signal, "SIGTERM", None),
+                )
+                if signum is not None
+            }
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m, "probe_staging_execution"
+            ):
                 with self.assertRaisesRegex(self.m.ManagerError, "synthetic failure"):
                     with self.m.update_staging() as staging:
                         failed = staging
@@ -319,11 +356,38 @@ class CodexRuntimeTests(unittest.TestCase):
                             signal.raise_signal(signal.SIGTERM)
                     self.assertFalse(interrupted.exists())
                 self.assertEqual(list(fixed.iterdir()), [])
+            for signum, handler in previous_handlers.items():
+                self.assertEqual(signal.getsignal(signum), handler)
+
+    def test_staging_execution_probe_fails_before_download(self):
+        with tempfile.TemporaryDirectory() as text:
+            fixed = self.staging_root(Path(text))
+            download = mock.Mock()
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m.subprocess,
+                "run",
+                side_effect=PermissionError("synthetic noexec"),
+            ), mock.patch.object(
+                self.m, "bundled_version", return_value="0.147.0"
+            ), mock.patch.object(
+                self.m, "state", return_value={"kind": "bundled"}
+            ), mock.patch.object(
+                self.m, "latest_asset", return_value=self.asset("0.149.0")
+            ), mock.patch.object(
+                self.m, "download", download
+            ), self.assertRaisesRegex(
+                self.m.ManagerError, "does not permit candidate execution"
+            ):
+                self.m.update_runtime(yes=True)
+            download.assert_not_called()
+            self.assertEqual(list(fixed.iterdir()), [])
 
     def test_candidate_rejects_a_nontraversable_parent(self):
         with tempfile.TemporaryDirectory() as text:
             fixed = self.staging_root(Path(text))
-            with mock.patch.object(self.m, "STAGING_ROOT", fixed):
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m, "probe_staging_execution"
+            ):
                 with self.m.update_staging() as staging:
                     package_bin = staging / "package" / "bin"
                     package_bin.mkdir(parents=True)
@@ -339,13 +403,16 @@ class CodexRuntimeTests(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "root is required to verify privilege drop")
     def test_candidate_uses_nobody_and_synthetic_state(self):
-        with tempfile.TemporaryDirectory() as text:
+        with tempfile.TemporaryDirectory(
+            prefix="remote-dev-codex-candidate-test-", dir="/run"
+        ) as text:
             root = Path(text)
+            fixed = self.staging_root(root)
             real_home = root / "real-codex-home"
             real_home.mkdir(mode=0o700)
             credential = real_home / "auth.json"
             credential.write_text("synthetic-real-credential\n", encoding="utf-8")
-            with mock.patch.dict(
+            with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.dict(
                 os.environ,
                 {
                     "HOME": "/root",
@@ -399,7 +466,7 @@ class CodexRuntimeTests(unittest.TestCase):
                 self.assertFalse(created.exists())
 
     def test_failed_update_cleans_staging_and_preserves_previous_generation(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as text:
+        with tempfile.TemporaryDirectory() as text:
             root = Path(text)
             root.chmod(0o711)
             fixed = self.staging_root(root)
@@ -420,6 +487,8 @@ class CodexRuntimeTests(unittest.TestCase):
                 package.mkdir()
 
             with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
+                self.m, "probe_staging_execution"
+            ), mock.patch.object(
                 self.m, "bundled_version", return_value="0.147.0"
             ), mock.patch.object(
                 self.m,

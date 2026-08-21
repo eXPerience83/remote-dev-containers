@@ -89,8 +89,13 @@ Antes de activar un runtime opcional, Remote Dev:
 El staging ejecutable de admisión usa la raíz transitoria fija
 `/run/remote-dev-codex-update`, nunca `/tmp` ni un `TMPDIR` controlado por quien
 invoca el gestor. La raíz de staging y el directorio de cada operación,
-propiedad del gestor, usan modo `0711`; el `HOME` y directorio de trabajo
-sintéticos usan modo `0700` y pertenecen a UID/GID `65534`. Así se conserva intacto el montaje
+propiedad del gestor, usan modo `0711`. Los directorios extraídos y ejecutables
+del paquete, propiedad de root, se
+normalizan a `0755` independientemente del umask del proceso, mientras que los
+archivos no ejecutables usan `0644`. Antes de descargar el paquete, el gestor
+también ejecuta una prueba acotada y sin privilegios dentro de la raíz de
+staging. El `HOME` y directorio de trabajo sintéticos usan modo `0700` y
+pertenecen a UID/GID `65534`. Así se conserva intacto el montaje
 intencionadamente no ejecutable de `/tmp` sin hacer atravesables el runtime
 persistente ni las credenciales, y cada operación elimina su árbol de staging
 tras éxito, error, timeout o una señal de terminación capturable.

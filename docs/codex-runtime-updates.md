@@ -89,8 +89,11 @@ Before an optional runtime becomes active, Remote Dev:
 Executable admission staging uses the fixed transient root
 `/run/remote-dev-codex-update`, never `/tmp` or caller-controlled `TMPDIR`.
 The manager-owned staging root and per-operation directory use mode `0711`; the
-synthetic `HOME` and working directory use mode `0700` and belong to UID/GID
-`65534`. This
+root-owned extracted package directories and executables are normalized to
+`0755` independently of the process umask, while non-executable files use
+`0644`. Before downloading the package, the manager also runs a bounded
+unprivileged execution probe in the staging root. The synthetic `HOME` and
+working directory use mode `0700` and belong to UID/GID `65534`. This
 keeps the intentionally non-executable `/tmp` mount intact without making the
 persistent runtime or credentials traversable, and each operation removes its
 staging tree after success, failure, timeout or a catchable termination signal.

@@ -172,12 +172,65 @@ def prepare_staging_root() -> None:
         STAGING_ROOT.chmod(0o711)
     except OSError as exc:
         fail(f"cannot prepare Codex update staging root {STAGING_ROOT}: {exc}")
+    probe_staging_execution()
+
+
+def probe_staging_execution() -> None:
+    """Prove the fixed staging filesystem permits bounded unprivileged exec."""
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=".exec-probe-", dir=STAGING_ROOT
+        ) as text:
+            probe_dir = Path(text)
+            probe_dir.chmod(0o711)
+            probe = probe_dir / "probe"
+            flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            flags |= getattr(os, "O_CLOEXEC", 0)
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(probe, flags, 0o700)
+            try:
+                with os.fdopen(descriptor, "wb") as output:
+                    descriptor = -1
+                    output.write(b"#!/bin/sh\nexit 0\n")
+                    output.flush()
+                    os.fchmod(output.fileno(), 0o755)
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+            require_candidate_path(probe, executable=True)
+            try:
+                result = subprocess.run(
+                    [str(probe)],
+                    cwd="/",
+                    env={"PATH": "/usr/bin:/bin"},
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                    preexec_fn=drop_privileges if os.name == "posix" else None,
+                )
+            except subprocess.TimeoutExpired:
+                fail("Codex update staging execution probe timed out")
+            except OSError as exc:
+                fail(
+                    "Codex update staging root does not permit candidate "
+                    f"execution: {exc}"
+                )
+            if result.returncode != 0:
+                fail(
+                    "Codex update staging root failed its candidate execution "
+                    f"probe with status {result.returncode}"
+                )
+    except ManagerError:
+        raise
+    except OSError as exc:
+        fail(f"cannot probe Codex update staging root execution: {exc}")
 
 
 @contextlib.contextmanager
 def update_staging() -> Iterator[Path]:
     """Create one fixed-location staging tree and clean it on every normal exit."""
-    prepare_staging_root()
     previous_handlers: dict[signal.Signals, Any] = {}
 
     def interrupted(signum: int, _frame: object) -> NoReturn:
@@ -189,6 +242,7 @@ def update_staging() -> Iterator[Path]:
             if signum is not None:
                 previous_handlers[signum] = signal.getsignal(signum)
                 signal.signal(signum, interrupted)
+        prepare_staging_root()
         with tempfile.TemporaryDirectory(
             prefix="update-", dir=STAGING_ROOT
         ) as text:
@@ -418,9 +472,22 @@ def member_path(name: str) -> Path:
     return path
 
 
+def prepare_extracted_directory(destination: Path, directory: Path) -> None:
+    """Create and normalize every candidate directory independently of umask."""
+    directory.mkdir(parents=True, exist_ok=True)
+    current = destination
+    current.chmod(0o755)
+    for part in directory.relative_to(destination).parts:
+        current = current / part
+        info = current.lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            fail(f"Codex package path is not a directory: {current}")
+        current.chmod(0o755)
+
+
 def extract(archive_path: Path, destination: Path) -> None:
     try:
-        destination.mkdir(mode=0o755)
+        prepare_extracted_directory(destination, destination)
         with tarfile.open(archive_path, "r:gz") as archive:
             members = archive.getmembers()
             if not 1 <= len(members) <= MAX_MEMBERS:
@@ -449,10 +516,9 @@ def extract(archive_path: Path, destination: Path) -> None:
                 rel = member_path(member.name)
                 output = destination.joinpath(*rel.parts)
                 if member.isdir():
-                    output.mkdir(parents=True, exist_ok=True)
-                    output.chmod(0o755)
+                    prepare_extracted_directory(destination, output)
                     continue
-                output.parent.mkdir(parents=True, exist_ok=True)
+                prepare_extracted_directory(destination, output.parent)
                 source = archive.extractfile(member)
                 if source is None:
                     fail(f"cannot read Codex package member: {rel}")
@@ -740,7 +806,7 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
 
 
 def validate_candidate(
-    package: Path, expected_version: str, home: Path, cwd: Path
+    package: Path, expected_version: str, *, home: Path, cwd: Path
 ) -> None:
     result = candidate_run([str(package / "bin/codex"), "--version"], cwd, home)
     match = VERSION_RE.fullmatch(result.stdout.strip()) if result.returncode == 0 else None
@@ -1097,7 +1163,7 @@ def update_runtime(*, yes: bool) -> None:
         extract(archive, package)
         package_metadata(package, asset)
         home, cwd = prepare_candidate_directories(temp)
-        validate_candidate(package, asset["version"], home, cwd)
+        validate_candidate(package, asset["version"], home=home, cwd=cwd)
         publish(package, asset, final_url)
     print(
         f"Installed Codex runtime {asset['version']} "

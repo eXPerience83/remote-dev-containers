@@ -14,7 +14,8 @@ smoke: agent-contract-tests
 		-v "$(CURDIR)/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
 		-e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
 		remote-dev:local /tmp/test-remote-dev-context7-runtime-isolation.py
-	docker run --rm \
+	timeout --foreground 60s docker run --rm \
+		--user 0:0 \
 		--network none \
 		--tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
 		--entrypoint /opt/remote-dev/mise/shims/python \
