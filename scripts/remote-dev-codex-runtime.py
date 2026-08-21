@@ -14,6 +14,7 @@ import platform
 import re
 import select
 import shutil
+import signal
 import ssl
 import stat
 import subprocess
@@ -69,10 +70,19 @@ MAX_PROBE_OUTPUT = 1024 * 1024
 TIMEOUT = 20
 SCHEMA = 1
 NOBODY = 65534
+STAGING_ROOT = Path("/run/remote-dev-codex-update")
 
 
 class ManagerError(RuntimeError):
     """A bounded admission or local-integrity check failed."""
+
+
+class OperationInterrupted(Exception):
+    """A catchable signal interrupted transient update work."""
+
+    def __init__(self, signum: int):
+        super().__init__(signum)
+        self.signum = signum
 
 
 def fail(message: str) -> NoReturn:
@@ -149,6 +159,101 @@ def prepare_root() -> None:
         ROOT.chmod(0o700)
     except OSError as exc:
         fail(f"cannot prepare Codex runtime root {ROOT}: {exc}")
+
+
+def prepare_staging_root() -> None:
+    """Prepare a fixed executable transient root without exposing runtime state."""
+    try:
+        real_dir(STAGING_ROOT.parent)
+        if STAGING_ROOT.exists() or STAGING_ROOT.is_symlink():
+            real_dir(STAGING_ROOT)
+        else:
+            STAGING_ROOT.mkdir(mode=0o711)
+        STAGING_ROOT.chmod(0o711)
+    except OSError as exc:
+        fail(f"cannot prepare Codex update staging root {STAGING_ROOT}: {exc}")
+    probe_staging_execution()
+
+
+def probe_staging_execution() -> None:
+    """Prove the fixed staging filesystem permits bounded unprivileged exec."""
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=".exec-probe-", dir=STAGING_ROOT
+        ) as text:
+            probe_dir = Path(text)
+            probe_dir.chmod(0o711)
+            probe = probe_dir / "probe"
+            flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            flags |= getattr(os, "O_CLOEXEC", 0)
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(probe, flags, 0o700)
+            try:
+                with os.fdopen(descriptor, "wb") as output:
+                    descriptor = -1
+                    output.write(b"#!/bin/sh\nexit 0\n")
+                    output.flush()
+                    os.fchmod(output.fileno(), 0o755)
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+            require_candidate_path(probe, executable=True)
+            try:
+                result = subprocess.run(
+                    [str(probe)],
+                    cwd="/",
+                    env={"PATH": "/usr/bin:/bin"},
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                    **candidate_identity_kwargs(),
+                )
+            except subprocess.TimeoutExpired:
+                fail("Codex update staging execution probe timed out")
+            except OSError as exc:
+                fail(
+                    "Codex update staging root does not permit candidate "
+                    f"execution: {exc}"
+                )
+            if result.returncode != 0:
+                fail(
+                    "Codex update staging root failed its candidate execution "
+                    f"probe with status {result.returncode}"
+                )
+    except ManagerError:
+        raise
+    except OSError as exc:
+        fail(f"cannot probe Codex update staging root execution: {exc}")
+
+
+@contextlib.contextmanager
+def update_staging() -> Iterator[Path]:
+    """Create one fixed-location staging tree and clean it on every normal exit."""
+    previous_handlers: dict[signal.Signals, Any] = {}
+
+    def interrupted(signum: int, _frame: object) -> NoReturn:
+        raise OperationInterrupted(signum)
+
+    try:
+        for signame in ("SIGHUP", "SIGTERM"):
+            signum = getattr(signal, signame, None)
+            if signum is not None:
+                previous_handlers[signum] = signal.getsignal(signum)
+                signal.signal(signum, interrupted)
+        prepare_staging_root()
+        with tempfile.TemporaryDirectory(
+            prefix="update-", dir=STAGING_ROOT
+        ) as text:
+            staging = Path(text)
+            # The package is root-owned but must remain traversable after the
+            # candidate process drops to the fixed unprivileged identity.
+            staging.chmod(0o711)
+            yield staging
+    finally:
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
 
 
 @contextlib.contextmanager
@@ -367,9 +472,22 @@ def member_path(name: str) -> Path:
     return path
 
 
+def prepare_extracted_directory(destination: Path, directory: Path) -> None:
+    """Create and normalize every candidate directory independently of umask."""
+    directory.mkdir(parents=True, exist_ok=True)
+    current = destination
+    current.chmod(0o755)
+    for part in directory.relative_to(destination).parts:
+        current = current / part
+        info = current.lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            fail(f"Codex package path is not a directory: {current}")
+        current.chmod(0o755)
+
+
 def extract(archive_path: Path, destination: Path) -> None:
     try:
-        destination.mkdir(mode=0o755)
+        prepare_extracted_directory(destination, destination)
         with tarfile.open(archive_path, "r:gz") as archive:
             members = archive.getmembers()
             if not 1 <= len(members) <= MAX_MEMBERS:
@@ -398,10 +516,9 @@ def extract(archive_path: Path, destination: Path) -> None:
                 rel = member_path(member.name)
                 output = destination.joinpath(*rel.parts)
                 if member.isdir():
-                    output.mkdir(parents=True, exist_ok=True)
-                    output.chmod(0o755)
+                    prepare_extracted_directory(destination, output)
                     continue
-                output.parent.mkdir(parents=True, exist_ok=True)
+                prepare_extracted_directory(destination, output.parent)
                 source = archive.extractfile(member)
                 if source is None:
                     fail(f"cannot read Codex package member: {rel}")
@@ -450,11 +567,72 @@ def package_metadata(
     return data
 
 
-def drop_privileges() -> None:
+def candidate_identity_kwargs() -> dict[str, Any]:
+    if os.name != "posix" or os.geteuid() != 0:
+        return {}
+    return {"user": NOBODY, "group": NOBODY, "extra_groups": []}
+
+
+def candidate_identity() -> tuple[int, int]:
     if os.geteuid() == 0:
-        os.setgroups([])
-        os.setgid(NOBODY)
-        os.setuid(NOBODY)
+        return NOBODY, NOBODY
+    return os.geteuid(), os.getegid()
+
+
+def identity_has_mode(info: os.stat_result, uid: int, gid: int, mode: int) -> bool:
+    if uid == info.st_uid:
+        required = mode << 6
+    elif gid == info.st_gid:
+        required = mode << 3
+    else:
+        required = mode
+    return info.st_mode & required == required
+
+
+def require_candidate_path(path: Path, *, executable: bool = False) -> None:
+    """Prove the dropped candidate identity can traverse and use a fixed path."""
+    if not path.is_absolute():
+        fail(f"candidate path is not absolute: {path}")
+    uid, gid = candidate_identity()
+    for parent in reversed(path.parents):
+        try:
+            info = parent.lstat()
+        except OSError as exc:
+            fail(f"candidate path parent is unavailable: {parent}: {exc}")
+        if not stat.S_ISDIR(info.st_mode) or not identity_has_mode(
+            info, uid, gid, stat.S_IXOTH
+        ):
+            fail(
+                "candidate path parent is not traversable by the probe identity: "
+                f"{parent}"
+            )
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        fail(f"candidate path is unavailable: {path}: {exc}")
+    required = stat.S_IXOTH if executable or stat.S_ISDIR(info.st_mode) else stat.S_IROTH
+    if executable and not stat.S_ISREG(info.st_mode):
+        fail(f"candidate executable is not a regular file: {path}")
+    if not identity_has_mode(info, uid, gid, required):
+        fail(f"candidate path is inaccessible to the probe identity: {path}")
+
+
+def prepare_candidate_directories(staging: Path) -> tuple[Path, Path]:
+    home = staging / "probe-home"
+    cwd = staging / "probe-cwd"
+    try:
+        home.mkdir(mode=0o700)
+        cwd.mkdir(mode=0o700)
+        if os.geteuid() == 0:
+            os.chown(home, NOBODY, NOBODY)
+            os.chown(cwd, NOBODY, NOBODY)
+        home.chmod(0o700)
+        cwd.chmod(0o700)
+    except OSError as exc:
+        fail(f"cannot prepare synthetic candidate state: {exc}")
+    require_candidate_path(home)
+    require_candidate_path(cwd)
+    return home, cwd
 
 
 def candidate_env(home: Path) -> dict[str, str]:
@@ -483,16 +661,22 @@ def candidate_run(
     argv: list[str], cwd: Path, home: Path, *, timeout: float = 10
 ) -> subprocess.CompletedProcess[str]:
     """Run fixed candidate commands with bounded time/output and synthetic state."""
-    process = subprocess.Popen(
-        argv,
-        cwd=cwd,
-        env=candidate_env(home),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=0,
-        preexec_fn=drop_privileges if os.name == "posix" else None,
-    )
+    require_candidate_path(Path(argv[0]), executable=True)
+    require_candidate_path(cwd)
+    require_candidate_path(home)
+    try:
+        process = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=candidate_env(home),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            **candidate_identity_kwargs(),
+        )
+    except OSError as exc:
+        fail(f"cannot execute candidate Codex probe: {exc}")
     if process.stdout is None or process.stderr is None:
         terminate(process)
         fail("candidate output pipes are unavailable")
@@ -528,6 +712,8 @@ def candidate_run(
     finally:
         if process.poll() is None:
             terminate(process)
+        process.stdout.close()
+        process.stderr.close()
     return subprocess.CompletedProcess(
         argv,
         returncode,
@@ -537,16 +723,22 @@ def candidate_run(
 
 
 def probe_host(host: Path, cwd: Path, home: Path) -> None:
-    process = subprocess.Popen(
-        [str(host), "--listen", "ws://127.0.0.1:0"],
-        cwd=cwd,
-        env=candidate_env(home),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=0,
-        preexec_fn=drop_privileges if os.name == "posix" else None,
-    )
+    require_candidate_path(host, executable=True)
+    require_candidate_path(cwd)
+    require_candidate_path(home)
+    try:
+        process = subprocess.Popen(
+            [str(host), "--listen", "ws://127.0.0.1:0"],
+            cwd=cwd,
+            env=candidate_env(home),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            **candidate_identity_kwargs(),
+        )
+    except OSError as exc:
+        fail(f"cannot execute candidate code-mode host probe: {exc}")
     if process.stdout is None or process.stderr is None:
         terminate(process)
         fail("candidate code-mode host output pipes are unavailable")
@@ -606,32 +798,25 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
         fail("candidate code-mode host did not become ready")
     finally:
         terminate(process)
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
 
 
-def validate_candidate(package: Path, expected_version: str) -> None:
-    with tempfile.TemporaryDirectory(
-        prefix="remote-dev-codex-home-"
-    ) as home_text, tempfile.TemporaryDirectory(
-        prefix="remote-dev-codex-cwd-"
-    ) as cwd_text:
-        home = Path(home_text)
-        cwd = Path(cwd_text)
-        if os.geteuid() == 0:
-            os.chown(home, NOBODY, NOBODY)
-            os.chown(cwd, NOBODY, NOBODY)
-        home.chmod(0o700)
-        cwd.chmod(0o700)
-        result = candidate_run([str(package / "bin/codex"), "--version"], cwd, home)
-        match = VERSION_RE.fullmatch(result.stdout.strip()) if result.returncode == 0 else None
-        if not match or match.group(1) != expected_version:
-            fail("candidate Codex version probe failed")
-        help_result = candidate_run([str(package / "bin/codex"), "--help"], cwd, home)
-        if help_result.returncode != 0 or any(
-            flag not in help_result.stdout
-            for flag in ("--sandbox", "--ask-for-approval")
-        ):
-            fail("candidate Codex launcher compatibility probe failed")
-        probe_host(package / "bin/codex-code-mode-host", cwd, home)
+def validate_candidate(
+    package: Path, expected_version: str, *, home: Path, cwd: Path
+) -> None:
+    result = candidate_run([str(package / "bin/codex"), "--version"], cwd, home)
+    match = VERSION_RE.fullmatch(result.stdout.strip()) if result.returncode == 0 else None
+    if not match or match.group(1) != expected_version:
+        fail("candidate Codex version probe failed")
+    help_result = candidate_run([str(package / "bin/codex"), "--help"], cwd, home)
+    if help_result.returncode != 0 or any(
+        flag not in help_result.stdout for flag in ("--sandbox", "--ask-for-approval")
+    ):
+        fail("candidate Codex launcher compatibility probe failed")
+    probe_host(package / "bin/codex-code-mode-host", cwd, home)
 
 
 def records(package: Path) -> list[dict[str, Any]]:
@@ -970,17 +1155,14 @@ def update_runtime(*, yes: bool) -> None:
             f"new as latest stable {asset['version']}."
         )
         return
-    with tempfile.TemporaryDirectory(
-        prefix="remote-dev-codex-update-"
-    ) as text:
-        temp = Path(text)
-        temp.chmod(0o755)
+    with update_staging() as temp:
         archive = temp / asset["name"]
         final_url = download(asset, archive)
         package = temp / "package"
         extract(archive, package)
         package_metadata(package, asset)
-        validate_candidate(package, asset["version"])
+        home, cwd = prepare_candidate_directories(temp)
+        validate_candidate(package, asset["version"], home=home, cwd=cwd)
         publish(package, asset, final_url)
     print(
         f"Installed Codex runtime {asset['version']} "
@@ -1053,6 +1235,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "remove":
             remove_runtime(yes=args.yes)
         return 0
+    except OperationInterrupted as exc:
+        print("Codex runtime operation cancelled.", file=sys.stderr)
+        return 128 + exc.signum
     except KeyboardInterrupt:
         print("Codex runtime operation cancelled.", file=sys.stderr)
         return 130

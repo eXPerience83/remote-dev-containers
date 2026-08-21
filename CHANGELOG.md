@@ -92,6 +92,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- Codex runtime update probes now use a fixed transient executable staging root under `/run`, verify its real execution capability before download, and normalize extracted package directories independently of restrictive umasks while ignoring caller-controlled `TMPDIR` and preserving the intentional `noexec` `/tmp` mount, UID/GID `65534` probes, synthetic credential-free state and immutable bundled fallback.
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
 - Optional launcher authentication uses a file-backed Compose secret and is tested not to expose the password value in rendered Compose configuration.
 - The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds only its dedicated file-backed launcher password secret.

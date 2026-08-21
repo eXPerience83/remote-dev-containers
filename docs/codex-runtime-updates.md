@@ -86,6 +86,18 @@ Before an optional runtime becomes active, Remote Dev:
 10. fingerprints every published file into a restrictive private manifest;
 11. atomically switches the active pointer only after all checks pass.
 
+Executable admission staging uses the fixed transient root
+`/run/remote-dev-codex-update`, never `/tmp` or caller-controlled `TMPDIR`.
+The manager-owned staging root and per-operation directory use mode `0711`; the
+root-owned extracted package directories and executables are normalized to
+`0755` independently of the process umask, while non-executable files use
+`0644`. Before downloading the package, the manager also runs a bounded
+unprivileged execution probe in the staging root. The synthetic `HOME` and
+working directory use mode `0700` and belong to UID/GID `65534`. This
+keeps the intentionally non-executable `/tmp` mount intact without making the
+persistent runtime or credentials traversable, and each operation removes its
+staging tree after success, failure, timeout or a catchable termination signal.
+
 Mutation is serialized with a private lock. Failed or interrupted admission leaves the previous active runtime untouched. Abandoned `.candidate-*` staging directories from an interrupted earlier publish are reclaimed under that same lock on a later publish attempt. Normal launch does not use the lock: it verifies the immutable published file set and can fall back immediately to the bundled CLI.
 
 ## Launch and fallback
