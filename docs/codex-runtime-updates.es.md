@@ -86,6 +86,15 @@ Antes de activar un runtime opcional, Remote Dev:
 10. calcula la huella de cada archivo publicado y la guarda en un manifiesto privado restrictivo;
 11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones.
 
+El staging ejecutable de admisión usa la raíz transitoria fija
+`/run/remote-dev-codex-update`, nunca `/tmp` ni un `TMPDIR` controlado por quien
+invoca el gestor. La raíz de staging y el directorio de cada operación,
+propiedad del gestor, usan modo `0711`; el `HOME` y directorio de trabajo
+sintéticos usan modo `0700` y pertenecen a UID/GID `65534`. Así se conserva intacto el montaje
+intencionadamente no ejecutable de `/tmp` sin hacer atravesables el runtime
+persistente ni las credenciales, y cada operación elimina su árbol de staging
+tras éxito, error, timeout o una señal de terminación capturable.
+
 Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. Los directorios de staging `.candidate-*` abandonados por una publicación anterior interrumpida se recuperan bajo ese mismo lock en un intento posterior de publicación. El lanzamiento normal no necesita ese lock: verifica el conjunto de archivos ya publicado y puede volver inmediatamente al Codex incluido en la imagen.
 
 ## Lanzamiento y fallback
