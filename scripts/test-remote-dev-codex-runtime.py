@@ -564,6 +564,21 @@ class CodexRuntimeTests(unittest.TestCase):
             self.assertTrue((releases / current_name).is_dir())
             self.assertFalse(stale.exists())
 
+    def test_candidate_cleanup_keeps_marker_on_non_missing_open_error(self):
+        with tempfile.TemporaryDirectory() as text:
+            releases = Path(text) / "releases"
+            candidate = releases / ".candidate-active"
+            candidate.mkdir(parents=True)
+            (candidate / ".in-use").write_text("\n", encoding="utf-8")
+            with mock.patch.object(
+                self.m.os,
+                "open",
+                side_effect=PermissionError("synthetic transient denial"),
+            ):
+                discarded = self.m.stage_abandoned_candidates(releases)
+            self.assertEqual(discarded, [])
+            self.assertTrue(candidate.is_dir())
+
     def test_stamp_failure_after_pointer_does_not_rollback_publication(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)

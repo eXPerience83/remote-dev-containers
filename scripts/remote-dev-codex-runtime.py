@@ -981,10 +981,13 @@ def stage_abandoned_candidates(releases: Path) -> list[Path]:
             except BlockingIOError:
                 continue
             discarded.append(discard_path(old))
-        except OSError:
-            # Legacy or interrupted candidates have no live marker lock.
+        except FileNotFoundError:
+            # Legacy or interrupted candidates have no marker file at all.
             if old.exists() and not old.is_symlink():
                 discarded.append(discard_path(old))
+        except OSError:
+            # Keep candidates whose marker identity cannot be evaluated now.
+            continue
         finally:
             if descriptor >= 0:
                 with contextlib.suppress(OSError):
@@ -996,6 +999,47 @@ def remove_discarded(paths: list[Path]) -> None:
     for path in paths:
         if path.exists() and not path.is_symlink():
             shutil.rmtree(path, ignore_errors=True)
+
+
+def initialize_verification_stamp(
+    release_name: str,
+    manifest_bytes: bytes,
+    candidate_package_fingerprints: tuple[dict[str, Any], ...],
+) -> None:
+    """Best-effort stamp initialization for an already published generation."""
+    try:
+        final_inspection = inspect_active_runtime(full_hash=False)
+        final_package = ROOT / "releases" / release_name / "package"
+        final_matches = (
+            final_inspection is not None
+            and final_inspection.release_name == release_name
+            and final_inspection.manifest_sha256
+            == hashlib.sha256(manifest_bytes).hexdigest()
+            and package_fingerprints(final_package, prefix="package")
+            == candidate_package_fingerprints
+        )
+    except ManagerError as exc:
+        final_matches = False
+        final_inspection = None
+        stamp_warning = str(exc)
+    else:
+        stamp_warning = "active generation changed"
+    if not final_matches or final_inspection is None:
+        print(
+            "WARNING: Codex runtime was published after full verification, "
+            "but its verification stamp was not initialized: "
+            f"{stamp_warning}.",
+            file=sys.stderr,
+        )
+        return
+    refreshed = refresh_verification_stamp(final_inspection)
+    if not refreshed.refreshed:
+        print(
+            "WARNING: Codex runtime was published after full verification, "
+            "but its verification stamp could not be initialized: "
+            f"{refreshed.error or 'runtime generation changed'}",
+            file=sys.stderr,
+        )
 
 
 def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
@@ -1097,39 +1141,9 @@ def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
         remove_discarded(discarded)
         discarded.clear()
 
-        try:
-            final_inspection = inspect_active_runtime(full_hash=False)
-            final_package = ROOT / "releases" / release_name / "package"
-            final_matches = (
-                final_inspection is not None
-                and final_inspection.release_name == release_name
-                and final_inspection.manifest_sha256
-                == hashlib.sha256(manifest_bytes).hexdigest()
-                and package_fingerprints(final_package, prefix="package")
-                == candidate_package_fingerprints
-            )
-        except ManagerError as exc:
-            final_matches = False
-            final_inspection = None
-            stamp_warning = str(exc)
-        else:
-            stamp_warning = "active generation changed"
-        if not final_matches or final_inspection is None:
-            print(
-                "WARNING: Codex runtime was published after full verification, "
-                "but its verification stamp was not initialized: "
-                f"{stamp_warning}.",
-                file=sys.stderr,
-            )
-            return
-        refreshed = refresh_verification_stamp(final_inspection)
-        if not refreshed.refreshed:
-            print(
-                "WARNING: Codex runtime was published after full verification, "
-                "but its verification stamp could not be initialized: "
-                f"{refreshed.error or 'runtime generation changed'}",
-                file=sys.stderr,
-            )
+        initialize_verification_stamp(
+            release_name, manifest_bytes, candidate_package_fingerprints
+        )
     except ManagerError:
         raise
     except OSError as exc:
