@@ -429,7 +429,7 @@ assert_hardening_contract() {
   local inspection
   inspection="$(docker inspect "$name")"
 
-  jq -e --arg role "$role" '
+  if ! jq -e --arg role "$role" '
     .[0].HostConfig as $host
     | (if $role == "launcher" then
          ["DAC_READ_SEARCH", "SETGID", "SETUID"]
@@ -463,7 +463,21 @@ assert_hardening_contract() {
     and (($host.NetworkMode // "") != "host")
     and (($host.GroupAdd // []) | length == 0)
     and (($host.SecurityOpt // []) == ["no-new-privileges:true"])
-  ' <<<"$inspection" >/dev/null || fail "$role fixture differs from the reviewed hardening contract"
+  ' <<<"$inspection" >/dev/null; then
+    jq '.[0] | {
+      readonly_rootfs: .HostConfig.ReadonlyRootfs,
+      cap_drop: .HostConfig.CapDrop,
+      cap_add: .HostConfig.CapAdd,
+      pids_limit: .HostConfig.PidsLimit,
+      privileged: .HostConfig.Privileged,
+      pid_mode: .HostConfig.PidMode,
+      network_mode: .HostConfig.NetworkMode,
+      group_add: .HostConfig.GroupAdd,
+      security_opt: .HostConfig.SecurityOpt,
+      tmpfs: .HostConfig.Tmpfs
+    }' <<<"$inspection" >&2
+    fail "$role fixture differs from the reviewed hardening contract"
+  fi
 }
 
 assert_runtime_mount_options() {
