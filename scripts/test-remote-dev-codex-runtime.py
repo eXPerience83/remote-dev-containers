@@ -1030,6 +1030,9 @@ class CodexRuntimeTests(unittest.TestCase):
                 timeout_log.read_text(encoding="utf-8").splitlines()[:3],
                 ["--signal=TERM", "--kill-after=5s", "60s"],
             )
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["status"]
+            )
 
 
 if __name__ == "__main__":
