@@ -18,6 +18,8 @@ from unittest import mock
 
 SCRIPT = Path(__file__).with_name("remote-dev-codex-runtime.py")
 DOCTOR = Path(__file__).with_name("remote-dev-doctor.sh")
+if not DOCTOR.is_file():
+    DOCTOR = Path("/usr/local/bin/remote-dev-doctor")
 
 
 def load_manager():
