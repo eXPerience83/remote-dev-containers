@@ -8,6 +8,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -16,6 +17,9 @@ from pathlib import Path
 from unittest import mock
 
 SCRIPT = Path(__file__).with_name("remote-dev-codex-runtime.py")
+DOCTOR = Path(__file__).with_name("remote-dev-doctor.sh")
+if not DOCTOR.is_file():
+    DOCTOR = Path("/usr/local/bin/remote-dev-doctor")
 
 
 def load_manager():
@@ -107,6 +111,19 @@ class CodexRuntimeTests(unittest.TestCase):
         run.mkdir(mode=0o711)
         run.chmod(0o711)
         return run / "remote-dev-codex-update"
+
+    def publish_fixture(self, root: Path, version: str = "0.148.0"):
+        asset = self.asset(version)
+        self.m.ROOT = root / "runtime"
+        with mock.patch.object(self.m, "target", return_value=asset["target"]):
+            self.m.publish(self.package(root, version), asset, asset["url"])
+        name = (self.m.ROOT / "current").read_text(encoding="utf-8").strip()
+        release = self.m.ROOT / "releases" / name
+        return asset, release, release / "package"
+
+    def runtime_state(self, bundled: str = "0.147.0"):
+        with mock.patch.object(self.m, "bundled_version", return_value=bundled):
+            return self.m.state()
 
     def test_release_metadata_requires_exact_stable_tag_and_digest(self):
         data = self.release_metadata()
@@ -201,28 +218,138 @@ class CodexRuntimeTests(unittest.TestCase):
             ), self.assertRaisesRegex(self.m.ManagerError, "variant"):
                 self.m.package_metadata(package, self.asset())
 
-    def test_newer_runtime_becomes_active_and_tamper_falls_back(self):
+    def test_status_is_lightweight_for_regular_and_menu_output(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)
-            package = self.package(root)
-            self.m.ROOT = root / "runtime"
+            self.publish_fixture(root)
             with mock.patch.object(
-                self.m, "target", return_value=self.asset()["target"]
+                self.m, "bundled_version", return_value="0.147.0"
+            ), mock.patch.object(
+                self.m, "file_sha", side_effect=AssertionError("package hashed")
             ):
-                self.m.publish(package, self.asset(), self.asset()["url"])
+                for command in (["status"], ["status", "--menu"]):
+                    with self.subTest(command=command), contextlib.redirect_stdout(
+                        io.StringIO()
+                    ):
+                        self.assertEqual(self.m.main(command), 0)
+
+    def test_resolve_hashes_newer_runtime_and_selects_it(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            with mock.patch.object(
+                self.m, "bundled_version", return_value="0.147.0"
+            ), mock.patch.object(self.m, "file_sha", wraps=self.m.file_sha) as file_sha:
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(self.m.main(["resolve"]), 0)
+            self.assertEqual(stdout.getvalue().strip(), str(package / "bin/codex"))
+            self.assertEqual(file_sha.call_count, len(self.m.records(package)))
+
+    def test_same_size_tamper_and_restored_mtime_falls_back_during_resolve(self):
+        for restore_mtime in (False, True):
+            with self.subTest(
+                restore_mtime=restore_mtime
+            ), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                binary = package / "bin/codex"
+                before = binary.stat()
+                original = binary.read_bytes()
+                binary.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+                binary.chmod(before.st_mode & 0o777)
+                if restore_mtime:
+                    os.utime(binary, ns=(before.st_atime_ns, before.st_mtime_ns))
+                    self.assertEqual(binary.stat().st_mtime_ns, before.st_mtime_ns)
                 with mock.patch.object(
-                    self.m, "bundled_version", return_value="0.147.0"
-                ):
-                    current = self.m.state()
-                self.assertEqual(current["kind"], "runtime")
-                binary = current["binary"]
-                binary.write_bytes(b"tampered")
-                binary.chmod(0o700)
+                    self.m, "file_sha", wraps=self.m.file_sha
+                ) as file_sha:
+                    with mock.patch.object(
+                        self.m, "bundled_version", return_value="0.147.0"
+                    ), contextlib.redirect_stdout(io.StringIO()) as stdout:
+                        self.assertEqual(self.m.main(["resolve"]), 0)
+                self.assertEqual(stdout.getvalue().strip(), str(self.m.BUNDLED))
+                self.assertGreater(file_sha.call_count, 0)
+
+    def test_equal_or_older_runtime_uses_bundled_without_hashing(self):
+        for bundled in ("0.148.0", "0.149.0"):
+            with self.subTest(bundled=bundled), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                self.publish_fixture(root)
                 with mock.patch.object(
-                    self.m, "bundled_version", return_value="0.147.0"
-                ):
-                    damaged = self.m.state()
-            self.assertEqual(damaged["kind"], "damaged")
+                    self.m, "bundled_version", return_value=bundled
+                ), mock.patch.object(
+                    self.m, "file_sha", side_effect=AssertionError("package hashed")
+                ), contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    self.assertEqual(self.m.main(["resolve"]), 0)
+                self.assertEqual(stdout.getvalue().strip(), str(self.m.BUNDLED))
+
+    def test_light_inspection_keeps_current_structural_contract(self):
+        for mode, expected in ((0o640, "runtime"), (0o666, "damaged")):
+            with self.subTest(mode=oct(mode)), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                metadata = package / "codex-package.json"
+                metadata.chmod(mode)
+                with mock.patch.object(self.m, "file_sha", side_effect=AssertionError):
+                    self.assertEqual(self.runtime_state()["kind"], expected)
+
+    @unittest.skipUnless(os.geteuid() == 0, "root is required to change ownership")
+    def test_owner_change_is_rejected_by_current_contract(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            binary = package / "bin/codex"
+            os.chown(binary, self.m.NOBODY, self.m.NOBODY)
+            self.assertEqual(self.runtime_state()["kind"], "damaged")
+
+    def test_file_set_and_symlink_changes_are_rejected(self):
+        cases = ("added", "deleted", "file-symlink", "directory-symlink")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                if case == "added":
+                    (package / "extra").write_text("extra\n", encoding="utf-8")
+                    (package / "extra").chmod(0o600)
+                elif case == "deleted":
+                    (package / "codex-resources/bwrap").unlink()
+                elif case == "file-symlink":
+                    path = package / "codex-resources/bwrap"
+                    path.unlink()
+                    path.symlink_to(package / "bin/codex")
+                else:
+                    directory = package / "codex-resources"
+                    for child in directory.iterdir():
+                        child.unlink()
+                    directory.rmdir()
+                    directory.symlink_to(package / "bin")
+                self.assertEqual(self.runtime_state()["kind"], "damaged")
+
+    def test_manifest_and_pointer_changes_are_rejected_by_light_inspection(self):
+        for changed in ("schema", "target", "version", "current"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, release, _package = self.publish_fixture(root)
+                if changed != "current":
+                    path = release / "remote-dev-runtime.json"
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    if changed == "schema":
+                        data["schema_version"] = 999
+                    elif changed == "target":
+                        data["target"] = "unexpected-target"
+                    else:
+                        data["version"] = "0.149.0"
+                    path.write_text(
+                        json.dumps(data, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    path.chmod(0o600)
+                else:
+                    path = self.m.ROOT / "current"
+                    path.write_text("not-a-release\n", encoding="utf-8")
+                    path.chmod(0o600)
+                self.assertEqual(self.runtime_state()["kind"], "damaged")
 
     def test_dangling_current_symlink_is_damaged(self):
         with tempfile.TemporaryDirectory() as text:
@@ -601,6 +728,55 @@ class CodexRuntimeTests(unittest.TestCase):
                 if current["kind"] == "damaged":
                     self.assertIn("bundled fallback", stderr.getvalue())
 
+    def test_verify_always_hashes_newer_equal_and_older_runtime(self):
+        for bundled in ("0.147.0", "0.148.0", "0.149.0"):
+            with self.subTest(bundled=bundled), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                with mock.patch.object(
+                    self.m, "bundled_version", return_value=bundled
+                ), mock.patch.object(self.m, "file_sha", wraps=self.m.file_sha) as file_sha:
+                    stdout = io.StringIO()
+                    with contextlib.redirect_stdout(stdout):
+                        self.assertEqual(self.m.main(["verify"]), 0)
+                self.assertEqual(file_sha.call_count, len(self.m.records(package)))
+                self.assertIn("full integrity: OK (runtime 0.148.0)", stdout.getvalue())
+
+    def test_verify_corruption_fails(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            path = package / "bin/codex"
+            content = path.read_bytes()
+            path.write_bytes(bytes([content[0] ^ 1]) + content[1:])
+            path.chmod(0o700)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                self.assertEqual(self.m.main(["verify"]), 1)
+            self.assertIn("full integrity: FAILED", stderr.getvalue())
+
+    def test_verify_without_optional_runtime_is_bundled_only_and_offline(self):
+        with tempfile.TemporaryDirectory() as text:
+            self.m.ROOT = Path(text) / "missing-runtime"
+            stdout = io.StringIO()
+            with mock.patch.object(
+                self.m, "opener", side_effect=AssertionError("network used")
+            ), contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.m.main(["verify"]), 0)
+            self.assertIn(
+                "bundled-only; optional runtime not installed", stdout.getvalue()
+            )
+
+    def test_verify_never_opens_network_with_installed_runtime(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            with mock.patch.object(
+                self.m, "opener", side_effect=AssertionError("network used")
+            ):
+                self.assertEqual(self.m.main(["verify"]), 0)
+
     def test_remove_deletes_only_optional_runtime(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)
@@ -690,7 +866,173 @@ class CodexRuntimeTests(unittest.TestCase):
             self.m.print_status(current, menu=False)
         rendered = "\n".join(str(call.args[0]) for call in output.call_args_list)
         self.assertIn("official source; Remote Dev review pending", rendered)
-        self.assertIn("Codex active source: runtime", rendered)
+        self.assertIn("Codex preferred source: runtime", rendered)
+
+    @unittest.skipUnless(
+        os.geteuid() == 0, "root is required for executable /run fixture"
+    )
+    def test_doctor_runs_full_verify_before_status_and_propagates_failure(self):
+        with tempfile.TemporaryDirectory(prefix="doctor-test-", dir="/run") as text:
+            root = Path(text)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            runtime_lib = root / "remote-dev-runtime.sh"
+            runtime_lib.write_text(
+                "remote_dev_resolve_role() { printf '%s\\n' codex; }\n",
+                encoding="utf-8",
+            )
+            log = root / "runtime.log"
+            timeout_log = root / "timeout.log"
+            timeout = bin_dir / "timeout"
+            timeout.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$@\" >\"$DOCTOR_TIMEOUT_LOG\"\n"
+                "[ \"$1\" = --signal=TERM ] && shift\n"
+                "[ \"$1\" = --kill-after=5s ] && shift\n"
+                "[ \"$1\" = 60s ] && shift\n"
+                "if [ \"${DOCTOR_TIMEOUT_124:-0}\" = 1 ]; then\n"
+                "  exit 124\n"
+                "fi\n"
+                "exec \"$@\"\n",
+                encoding="utf-8",
+            )
+            timeout.chmod(0o755)
+            manager = bin_dir / "remote-dev-codex-runtime"
+            manager.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$1\" >>\"$DOCTOR_RUNTIME_LOG\"\n"
+                "if [ \"$1\" = verify ]; then\n"
+                "  if [ \"${DOCTOR_VERIFY_FAIL:-0}\" = 1 ]; then\n"
+                "    echo 'ERROR: Codex runtime full integrity: FAILED: "
+                "synthetic' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+                "  echo 'Codex runtime full integrity: OK (runtime 0.149.0)'\n"
+                "else\n"
+                "  echo 'Codex bundled: 0.148.0'\n"
+                "  echo 'Codex runtime: 0.149.0'\n"
+                "  echo 'Codex preferred source: runtime'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            manager.chmod(0o755)
+            context7 = bin_dir / "remote-dev-context7"
+            generic = "#!/bin/sh\nexit 0\n"
+            context7.write_text(generic, encoding="utf-8")
+            context7.chmod(0o755)
+            commands = (
+                "start-remote-dev-web",
+                "attach-remote-dev-tmux",
+                "remote-dev-menu",
+                "remote-dev-healthcheck",
+                "remote-dev-doctor",
+                "remote-dev-version",
+                "gh",
+                "git",
+                "python",
+                "node",
+                "npm",
+                "uv",
+                "mise",
+                "ttyd",
+                "tmux",
+                "ssh",
+                "rg",
+                "fd",
+                "codex",
+                "run-codex",
+            )
+            for name in commands:
+                path = bin_dir / name
+                path.write_text(generic, encoding="utf-8")
+                path.chmod(0o755)
+            doctor = root / "remote-dev-doctor.sh"
+            source = DOCTOR.read_text(encoding="utf-8")
+            source = source.replace(
+                "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh",
+                f"runtime_lib={runtime_lib}",
+            ).replace(
+                "/usr/local/bin/remote-dev-codex-runtime", str(manager)
+            ).replace(
+                "/usr/local/bin/remote-dev-context7", str(context7)
+            )
+            doctor.write_text(source, encoding="utf-8")
+            doctor.chmod(0o755)
+            workspace = root / "workspace"
+            gh_home = root / "gh"
+            codex_home = root / "codex"
+            runtime_root = root / "runtime"
+            for path in (workspace, gh_home, codex_home, runtime_root):
+                path.mkdir()
+            env = {
+                **os.environ,
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
+                "HOME": str(root),
+                "WORKSPACE": str(workspace),
+                "GH_CONFIG_DIR": str(gh_home),
+                "CODEX_HOME": str(codex_home),
+                "REMOTE_DEV_CODEX_RUNTIME_ROOT": str(runtime_root),
+                "DOCTOR_RUNTIME_LOG": str(log),
+                "DOCTOR_TIMEOUT_LOG": str(timeout_log),
+            }
+            success = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
+            self.assertIn("Codex runtime full integrity: OK", success.stdout)
+            self.assertEqual(
+                timeout_log.read_text(encoding="utf-8").splitlines(),
+                [
+                    "--signal=TERM",
+                    "--kill-after=5s",
+                    "60s",
+                    str(manager),
+                    "verify",
+                ],
+            )
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
+            )
+
+            log.unlink()
+            env["DOCTOR_VERIFY_FAIL"] = "1"
+            failure = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(failure.returncode, 0)
+            self.assertIn("full integrity: unavailable", failure.stdout)
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
+            )
+
+            log.unlink()
+            timeout_log.unlink()
+            env.pop("DOCTOR_VERIFY_FAIL")
+            env["DOCTOR_TIMEOUT_124"] = "1"
+            timed_out = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(timed_out.returncode, 0)
+            self.assertIn("full integrity: unavailable (exit 124)", timed_out.stdout)
+            self.assertEqual(
+                timeout_log.read_text(encoding="utf-8").splitlines()[:3],
+                ["--signal=TERM", "--kill-after=5s", "60s"],
+            )
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["status"]
+            )
 
 
 if __name__ == "__main__":

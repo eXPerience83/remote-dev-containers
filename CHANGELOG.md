@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
 - Migrated the effective base image from Ubuntu 24.04 to Ubuntu 26.04 LTS.
 - Updated maintained GitHub Actions to their current major releases.
 - Changed the edge channel from private validation to public experimental development testing.

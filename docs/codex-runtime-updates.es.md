@@ -12,14 +12,14 @@ El menú, `remote-dev-version` y `remote-dev-doctor` distinguen estos estados:
 
 - **Incluido en la imagen** — la versión de Codex integrada en la imagen de Remote Dev. Es el fallback probado con esa imagen.
 - **Fuente oficial; revisión de Remote Dev pendiente** — se ha descargado explícitamente un paquete estable más nuevo desde la release oficial de OpenAI en GitHub, se han verificado el SHA-256 publicado en los metadatos de la release y la identidad del paquete, y han pasado las pruebas de compatibilidad acotadas. Remote Dev todavía no ha revisado ni probado en uso real esa release exacta como parte de una build de imagen.
-- **Dañado o modificado localmente** — el runtime opcional persistente ya no coincide con su manifiesto privado o incumple la identidad esperada de archivos/directorios. Remote Dev lo rechaza y usa el fallback incluido en la imagen.
+- **Dañado o modificado localmente** — el gestor ha detectado que el runtime opcional persistente incumple las comprobaciones de su manifiesto privado o de la identidad esperada de archivos/directorios. Remote Dev lo rechaza y usa el fallback incluido en la imagen.
 - **Se prefiere el incluido** — el runtime opcional es igual o más antiguo que la versión de Codex que ahora incluye la imagen. Gana automáticamente la copia equivalente o más nueva ya probada con la imagen.
 
 “Revisión pendiente” **no** significa que la descarga se acepte sin comprobaciones de integridad. Antes de publicarla se verifican origen, tag estable, arquitectura, digest de la release, estructura del paquete, identidad de archivos y pruebas de compatibilidad. Lo pendiente es la revisión y la validación real de Remote Dev para esa release concreta de Codex.
 
 ## Red sólo mediante acción explícita
 
-El arranque normal, `status`, `resolve`, el lanzamiento de Codex, reanudar sesiones, health checks y diagnósticos no contactan con el endpoint de actualizaciones.
+El arranque normal, `status`, `resolve`, `verify`, el lanzamiento de Codex, reanudar sesiones, health checks y diagnósticos no contactan con el endpoint de actualizaciones.
 
 Sólo hay acceso a red después de una acción explícita de instalación/actualización:
 
@@ -83,7 +83,7 @@ Antes de activar un runtime opcional, Remote Dev:
 7. ejecuta los bytes nuevos del proveedor con un `HOME`/`CODEX_HOME` sintético sin credenciales, fuera del workspace del usuario y, cuando el proceso principal es root, con un UID/GID fijo sin privilegios;
 8. limita el tiempo y la salida capturada de las pruebas del candidato;
 9. comprueba `codex --version`, las opciones de launcher necesarias y el contrato `codex-code-mode-host --listen ws://127.0.0.1:0` + `/readyz`;
-10. calcula la huella de cada archivo publicado y la guarda en un manifiesto privado restrictivo;
+10. registra la identidad SHA-256 de cada archivo publicado en un manifiesto privado restrictivo;
 11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones.
 
 El staging ejecutable de admisión usa la raíz transitoria fija
@@ -100,7 +100,23 @@ intencionadamente no ejecutable de `/tmp` sin hacer atravesables el runtime
 persistente ni las credenciales, y cada operación elimina su árbol de staging
 tras éxito, error, timeout o una señal de terminación capturable.
 
-Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. Los directorios de staging `.candidate-*` abandonados por una publicación anterior interrumpida se recuperan bajo ese mismo lock en un intento posterior de publicación. El lanzamiento normal no necesita ese lock: verifica el conjunto de archivos ya publicado y puede volver inmediatamente al Codex incluido en la imagen.
+Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. El lanzamiento normal no mantiene el lock de mutación.
+
+## Estado ligero y verificación completa
+
+`status`, `status --menu` y las vistas de versión son offline y ligeros. Validan el puntero actual, el manifiesto privado, los metadatos del paquete, la estructura esperada, propiedad, permisos, symlinks, tamaños y el conjunto exacto de archivos, pero no calculan los SHA-256 de los archivos del paquete. La fuente indicada es por tanto una preferencia de política, no una declaración criptográfica recién comprobada sobre los bytes del paquete.
+
+Antes de seleccionar un runtime opcional más nuevo que el CLI incluido, `resolve` realiza una verificación SHA-256 completa y offline de cada archivo del paquete contra el manifiesto privado. Si falla, Remote Dev usa el fallback inmutable incluido. Un runtime opcional igual o más antiguo no se selecciona y por tanto no paga el hash del paquete durante el lanzamiento.
+
+Usa el siguiente comando offline para forzar la verificación completa:
+
+```bash
+remote-dev-codex-runtime verify
+```
+
+`verify` comprueba siempre el SHA-256 de cada archivo del paquete, incluso para runtimes opcionales iguales o más antiguos que el CLI incluido. `remote-dev-doctor`, y por tanto la acción **Run diagnostics** del menú, incluye `verify`; un fallo de integridad completa hace fallar los diagnósticos.
+
+Esta separación no amplía la frontera de confianza. Una corrupción sólo de bytes que conserve las propiedades estructurales ligeras puede parecer normal en status, pero `resolve` la detecta inmediatamente antes de seleccionar un runtime opcional más nuevo y también la detectan los diagnósticos explícitos. El diseño no protege frente a un proceso con la autoridad del propietario del runtime o root del contenedor, frente a root que sustituya el propio gestor/launcher, frente al administrador del host o ZFS, ni frente a un kernel o almacenamiento comprometido. La ventana TOCTOU final entre el gestor y `exec` no cambia y se sigue por separado en [#114](https://github.com/eXPerience83/remote-dev-containers/issues/114).
 
 ## Lanzamiento y fallback
 
@@ -116,11 +132,12 @@ El contrato de aislamiento existente no cambia: Remote Dev sigue pasando `--sand
 remote-dev-codex-runtime status
 remote-dev-codex-runtime status --menu
 remote-dev-codex-runtime resolve
+remote-dev-codex-runtime verify
 remote-dev-codex-runtime remove
 remote-dev-codex-runtime remove --yes
 ```
 
-`resolve` está pensado para el launcher del proyecto e imprime la ruta del ejecutable seleccionado. Sólo realiza comprobaciones locales de integridad.
+`resolve` está pensado para el launcher del proyecto e imprime la ruta del ejecutable seleccionado. Realiza comprobaciones estructurales offline y verifica por completo cada archivo del paquete antes de seleccionar un runtime opcional más nuevo. Status informa la fuente que se preferiría por política de versión; la integridad completa se comprueba al lanzar y con `verify`.
 
 `remove` elimina únicamente el estado del runtime opcional gestionado por Remote Dev y vuelve inmediatamente al fallback inmutable incluido. Nunca modifica `/usr/local/bin/codex` ni `/root/.codex`. La eliminación interactiva pide confirmación; `--yes` es la forma explícita no interactiva.
 

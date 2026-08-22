@@ -967,7 +967,10 @@ def validate_manifest(manifest: object) -> dict[str, Any]:
     return manifest
 
 
-def verify_package_files(package: Path, manifest: dict[str, Any]) -> set[str]:
+def verify_package_files(
+    package: Path, manifest: dict[str, Any], *, full_hash: bool = True
+) -> set[str]:
+    """Apply the shared package rules, optionally adding full content hashes."""
     files = manifest.get("files")
     if not isinstance(files, list) or not files or len(files) > MAX_MEMBERS:
         fail("Codex runtime manifest has invalid file records")
@@ -1002,7 +1005,9 @@ def verify_package_files(package: Path, manifest: dict[str, Any]) -> set[str]:
         expected_paths.add(rel_value)
         path = package.joinpath(*rel.parts)
         info = real_file(path, executable=executable)
-        if info.st_size != size or file_sha(path) != sha:
+        if info.st_size != size:
+            fail(f"Codex runtime file changed: {rel_value}")
+        if full_hash and file_sha(path) != sha:
             fail(f"Codex runtime file changed: {rel_value}")
 
     actual_paths: set[str] = set()
@@ -1019,7 +1024,7 @@ def verify_package_files(package: Path, manifest: dict[str, Any]) -> set[str]:
     return expected_paths
 
 
-def active_runtime() -> tuple[str, Path] | None:
+def active_runtime(*, full_hash: bool = False) -> tuple[str, Path] | None:
     current = ROOT / "current"
     if not current.exists() and not current.is_symlink():
         return None
@@ -1039,46 +1044,67 @@ def active_runtime() -> tuple[str, Path] | None:
     if manifest_info.st_size > MAX_MANIFEST:
         fail("Codex runtime manifest exceeds size limit")
     try:
-        manifest = validate_manifest(
-            json.loads(manifest_path.read_text(encoding="utf-8"))
-        )
+        manifest = validate_manifest(json.loads(manifest_path.read_bytes()))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         fail(f"Codex runtime manifest is invalid: {exc}")
     package = release / "package"
     real_dir(package)
-    verify_package_files(package, manifest)
-    metadata = package_metadata(package)
+    verify_package_files(package, manifest, full_hash=full_hash)
     version = manifest["version"]
+    metadata = package_metadata(package)
     if metadata.get("version") != version:
         fail("Codex runtime version differs between package and private manifest")
     return version, package / "bin/codex"
 
 
-def state() -> dict[str, Any]:
+def verify_runtime() -> None:
+    try:
+        if not ROOT.exists() and not ROOT.is_symlink():
+            print(
+                "Codex runtime full integrity: OK "
+                "(bundled-only; optional runtime not installed)"
+            )
+            return
+        real_dir(ROOT)
+        runtime = active_runtime(full_hash=True)
+        if runtime is None:
+            print(
+                "Codex runtime full integrity: OK "
+                "(bundled-only; optional runtime not installed)"
+            )
+            return
+        print(f"Codex runtime full integrity: OK (runtime {runtime[0]})")
+    except ManagerError as exc:
+        fail(f"Codex runtime full integrity: FAILED: {exc}")
+
+
+def state(*, full_hash: bool = False) -> dict[str, Any]:
     bundled = bundled_version()
     if not ROOT.exists() and not ROOT.is_symlink():
         return {"kind": "bundled", "bundled": bundled}
     try:
         real_dir(ROOT)
-        runtime = active_runtime()
+        runtime = active_runtime(full_hash=full_hash)
     except ManagerError as exc:
         return {"kind": "damaged", "bundled": bundled, "warning": str(exc)}
     if runtime is None:
         return {"kind": "bundled", "bundled": bundled}
     runtime_version, binary = runtime
     if version_tuple(runtime_version) <= version_tuple(bundled):
-        return {
+        result = {
             "kind": "bundled-preferred",
             "bundled": bundled,
             "runtime": runtime_version,
             "binary": binary,
         }
-    return {
-        "kind": "runtime",
-        "bundled": bundled,
-        "runtime": runtime_version,
-        "binary": binary,
-    }
+    else:
+        result = {
+            "kind": "runtime",
+            "bundled": bundled,
+            "runtime": runtime_version,
+            "binary": binary,
+        }
+    return result
 
 
 def print_status(current: dict[str, Any], *, menu: bool) -> None:
@@ -1106,20 +1132,20 @@ def print_status(current: dict[str, Any], *, menu: bool) -> None:
             f"Codex runtime: {current['runtime']} "
             "(official source; Remote Dev review pending)"
         )
-        print("Codex active source: runtime")
+        print("Codex preferred source: runtime")
     elif kind == "damaged":
         print("Codex runtime: damaged or locally modified")
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
         print(f"Codex runtime warning: {current['warning']}")
     elif kind == "bundled-preferred":
         print(
             f"Codex runtime: {current['runtime']} "
             f"(official source; bundled {bundled} preferred)"
         )
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
     else:
         print("Codex runtime: not installed")
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
 
 
 def confirm(prompt: str, *, yes: bool) -> None:
@@ -1133,7 +1159,7 @@ def confirm(prompt: str, *, yes: bool) -> None:
 
 def update_runtime(*, yes: bool) -> None:
     bundled = bundled_version()
-    current = state()
+    current = state(full_hash=True)
     confirm(
         "Check the official OpenAI Codex release and install a newer compatible "
         "runtime if available? This action will make network requests; the "
@@ -1211,6 +1237,7 @@ def main(argv: list[str] | None = None) -> int:
     status = commands.add_parser("status")
     status.add_argument("--menu", action="store_true")
     commands.add_parser("resolve")
+    commands.add_parser("verify")
     for name in ("install", "update", "remove"):
         sub = commands.add_parser(name)
         sub.add_argument("--yes", action="store_true")
@@ -1221,6 +1248,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "resolve":
             current = state()
             if current["kind"] == "runtime":
+                current = state(full_hash=True)
+            if current["kind"] == "runtime":
                 print(current["binary"])
             else:
                 if current["kind"] == "damaged":
@@ -1230,6 +1259,8 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                     )
                 print(BUNDLED)
+        elif args.command == "verify":
+            verify_runtime()
         elif args.command in {"install", "update"}:
             update_runtime(yes=args.yes)
         elif args.command == "remove":
