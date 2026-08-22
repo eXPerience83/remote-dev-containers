@@ -46,7 +46,7 @@ services:
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
-      - /run:rw,nosuid,nodev,size=16m,mode=755
+      - /run:rw,noexec,nosuid,nodev,size=16m,mode=755
 
     stop_grace_period: 10s
 
@@ -151,7 +151,7 @@ services:
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
-      - /run:rw,nosuid,nodev,size=1536m,mode=755
+      - /run:rw,exec,nosuid,nodev,size=1536m,mode=755
 
     shm_size: 256m
     stop_grace_period: 30s
@@ -261,7 +261,7 @@ services:
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
-      - /run:rw,nosuid,nodev,size=64m,mode=755
+      - /run:rw,noexec,nosuid,nodev,size=64m,mode=755
 
     shm_size: 256m
     stop_grace_period: 30s

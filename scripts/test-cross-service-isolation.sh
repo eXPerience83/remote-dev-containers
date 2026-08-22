@@ -444,6 +444,7 @@ assert_hardening_contract() {
        elif $role == "codex" then "size=1536m"
        else "size=64m"
        end) as $run_size
+    | (if $role == "codex" then "exec" else "noexec" end) as $run_exec
     | (($host.Tmpfs // {}) as $tmpfs
        | ($tmpfs | keys | sort) == ["/run", "/tmp"]
        and (($tmpfs["/tmp"] | split(",")) as $options
@@ -451,9 +452,9 @@ assert_hardening_contract() {
                | all(. as $required | $options | index($required) != null))
             and ($options | length == 6))
        and (($tmpfs["/run"] | split(",")) as $options
-            | (["rw", "nosuid", "nodev", $run_size, "mode=755"]
+            | (["rw", $run_exec, "nosuid", "nodev", $run_size, "mode=755"]
                | all(. as $required | $options | index($required) != null))
-            and ($options | length == 5)))
+            and ($options | length == 6)))
     and ($host.ReadonlyRootfs == true)
     and (($host.CapDrop // []) == ["ALL"])
     and ((($host.CapAdd // []) | sort) == ($expected_caps | sort))
@@ -502,10 +503,17 @@ assert_runtime_mount_options() {
         *) exit 1 ;;
       esac
     done
-    case ",$run_options," in
-      *,noexec,*) exit 1 ;;
-    esac
-  ' >/dev/null 2>&1; then
+    if test "$1" = codex; then
+      case ",$run_options," in
+        *,noexec,*) exit 1 ;;
+      esac
+    else
+      case ",$run_options," in
+        *,noexec,*) ;;
+        *) exit 1 ;;
+      esac
+    fi
+  ' sh "$role" >/dev/null 2>&1; then
     docker_exec "$name" awk '$2 == "/tmp" || $2 == "/run" { print $2 ":" $4 }' /proc/mounts >&2 || true
     fail "$role fixture runtime tmpfs options are not enforced"
   fi
@@ -970,7 +978,7 @@ start_launcher() {
     --pids-limit 64 \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-    --tmpfs /run:rw,nosuid,nodev,size=16m,mode=755 \
+    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
     --env REMOTE_DEV_ROLE=launcher \
     --env REMOTE_DEV_START_MODE=menu \
     --env WEB_USERNAME=isolation-launcher \
@@ -1003,7 +1011,7 @@ start_codex() {
     --pids-limit 1024 \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
-    --tmpfs /run:rw,nosuid,nodev,size=1536m,mode=755 \
+    --tmpfs /run:rw,exec,nosuid,nodev,size=1536m,mode=755 \
     --env REMOTE_DEV_ROLE=codex \
     --env WORKSPACE=/workspace \
     --env CODEX_HOME=/root/.codex \
@@ -1046,7 +1054,7 @@ start_antigravity() {
     --pids-limit 1024 \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
-    --tmpfs /run:rw,nosuid,nodev,size=64m,mode=755 \
+    --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
     --env REMOTE_DEV_ROLE=antigravity \
     --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
     --env AGY_CLI_DISABLE_AUTO_UPDATE=true \

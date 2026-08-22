@@ -56,9 +56,9 @@ The only transient writable filesystems are private per-container tmpfs mounts:
 
 | Role | `/tmp` | `/run` |
 | --- | --- | --- |
-| launcher | `rw,noexec,nosuid,nodev,size=64m,mode=1777` | `rw,nosuid,nodev,size=16m,mode=755` |
-| Codex | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,nosuid,nodev,size=1536m,mode=755` |
-| Antigravity | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,nosuid,nodev,size=64m,mode=755` |
+| launcher | `rw,noexec,nosuid,nodev,size=64m,mode=1777` | `rw,noexec,nosuid,nodev,size=16m,mode=755` |
+| Codex | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,exec,nosuid,nodev,size=1536m,mode=755` |
+| Antigravity | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,noexec,nosuid,nodev,size=64m,mode=755` |
 
 Codex `/run` deliberately remains executable for the bounded `/run/remote-dev-codex-update` staging contract and transient Context7 device-login tooling. Its `1536m` ceiling covers the published 300 MiB package and 1 GiB unpacked limits plus working overhead; tmpfs size is a ceiling, not preallocated memory. npm and uv caches use narrow paths below the existing `/tmp` tmpfs and are transient. Antigravity installation/update staging remains in its private persistent runtime state rather than moving into `/tmp`.
 

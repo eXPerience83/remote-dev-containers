@@ -277,14 +277,14 @@ different source revision.
   mount.
 - Confirm launcher has only `DAC_READ_SEARCH,SETGID,SETUID`, PID limit `64`, `/tmp` at
   `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
-  `rw,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
+  `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
   UID/GID `65532`, has no supplementary groups, zero effective capabilities and
   `NoNewPrivs: 1`.
 - Confirm each agent has exactly
   `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID`, PID limit `1024`, and `/tmp` at
   `rw,noexec,nosuid,nodev,size=512m,mode=1777`. Confirm Codex `/run` is
-  `rw,nosuid,nodev,size=1536m,mode=755` and Antigravity `/run` is
-  `rw,nosuid,nodev,size=64m,mode=755`.
+  `rw,exec,nosuid,nodev,size=1536m,mode=755` and Antigravity `/run` is
+  `rw,noexec,nosuid,nodev,size=64m,mode=755`.
 - Verify launcher navigation, its configured authentication mode, origin/CSP,
   GET/HEAD-only behavior and secret-free `/healthz`. Verify both agent terminals
   retain independent authentication, origin checking, client limits and

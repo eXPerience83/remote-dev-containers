@@ -31,19 +31,19 @@ ROLE_TMPFS = {
     "launcher": frozenset(
         (
             "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
-            "/run:rw,nosuid,nodev,size=16m,mode=755",
+            "/run:rw,noexec,nosuid,nodev,size=16m,mode=755",
         )
     ),
     "codex": frozenset(
         (
             "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
-            "/run:rw,nosuid,nodev,size=1536m,mode=755",
+            "/run:rw,exec,nosuid,nodev,size=1536m,mode=755",
         )
     ),
     "antigravity": frozenset(
         (
             "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
-            "/run:rw,nosuid,nodev,size=64m,mode=755",
+            "/run:rw,noexec,nosuid,nodev,size=64m,mode=755",
         )
     ),
 }
