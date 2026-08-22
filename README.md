@@ -179,6 +179,10 @@ Here, `danger-full-access` describes only the Codex inner sandbox. It does not g
 
 Autonomous mode means Codex may read, modify or delete anything mounted into its service and may use credentials available there without asking first. It does not add access beyond the existing container mounts, network and credentials. Guarded mode adds confirmation friction but does not provide filesystem isolation.
 
+The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts as root only to read an optional protected file-backed password, receives only `SETGID` and `SETUID`, then permanently becomes UID/GID `65532` with zero effective capabilities. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
+
+Each role has private transient `/tmp` and `/run` tmpfs mounts. `/tmp` is `noexec,nosuid,nodev`; Codex `/run` deliberately permits execution for bounded Codex update and Context7 device-login staging. npm and uv caches use transient paths below `/tmp`. These tmpfs contents, including tmux sockets, disappear on recreation; only the existing narrow role mounts persist. Generic Compose keeps file-backed secrets below `/run/secrets`, while the TrueNAS reference keeps its environment-backed password mode.
+
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
 ## Canonical persistent-data layout

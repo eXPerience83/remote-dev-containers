@@ -162,6 +162,10 @@ El launcher y Codex son contenedores separados. El launcher base solo recibe su 
 
 La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
 
+Los contenedores de producción del launcher, Codex y Antigravity usan un sistema de archivos raíz de solo lectura, `no-new-privileges`, `cap_drop: [ALL]`, ningún grupo suplementario, mounts privados por rol y límites PID explícitos (`64` para el launcher y `1024` para cada agente). El launcher arranca como root únicamente para leer una contraseña opcional protegida y respaldada por archivo, recibe solo `SETGID` y `SETUID`, y después baja permanentemente a UID/GID `65532` con cero capacidades efectivas. Los terminales de agente root reciben solo `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` y `SETUID`; estas capacidades mantienen la propiedad y el endurecimiento de los bind mounts privados y la ejecución acotada de candidatos como UID/GID `65534`, no acceso al host.
+
+Cada rol tiene tmpfs transitorios y privados para `/tmp` y `/run`. `/tmp` usa `noexec,nosuid,nodev`; `/run` de Codex permite deliberadamente ejecución para el staging acotado de actualizaciones de Codex y del login de dispositivo de Context7. Las cachés de npm y uv usan rutas transitorias bajo `/tmp`. El contenido de estos tmpfs, incluidos los sockets tmux, desaparece al recrear el contenedor; solo persisten los mounts estrechos ya existentes de cada rol. El Compose genérico mantiene secretos respaldados por archivo bajo `/run/secrets`, mientras que la referencia TrueNAS conserva su modo de contraseñas por variables de entorno.
+
 No añadas modo privilegiado, `SYS_ADMIN`, perfiles sin restricciones, el socket Docker ni montajes amplios para intentar habilitar un sandbox anidado.
 
 ## Estructura persistente canónica

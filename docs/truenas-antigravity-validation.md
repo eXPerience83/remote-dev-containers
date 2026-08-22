@@ -211,8 +211,9 @@ Before pasting it into the TrueNAS Custom App editor:
 5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
    password;
 6. keep both values quoted and never commit the personalized YAML to Git;
-7. do not add privileged mode, capabilities, host networking, host-root mounts
-   or a Docker socket;
+7. preserve the reviewed `cap_drop: [ALL]` plus role-specific `cap_add` lists;
+   do not add privileged mode, host networking, host-root mounts or a Docker
+   socket;
 8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
    validation.
 
@@ -251,7 +252,7 @@ for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
   test "$configured_image" = "$pinned_image"
   sudo docker inspect "$container" --format \
-    'configured_image={{.Config.Image}} image_id={{.Image}} privileged={{.HostConfig.Privileged}} network={{.HostConfig.NetworkMode}} cap_add={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}}'
+    'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
   sudo docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
@@ -259,6 +260,51 @@ done
 
 Do not dump complete container environments. Verify only variable names when
 needed.
+
+## Exact #42 candidate checklist
+
+Keep issue #42 open until this checklist passes against the exact PR candidate.
+Record sanitized facts only; do not infer success from an older image or a
+different source revision.
+
+- Record the TrueNAS version, test date, exact source revision and exact
+  `dev-amd64` repository digest. Confirm launcher, Codex and Antigravity resolve
+  to the same image ID/digest.
+- Save the rendered/serialized App configuration and the inspect fields above.
+  Confirm every role has a read-only root filesystem,
+  `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
+  groups, no privileged/host PID/host network mode and no engine socket or broad
+  mount.
+- Confirm launcher has only `SETGID,SETUID`, PID limit `64`, `/tmp` at
+  `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
+  `rw,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
+  UID/GID `65532`, has no supplementary groups, zero effective capabilities and
+  `NoNewPrivs: 1`.
+- Confirm each agent has exactly
+  `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID`, PID limit `1024`, and `/tmp` at
+  `rw,noexec,nosuid,nodev,size=512m,mode=1777`. Confirm Codex `/run` is
+  `rw,nosuid,nodev,size=1536m,mode=755` and Antigravity `/run` is
+  `rw,nosuid,nodev,size=64m,mode=755`.
+- Verify launcher navigation, its configured authentication mode, origin/CSP,
+  GET/HEAD-only behavior and secret-free `/healthz`. Verify both agent terminals
+  retain independent authentication, origin checking, client limits and
+  role-specific credential-independent health.
+- Exercise Codex autonomous (`danger-full-access` + `never`) and guarded
+  (`danger-full-access` + `untrusted`) workflows. Record successful Start,
+  Resume, Shell, login and doctor behavior, and confirm diagnostics still name
+  the outer container as the boundary. Where Context7 is already configured,
+  confirm that existing managed path remains functional without recording its
+  key or account data.
+- Record Antigravity's installed/review state, explicit launch, OAuth
+  persistence, native in-TUI `/resume` conversation picker and `--continue`
+  behavior. Antigravity remains experimental; a real account result must not be
+  replaced with a synthetic claim.
+- Place existence-only synthetic canaries in every role-private mount category.
+  Stop/start and recreate launcher, Codex and Antigravity separately; after each
+  recreation, repeat the mount/security inspection and confirm other-role
+  canaries, health and private state are unchanged.
+- Record no password, token, OAuth URL/code, account name, credential content or
+  private repository name in the evidence.
 
 ## Browser checks
 
@@ -326,17 +372,19 @@ tree during the validation cycle.
 
 ## Completion evidence
 
-Post sanitized results to #29 and #69:
+Post the hardening/isolation candidate results to #42 and keep the related
+Antigravity lifecycle and password-source evidence linked to #29 and #69:
 
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
+- rendered and inspected hardening fields from the exact candidate;
 - confirmation that YAML and preflight came from that same revision;
 - password source (`environment` or `file`) without its value;
 - Antigravity CLI version;
 - browser/access method without account identity;
 - pass/fail for install, login, stop/start and recreation;
 - confirmed mount destinations and permission metadata;
-- confirmation that launcher has no mounts;
+- confirmation that the base TrueNAS launcher has no mounts;
 - confirmation that Codex and Antigravity use independent credentials;
 - any safe error messages and follow-up issue links.
 
