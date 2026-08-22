@@ -483,7 +483,7 @@ assert_hardening_contract() {
 assert_runtime_mount_options() {
   local name="$1"
   local role="$2"
-  docker_exec "$name" sh -c '
+  if ! docker_exec "$name" sh -c '
     set -eu
     mount_options() {
       awk -v target="$1" '\''$2 == target { print $4 }'\'' /proc/mounts
@@ -505,7 +505,10 @@ assert_runtime_mount_options() {
     case ",$run_options," in
       *,noexec,*) exit 1 ;;
     esac
-  ' >/dev/null 2>&1 || fail "$role fixture runtime tmpfs options are not enforced"
+  ' >/dev/null 2>&1; then
+    docker_exec "$name" awk '$2 == "/tmp" || $2 == "/run" { print $2 ":" $4 }' /proc/mounts >&2 || true
+    fail "$role fixture runtime tmpfs options are not enforced"
+  fi
 }
 
 assert_launcher_runtime_identity() {
