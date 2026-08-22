@@ -126,7 +126,7 @@ fi
 if [[ "$role" == codex ]]; then
   echo
   codex_runtime_verify=0
-  codex_runtime_verify_command=(/usr/local/bin/remote-dev-codex-runtime verify)
+  codex_runtime_verify_command=(timeout --signal=TERM --kill-after=5s 60s /usr/local/bin/remote-dev-codex-runtime verify)
   if "${codex_runtime_verify_command[@]}"; then
     :
   else

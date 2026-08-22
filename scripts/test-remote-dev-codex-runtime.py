@@ -882,6 +882,21 @@ class CodexRuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             log = root / "runtime.log"
+            timeout_log = root / "timeout.log"
+            timeout = bin_dir / "timeout"
+            timeout.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$@\" >\"$DOCTOR_TIMEOUT_LOG\"\n"
+                "[ \"$1\" = --signal=TERM ] && shift\n"
+                "[ \"$1\" = --kill-after=5s ] && shift\n"
+                "[ \"$1\" = 60s ] && shift\n"
+                "if [ \"${DOCTOR_TIMEOUT_124:-0}\" = 1 ]; then\n"
+                "  exit 124\n"
+                "fi\n"
+                "exec \"$@\"\n",
+                encoding="utf-8",
+            )
+            timeout.chmod(0o755)
             manager = bin_dir / "remote-dev-codex-runtime"
             manager.write_text(
                 "#!/bin/sh\n"
@@ -958,6 +973,7 @@ class CodexRuntimeTests(unittest.TestCase):
                 "CODEX_HOME": str(codex_home),
                 "REMOTE_DEV_CODEX_RUNTIME_ROOT": str(runtime_root),
                 "DOCTOR_RUNTIME_LOG": str(log),
+                "DOCTOR_TIMEOUT_LOG": str(timeout_log),
             }
             success = subprocess.run(
                 ["/bin/bash", str(doctor)],
@@ -968,6 +984,16 @@ class CodexRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
             self.assertIn("Codex runtime full integrity: OK", success.stdout)
+            self.assertEqual(
+                timeout_log.read_text(encoding="utf-8").splitlines(),
+                [
+                    "--signal=TERM",
+                    "--kill-after=5s",
+                    "60s",
+                    str(manager),
+                    "verify",
+                ],
+            )
             self.assertEqual(
                 log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
             )
@@ -985,6 +1011,24 @@ class CodexRuntimeTests(unittest.TestCase):
             self.assertIn("full integrity: unavailable", failure.stdout)
             self.assertEqual(
                 log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
+            )
+
+            log.unlink()
+            timeout_log.unlink()
+            env.pop("DOCTOR_VERIFY_FAIL")
+            env["DOCTOR_TIMEOUT_124"] = "1"
+            timed_out = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(timed_out.returncode, 0)
+            self.assertIn("full integrity: unavailable (exit 124)", timed_out.stdout)
+            self.assertEqual(
+                timeout_log.read_text(encoding="utf-8").splitlines()[:3],
+                ["--signal=TERM", "--kill-after=5s", "60s"],
             )
 
 
