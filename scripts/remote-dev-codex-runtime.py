@@ -27,7 +27,6 @@ import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -67,13 +66,9 @@ MAX_MEMBERS = 128
 MAX_METADATA = 4 * 1024 * 1024
 MAX_MANIFEST = 4 * 1024 * 1024
 MAX_POINTER = 256
-MAX_STAMP = 256 * 1024
 MAX_PROBE_OUTPUT = 1024 * 1024
 TIMEOUT = 20
 SCHEMA = 1
-STAMP_SCHEMA = 1
-FINGERPRINT_ALGORITHM = "linux-stat-v1"
-MAX_STAMP_OBJECTS = 2048
 NOBODY = 65534
 STAGING_ROOT = Path("/run/remote-dev-codex-update")
 
@@ -88,25 +83,6 @@ class OperationInterrupted(Exception):
     def __init__(self, signum: int):
         super().__init__(signum)
         self.signum = signum
-
-
-@dataclass(frozen=True)
-class RuntimeInspection:
-    """One structurally validated optional runtime generation."""
-
-    release_name: str
-    version: str
-    runtime_target: str
-    binary: Path
-    manifest_sha256: str
-    fingerprints: tuple[dict[str, Any], ...]
-
-
-@dataclass(frozen=True)
-class StampRefreshResult:
-    refreshed: bool
-    stale: bool = False
-    error: str | None = None
 
 
 def fail(message: str) -> NoReturn:
@@ -172,63 +148,6 @@ def real_dir(path: Path) -> os.stat_result:
     if info.st_mode & 0o022:
         fail(f"runtime directory is group/world writable: {path}")
     return info
-
-
-def fingerprint_record(path: Path, label: str) -> dict[str, Any]:
-    """Describe one object without following links or reading file contents."""
-    try:
-        info = path.lstat()
-    except OSError as exc:
-        fail(f"cannot fingerprint Codex runtime object {path}: {exc}")
-    if stat.S_ISREG(info.st_mode):
-        kind = "file"
-    elif stat.S_ISDIR(info.st_mode):
-        kind = "directory"
-    elif stat.S_ISLNK(info.st_mode):
-        fail(f"Codex runtime object is a symlink: {path}")
-    else:
-        # The current full verifier ignores additional non-file package
-        # objects. Record them as a change signal without widening #113 into
-        # the stricter object-type admission policy tracked by #114.
-        kind = "other"
-    return {
-        "path": label,
-        "kind": kind,
-        "st_dev": info.st_dev,
-        "st_ino": info.st_ino,
-        "st_nlink": info.st_nlink,
-        "st_size": info.st_size,
-        "st_uid": info.st_uid,
-        "st_gid": info.st_gid,
-        "st_mode": info.st_mode,
-        "st_mtime_ns": info.st_mtime_ns,
-        "st_ctime_ns": info.st_ctime_ns,
-    }
-
-
-def package_fingerprints(package: Path, *, prefix: str) -> tuple[dict[str, Any], ...]:
-    result = [fingerprint_record(package, prefix)]
-    try:
-        for path in sorted(package.rglob("*")):
-            rel = path.relative_to(package).as_posix()
-            result.append(fingerprint_record(path, f"{prefix}/{rel}"))
-    except OSError as exc:
-        fail(f"cannot fingerprint Codex runtime package: {exc}")
-    return tuple(result)
-
-
-def runtime_fingerprints(
-    current: Path, release: Path, manifest_path: Path, package: Path, release_name: str
-) -> tuple[dict[str, Any], ...]:
-    release_label = f"releases/{release_name}"
-    result = [
-        fingerprint_record(current, "current"),
-        fingerprint_record(release, release_label),
-        fingerprint_record(manifest_path, f"{release_label}/remote-dev-runtime.json"),
-        *package_fingerprints(package, prefix=f"{release_label}/package"),
-    ]
-    result.sort(key=lambda item: item["path"])
-    return tuple(result)
 
 
 def prepare_root() -> None:
@@ -937,229 +856,82 @@ def read_previous_name() -> str | None:
     return name if CURRENT_RE.fullmatch(name) else None
 
 
-def prepare_releases() -> Path:
-    releases = ROOT / "releases"
-    if releases.exists() or releases.is_symlink():
-        real_dir(releases)
-    else:
-        releases.mkdir(mode=0o700)
-    releases.chmod(0o700)
-    return releases
-
-
-def discard_path(path: Path) -> Path:
-    discarded = path.parent / f".discard-{uuid.uuid4().hex}"
-    os.replace(path, discarded)
-    return discarded
-
-
-def stage_abandoned_candidates(releases: Path) -> list[Path]:
-    """Atomically detach inactive candidate trees for lock-free deletion."""
-    discarded: list[Path] = []
-    for old in releases.iterdir():
-        if old.name.startswith(".discard-"):
-            discarded.append(old)
-            continue
-        if (
-            not old.name.startswith(".candidate-")
-            or not old.is_dir()
-            or old.is_symlink()
-        ):
-            continue
-        marker = old / ".in-use"
-        descriptor = -1
-        try:
-            flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
-            flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(marker, flags)
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != expected_owner():
-                discarded.append(discard_path(old))
-                continue
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                continue
-            discarded.append(discard_path(old))
-        except FileNotFoundError:
-            # Legacy or interrupted candidates have no marker file at all.
-            if old.exists() and not old.is_symlink():
-                discarded.append(discard_path(old))
-        except OSError:
-            # Keep candidates whose marker identity cannot be evaluated now.
-            continue
-        finally:
-            if descriptor >= 0:
-                with contextlib.suppress(OSError):
-                    os.close(descriptor)
-    return discarded
-
-
-def remove_discarded(paths: list[Path]) -> None:
-    for path in paths:
-        if path.exists() and not path.is_symlink():
-            shutil.rmtree(path, ignore_errors=True)
-
-
-def initialize_verification_stamp(
-    release_name: str,
-    manifest_bytes: bytes,
-    candidate_package_fingerprints: tuple[dict[str, Any], ...],
-) -> None:
-    """Best-effort stamp initialization for an already published generation."""
-    try:
-        final_inspection = inspect_active_runtime(full_hash=False)
-        final_package = ROOT / "releases" / release_name / "package"
-        final_matches = (
-            final_inspection is not None
-            and final_inspection.release_name == release_name
-            and final_inspection.manifest_sha256
-            == hashlib.sha256(manifest_bytes).hexdigest()
-            and package_fingerprints(final_package, prefix="package")
-            == candidate_package_fingerprints
-        )
-    except ManagerError as exc:
-        final_matches = False
-        final_inspection = None
-        stamp_warning = str(exc)
-    else:
-        stamp_warning = "active generation changed"
-    if not final_matches or final_inspection is None:
-        print(
-            "WARNING: Codex runtime was published after full verification, "
-            "but its verification stamp was not initialized: "
-            f"{stamp_warning}.",
-            file=sys.stderr,
-        )
-        return
-    refreshed = refresh_verification_stamp(final_inspection)
-    if not refreshed.refreshed:
-        print(
-            "WARNING: Codex runtime was published after full verification, "
-            "but its verification stamp could not be initialized: "
-            f"{refreshed.error or 'runtime generation changed'}",
-            file=sys.stderr,
-        )
-
-
 def publish(package: Path, asset: dict[str, Any], final_url: str) -> None:
     expected_records = records(package)
     release_name = (
         f"{asset['version']}-{asset['sha256'][:16]}-{uuid.uuid4().hex[:8]}"
     )
-    staging: Path | None = None
-    marker_descriptor = -1
-    published = False
-    discarded: list[Path] = []
-    candidate_package_fingerprints: tuple[dict[str, Any], ...] | None = None
-    try:
-        with runtime_lock():
-            releases = prepare_releases()
-            discarded.extend(stage_abandoned_candidates(releases))
-            staging = releases / f".candidate-{uuid.uuid4().hex}"
-            staging.mkdir(mode=0o700)
-            marker = staging / ".in-use"
-            flags = os.O_CREAT | os.O_EXCL | os.O_RDWR
-            flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-            marker_descriptor = os.open(marker, flags, 0o600)
-            os.fchmod(marker_descriptor, 0o600)
-            fcntl.flock(marker_descriptor, fcntl.LOCK_EX)
-        remove_discarded(discarded)
-        discarded.clear()
-
-        destination = staging / "package"
-        shutil.copytree(package, destination)
-        for path in [destination, *destination.rglob("*")]:
-            if path.is_symlink():
-                fail("published Codex runtime cannot contain symlinks")
-            if path.is_dir():
-                path.chmod(0o700)
-            elif path.is_file():
-                path.chmod(0o700 if path.stat().st_mode & stat.S_IXUSR else 0o600)
-        before_hash = package_fingerprints(destination, prefix="package")
-        if records(destination) != expected_records:
-            fail("candidate Codex package changed while publishing")
-        candidate_package_fingerprints = package_fingerprints(
-            destination, prefix="package"
-        )
-        if before_hash != candidate_package_fingerprints:
-            fail("candidate Codex package changed while publishing")
-
-        manifest = {
-            "schema_version": SCHEMA,
-            "version": asset["version"],
-            "release_tag": asset["tag"],
-            "target": asset["target"],
-            "source_url": asset["url"],
-            "final_url": final_url,
-            "package_name": asset["name"],
-            "package_sha256": asset["sha256"],
-            "package_size": asset["size"],
-            "files": expected_records,
-            "installed_at": int(time.time()),
-        }
-        manifest_path = staging / "remote-dev-runtime.json"
-        manifest_bytes = (
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-        ).encode()
-        manifest_path.write_bytes(manifest_bytes)
-        manifest_path.chmod(0o600)
-        candidate_manifest_fingerprint = fingerprint_record(manifest_path, "manifest")
-
-        with runtime_lock():
-            releases = prepare_releases()
-            if staging.parent != releases or not staging.exists():
-                fail("candidate Codex package disappeared while publishing")
-            if (
-                package_fingerprints(destination, prefix="package")
-                != candidate_package_fingerprints
-                or fingerprint_record(manifest_path, "manifest")
-                != candidate_manifest_fingerprint
-            ):
-                fail("candidate Codex package changed while publishing")
+    with runtime_lock():
+        staging: Path | None = None
+        try:
+            releases = ROOT / "releases"
+            if releases.exists() or releases.is_symlink():
+                real_dir(releases)
+            else:
+                releases.mkdir(mode=0o700)
+            releases.chmod(0o700)
+            for old in releases.iterdir():
+                if (
+                    old.name.startswith(".candidate-")
+                    and old.is_dir()
+                    and not old.is_symlink()
+                ):
+                    shutil.rmtree(old, ignore_errors=True)
             previous_name = read_previous_name()
+            staging = releases / f".candidate-{uuid.uuid4().hex}"
             final_release = releases / release_name
-            marker.unlink()
+            staging.mkdir(mode=0o700)
+            destination = staging / "package"
+            shutil.copytree(package, destination)
+            for path in [destination, *destination.rglob("*")]:
+                if path.is_symlink():
+                    fail("published Codex runtime cannot contain symlinks")
+                if path.is_dir():
+                    path.chmod(0o700)
+                elif path.is_file():
+                    path.chmod(0o700 if path.stat().st_mode & stat.S_IXUSR else 0o600)
+            if records(destination) != expected_records:
+                fail("candidate Codex package changed while publishing")
+            manifest = {
+                "schema_version": SCHEMA,
+                "version": asset["version"],
+                "release_tag": asset["tag"],
+                "target": asset["target"],
+                "source_url": asset["url"],
+                "final_url": final_url,
+                "package_name": asset["name"],
+                "package_sha256": asset["sha256"],
+                "package_size": asset["size"],
+                "files": expected_records,
+                "installed_at": int(time.time()),
+            }
+            manifest_path = staging / "remote-dev-runtime.json"
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            manifest_path.chmod(0o600)
             os.replace(staging, final_release)
             pointer = ROOT / f".current-{uuid.uuid4().hex}"
             pointer.write_text(release_name + "\n", encoding="utf-8")
             pointer.chmod(0o600)
             os.replace(pointer, ROOT / "current")
-            published = True
             keep_names = {release_name}
             if previous_name:
                 keep_names.add(previous_name)
-            discarded.extend(stage_abandoned_candidates(releases))
             for old in releases.iterdir():
                 if (
                     old.name not in keep_names
                     and old.is_dir()
                     and not old.is_symlink()
-                    and not old.name.startswith((".candidate-", ".discard-"))
+                    and not old.name.startswith(".candidate-")
                 ):
-                    discarded.append(discard_path(old))
-        remove_discarded(discarded)
-        discarded.clear()
-
-        initialize_verification_stamp(
-            release_name, manifest_bytes, candidate_package_fingerprints
-        )
-    except ManagerError:
-        raise
-    except OSError as exc:
-        fail(f"cannot publish Codex runtime: {exc}")
-    finally:
-        if marker_descriptor >= 0:
-            with contextlib.suppress(OSError):
-                os.close(marker_descriptor)
-        remove_discarded(discarded)
-        if (
-            not published
-            and staging is not None
-            and staging.exists()
-            and not staging.is_symlink()
-        ):
-            shutil.rmtree(staging, ignore_errors=True)
+                    shutil.rmtree(old, ignore_errors=True)
+        except OSError as exc:
+            fail(f"cannot publish Codex runtime: {exc}")
+        finally:
+            if staging is not None and staging.exists() and not staging.is_symlink():
+                shutil.rmtree(staging, ignore_errors=True)
 
 
 def validate_manifest(manifest: object) -> dict[str, Any]:
@@ -1252,7 +1024,7 @@ def verify_package_files(
     return expected_paths
 
 
-def inspect_active_runtime(*, full_hash: bool) -> RuntimeInspection | None:
+def active_runtime(*, full_hash: bool = False) -> tuple[str, Path] | None:
     current = ROOT / "current"
     if not current.exists() and not current.is_symlink():
         return None
@@ -1272,265 +1044,17 @@ def inspect_active_runtime(*, full_hash: bool) -> RuntimeInspection | None:
     if manifest_info.st_size > MAX_MANIFEST:
         fail("Codex runtime manifest exceeds size limit")
     try:
-        manifest_bytes = manifest_path.read_bytes()
-        manifest = validate_manifest(json.loads(manifest_bytes))
+        manifest = validate_manifest(json.loads(manifest_path.read_bytes()))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         fail(f"Codex runtime manifest is invalid: {exc}")
     package = release / "package"
     real_dir(package)
-    before = runtime_fingerprints(current, release, manifest_path, package, name)
     verify_package_files(package, manifest, full_hash=full_hash)
     version = manifest["version"]
-    if full_hash:
-        metadata = package_metadata(package)
-        if metadata.get("version") != version:
-            fail("Codex runtime version differs between package and private manifest")
-    after = runtime_fingerprints(current, release, manifest_path, package, name)
-    if before != after:
-        fail("Codex runtime changed during integrity inspection")
-    return RuntimeInspection(
-        release_name=name,
-        version=version,
-        runtime_target=manifest["target"],
-        binary=package / "bin/codex",
-        manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
-        fingerprints=after,
-    )
-
-
-def stamp_path() -> Path:
-    return ROOT / "verification-stamp.json"
-
-
-def stamp_payload(inspection: RuntimeInspection) -> dict[str, Any]:
-    return {
-        "schema_version": STAMP_SCHEMA,
-        "fingerprint_algorithm": FINGERPRINT_ALGORITHM,
-        "release_name": inspection.release_name,
-        "runtime_version": inspection.version,
-        "target": inspection.runtime_target,
-        "manifest_sha256": inspection.manifest_sha256,
-        "fingerprints": list(inspection.fingerprints),
-        "verified_at": int(time.time()),
-    }
-
-
-def valid_stamp_fingerprint(item: object) -> bool:
-    keys = {
-        "path",
-        "kind",
-        "st_dev",
-        "st_ino",
-        "st_nlink",
-        "st_size",
-        "st_uid",
-        "st_gid",
-        "st_mode",
-        "st_mtime_ns",
-        "st_ctime_ns",
-    }
-    if not isinstance(item, dict) or set(item) != keys:
-        return False
-    label = item.get("path")
-    if (
-        not isinstance(label, str)
-        or not 1 <= len(label) <= 1024
-        or "\x00" in label
-        or label.startswith("/")
-        or ".." in Path(label).parts
-    ):
-        return False
-    if item.get("kind") not in {"file", "directory", "other"}:
-        return False
-    for key in keys - {"path", "kind"}:
-        value = item.get(key)
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            return False
-    return True
-
-
-def read_verification_stamp() -> dict[str, Any] | None:
-    path = stamp_path()
-    if not path.exists() and not path.is_symlink():
-        return None
-    try:
-        info = real_file(path)
-        if not 1 <= info.st_size <= MAX_STAMP:
-            return None
-        with path.open("rb") as stream:
-            payload = stream.read(MAX_STAMP + 1)
-        if len(payload) != info.st_size or len(payload) > MAX_STAMP:
-            return None
-        data = json.loads(payload)
-    except (ManagerError, OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    keys = {
-        "schema_version",
-        "fingerprint_algorithm",
-        "release_name",
-        "runtime_version",
-        "target",
-        "manifest_sha256",
-        "fingerprints",
-        "verified_at",
-    }
-    if not isinstance(data, dict) or set(data) != keys:
-        return None
-    if (
-        data.get("schema_version") != STAMP_SCHEMA
-        or data.get("fingerprint_algorithm") != FINGERPRINT_ALGORITHM
-        or not isinstance(data.get("release_name"), str)
-        or not CURRENT_RE.fullmatch(data["release_name"])
-        or not isinstance(data.get("runtime_version"), str)
-        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", data["runtime_version"])
-        or not isinstance(data.get("target"), str)
-        or not isinstance(data.get("manifest_sha256"), str)
-        or not SHA_RE.fullmatch(data["manifest_sha256"])
-    ):
-        return None
-    verified_at = data.get("verified_at")
-    if (
-        not isinstance(verified_at, int)
-        or isinstance(verified_at, bool)
-        or verified_at < 0
-    ):
-        return None
-    fingerprints = data.get("fingerprints")
-    if (
-        not isinstance(fingerprints, list)
-        or not 1 <= len(fingerprints) <= MAX_STAMP_OBJECTS
-        or not all(valid_stamp_fingerprint(item) for item in fingerprints)
-    ):
-        return None
-    labels = [item["path"] for item in fingerprints]
-    if labels != sorted(labels) or len(labels) != len(set(labels)):
-        return None
-    return data
-
-
-def stamp_matches(inspection: RuntimeInspection) -> bool:
-    stamp = read_verification_stamp()
-    if stamp is None:
-        return False
-    return (
-        stamp["release_name"] == inspection.release_name
-        and stamp["runtime_version"] == inspection.version
-        and stamp["target"] == inspection.runtime_target
-        and stamp["manifest_sha256"] == inspection.manifest_sha256
-        and stamp["fingerprints"] == list(inspection.fingerprints)
-    )
-
-
-def write_verification_stamp(inspection: RuntimeInspection) -> None:
-    destination = stamp_path()
-    temporary = ROOT / f".verification-stamp-{uuid.uuid4().hex}"
-    fingerprints = list(inspection.fingerprints)
-    labels = [item["path"] for item in fingerprints]
-    if (
-        not 1 <= len(fingerprints) <= MAX_STAMP_OBJECTS
-        or not all(valid_stamp_fingerprint(item) for item in fingerprints)
-        or labels != sorted(labels)
-        or len(labels) != len(set(labels))
-    ):
-        fail("Codex runtime verification fingerprint cannot be persisted safely")
-    payload = (
-        json.dumps(stamp_payload(inspection), sort_keys=True, separators=(",", ":"))
-        + "\n"
-    ).encode()
-    if len(payload) > MAX_STAMP:
-        fail("Codex runtime verification stamp exceeds size limit")
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
-    descriptor = -1
-    try:
-        descriptor = os.open(temporary, flags, 0o600)
-        with os.fdopen(descriptor, "wb") as output:
-            descriptor = -1
-            output.write(payload)
-            output.flush()
-            os.fchmod(output.fileno(), 0o600)
-            os.fsync(output.fileno())
-        os.replace(temporary, destination)
-        directory_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        directory_flags |= getattr(os, "O_DIRECTORY", 0)
-        directory = os.open(ROOT, directory_flags)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-    except OSError as exc:
-        fail(f"cannot persist Codex runtime verification stamp: {exc}")
-    finally:
-        if descriptor >= 0:
-            with contextlib.suppress(OSError):
-                os.close(descriptor)
-        with contextlib.suppress(OSError):
-            temporary.unlink(missing_ok=True)
-
-
-def same_inspection(left: RuntimeInspection, right: RuntimeInspection) -> bool:
-    return (
-        left.release_name == right.release_name
-        and left.version == right.version
-        and left.runtime_target == right.runtime_target
-        and left.manifest_sha256 == right.manifest_sha256
-        and left.fingerprints == right.fingerprints
-    )
-
-
-def refresh_verification_stamp(
-    inspection: RuntimeInspection,
-) -> StampRefreshResult:
-    try:
-        with runtime_lock():
-            try:
-                current = inspect_active_runtime(full_hash=False)
-            except ManagerError as exc:
-                return StampRefreshResult(
-                    False,
-                    stale=True,
-                    error=f"runtime changed before stamp publication: {exc}",
-                )
-            if current is None or not same_inspection(current, inspection):
-                return StampRefreshResult(
-                    False,
-                    stale=True,
-                    error="runtime generation changed before stamp publication",
-                )
-            write_verification_stamp(inspection)
-    except ManagerError as exc:
-        return StampRefreshResult(False, error=str(exc))
-    return StampRefreshResult(True)
-
-
-def active_runtime(
-    *,
-    force_full: bool = False,
-    require_stamp: bool = False,
-    warnings: list[str] | None = None,
-) -> tuple[str, Path] | None:
-    for attempt in range(2):
-        inspection = inspect_active_runtime(full_hash=force_full)
-        if inspection is None:
-            return None
-        if not force_full and stamp_matches(inspection):
-            return inspection.version, inspection.binary
-        if not force_full:
-            inspection = inspect_active_runtime(full_hash=True)
-            if inspection is None:
-                return None
-        refreshed = refresh_verification_stamp(inspection)
-        if refreshed.refreshed:
-            return inspection.version, inspection.binary
-        if refreshed.stale and attempt == 0:
-            continue
-        message = refreshed.error or "verification stamp could not be refreshed"
-        if require_stamp:
-            fail(message)
-        if warnings is not None:
-            warnings.append(message)
-        return inspection.version, inspection.binary
-    fail("Codex runtime changed repeatedly during verification")
+    metadata = package_metadata(package)
+    if metadata.get("version") != version:
+        fail("Codex runtime version differs between package and private manifest")
+    return version, package / "bin/codex"
 
 
 def verify_runtime() -> None:
@@ -1542,7 +1066,7 @@ def verify_runtime() -> None:
             )
             return
         real_dir(ROOT)
-        runtime = active_runtime(force_full=True, require_stamp=True)
+        runtime = active_runtime(full_hash=True)
         if runtime is None:
             print(
                 "Codex runtime full integrity: OK "
@@ -1554,14 +1078,13 @@ def verify_runtime() -> None:
         fail(f"Codex runtime full integrity: FAILED: {exc}")
 
 
-def state() -> dict[str, Any]:
+def state(*, full_hash: bool = False) -> dict[str, Any]:
     bundled = bundled_version()
     if not ROOT.exists() and not ROOT.is_symlink():
         return {"kind": "bundled", "bundled": bundled}
     try:
         real_dir(ROOT)
-        verification_warnings: list[str] = []
-        runtime = active_runtime(warnings=verification_warnings)
+        runtime = active_runtime(full_hash=full_hash)
     except ManagerError as exc:
         return {"kind": "damaged", "bundled": bundled, "warning": str(exc)}
     if runtime is None:
@@ -1581,8 +1104,6 @@ def state() -> dict[str, Any]:
             "runtime": runtime_version,
             "binary": binary,
         }
-    if verification_warnings:
-        result["verification_warning"] = verification_warnings[-1]
     return result
 
 
@@ -1611,20 +1132,20 @@ def print_status(current: dict[str, Any], *, menu: bool) -> None:
             f"Codex runtime: {current['runtime']} "
             "(official source; Remote Dev review pending)"
         )
-        print("Codex active source: runtime")
+        print("Codex preferred source: runtime")
     elif kind == "damaged":
         print("Codex runtime: damaged or locally modified")
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
         print(f"Codex runtime warning: {current['warning']}")
     elif kind == "bundled-preferred":
         print(
             f"Codex runtime: {current['runtime']} "
             f"(official source; bundled {bundled} preferred)"
         )
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
     else:
         print("Codex runtime: not installed")
-        print("Codex active source: bundled")
+        print("Codex preferred source: bundled")
 
 
 def confirm(prompt: str, *, yes: bool) -> None:
@@ -1638,7 +1159,7 @@ def confirm(prompt: str, *, yes: bool) -> None:
 
 def update_runtime(*, yes: bool) -> None:
     bundled = bundled_version()
-    current = state()
+    current = state(full_hash=True)
     confirm(
         "Check the official OpenAI Codex release and install a newer compatible "
         "runtime if available? This action will make network requests; the "
@@ -1702,7 +1223,6 @@ def remove_runtime(*, yes: bool) -> None:
     with runtime_lock():
         try:
             remove_runtime_entry(ROOT / "current")
-            remove_runtime_entry(stamp_path())
             releases = ROOT / "releases"
             remove_runtime_entry(releases)
             releases.mkdir(mode=0o700)
@@ -1727,13 +1247,8 @@ def main(argv: list[str] | None = None) -> int:
             print_status(state(), menu=args.menu)
         elif args.command == "resolve":
             current = state()
-            if current.get("verification_warning"):
-                print(
-                    "WARNING: optional Codex runtime passed full integrity "
-                    "verification, but its verification stamp could not be "
-                    f"persisted: {current['verification_warning']}",
-                    file=sys.stderr,
-                )
+            if current["kind"] == "runtime":
+                current = state(full_hash=True)
             if current["kind"] == "runtime":
                 print(current["binary"])
             else:

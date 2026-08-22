@@ -12,7 +12,7 @@ The menu, `remote-dev-version` and `remote-dev-doctor` distinguish these states:
 
 - **Bundled** — the Codex release built into the Remote Dev image. This is the image-tested fallback.
 - **Official source; Remote Dev review pending** — a newer stable Codex package was explicitly downloaded from OpenAI's official GitHub release, its release-metadata SHA-256 and package identity were verified, and bounded compatibility probes passed. Remote Dev has not yet reviewed and real-world tested that exact upstream release as part of an image build.
-- **Damaged or locally modified** — the persistent optional runtime no longer matches its private manifest or violates the expected file/directory identity. Remote Dev refuses it and uses the bundled fallback.
+- **Damaged or locally modified** — the manager has detected that the persistent optional runtime violates its private-manifest or expected file/directory identity checks. Remote Dev refuses it and uses the bundled fallback.
 - **Bundled preferred** — an optional runtime is equal to or older than the Codex release now bundled in the image. The newer/equivalent image-tested copy wins automatically.
 
 “Review pending” does **not** mean that the download is accepted without integrity checks. Source origin, stable release tag, architecture, release digest, package layout, file identities and compatibility probes are verified before publication. The pending part is Remote Dev's review and real deployment validation for that exact Codex release.
@@ -83,9 +83,8 @@ Before an optional runtime becomes active, Remote Dev:
 7. executes changed vendor bytes with a synthetic credential-free `HOME`/`CODEX_HOME`, outside the user workspace and, when running as root, under a fixed unprivileged UID/GID;
 8. bounds candidate execution time and captured output;
 9. checks `codex --version`, required launcher flags and the `codex-code-mode-host --listen ws://127.0.0.1:0` + `/readyz` contract;
-10. fingerprints every published file into a restrictive private manifest;
-11. atomically switches the active pointer only after all checks pass;
-12. initializes a private verification stamp only after the final published generation still matches the package that passed full verification.
+10. records every published file's SHA-256 identity in a restrictive private manifest;
+11. atomically switches the active pointer only after all checks pass.
 
 Executable admission staging uses the fixed transient root
 `/run/remote-dev-codex-update`, never `/tmp` or caller-controlled `TMPDIR`.
@@ -99,23 +98,23 @@ keeps the intentionally non-executable `/tmp` mount intact without making the
 persistent runtime or credentials traversable, and each operation removes its
 staging tree after success, failure, timeout or a catchable termination signal.
 
-Mutation is serialized with a private lock. Package hashing is performed without holding that mutation lock; only the short publication and stamp-recheck sections hold it. Failed or interrupted admission leaves the previous active runtime untouched. Abandoned `.candidate-*` staging directories from an interrupted earlier publish are reclaimed on a later publish attempt, while an advisory per-candidate marker prevents cleanup of a publication that is still active. Normal launch does not hold the mutation lock.
+Mutation is serialized with a private lock. Failed or interrupted admission leaves the previous active runtime untouched. Normal launch does not hold the mutation lock.
 
-## Fast change detection and full verification
+## Lightweight status and full verification
 
-Publication and the explicit full verifier check every package-file SHA-256 against the private manifest. After a successful full verification, the manager atomically writes `verification-stamp.json` outside the active release. The bounded, versioned stamp binds the current release name, runtime version and target to the SHA-256 of the small private manifest and a canonical Linux metadata fingerprint for the pointer, release, manifest, package directories and package objects. The fingerprint records object kind, device, inode, link count, size, owner, group, mode, nanosecond mtime and nanosecond ctime.
+`status`, `status --menu` and version displays are offline and lightweight. They validate the current pointer, private manifest, package metadata, expected layout, ownership, permissions, symlinks, sizes and exact package file set, but do not calculate package-file SHA-256 values. Their selected source is therefore a preference by policy, not a fresh cryptographic statement about package bytes.
 
-`resolve`, `status` and `status --menu` always revalidate the existing structural and permission rules, hash the small manifest, and compare the current metadata fingerprint with that trusted stamp. When they match, no package file is read or hashed. A missing, malformed, truncated, symlinked, insecure, incompatible or mismatched stamp never grants trust: the manager immediately performs full package SHA-256 verification before allowing the optional runtime. A successful full check refreshes the stamp atomically. There is no TTL; invalidation is driven only by observed change.
+Before selecting an optional runtime that is newer than the bundled CLI, `resolve` performs a complete offline SHA-256 verification of every package file against the private manifest. If it fails, Remote Dev uses the immutable bundled fallback. An equal or older optional runtime is not selected and therefore does not pay the package hash during launch.
 
-Use the following offline command to force full verification regardless of a valid stamp:
+Use the following offline command to force full verification:
 
 ```bash
 remote-dev-codex-runtime verify
 ```
 
-`remote-dev-doctor`, and therefore the menu's **Run diagnostics** action, runs `verify` before showing normal runtime status. Corruption or an inability to maintain the verification stamp makes diagnostics fail. If `resolve` has just completed a successful full check but cannot persist the optional stamp, it may still use those verified bytes for that invocation and emits a warning; the next invocation verifies them fully again.
+`verify` always checks every package-file SHA-256, including optional runtimes equal to or older than the bundled CLI. `remote-dev-doctor`, and therefore the menu's **Run diagnostics** action, includes `verify`; a full-integrity failure makes diagnostics fail.
 
-This optimization does not expand the trust boundary. Metadata change detection covers ordinary local changes, replacements and corruption that alter the recorded identity. It is not protection from a process with the runtime owner's authority or container root that can coherently alter both runtime and verification state, from root replacing the manager/launcher, from a host or ZFS administrator, or from compromised kernel/storage behavior. Physical corruption that leaves all recorded metadata unchanged is therefore not guaranteed to be detected before every launch; storage read errors, ZFS integrity mechanisms and explicit `verify`/diagnostics remain the full-check paths. The final manager-to-`exec` TOCTOU window is unchanged and is tracked separately in [#114](https://github.com/eXPerience83/remote-dev-containers/issues/114).
+This split does not expand the trust boundary. A byte-only corruption that preserves the lightweight structural properties can appear normal in status, but it is detected by `resolve` immediately before a newer optional runtime is selected, and by explicit diagnostics. The design does not protect from a process with the runtime owner's authority or container root, from root replacing the manager/launcher, from a host or ZFS administrator, or from compromised kernel/storage behavior. The final manager-to-`exec` TOCTOU window is unchanged and is tracked separately in [#114](https://github.com/eXPerience83/remote-dev-containers/issues/114).
 
 ## Launch and fallback
 
@@ -136,7 +135,7 @@ remote-dev-codex-runtime remove
 remote-dev-codex-runtime remove --yes
 ```
 
-`resolve` is intended for the project launcher and prints the selected executable path. It performs offline structural and change-detection checks, escalating to full SHA-256 verification whenever the trusted stamp is unavailable or differs.
+`resolve` is intended for the project launcher and prints the selected executable path. It performs offline structural checks and fully verifies every package file before selecting a newer optional runtime. Status output reports the source that would be preferred by version policy; full integrity is checked at launch and by `verify`.
 
 `remove` deletes only the optional Remote Dev-managed runtime state and returns immediately to the immutable bundled fallback. It never modifies `/usr/local/bin/codex` or `/root/.codex`. Interactive removal asks for confirmation; `--yes` is the explicit non-interactive form.
 
