@@ -563,7 +563,13 @@ assert_agent_runtime_identity() {
     child_status=0
     wait "$child" || child_status=$?
     test "$child_status" = 143
-  ' >/dev/null 2>&1 || fail "$role fixture did not preserve the reviewed root and unprivileged-child identities"
+  ' >/dev/null 2>&1 || {
+    docker_exec "$name" sh -c '
+      pid="$(pgrep -xo ttyd)"
+      grep -E "^(Uid|Gid|Groups|CapEff|NoNewPrivs):" "/proc/$pid/status"
+    ' >&2 || true
+    fail "$role fixture did not preserve the reviewed root and unprivileged-child identities"
+  }
 }
 
 assert_launcher_http_security() {
