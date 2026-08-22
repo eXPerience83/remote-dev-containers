@@ -6,6 +6,7 @@ set -euo pipefail
 # a user's Compose project so it cannot address or clean up a real deployment.
 
 image="${1:-${REMOTE_DEV_ISOLATION_IMAGE:-remote-dev:local}}"
+source_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -386,9 +387,13 @@ assert_no_broad_mounts_or_environment() {
                            and (.Destination // "" | ascii_downcase | contains("podman.sock") | not)))
        and ($mounts | all((.Destination | test("(^|/)tmux|control"; "i")) | not))
        and ($mounts | all((.Destination != "/tmp") or (.Type == "tmpfs")))
-       and (($container.HostConfig.Tmpfs // {}) | keys | all(. == "/tmp"))
+       and (($container.HostConfig.Tmpfs // {}) | keys | sort == ["/run", "/tmp"])
        and (if $role == "launcher" then
-              ($mounts | all(.Type != "bind"))
+              (($mounts | map(select(.Type == "bind"))) as $binds
+               | ($binds | length == 1)
+               and ($binds[0].Source == ($test_root + "/launcher/password/web_password"))
+               and ($binds[0].Destination == "/run/secrets/launcher_password")
+               and ($binds[0].RW == false))
             else true
             end))
   ' <<<"$inspection" >/dev/null || fail "$role fixture has a broad, engine, parent-root, tmux/control, or data-root escape"
@@ -404,7 +409,10 @@ assert_mount_contract() {
     .[0].Mounts as $mounts
     | ($mounts | map(select(.Type == "bind"))) as $binds
     | if $role == "launcher" then
-        ($binds | length == 0)
+        (($binds | length == 1)
+         and ($binds[0].Source == ($root + "/launcher/password/web_password"))
+         and ($binds[0].Destination == "/run/secrets/launcher_password")
+         and ($binds[0].RW == false))
       else
         (($binds | length > 0)
          and ($binds | all(.Source | startswith($root + "/")))
@@ -413,6 +421,287 @@ assert_mount_contract() {
          and ($binds | any(.Destination == "/run/secrets/web_password" and .RW == false)))
       end
   ' <<<"$inspection" >/dev/null || fail "$role fixture mount contract is not role-private"
+}
+
+assert_hardening_contract() {
+  local name="$1"
+  local role="$2"
+  local inspection
+  inspection="$(docker inspect "$name")"
+
+  jq -e --arg role "$role" '
+    .[0].HostConfig as $host
+    | (if $role == "launcher" then
+         ["SETGID", "SETUID"]
+       else
+         ["CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID"]
+       end) as $expected_caps
+    | (if $role == "launcher" then 64 else 1024 end) as $expected_pids
+    | (if $role == "launcher" then "size=64m"
+       else "size=512m"
+       end) as $tmp_size
+    | (if $role == "launcher" then "size=16m"
+       elif $role == "codex" then "size=1536m"
+       else "size=64m"
+       end) as $run_size
+    | (($host.Tmpfs // {}) as $tmpfs
+       | ($tmpfs | keys | sort) == ["/run", "/tmp"]
+       and (($tmpfs["/tmp"] | split(",")) as $options
+            | (["rw", "noexec", "nosuid", "nodev", $tmp_size, "mode=1777"]
+               | all(. as $required | $options | index($required) != null))
+            and ($options | length == 6))
+       and (($tmpfs["/run"] | split(",")) as $options
+            | (["rw", "nosuid", "nodev", $run_size, "mode=755"]
+               | all(. as $required | $options | index($required) != null))
+            and ($options | length == 5)))
+    and ($host.ReadonlyRootfs == true)
+    and (($host.CapDrop // []) == ["ALL"])
+    and ((($host.CapAdd // []) | sort) == ($expected_caps | sort))
+    and ($host.PidsLimit == $expected_pids)
+    and ($host.Privileged == false)
+    and (($host.PidMode // "") != "host")
+    and (($host.NetworkMode // "") != "host")
+    and (($host.GroupAdd // []) | length == 0)
+    and (($host.SecurityOpt // []) == ["no-new-privileges:true"])
+  ' <<<"$inspection" >/dev/null || fail "$role fixture differs from the reviewed hardening contract"
+}
+
+assert_runtime_mount_options() {
+  local name="$1"
+  local role="$2"
+  docker_exec "$name" sh -c '
+    set -eu
+    mount_options() {
+      awk -v target="$1" '\''$2 == target { print $4 }'\'' /proc/mounts
+    }
+    tmp_options="$(mount_options /tmp)"
+    run_options="$(mount_options /run)"
+    for required in rw noexec nosuid nodev; do
+      case ",$tmp_options," in
+        *",$required,"*) ;;
+        *) exit 1 ;;
+      esac
+    done
+    for required in rw nosuid nodev; do
+      case ",$run_options," in
+        *",$required,"*) ;;
+        *) exit 1 ;;
+      esac
+    done
+    case ",$run_options," in
+      *,noexec,*) exit 1 ;;
+    esac
+  ' >/dev/null 2>&1 || fail "$role fixture runtime tmpfs options are not enforced"
+}
+
+assert_launcher_runtime_identity() {
+  docker_exec "$launcher_name" sh -c '
+    set -eu
+    pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
+    test -n "$pid"
+    status="/proc/$pid/status"
+    awk '\''$1 == "Uid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
+    awk '\''$1 == "Gid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
+    awk '\''$1 == "Groups:" { exit !(NF == 1) }'\'' "$status"
+    grep -Eq '\''^CapEff:[[:space:]]+0+$'\'' "$status"
+    grep -Eq '\''^NoNewPrivs:[[:space:]]+1$'\'' "$status"
+  ' >/dev/null 2>&1 || fail "launcher HTTP process did not retain its permanent unprivileged boundary"
+}
+
+assert_agent_runtime_identity() {
+  local name="$1"
+  local role="$2"
+  docker_exec "$name" sh -c '
+    set -eu
+    pid="$(pgrep -xo ttyd)"
+    status="/proc/$pid/status"
+    awk '\''$1 == "Uid:" { exit !($2 == 0 && $3 == 0 && $4 == 0 && $5 == 0) }'\'' "$status"
+    awk '\''$1 == "Gid:" { exit !($2 == 0 && $3 == 0 && $4 == 0 && $5 == 0) }'\'' "$status"
+    awk '\''$1 == "Groups:" { exit !(NF == 1) }'\'' "$status"
+    grep -Eqi '\''^CapEff:[[:space:]]+0*eb$'\'' "$status"
+    grep -Eq '\''^NoNewPrivs:[[:space:]]+1$'\'' "$status"
+    probe=/workspace/.hardening-capability-probe
+    test -f "$probe"
+    chown 65534:65534 "$probe"
+    chmod 000 "$probe"
+    printf probe >"$probe"
+    chmod 0600 "$probe"
+    chown 0:0 "$probe"
+    setpriv --reuid 65534 --regid 65534 --clear-groups sh -c '\''
+      test "$(id -u)" = 65534
+      test "$(id -g)" = 65534
+      test "$(id -G)" = 65534
+    '\''
+    setpriv --reuid 65534 --regid 65534 --clear-groups sleep 30 &
+    child=$!
+    kill "$child"
+    child_status=0
+    wait "$child" || child_status=$?
+    test "$child_status" = 143
+  ' >/dev/null 2>&1 || fail "$role fixture did not preserve the reviewed root and unprivileged-child identities"
+}
+
+assert_launcher_http_security() {
+  local status=""
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    http://127.0.0.1:7680/healthz)" \
+    || fail "launcher secret-free health endpoint could not be reached"
+  [[ "$status" == 200 ]] || fail "launcher secret-free health endpoint returned an unexpected status"
+
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    http://127.0.0.1:7680/)" \
+    || fail "launcher unauthenticated request could not be evaluated"
+  [[ "$status" == 401 ]] || fail "launcher did not enforce Basic authentication"
+
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    --user "isolation-launcher:$launcher_password" \
+    --header 'Origin: http://127.0.0.1:7680' \
+    http://127.0.0.1:7680/)" \
+    || fail "launcher authenticated request could not be evaluated"
+  [[ "$status" == 200 ]] || fail "launcher rejected its synthetic authenticated request"
+
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    --user "isolation-launcher:$launcher_password" \
+    --header 'Origin: https://invalid.example' \
+    http://127.0.0.1:7680/)" \
+    || fail "launcher origin rejection request could not be evaluated"
+  [[ "$status" == 403 ]] || fail "launcher did not reject a cross-origin request"
+
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    --request POST \
+    --user "isolation-launcher:$launcher_password" \
+    http://127.0.0.1:7680/)" \
+    || fail "launcher method rejection request could not be evaluated"
+  [[ "$status" == 405 ]] || fail "launcher did not reject a state-changing method"
+
+  docker_exec "$launcher_name" sh -c '
+    set -eu
+    headers="$(mktemp /tmp/launcher-headers.XXXXXX)"
+    trap '\''rm -f -- "$headers"'\'' EXIT
+    curl --fail --silent --show-error --dump-header "$headers" --output /dev/null \
+      --user "$1:$2" --header "Origin: http://127.0.0.1:7680" \
+      http://127.0.0.1:7680/
+    grep -Fqi -- "$3" "$headers"
+  ' sh isolation-launcher "$launcher_password" "Content-Security-Policy: default-src 'none'" \
+    >/dev/null 2>&1 \
+    || fail "launcher response did not retain its restrictive CSP"
+}
+
+assert_read_only_rootfs() {
+  local name="$1"
+  local role="$2"
+  docker_exec "$name" sh -c '
+    path="/etc/.remote-dev-read-only-probe-$$"
+    if printf probe >"$path" 2>/dev/null; then
+      rm -f -- "$path"
+      exit 1
+    fi
+  ' >/dev/null 2>&1 || fail "$role fixture unexpectedly permits writes to the immutable root filesystem"
+}
+
+assert_codex_toolchain_workflow() {
+  docker_exec "$codex_name" bash -c '
+    set -euo pipefail
+    project="/workspace/hardening-toolchain"
+    rm -rf -- "$project"
+    mkdir -p "$project/local-dependency"
+    cd "$project"
+
+    printf "value = 1\n" > module.py
+    printf "from module import value\nassert value == 1\n" > test_module.py
+    python -m py_compile module.py test_module.py
+    python test_module.py
+    python -m venv .venv
+    .venv/bin/python -c "import sys; assert sys.prefix.endswith(\"/.venv\")"
+    uv venv --offline .uv-venv >/dev/null
+
+    printf '\''{"name":"remote-dev-local-dependency","version":"1.0.0","main":"index.js"}\n'\'' \
+      > local-dependency/package.json
+    printf '\''module.exports = 42;\n'\'' > local-dependency/index.js
+    printf '\''{"name":"remote-dev-toolchain-smoke","version":"1.0.0","private":true}\n'\'' \
+      > package.json
+    npm install --offline --ignore-scripts --no-audit --no-fund ./local-dependency >/dev/null
+    node -e '\''if (require("remote-dev-local-dependency") !== 42) process.exit(1)'\''
+    test -d "$NPM_CONFIG_CACHE"
+    test -d "$UV_CACHE_DIR"
+
+    printf '\''#include <stdio.h>\nint main(void) { return puts("ok") < 0; }\n'\'' > smoke.c
+    printf '\''smoke: smoke.c\n\t$(CC) -Wall -Wextra -Werror -o $@ $<\n'\'' > Makefile
+    make >/dev/null
+    test "$(./smoke)" = ok
+
+    git init -q
+    git config user.name "Synthetic Test"
+    git config user.email "synthetic@example.invalid"
+    git add module.py test_module.py package.json package-lock.json smoke.c Makefile
+    git status --porcelain | grep -q .
+
+    socket="hardening-toolchain"
+    tmux -L "$socket" new-session -d -s hardening "sleep 30"
+    tmux -L "$socket" has-session -t hardening
+    tmux -L "$socket" list-sessions | grep -q '\''^hardening:'\''
+    tmux -L "$socket" kill-server
+  ' >/dev/null 2>&1 || fail "hardened Codex fixture could not complete the offline development-toolchain workflow"
+  wait_for_health_command "$codex_name"
+}
+
+assert_hardened_antigravity_host_fixtures() {
+  local fixture_root="/workspace/hardening-antigravity-fixtures"
+  local fixture_tmp="$fixture_root/tmp"
+  local copy_status=0
+  docker_exec "$antigravity_name" install -d -m 0755 \
+    "$fixture_root/scripts" "$fixture_tmp" >/dev/null 2>&1 \
+    || fail "hardened Antigravity fixture roots could not be prepared"
+  docker_exec "$antigravity_name" chown 65534:65534 "$fixture_tmp" >/dev/null 2>&1 \
+    || fail "Antigravity unprivileged fixture staging ownership could not be prepared"
+  docker_exec "$antigravity_name" chmod 0700 "$fixture_tmp" >/dev/null 2>&1 \
+    || fail "Antigravity unprivileged fixture staging mode could not be prepared"
+  timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+    "${docker_exec_timeout_seconds}s" \
+    docker cp "$source_root/scripts/." "$antigravity_name:$fixture_root/scripts" \
+    >/dev/null 2>&1 || copy_status=$?
+  case "$copy_status" in
+    0) ;;
+    124) fail "Antigravity fixture copy timed out" ;;
+    125) fail "Antigravity fixture copy timeout invocation failed" ;;
+    137) fail "Antigravity fixture copy required KILL escalation" ;;
+    *) fail "Antigravity fixture copy failed" ;;
+  esac
+  docker_exec "$antigravity_name" chmod -R a+rX "$fixture_root/scripts" >/dev/null 2>&1 \
+    || fail "Antigravity copied fixture sources could not be made readable"
+
+  # These host-safe harnesses intentionally shadow curl/readelf with synthetic
+  # binaries. The production root manager correctly ignores such PATH shadows,
+  # so exercise the harnesses as the same fixed unprivileged identity used for
+  # candidate execution while the surrounding container remains hardened.
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-antigravity-runtime.sh" >/dev/null 2>&1 \
+    || fail "Antigravity runtime/admission fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-antigravity-security-regressions.sh" >/dev/null 2>&1 \
+    || fail "Antigravity security fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-antigravity-repair-download-hardening.sh" >/dev/null 2>&1 \
+    || fail "Antigravity repair fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-antigravity-staging-wrappers.sh" >/dev/null 2>&1 \
+    || fail "Antigravity private-staging fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-antigravity-redirects.sh" >/dev/null 2>&1 \
+    || fail "Antigravity installer-origin fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    python "$fixture_root/scripts/test-antigravity-oauth.py" >/dev/null 2>&1 \
+    || fail "Antigravity OAuth fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    python "$fixture_root/scripts/test-antigravity-picker.py" >/dev/null 2>&1 \
+    || fail "Antigravity picker fixture failed under hardening"
+  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
+    bash "$fixture_root/scripts/test-run-antigravity-picker.sh" >/dev/null 2>&1 \
+    || fail "Antigravity resume helper fixture failed under hardening"
+
+  docker_exec "$antigravity_name" rm -rf -- "$fixture_root" "$fixture_tmp" >/dev/null 2>&1 \
+    || fail "Antigravity hardened fixtures did not clean up"
+  wait_for_health_command "$antigravity_name"
 }
 
 assert_distinct_agent_sources() {
@@ -620,14 +909,23 @@ for index in "${!antigravity_categories[@]}"; do
   antigravity_markers[index]="$marker"
   make_marker "$test_root/antigravity/$category" "$marker"
 done
-install -d -m 0700 -- "$test_root/codex/password" "$test_root/antigravity/password"
+printf 'capability-probe\n' >"$test_root/codex/workspace/.hardening-capability-probe"
+printf 'capability-probe\n' >"$test_root/antigravity/workspace/.hardening-capability-probe"
+chmod 0711 -- "$test_root/antigravity/workspace"
+install -d -m 0700 -- \
+  "$test_root/launcher/password" \
+  "$test_root/codex/password" \
+  "$test_root/antigravity/password"
+launcher_password="synthetic-launcher-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+launcher_password_source="$test_root/launcher/password/web_password"
 codex_password_marker="$(marker_name codex-password)"
 antigravity_password_marker="$(marker_name antigravity-password)"
 codex_password_source="$test_root/codex/password/$codex_password_marker"
 antigravity_password_source="$test_root/antigravity/password/$antigravity_password_marker"
+printf '%s\n' "$launcher_password" >"$launcher_password_source"
 printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$codex_password_source"
 printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$antigravity_password_source"
-chmod 0600 -- "$codex_password_source" "$antigravity_password_source"
+chmod 0600 -- "$launcher_password_source" "$codex_password_source" "$antigravity_password_source"
 codex_password_measurement="$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 antigravity_password_measurement="$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
 [[ "$codex_password_measurement" != "$antigravity_password_measurement" ]] \
@@ -647,12 +945,21 @@ start_launcher() {
   if ! launcher_id="$(docker run -d --name "$launcher_name" \
     --label "$ownership_label=$run_id" \
     --network "$network_name" \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add SETGID \
+    --cap-add SETUID \
+    --pids-limit 64 \
     --security-opt no-new-privileges:true \
-    --tmpfs /tmp:rw,mode=1777,size=64m \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
+    --tmpfs /run:rw,nosuid,nodev,size=16m,mode=755 \
     --env REMOTE_DEV_ROLE=launcher \
     --env REMOTE_DEV_START_MODE=menu \
+    --env WEB_USERNAME=isolation-launcher \
+    --env WEB_PASSWORD_FILE=/run/secrets/launcher_password \
+    --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7680 \
-    --env ALLOW_INSECURE_WEB=1 \
+    --mount "type=bind,src=$launcher_password_source,dst=/run/secrets/launcher_password,readonly" \
     "$image_id")"; then
     launcher_id="$(capture_owned_container_id "$launcher_name" || true)"
     fail "failed to start launcher fixture"
@@ -666,9 +973,19 @@ start_codex() {
   prepare_container_name "$codex_name" || fail "Codex fixture name is already owned by another resource"
   if ! codex_id="$(docker run -d --name "$codex_name" \
     --label "$ownership_label=$run_id" \
-    --network "$network_name" \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add CHOWN \
+    --cap-add DAC_OVERRIDE \
+    --cap-add FOWNER \
+    --cap-add KILL \
+    --cap-add SETGID \
+    --cap-add SETUID \
+    --pids-limit 1024 \
     --security-opt no-new-privileges:true \
-    --tmpfs /tmp:rw,mode=1777,size=512m \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+    --tmpfs /run:rw,nosuid,nodev,size=1536m,mode=755 \
     --env REMOTE_DEV_ROLE=codex \
     --env WORKSPACE=/workspace \
     --env CODEX_HOME=/root/.codex \
@@ -677,6 +994,8 @@ start_codex() {
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
     --env WEB_PASSWORD_FILE=/run/secrets/web_password \
     --env WEB_PORT=7681 \
+    --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
+    --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
     --mount "type=bind,src=$test_root/codex/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/codex/agent,dst=/root/.codex" \
     --mount "type=bind,src=$test_root/codex/runtime,dst=/root/.local/share/remote-dev/codex-runtime" \
@@ -697,9 +1016,19 @@ start_antigravity() {
   prepare_container_name "$antigravity_name" || fail "Antigravity fixture name is already owned by another resource"
   if ! antigravity_id="$(docker run -d --name "$antigravity_name" \
     --label "$ownership_label=$run_id" \
-    --network "$network_name" \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add CHOWN \
+    --cap-add DAC_OVERRIDE \
+    --cap-add FOWNER \
+    --cap-add KILL \
+    --cap-add SETGID \
+    --cap-add SETUID \
+    --pids-limit 1024 \
     --security-opt no-new-privileges:true \
-    --tmpfs /tmp:rw,mode=1777,size=512m \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+    --tmpfs /run:rw,nosuid,nodev,size=64m,mode=755 \
     --env REMOTE_DEV_ROLE=antigravity \
     --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
     --env AGY_CLI_DISABLE_AUTO_UPDATE=true \
@@ -708,6 +1037,8 @@ start_antigravity() {
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
     --env WEB_PASSWORD_FILE=/run/secrets/web_password \
     --env WEB_PORT=7682 \
+    --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
+    --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
     --mount "type=bind,src=$test_root/antigravity/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/antigravity/bin,dst=/root/.local/bin" \
     --mount "type=bind,src=$test_root/antigravity/runtime,dst=/root/.local/share/remote-dev/antigravity" \
@@ -738,9 +1069,24 @@ assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
 assert_mount_contract "$launcher_name" launcher
 assert_mount_contract "$codex_name" codex
 assert_mount_contract "$antigravity_name" antigravity
+assert_hardening_contract "$launcher_name" launcher
+assert_hardening_contract "$codex_name" codex
+assert_hardening_contract "$antigravity_name" antigravity
+assert_runtime_mount_options "$launcher_name" launcher
+assert_runtime_mount_options "$codex_name" codex
+assert_runtime_mount_options "$antigravity_name" antigravity
+assert_launcher_runtime_identity
+assert_agent_runtime_identity "$codex_name" Codex
+assert_agent_runtime_identity "$antigravity_name" Antigravity
+assert_launcher_http_security
+assert_read_only_rootfs "$launcher_name" launcher
+assert_read_only_rootfs "$codex_name" Codex
+assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
 assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
+assert_codex_toolchain_workflow
+assert_hardened_antigravity_host_fixtures
 
 for index in "${!codex_targets[@]}"; do
   target="${codex_targets[$index]}"
@@ -792,6 +1138,10 @@ wait_for_health_command "$codex_name"
 assert_image_id "$codex_name"
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_mount_contract "$codex_name" codex
+assert_hardening_contract "$codex_name" codex
+assert_runtime_mount_options "$codex_name" codex
+assert_agent_runtime_identity "$codex_name" Codex
+assert_read_only_rootfs "$codex_name" Codex
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
@@ -811,6 +1161,10 @@ wait_for_health_command "$antigravity_name"
 assert_image_id "$antigravity_name"
 assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
 assert_mount_contract "$antigravity_name" antigravity
+assert_hardening_contract "$antigravity_name" antigravity
+assert_runtime_mount_options "$antigravity_name" antigravity
+assert_agent_runtime_identity "$antigravity_name" Antigravity
+assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
@@ -822,4 +1176,4 @@ assert_equal "Antigravity terminal password canary" "$antigravity_password_measu
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 
-echo "Cross-service synthetic isolation canaries: OK"
+echo "Hardened cross-service isolation and offline toolchain canaries: OK"

@@ -18,6 +18,35 @@ AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
 BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
+AGENT_CAPABILITIES = frozenset(
+    ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID")
+)
+ROLE_CAPABILITIES = {
+    "launcher": frozenset(("SETGID", "SETUID")),
+    "codex": AGENT_CAPABILITIES,
+    "antigravity": AGENT_CAPABILITIES,
+}
+ROLE_PIDS_LIMITS = {"launcher": 64, "codex": 1024, "antigravity": 1024}
+ROLE_TMPFS = {
+    "launcher": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+            "/run:rw,nosuid,nodev,size=16m,mode=755",
+        )
+    ),
+    "codex": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
+            "/run:rw,nosuid,nodev,size=1536m,mode=755",
+        )
+    ),
+    "antigravity": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
+            "/run:rw,nosuid,nodev,size=64m,mode=755",
+        )
+    ),
+}
 
 
 def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -154,6 +183,47 @@ def validate_mount_safety(service: dict[str, object], context: str) -> None:
         require("control" not in lowered_target, f"{context} control mount {target}")
 
 
+def rendered_string_list(service: dict[str, object], key: str, context: str) -> list[str]:
+    value = service.get(key)
+    require(isinstance(value, list), f"{context} {key} must be a list")
+    require(
+        all(isinstance(item, str) for item in value),
+        f"{context} {key} entries must be strings",
+    )
+    return value
+
+
+def validate_service_hardening(
+    service: dict[str, object], role: str, context: str
+) -> None:
+    require(service.get("user") == "0:0", f"{context} must start as root")
+    require(service.get("read_only") is True, f"{context} root filesystem is writable")
+    cap_drop = rendered_string_list(service, "cap_drop", context)
+    require(cap_drop == ["ALL"], f"{context} cap_drop must be exactly ALL")
+    cap_add = rendered_string_list(service, "cap_add", context)
+    require(
+        len(cap_add) == len(set(cap_add)) and frozenset(cap_add) == ROLE_CAPABILITIES[role],
+        f"{context} cap_add differs from the reviewed role whitelist",
+    )
+    require(
+        service.get("pids_limit") == ROLE_PIDS_LIMITS[role],
+        f"{context} pids_limit differs from the reviewed role ceiling",
+    )
+    tmpfs = rendered_string_list(service, "tmpfs", context)
+    require(
+        len(tmpfs) == len(set(tmpfs)) and frozenset(tmpfs) == ROLE_TMPFS[role],
+        f"{context} tmpfs contract differs from the reviewed role contract",
+    )
+    security_opt = rendered_string_list(service, "security_opt", context)
+    require(
+        security_opt == ["no-new-privileges:true"],
+        f"{context} security options differ from no-new-privileges",
+    )
+    group_add = service.get("group_add", [])
+    require(isinstance(group_add, list), f"{context} group_add must be a list")
+    require(group_add == [], f"{context} configures supplementary groups")
+
+
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
     path = Path(path_value)
     if not path.is_absolute():
@@ -202,6 +272,14 @@ def validate(path: Path, config: dict[str, object]) -> None:
         else:
             require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
             require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
+        require(
+            environment.get("NPM_CONFIG_CACHE") == "/tmp/remote-dev-npm-cache",
+            f"{path}: {name} transient npm cache",
+        )
+        require(
+            environment.get("UV_CACHE_DIR") == "/tmp/remote-dev-uv-cache",
+            f"{path}: {name} transient uv cache",
+        )
 
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 
@@ -253,10 +331,20 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
 
     for name, service in services.items():
-        require(service.get("privileged") is not True, f"{path}: {name} privileged")
-        require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
-        require(service.get("network_mode") != "host", f"{path}: {name} host network")
-        require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
+        require(service.get("privileged", False) is False, f"{path}: {name} privileged")
+        network_mode = service.get("network_mode")
+        require(
+            network_mode is None or isinstance(network_mode, str),
+            f"{path}: {name} network mode shape",
+        )
+        require(network_mode != "host", f"{path}: {name} host network")
+        pid_mode = service.get("pid")
+        require(
+            pid_mode is None or isinstance(pid_mode, str),
+            f"{path}: {name} PID mode shape",
+        )
+        require(pid_mode != "host", f"{path}: {name} host PID namespace")
+        validate_service_hardening(service, name, f"{path}: {name}")
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {name} environment")
         require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
@@ -330,6 +418,7 @@ def validate_auth_override_separation(env_path: Path) -> None:
         )
     require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
     launcher = hardened["services"]["launcher"]
+    validate_service_hardening(launcher, "launcher", "launcher auth override")
     require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
     require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
