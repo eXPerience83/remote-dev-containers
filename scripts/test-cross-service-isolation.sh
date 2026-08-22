@@ -542,7 +542,7 @@ assert_agent_runtime_identity() {
     status="/proc/$pid/status"
     awk '\''$1 == "Uid:" { exit !($2 == 0 && $3 == 0 && $4 == 0 && $5 == 0) }'\'' "$status"
     awk '\''$1 == "Gid:" { exit !($2 == 0 && $3 == 0 && $4 == 0 && $5 == 0) }'\'' "$status"
-    awk '\''$1 == "Groups:" { exit !(NF == 1) }'\'' "$status"
+    awk '\''$1 == "Groups:" { exit !(NF == 2 && $2 == 0) }'\'' "$status"
     grep -Eqi '\''^CapEff:[[:space:]]+0*eb$'\'' "$status"
     grep -Eq '\''^NoNewPrivs:[[:space:]]+1$'\'' "$status"
     probe=/workspace/.hardening-capability-probe
