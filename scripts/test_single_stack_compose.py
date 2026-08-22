@@ -75,11 +75,19 @@ def published_targets(service: dict[str, object]) -> set[int]:
     }
 
 
+def rendered_volumes(service: dict[str, object]) -> list[dict[str, object]]:
+    if "volumes" not in service:
+        return []
+    volumes = service["volumes"]
+    require(isinstance(volumes, list), "rendered service volumes must be a list")
+    for mount in volumes:
+        require(isinstance(mount, dict), "rendered service volume must be a mapping")
+    return volumes
+
+
 def mount_sources(service: dict[str, object], target: str | None = None) -> list[str]:
     sources: list[str] = []
-    for mount in service.get("volumes", []):
-        if not isinstance(mount, dict):
-            continue
+    for mount in rendered_volumes(service):
         if target is not None and mount.get("target") != target:
             continue
         source = mount.get("source")
@@ -90,9 +98,7 @@ def mount_sources(service: dict[str, object], target: str | None = None) -> list
 
 def mount_targets(service: dict[str, object]) -> list[str]:
     targets: list[str] = []
-    for mount in service.get("volumes", []):
-        if not isinstance(mount, dict):
-            continue
+    for mount in rendered_volumes(service):
         target = mount.get("target")
         if target is not None:
             targets.append(str(target))
@@ -329,7 +335,18 @@ def validate_truenas_launcher_password_free_source() -> None:
         require(marker not in launcher_source, f"TrueNAS launcher source contains {marker}")
 
 
+def validate_rendered_volume_shapes() -> None:
+    for volumes in (["../data:/root/.ssh"], {"source": "../data", "target": "/root/.ssh"}):
+        for validator in (mount_sources, mount_targets):
+            try:
+                validator({"volumes": volumes})
+            except AssertionError:
+                continue
+            raise AssertionError(f"invalid rendered volume shape was accepted: {volumes!r}")
+
+
 def main() -> int:
+    validate_rendered_volume_shapes()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)

@@ -22,6 +22,7 @@ fail() {
 require_command docker
 require_command jq
 require_command sha256sum
+require_command timeout
 
 case "$image" in
   ''|*$'\n'*|*$'\r'*) fail "image reference is invalid" ;;
@@ -46,6 +47,8 @@ codex_id=""
 antigravity_id=""
 cleanup_helper_id=""
 readonly cleanup_helper_timeout_seconds=30
+readonly docker_exec_timeout_seconds=30
+readonly docker_exec_kill_after_seconds=5
 
 validate_test_root() {
   case "$test_root" in
@@ -314,14 +317,39 @@ container_running() {
   [[ "$(docker inspect --format '{{.State.Running}}' "$1" 2>/dev/null || true)" == true ]]
 }
 
+docker_exec() {
+  local status=0
+  timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" "${docker_exec_timeout_seconds}s" \
+    docker exec "$@" || status=$?
+  case "$status" in
+    124) echo "ERROR: docker exec timed out after ${docker_exec_timeout_seconds}s" >&2 ;;
+    125) echo "ERROR: docker exec timeout invocation failed" >&2 ;;
+    137) echo "ERROR: docker exec required KILL escalation" >&2 ;;
+  esac
+  return "$status"
+}
+
+docker_exec_infrastructure_failure() {
+  case "$1" in
+    124|125|137) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 wait_for_health_command() {
   local name="$1"
+  local status=0
   for _ in $(seq 1 30); do
     container_running "$name" || {
       fail "$name stopped before its role health check succeeded"
     }
-    if docker exec "$name" remote-dev-healthcheck >/dev/null 2>&1; then
+    if docker_exec "$name" remote-dev-healthcheck >/dev/null 2>&1; then
       return 0
+    else
+      status=$?
+      if docker_exec_infrastructure_failure "$status"; then
+        fail "$name role health check docker exec failed"
+      fi
     fi
     sleep 1
   done
@@ -403,7 +431,7 @@ assert_path_exists() {
   local name="$1"
   local category="$2"
   local path="$3"
-  docker exec "$name" test -e "$path" >/dev/null 2>&1 \
+  docker_exec "$name" test -e "$path" >/dev/null 2>&1 \
     || fail "$category is unavailable at ${path%/*} in its owning fixture"
 }
 
@@ -411,16 +439,29 @@ assert_path_absent() {
   local name="$1"
   local category="$2"
   local path="$3"
-  if docker exec "$name" test -e "$path" >/dev/null 2>&1; then
-    fail "$category is visible at ${path%/*} outside its owning fixture"
-  fi
+  local output=""
+  local status=0
+  output="$(docker_exec "$name" sh -c '
+    if test ! -e "$1"; then
+      printf absent
+      exit 0
+    fi
+    printf present
+    exit 1
+  ' sh "$path" 2>&1)" || status=$?
+  case "$status:$output" in
+    0:absent) return 0 ;;
+    1:present) fail "$category is visible at ${path%/*} outside its owning fixture" ;;
+    124:*|125:*|137:*) fail "$category absence could not be checked because docker exec failed" ;;
+    *) fail "$category absence could not be verified outside its owning fixture" ;;
+  esac
 }
 
 write_owned_marker() {
   local name="$1"
   local category="$2"
   local path="$3"
-  docker exec "$name" sh -c 'umask 077; printf "%s\n" "$2" > "$1"' \
+  docker_exec "$name" sh -c 'umask 077; printf "%s\n" "$2" > "$1"' \
     sh "$path" "synthetic-write-$run_id" >/dev/null 2>&1 \
     || fail "$category is not writable at ${path%/*} in its owning fixture"
 }
@@ -430,7 +471,7 @@ measure_canary() {
   local category="$2"
   local path="$3"
   local measurement=""
-  measurement="$(docker exec "$name" sh -c '
+  measurement="$(docker_exec "$name" sh -c '
     set -eu
     test -f "$1"
     size="$(wc -c < "$1" | tr -d "[:space:]")"
@@ -473,11 +514,11 @@ assert_terminal_password_canary() {
 assert_antigravity_missing_runtime_rejection() {
   local output=""
   local status=0
-  output="$(docker exec "$antigravity_name" run-antigravity 2>&1)" || status=$?
+  output="$(docker_exec "$antigravity_name" run-antigravity 2>&1)" || status=$?
   if (( status == 0 )); then
     fail "missing synthetic Antigravity runtime unexpectedly launched"
   fi
-  if (( status == 126 || status == 127 )); then
+  if (( status == 124 || status == 125 || status == 126 || status == 127 || status == 137 )); then
     fail "Antigravity rejection command could not execute"
   fi
   (( status == 1 )) || fail "missing synthetic Antigravity runtime returned an unexpected status"
@@ -521,9 +562,9 @@ start_tmux_fixture() {
   local role="$2"
   local socket="isolation-${role}-${run_id#remote-dev-isolation.}"
   local session="isolation-${role}"
-  docker exec "$name" tmux -L "$socket" new-session -d -s "$session" 'sleep 300' >/dev/null 2>&1 \
+  docker_exec "$name" tmux -L "$socket" new-session -d -s "$session" 'sleep 300' >/dev/null 2>&1 \
     || fail "$role fixture could not create its tmux socket"
-  docker exec "$name" test -S "/tmp/tmux-0/$socket" >/dev/null 2>&1 \
+  docker_exec "$name" test -S "/tmp/tmux-0/$socket" >/dev/null 2>&1 \
     || fail "$role tmux socket was not private to its /tmp"
   printf '%s\n' "$socket"
 }
