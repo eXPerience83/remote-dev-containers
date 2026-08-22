@@ -19,7 +19,7 @@ The menu, `remote-dev-version` and `remote-dev-doctor` distinguish these states:
 
 ## Explicit-only network access
 
-Normal startup, `status`, `resolve`, Codex launch, resume, health checks and diagnostics do not contact the update endpoint.
+Normal startup, `status`, `resolve`, `verify`, Codex launch, resume, health checks and diagnostics do not contact the update endpoint.
 
 Network access happens only after an explicit install/update action:
 
@@ -84,7 +84,8 @@ Before an optional runtime becomes active, Remote Dev:
 8. bounds candidate execution time and captured output;
 9. checks `codex --version`, required launcher flags and the `codex-code-mode-host --listen ws://127.0.0.1:0` + `/readyz` contract;
 10. fingerprints every published file into a restrictive private manifest;
-11. atomically switches the active pointer only after all checks pass.
+11. atomically switches the active pointer only after all checks pass;
+12. initializes a private verification stamp only after the final published generation still matches the package that passed full verification.
 
 Executable admission staging uses the fixed transient root
 `/run/remote-dev-codex-update`, never `/tmp` or caller-controlled `TMPDIR`.
@@ -98,7 +99,23 @@ keeps the intentionally non-executable `/tmp` mount intact without making the
 persistent runtime or credentials traversable, and each operation removes its
 staging tree after success, failure, timeout or a catchable termination signal.
 
-Mutation is serialized with a private lock. Failed or interrupted admission leaves the previous active runtime untouched. Abandoned `.candidate-*` staging directories from an interrupted earlier publish are reclaimed under that same lock on a later publish attempt. Normal launch does not use the lock: it verifies the immutable published file set and can fall back immediately to the bundled CLI.
+Mutation is serialized with a private lock. Package hashing is performed without holding that mutation lock; only the short publication and stamp-recheck sections hold it. Failed or interrupted admission leaves the previous active runtime untouched. Abandoned `.candidate-*` staging directories from an interrupted earlier publish are reclaimed on a later publish attempt, while an advisory per-candidate marker prevents cleanup of a publication that is still active. Normal launch does not hold the mutation lock.
+
+## Fast change detection and full verification
+
+Publication and the explicit full verifier check every package-file SHA-256 against the private manifest. After a successful full verification, the manager atomically writes `verification-stamp.json` outside the active release. The bounded, versioned stamp binds the current release name, runtime version and target to the SHA-256 of the small private manifest and a canonical Linux metadata fingerprint for the pointer, release, manifest, package directories and package objects. The fingerprint records object kind, device, inode, link count, size, owner, group, mode, nanosecond mtime and nanosecond ctime.
+
+`resolve`, `status` and `status --menu` always revalidate the existing structural and permission rules, hash the small manifest, and compare the current metadata fingerprint with that trusted stamp. When they match, no package file is read or hashed. A missing, malformed, truncated, symlinked, insecure, incompatible or mismatched stamp never grants trust: the manager immediately performs full package SHA-256 verification before allowing the optional runtime. A successful full check refreshes the stamp atomically. There is no TTL; invalidation is driven only by observed change.
+
+Use the following offline command to force full verification regardless of a valid stamp:
+
+```bash
+remote-dev-codex-runtime verify
+```
+
+`remote-dev-doctor`, and therefore the menu's **Run diagnostics** action, runs `verify` before showing normal runtime status. Corruption or an inability to maintain the verification stamp makes diagnostics fail. If `resolve` has just completed a successful full check but cannot persist the optional stamp, it may still use those verified bytes for that invocation and emits a warning; the next invocation verifies them fully again.
+
+This optimization does not expand the trust boundary. Metadata change detection covers ordinary local changes, replacements and corruption that alter the recorded identity. It is not protection from a process with the runtime owner's authority or container root that can coherently alter both runtime and verification state, from root replacing the manager/launcher, from a host or ZFS administrator, or from compromised kernel/storage behavior. Physical corruption that leaves all recorded metadata unchanged is therefore not guaranteed to be detected before every launch; storage read errors, ZFS integrity mechanisms and explicit `verify`/diagnostics remain the full-check paths. The final manager-to-`exec` TOCTOU window is unchanged and is tracked separately in [#114](https://github.com/eXPerience83/remote-dev-containers/issues/114).
 
 ## Launch and fallback
 
@@ -114,11 +131,12 @@ The existing isolation contract is unchanged: Remote Dev still passes `--sandbox
 remote-dev-codex-runtime status
 remote-dev-codex-runtime status --menu
 remote-dev-codex-runtime resolve
+remote-dev-codex-runtime verify
 remote-dev-codex-runtime remove
 remote-dev-codex-runtime remove --yes
 ```
 
-`resolve` is intended for the project launcher and prints the selected executable path. It performs local integrity checks only.
+`resolve` is intended for the project launcher and prints the selected executable path. It performs offline structural and change-detection checks, escalating to full SHA-256 verification whenever the trusted stamp is unavailable or differs.
 
 `remove` deletes only the optional Remote Dev-managed runtime state and returns immediately to the immutable bundled fallback. It never modifies `/usr/local/bin/codex` or `/root/.codex`. Interactive removal asks for confirmation; `--yes` is the explicit non-interactive form.
 

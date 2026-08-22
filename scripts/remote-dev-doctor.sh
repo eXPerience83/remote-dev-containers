@@ -125,6 +125,15 @@ fi
 
 if [[ "$role" == codex ]]; then
   echo
+  codex_runtime_verify=0
+  codex_runtime_verify_command=(/usr/local/bin/remote-dev-codex-runtime verify)
+  if "${codex_runtime_verify_command[@]}"; then
+    :
+  else
+    codex_runtime_verify=$?
+    echo "Codex runtime full integrity: unavailable (exit $codex_runtime_verify)"
+    status=1
+  fi
   codex_runtime_status=0
   codex_runtime_status_command=(/usr/local/bin/remote-dev-codex-runtime status)
   if "${codex_runtime_status_command[@]}"; then

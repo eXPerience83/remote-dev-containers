@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Changed optional Codex runtime `resolve` and `status` to use fail-safe metadata change detection after a successful full verification, added an offline full-SHA `verify` command, and made Codex diagnostics fail on runtime integrity or verification-state errors.
 - Migrated the effective base image from Ubuntu 24.04 to Ubuntu 26.04 LTS.
 - Updated maintained GitHub Actions to their current major releases.
 - Changed the edge channel from private validation to public experimental development testing.
@@ -92,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- Optional Codex runtime fast-path trust is now bound to a strict, private, atomic, versioned verification stamp; any missing or changed identity forces full manifest SHA-256 verification, while same-owner/root, host/ZFS control and the final manager-to-exec TOCTOU boundary remain explicitly outside this mechanism and tracked separately in #114.
 - Codex runtime update probes now use a fixed transient executable staging root under `/run`, verify its real execution capability before download, and normalize extracted package directories independently of restrictive umasks while ignoring caller-controlled `TMPDIR` and preserving the intentional `noexec` `/tmp` mount, UID/GID `65534` probes, synthetic credential-free state and immutable bundled fallback.
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
 - Optional launcher authentication uses a file-backed Compose secret and is tested not to expose the password value in rendered Compose configuration.

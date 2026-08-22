@@ -8,6 +8,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -16,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 SCRIPT = Path(__file__).with_name("remote-dev-codex-runtime.py")
+DOCTOR = Path(__file__).with_name("remote-dev-doctor.sh")
 
 
 def load_manager():
@@ -107,6 +109,19 @@ class CodexRuntimeTests(unittest.TestCase):
         run.mkdir(mode=0o711)
         run.chmod(0o711)
         return run / "remote-dev-codex-update"
+
+    def publish_fixture(self, root: Path, version: str = "0.148.0"):
+        asset = self.asset(version)
+        self.m.ROOT = root / "runtime"
+        with mock.patch.object(self.m, "target", return_value=asset["target"]):
+            self.m.publish(self.package(root, version), asset, asset["url"])
+        name = (self.m.ROOT / "current").read_text(encoding="utf-8").strip()
+        release = self.m.ROOT / "releases" / name
+        return asset, release, release / "package"
+
+    def runtime_state(self, bundled: str = "0.147.0"):
+        with mock.patch.object(self.m, "bundled_version", return_value=bundled):
+            return self.m.state()
 
     def test_release_metadata_requires_exact_stable_tag_and_digest(self):
         data = self.release_metadata()
@@ -224,6 +239,244 @@ class CodexRuntimeTests(unittest.TestCase):
                     damaged = self.m.state()
             self.assertEqual(damaged["kind"], "damaged")
 
+    def test_legacy_runtime_full_hashes_once_then_uses_fast_path(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            self.m.stamp_path().unlink()
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                current = self.runtime_state()
+                self.assertEqual(current["kind"], "runtime")
+                self.assertGreater(file_sha.call_count, 0)
+            self.assertTrue(self.m.stamp_path().is_file())
+
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                current = self.runtime_state()
+                self.assertEqual(current["kind"], "runtime")
+                file_sha.assert_not_called()
+
+    def test_fast_path_hashes_manifest_but_no_package_file(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, release, _package = self.publish_fixture(root)
+            manifest = release / "remote-dev-runtime.json"
+            expected_manifest_sha = self.m.file_sha(manifest)
+            real_sha256 = self.m.hashlib.sha256
+            hashed_payloads = []
+
+            def observe(value=b""):
+                hashed_payloads.append(value)
+                return real_sha256(value)
+
+            with mock.patch.object(
+                self.m, "file_sha", side_effect=AssertionError("package hashed")
+            ), mock.patch.object(
+                self.m.hashlib, "sha256", side_effect=observe
+            ), mock.patch.object(
+                self.m, "bundled_version", return_value="0.147.0"
+            ):
+                current = self.m.state()
+                for command in (["status"], ["status", "--menu"], ["resolve"]):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(self.m.main(command), 0)
+            self.assertEqual(current["kind"], "runtime")
+            observed = [real_sha256(value).hexdigest() for value in hashed_payloads]
+            self.assertIn(expected_manifest_sha, observed)
+
+    def test_same_size_tamper_and_restored_mtime_force_full_failure(self):
+        for restore_mtime in (False, True):
+            with self.subTest(
+                restore_mtime=restore_mtime
+            ), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                binary = package / "bin/codex"
+                before = binary.stat()
+                original = binary.read_bytes()
+                binary.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+                binary.chmod(before.st_mode & 0o777)
+                if restore_mtime:
+                    os.utime(binary, ns=(before.st_atime_ns, before.st_mtime_ns))
+                    self.assertEqual(binary.stat().st_mtime_ns, before.st_mtime_ns)
+                with mock.patch.object(
+                    self.m, "file_sha", wraps=self.m.file_sha
+                ) as file_sha:
+                    current = self.runtime_state()
+                self.assertEqual(current["kind"], "damaged")
+                self.assertGreater(file_sha.call_count, 0)
+
+    def test_mode_changes_invalidate_trust_without_changing_acceptance_policy(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            metadata = package / "codex-package.json"
+            original_mode = metadata.stat().st_mode & 0o777
+            metadata.chmod(0o640)
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                self.assertEqual(self.runtime_state()["kind"], "runtime")
+                self.assertGreater(file_sha.call_count, 0)
+            metadata.chmod(original_mode)
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                self.assertEqual(self.runtime_state()["kind"], "runtime")
+                self.assertGreater(file_sha.call_count, 0)
+
+    @unittest.skipUnless(os.geteuid() == 0, "root is required to change ownership")
+    def test_owner_change_is_rejected_by_current_contract(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            binary = package / "bin/codex"
+            os.chown(binary, self.m.NOBODY, self.m.NOBODY)
+            self.assertEqual(self.runtime_state()["kind"], "damaged")
+
+    def test_file_set_and_symlink_changes_are_rejected(self):
+        cases = ("added", "deleted", "file-symlink", "directory-symlink")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                if case == "added":
+                    (package / "extra").write_text("extra\n", encoding="utf-8")
+                    (package / "extra").chmod(0o600)
+                elif case == "deleted":
+                    (package / "codex-resources/bwrap").unlink()
+                elif case == "file-symlink":
+                    path = package / "codex-resources/bwrap"
+                    path.unlink()
+                    path.symlink_to(package / "bin/codex")
+                else:
+                    directory = package / "codex-resources"
+                    for child in directory.iterdir():
+                        child.unlink()
+                    directory.rmdir()
+                    directory.symlink_to(package / "bin")
+                self.assertEqual(self.runtime_state()["kind"], "damaged")
+
+    def test_manifest_and_pointer_metadata_changes_force_full_verification(self):
+        for changed in ("manifest", "current"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, release, _package = self.publish_fixture(root)
+                if changed == "manifest":
+                    path = release / "remote-dev-runtime.json"
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    data["installed_at"] += 1
+                    path.write_text(
+                        json.dumps(data, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    path.chmod(0o600)
+                else:
+                    path = self.m.ROOT / "current"
+                    previous_name = path.read_text(encoding="utf-8").strip()
+                    next_asset = self.asset("0.149.0", "b" * 64)
+                    with mock.patch.object(
+                        self.m, "target", return_value=next_asset["target"]
+                    ):
+                        self.m.publish(
+                            self.package(root, next_asset["version"]),
+                            next_asset,
+                            next_asset["url"],
+                        )
+                    path.write_text(previous_name + "\n", encoding="utf-8")
+                    path.chmod(0o600)
+                with mock.patch.object(
+                    self.m, "file_sha", wraps=self.m.file_sha
+                ) as file_sha:
+                    self.assertEqual(self.runtime_state()["kind"], "runtime")
+                    self.assertGreater(file_sha.call_count, 0)
+
+    def test_stamp_invalid_states_always_force_full_and_repair(self):
+        cases = (
+            "missing",
+            "corrupt",
+            "truncated",
+            "schema",
+            "extra-key",
+            "release",
+            "symlink",
+            "perms",
+        )
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                self.publish_fixture(root)
+                stamp = self.m.stamp_path()
+                if case == "missing":
+                    stamp.unlink()
+                elif case == "corrupt":
+                    stamp.write_text("not-json\n", encoding="utf-8")
+                elif case == "truncated":
+                    stamp.write_text('{"schema_version":', encoding="utf-8")
+                elif case == "schema":
+                    data = json.loads(stamp.read_text(encoding="utf-8"))
+                    data["schema_version"] = 999
+                    stamp.write_text(json.dumps(data) + "\n", encoding="utf-8")
+                elif case == "extra-key":
+                    data = json.loads(stamp.read_text(encoding="utf-8"))
+                    data["unexpected"] = True
+                    stamp.write_text(json.dumps(data) + "\n", encoding="utf-8")
+                elif case == "release":
+                    data = json.loads(stamp.read_text(encoding="utf-8"))
+                    data["release_name"] = data["release_name"][:-8] + "00000000"
+                    stamp.write_text(json.dumps(data) + "\n", encoding="utf-8")
+                elif case == "symlink":
+                    stamp.unlink()
+                    outside = root / "outside-stamp"
+                    outside.write_text("keep\n", encoding="utf-8")
+                    stamp.symlink_to(outside)
+                else:
+                    stamp.chmod(0o666)
+                with mock.patch.object(
+                    self.m, "file_sha", wraps=self.m.file_sha
+                ) as file_sha:
+                    self.assertEqual(self.runtime_state()["kind"], "runtime")
+                    self.assertGreater(file_sha.call_count, 0)
+                self.assertIsNotNone(self.m.read_verification_stamp())
+                self.assertFalse(stamp.is_symlink())
+                self.assertEqual(stamp.stat().st_mode & 0o022, 0)
+
+    @unittest.skipUnless(os.geteuid() == 0, "root is required to change ownership")
+    def test_wrong_stamp_owner_forces_full_and_atomic_repair(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            os.chown(self.m.stamp_path(), self.m.NOBODY, self.m.NOBODY)
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                self.assertEqual(self.runtime_state()["kind"], "runtime")
+                self.assertGreater(file_sha.call_count, 0)
+            self.assertEqual(self.m.stamp_path().stat().st_uid, os.geteuid())
+
+    def test_legitimate_inode_change_and_empty_directory_refresh_stamp(self):
+        for case in ("inode", "empty-directory"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as text:
+                root = Path(text)
+                _asset, _release, package = self.publish_fixture(root)
+                if case == "inode":
+                    path = package / "codex-package.json"
+                    replacement = package / ".replacement"
+                    replacement.write_bytes(path.read_bytes())
+                    replacement.chmod(path.stat().st_mode & 0o777)
+                    os.replace(replacement, path)
+                else:
+                    (package / "codex-resources/empty").mkdir(mode=0o700)
+                with mock.patch.object(
+                    self.m, "file_sha", wraps=self.m.file_sha
+                ) as file_sha:
+                    self.assertEqual(self.runtime_state()["kind"], "runtime")
+                    self.assertGreater(file_sha.call_count, 0)
+                self.assertIsNotNone(self.m.read_verification_stamp())
+
     def test_dangling_current_symlink_is_damaged(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)
@@ -308,6 +561,36 @@ class CodexRuntimeTests(unittest.TestCase):
             self.assertTrue((releases / previous_name).is_dir())
             self.assertTrue((releases / current_name).is_dir())
             self.assertFalse(stale.exists())
+
+    def test_stamp_failure_after_pointer_does_not_rollback_publication(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.m.ROOT = root / "runtime"
+            first = self.asset("0.148.0", "a" * 64)
+            second = self.asset("0.149.0", "b" * 64)
+            with mock.patch.object(self.m, "target", return_value=first["target"]):
+                self.m.publish(
+                    self.package(root, first["version"]), first, first["url"]
+                )
+                previous = (self.m.ROOT / "current").read_text(encoding="utf-8")
+                stderr = io.StringIO()
+                with mock.patch.object(
+                    self.m,
+                    "write_verification_stamp",
+                    side_effect=self.m.ManagerError("synthetic stamp failure"),
+                ), contextlib.redirect_stderr(stderr):
+                    self.m.publish(
+                        self.package(root, second["version"]), second, second["url"]
+                    )
+            current = (self.m.ROOT / "current").read_text(encoding="utf-8")
+            self.assertNotEqual(current, previous)
+            self.assertTrue(current.startswith("0.149.0-"))
+            self.assertIn("stamp could not be initialized", stderr.getvalue())
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha:
+                self.assertEqual(self.runtime_state()["kind"], "runtime")
+                self.assertGreater(file_sha.call_count, 0)
 
     def test_update_staging_is_fixed_ignores_tmpdir_and_cleans(self):
         with tempfile.TemporaryDirectory() as text:
@@ -601,6 +884,166 @@ class CodexRuntimeTests(unittest.TestCase):
                 if current["kind"] == "damaged":
                     self.assertIn("bundled fallback", stderr.getvalue())
 
+    def test_verify_always_full_hashes_and_refreshes_stamp(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            before = json.loads(self.m.stamp_path().read_text(encoding="utf-8"))
+            with mock.patch.object(
+                self.m, "file_sha", wraps=self.m.file_sha
+            ) as file_sha, mock.patch.object(
+                self.m.time, "time", return_value=before["verified_at"] + 10
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(self.m.main(["verify"]), 0)
+                self.assertGreater(file_sha.call_count, 0)
+            self.assertIn("full integrity: OK (runtime 0.148.0)", stdout.getvalue())
+            after = json.loads(self.m.stamp_path().read_text(encoding="utf-8"))
+            self.assertEqual(after["verified_at"], before["verified_at"] + 10)
+
+    def test_verify_corruption_fails_and_does_not_publish_new_trust(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            stamp_before = self.m.stamp_path().read_bytes()
+            path = package / "bin/codex"
+            content = path.read_bytes()
+            path.write_bytes(bytes([content[0] ^ 1]) + content[1:])
+            path.chmod(0o700)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                self.assertEqual(self.m.main(["verify"]), 1)
+            self.assertIn("full integrity: FAILED", stderr.getvalue())
+            self.assertEqual(self.m.stamp_path().read_bytes(), stamp_before)
+
+    def test_verify_without_optional_runtime_is_bundled_only_and_offline(self):
+        with tempfile.TemporaryDirectory() as text:
+            self.m.ROOT = Path(text) / "missing-runtime"
+            stdout = io.StringIO()
+            with mock.patch.object(
+                self.m, "opener", side_effect=AssertionError("network used")
+            ), contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.m.main(["verify"]), 0)
+            self.assertIn(
+                "bundled-only; optional runtime not installed", stdout.getvalue()
+            )
+
+    def test_resolve_uses_fully_verified_runtime_when_stamp_write_fails(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, _release, package = self.publish_fixture(root)
+            self.m.stamp_path().unlink()
+            runtime_binary = package / "bin/codex"
+            file_sha_calls = 0
+            original_file_sha = self.m.file_sha
+
+            def counted_file_sha(path):
+                nonlocal file_sha_calls
+                file_sha_calls += 1
+                return original_file_sha(path)
+
+            with mock.patch.object(
+                self.m, "bundled_version", return_value="0.147.0"
+            ), mock.patch.object(
+                self.m, "file_sha", side_effect=counted_file_sha
+            ), mock.patch.object(
+                self.m,
+                "write_verification_stamp",
+                side_effect=self.m.ManagerError("synthetic read-only state"),
+            ):
+                for invocation in range(2):
+                    stdout = io.StringIO()
+                    stderr = io.StringIO()
+                    with contextlib.redirect_stdout(
+                        stdout
+                    ), contextlib.redirect_stderr(stderr):
+                        self.assertEqual(self.m.main(["resolve"]), 0)
+                    self.assertEqual(stdout.getvalue().strip(), str(runtime_binary))
+                    self.assertIn(
+                        "passed full integrity verification", stderr.getvalue()
+                    )
+                    self.assertGreater(file_sha_calls, invocation * 5)
+            self.assertFalse(self.m.stamp_path().exists())
+
+    def test_verify_fails_operationally_when_stamp_write_fails(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            with mock.patch.object(
+                self.m,
+                "write_verification_stamp",
+                side_effect=self.m.ManagerError("synthetic read-only state"),
+            ):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(self.m.main(["verify"]), 1)
+            self.assertIn("full integrity: FAILED", stderr.getvalue())
+            self.assertIn("synthetic read-only state", stderr.getvalue())
+
+    def test_stamp_refresh_rechecks_current_and_never_publishes_stale_state(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            inspection = self.m.inspect_active_runtime(full_hash=True)
+            self.assertIsNotNone(inspection)
+            self.m.stamp_path().unlink()
+            current = self.m.ROOT / "current"
+            value = current.read_text(encoding="utf-8")
+            current.write_text(value, encoding="utf-8")
+            current.chmod(0o600)
+            refreshed = self.m.refresh_verification_stamp(inspection)
+            self.assertFalse(refreshed.refreshed)
+            self.assertTrue(refreshed.stale)
+            self.assertFalse(self.m.stamp_path().exists())
+
+    def test_publication_stamp_matches_only_the_final_active_generation(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            _asset, release, _package = self.publish_fixture(root)
+            stamp = self.m.read_verification_stamp()
+            self.assertIsNotNone(stamp)
+            stamp_info = self.m.stamp_path().lstat()
+            self.assertTrue(self.m.stat.S_ISREG(stamp_info.st_mode))
+            self.assertEqual(stamp_info.st_uid, os.geteuid())
+            self.assertEqual(stamp_info.st_mode & 0o777, 0o600)
+            self.assertEqual(
+                set(stamp),
+                {
+                    "schema_version",
+                    "fingerprint_algorithm",
+                    "release_name",
+                    "runtime_version",
+                    "target",
+                    "manifest_sha256",
+                    "fingerprints",
+                    "verified_at",
+                },
+            )
+            self.assertEqual(stamp["schema_version"], self.m.STAMP_SCHEMA)
+            self.assertEqual(
+                stamp["fingerprint_algorithm"], self.m.FINGERPRINT_ALGORITHM
+            )
+            self.assertEqual(stamp["release_name"], release.name)
+            self.assertEqual(
+                stamp["manifest_sha256"],
+                self.m.file_sha(release / "remote-dev-runtime.json"),
+            )
+            self.assertEqual(
+                stamp["release_name"],
+                (self.m.ROOT / "current").read_text(encoding="utf-8").strip(),
+            )
+
+    def test_verify_never_opens_network_with_installed_runtime(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            with mock.patch.object(
+                self.m, "opener", side_effect=AssertionError("network used")
+            ):
+                self.assertEqual(self.m.main(["verify"]), 0)
+
     def test_remove_deletes_only_optional_runtime(self):
         with tempfile.TemporaryDirectory() as text:
             root = Path(text)
@@ -691,6 +1134,125 @@ class CodexRuntimeTests(unittest.TestCase):
         rendered = "\n".join(str(call.args[0]) for call in output.call_args_list)
         self.assertIn("official source; Remote Dev review pending", rendered)
         self.assertIn("Codex active source: runtime", rendered)
+
+    @unittest.skipUnless(
+        os.geteuid() == 0, "root is required for executable /run fixture"
+    )
+    def test_doctor_runs_full_verify_before_status_and_propagates_failure(self):
+        with tempfile.TemporaryDirectory(prefix="doctor-test-", dir="/run") as text:
+            root = Path(text)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            runtime_lib = root / "remote-dev-runtime.sh"
+            runtime_lib.write_text(
+                "remote_dev_resolve_role() { printf '%s\\n' codex; }\n",
+                encoding="utf-8",
+            )
+            log = root / "runtime.log"
+            manager = bin_dir / "remote-dev-codex-runtime"
+            manager.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$1\" >>\"$DOCTOR_RUNTIME_LOG\"\n"
+                "if [ \"$1\" = verify ]; then\n"
+                "  if [ \"${DOCTOR_VERIFY_FAIL:-0}\" = 1 ]; then\n"
+                "    echo 'ERROR: Codex runtime full integrity: FAILED: "
+                "synthetic' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+                "  echo 'Codex runtime full integrity: OK (runtime 0.149.0)'\n"
+                "else\n"
+                "  echo 'Codex bundled: 0.148.0'\n"
+                "  echo 'Codex runtime: 0.149.0'\n"
+                "  echo 'Codex active source: runtime'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            manager.chmod(0o755)
+            context7 = bin_dir / "remote-dev-context7"
+            generic = "#!/bin/sh\nexit 0\n"
+            context7.write_text(generic, encoding="utf-8")
+            context7.chmod(0o755)
+            commands = (
+                "start-remote-dev-web",
+                "attach-remote-dev-tmux",
+                "remote-dev-menu",
+                "remote-dev-healthcheck",
+                "remote-dev-doctor",
+                "remote-dev-version",
+                "gh",
+                "git",
+                "python",
+                "node",
+                "npm",
+                "uv",
+                "mise",
+                "ttyd",
+                "tmux",
+                "ssh",
+                "rg",
+                "fd",
+                "codex",
+                "run-codex",
+            )
+            for name in commands:
+                path = bin_dir / name
+                path.write_text(generic, encoding="utf-8")
+                path.chmod(0o755)
+            doctor = root / "remote-dev-doctor.sh"
+            source = DOCTOR.read_text(encoding="utf-8")
+            source = source.replace(
+                "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh",
+                f"runtime_lib={runtime_lib}",
+            ).replace(
+                "/usr/local/bin/remote-dev-codex-runtime", str(manager)
+            ).replace(
+                "/usr/local/bin/remote-dev-context7", str(context7)
+            )
+            doctor.write_text(source, encoding="utf-8")
+            doctor.chmod(0o755)
+            workspace = root / "workspace"
+            gh_home = root / "gh"
+            codex_home = root / "codex"
+            runtime_root = root / "runtime"
+            for path in (workspace, gh_home, codex_home, runtime_root):
+                path.mkdir()
+            env = {
+                **os.environ,
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
+                "HOME": str(root),
+                "WORKSPACE": str(workspace),
+                "GH_CONFIG_DIR": str(gh_home),
+                "CODEX_HOME": str(codex_home),
+                "REMOTE_DEV_CODEX_RUNTIME_ROOT": str(runtime_root),
+                "DOCTOR_RUNTIME_LOG": str(log),
+            }
+            success = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
+            self.assertIn("Codex runtime full integrity: OK", success.stdout)
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
+            )
+
+            log.unlink()
+            env["DOCTOR_VERIFY_FAIL"] = "1"
+            failure = subprocess.run(
+                ["/bin/bash", str(doctor)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(failure.returncode, 0)
+            self.assertIn("full integrity: unavailable", failure.stdout)
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(), ["verify", "status"]
+            )
 
 
 if __name__ == "__main__":

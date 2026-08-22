@@ -19,7 +19,7 @@ El menú, `remote-dev-version` y `remote-dev-doctor` distinguen estos estados:
 
 ## Red sólo mediante acción explícita
 
-El arranque normal, `status`, `resolve`, el lanzamiento de Codex, reanudar sesiones, health checks y diagnósticos no contactan con el endpoint de actualizaciones.
+El arranque normal, `status`, `resolve`, `verify`, el lanzamiento de Codex, reanudar sesiones, health checks y diagnósticos no contactan con el endpoint de actualizaciones.
 
 Sólo hay acceso a red después de una acción explícita de instalación/actualización:
 
@@ -84,7 +84,8 @@ Antes de activar un runtime opcional, Remote Dev:
 8. limita el tiempo y la salida capturada de las pruebas del candidato;
 9. comprueba `codex --version`, las opciones de launcher necesarias y el contrato `codex-code-mode-host --listen ws://127.0.0.1:0` + `/readyz`;
 10. calcula la huella de cada archivo publicado y la guarda en un manifiesto privado restrictivo;
-11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones.
+11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones;
+12. inicializa un stamp privado de verificación sólo después de comprobar que la generación final publicada sigue correspondiendo al paquete que superó la verificación completa.
 
 El staging ejecutable de admisión usa la raíz transitoria fija
 `/run/remote-dev-codex-update`, nunca `/tmp` ni un `TMPDIR` controlado por quien
@@ -100,7 +101,23 @@ intencionadamente no ejecutable de `/tmp` sin hacer atravesables el runtime
 persistente ni las credenciales, y cada operación elimina su árbol de staging
 tras éxito, error, timeout o una señal de terminación capturable.
 
-Las mutaciones se serializan con un lock privado. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. Los directorios de staging `.candidate-*` abandonados por una publicación anterior interrumpida se recuperan bajo ese mismo lock en un intento posterior de publicación. El lanzamiento normal no necesita ese lock: verifica el conjunto de archivos ya publicado y puede volver inmediatamente al Codex incluido en la imagen.
+Las mutaciones se serializan con un lock privado. El hash del paquete se calcula sin mantener ese lock de mutación; sólo lo mantienen las secciones cortas de publicación y de nueva comprobación del stamp. Una admisión fallida o interrumpida deja intacto el runtime activo anterior. Los directorios de staging `.candidate-*` abandonados por una publicación anterior interrumpida se recuperan en un intento posterior, mientras que un marcador advisory por candidato evita eliminar una publicación que sigue activa. El lanzamiento normal no mantiene el lock de mutación.
+
+## Detección rápida de cambios y verificación completa
+
+La publicación y el verificador completo explícito comprueban el SHA-256 de cada archivo del paquete contra el manifiesto privado. Después de una verificación completa satisfactoria, el gestor escribe atómicamente `verification-stamp.json` fuera de la release activa. El stamp acotado y versionado liga el nombre de la release actual, la versión y el target del runtime con el SHA-256 del pequeño manifiesto privado y con una fingerprint canónica de metadatos Linux para el puntero, la release, el manifiesto, los directorios del paquete y sus objetos. La fingerprint registra tipo de objeto, dispositivo, inode, número de enlaces, tamaño, propietario, grupo, modo, mtime y ctime con precisión de nanosegundos.
+
+`resolve`, `status` y `status --menu` vuelven a validar siempre las reglas estructurales y de permisos existentes, hashean el manifiesto pequeño y comparan la fingerprint actual de metadatos con ese stamp de confianza. Cuando coinciden, no se lee ni se hashea ningún archivo del paquete. Un stamp ausente, malformado, truncado, symlink, inseguro, incompatible o distinto nunca otorga confianza: el gestor ejecuta inmediatamente la verificación SHA-256 completa del paquete antes de permitir el runtime opcional. Una comprobación completa satisfactoria refresca el stamp de forma atómica. No hay TTL; la invalidación depende únicamente de cambios observados.
+
+Usa el siguiente comando offline para forzar la verificación completa aunque exista un stamp válido:
+
+```bash
+remote-dev-codex-runtime verify
+```
+
+`remote-dev-doctor`, y por tanto la acción **Run diagnostics** del menú, ejecuta `verify` antes de mostrar el estado normal del runtime. La corrupción o la incapacidad de mantener el stamp de verificación hace fallar los diagnósticos. Si `resolve` acaba de completar una comprobación completa satisfactoria pero no puede persistir el stamp opcional, puede usar esos bytes verificados para esa invocación y emite una advertencia; la siguiente invocación los verificará por completo otra vez.
+
+Esta optimización no amplía la frontera de confianza. La detección por metadatos cubre cambios locales ordinarios, sustituciones y corrupción que alteren la identidad registrada. No protege frente a un proceso con la autoridad del propietario del runtime o root del contenedor que pueda alterar coherentemente el runtime y el estado de verificación, frente a root que sustituya el propio gestor/launcher, frente al administrador del host o ZFS, ni frente a un kernel o almacenamiento comprometido. Por tanto, no se garantiza detectar antes de cada lanzamiento una corrupción física que conserve todos los metadatos registrados; los errores de lectura, los mecanismos de integridad de ZFS y `verify`/diagnostics explícitos siguen siendo las rutas de comprobación completa. La ventana TOCTOU final entre el gestor y `exec` no cambia y se sigue por separado en [#114](https://github.com/eXPerience83/remote-dev-containers/issues/114).
 
 ## Lanzamiento y fallback
 
@@ -116,11 +133,12 @@ El contrato de aislamiento existente no cambia: Remote Dev sigue pasando `--sand
 remote-dev-codex-runtime status
 remote-dev-codex-runtime status --menu
 remote-dev-codex-runtime resolve
+remote-dev-codex-runtime verify
 remote-dev-codex-runtime remove
 remote-dev-codex-runtime remove --yes
 ```
 
-`resolve` está pensado para el launcher del proyecto e imprime la ruta del ejecutable seleccionado. Sólo realiza comprobaciones locales de integridad.
+`resolve` está pensado para el launcher del proyecto e imprime la ruta del ejecutable seleccionado. Realiza comprobaciones offline estructurales y de detección de cambios, escalando a la verificación SHA-256 completa cuando el stamp de confianza no está disponible o es distinto.
 
 `remove` elimina únicamente el estado del runtime opcional gestionado por Remote Dev y vuelve inmediatamente al fallback inmutable incluido. Nunca modifica `/usr/local/bin/codex` ni `/root/.codex`. La eliminación interactiva pide confirmación; `--yes` es la forma explícita no interactiva.
 
