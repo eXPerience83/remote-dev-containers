@@ -8,6 +8,8 @@ Agent containers intentionally run as root. Root is constrained to that containe
 
 The launcher starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server, it clears supplementary groups and drops permanently to UID/GID `65532`. The launcher has no agent-state mounts.
 
+The launcher starts with only `DAC_READ_SEARCH`, `SETGID` and `SETUID`. `DAC_READ_SEARCH` lets it read a mode-`0600` file-backed password whose host ownership Compose preserves; `SETGID` and `SETUID` perform the permanent drop. After the drop, the network-facing process has no supplementary groups and zero effective capabilities.
+
 ## Launcher boundary
 
 The launcher and Codex run as separate containers from the same immutable image. Sharing image layers does not share mutable state or credentials.
@@ -35,6 +37,32 @@ The supported TrueNAS security boundary is the outer agent container. The defaul
 `danger-full-access` describes only the Codex inner sandbox. It does not add Docker privileges, capabilities, host mounts, unconfined profiles or a container-engine socket.
 
 Approval prompts are not a sandbox. Autonomous and guarded modes can access every path and credential mounted into Codex. Guarded mode adds confirmation friction only.
+
+## Enforced container hardening
+
+Both deployment files make the launcher, Codex and Antigravity root filesystems read-only, drop every capability and then restore only the exact role minimum. They retain `no-new-privileges`, do not configure supplementary groups, and set PID ceilings of `64` for the launcher and `1024` for each agent.
+
+Codex and Antigravity keep the established root-agent model because the authenticated terminal is trusted for that one service and must initialize and harden role-private bind mounts whose host ownership can differ. Their exact capability whitelist is:
+
+- `CHOWN` for ownership of fixed unprivileged candidate/login staging;
+- `DAC_OVERRIDE` for root access to the service's narrow private bind mounts when host UID ownership differs;
+- `FOWNER` for `chmod` and persistent-state hardening on those mounts;
+- `KILL` so bounded supervisors can terminate a candidate running as another UID;
+- `SETGID` and `SETUID` to execute reviewed candidate/login probes as UID/GID `65534` with supplementary groups cleared.
+
+All other capabilities are dropped. In particular, no role receives `SYS_ADMIN`, `NET_ADMIN`, `NET_RAW`, `MKNOD`, `SETPCAP`, `SETFCAP`, `SYS_CHROOT` or `NET_BIND_SERVICE`.
+
+The only transient writable filesystems are private per-container tmpfs mounts:
+
+| Role | `/tmp` | `/run` |
+| --- | --- | --- |
+| launcher | `rw,noexec,nosuid,nodev,size=64m,mode=1777` | `rw,noexec,nosuid,nodev,size=16m,mode=755` |
+| Codex | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,exec,nosuid,nodev,size=1536m,mode=755` |
+| Antigravity | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,noexec,nosuid,nodev,size=64m,mode=755` |
+
+Codex `/run` deliberately remains executable for the bounded `/run/remote-dev-codex-update` staging contract and transient Context7 device-login tooling. Its `1536m` ceiling covers the published 300 MiB package and 1 GiB unpacked limits plus working overhead; tmpfs size is a ceiling, not preallocated memory. npm and uv caches use narrow paths below the existing `/tmp` tmpfs and are transient. Antigravity installation/update staging remains in its private persistent runtime state rather than moving into `/tmp`.
+
+Everything in `/tmp` and `/run`, including tool caches and tmux sockets, disappears when a container is recreated. Credentials, configuration, workspaces and admitted runtimes persist only through the existing role-private binds. Generic Compose file-backed secrets remain read-only below `/run/secrets`; the TrueNAS reference keeps its distinct environment-backed terminal-password mode.
 
 ## Canonical persistent-data boundary
 
@@ -71,7 +99,7 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 - Keep credentials out of navigation URLs, diagnostics, logs, tests and rendered environment output.
 - Keep agent data and credentials out of the launcher.
 - Do not mount Docker or Podman sockets.
-- Do not use `privileged: true`, host PID, host networking or added capabilities.
+- Do not use `privileged: true`, host PID or host networking, and do not add capabilities beyond the exact role whitelists above.
 - Do not mount the parent data root, host root, `/root`, `/home`, `/mnt`, `/opt` or `/usr/local` wholesale.
 - Treat Codex authentication, GitHub credentials and SSH keys as secrets.
 - Keep `no-new-privileges:true` enabled on every service.

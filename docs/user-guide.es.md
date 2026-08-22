@@ -161,6 +161,8 @@ Remote Dev separa el estado persistente por función:
 - un runtime opcional admitido de Codex tiene su propio estado de runtime privado de Codex;
 - la selección activa de proyecto es únicamente estado del proceso menú/tmux actual.
 
+El sistema de archivos raíz del contenedor es de solo lectura. `/tmp` y `/run` son tmpfs privados y acotados, por lo que los sockets tmux y el staging transitorio de cachés npm/uv, actualizaciones o login desaparecen al recrear el contenedor. `/tmp` también usa `noexec`; `/run` de Codex permite ejecución únicamente para el ciclo acotado del actualizador de Codex y del login de dispositivo de Context7. No guardes credenciales, configuración ni trabajo de proyecto en ninguna de estas rutas transitorias.
+
 Recrear el contenedor con los mismos mounts revisados debería conservar los directorios de proyecto y el estado del agente aunque arranque un proceso nuevo. Si se borra un proyecto, el historial de Codex puede seguir conteniendo sesiones de la ruta antigua porque ese historial no estaba almacenado en el checkout eliminado.
 
 ## 8. Antigravity: límite documental actual
