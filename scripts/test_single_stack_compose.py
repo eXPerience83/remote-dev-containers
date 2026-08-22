@@ -22,7 +22,7 @@ AGENT_CAPABILITIES = frozenset(
     ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID")
 )
 ROLE_CAPABILITIES = {
-    "launcher": frozenset(("SETGID", "SETUID")),
+    "launcher": frozenset(("DAC_READ_SEARCH", "SETGID", "SETUID")),
     "codex": AGENT_CAPABILITIES,
     "antigravity": AGENT_CAPABILITIES,
 }

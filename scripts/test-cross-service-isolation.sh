@@ -432,7 +432,7 @@ assert_hardening_contract() {
   jq -e --arg role "$role" '
     .[0].HostConfig as $host
     | (if $role == "launcher" then
-         ["SETGID", "SETUID"]
+         ["DAC_READ_SEARCH", "SETGID", "SETUID"]
        else
          ["CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID"]
        end) as $expected_caps
@@ -947,6 +947,7 @@ start_launcher() {
     --network "$network_name" \
     --read-only \
     --cap-drop ALL \
+    --cap-add DAC_READ_SEARCH \
     --cap-add SETGID \
     --cap-add SETUID \
     --pids-limit 64 \

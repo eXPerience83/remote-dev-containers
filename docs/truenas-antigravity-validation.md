@@ -275,7 +275,7 @@ different source revision.
   `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
   groups, no privileged/host PID/host network mode and no engine socket or broad
   mount.
-- Confirm launcher has only `SETGID,SETUID`, PID limit `64`, `/tmp` at
+- Confirm launcher has only `DAC_READ_SEARCH,SETGID,SETUID`, PID limit `64`, `/tmp` at
   `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
   `rw,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
   UID/GID `65532`, has no supplementary groups, zero effective capabilities and

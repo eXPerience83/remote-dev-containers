@@ -8,7 +8,7 @@ Agent containers intentionally run as root. Root is constrained to that containe
 
 The launcher starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server, it clears supplementary groups and drops permanently to UID/GID `65532`. The launcher has no agent-state mounts.
 
-The launcher starts with only `SETGID` and `SETUID`, which are required for that permanent drop while preserving the existing root-readable `0600` file-backed password contract. After the drop, the network-facing process has no supplementary groups and zero effective capabilities.
+The launcher starts with only `DAC_READ_SEARCH`, `SETGID` and `SETUID`. `DAC_READ_SEARCH` lets it read a mode-`0600` file-backed password whose host ownership Compose preserves; `SETGID` and `SETUID` perform the permanent drop. After the drop, the network-facing process has no supplementary groups and zero effective capabilities.
 
 ## Launcher boundary
 
