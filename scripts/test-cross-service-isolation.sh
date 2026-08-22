@@ -792,6 +792,7 @@ wait_for_health_command "$codex_name"
 assert_image_id "$codex_name"
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_mount_contract "$codex_name" codex
+assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
 assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"

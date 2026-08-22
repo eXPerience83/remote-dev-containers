@@ -17,6 +17,7 @@ COMPOSE_FILES = (GENERIC_COMPOSE, TRUENAS_COMPOSE)
 AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
+BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
 
 
 def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -140,6 +141,19 @@ def credential_sources(
     return sources
 
 
+def validate_mount_safety(service: dict[str, object], context: str) -> None:
+    for source in mount_sources(service):
+        lowered = source.lower()
+        require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{context} engine socket {source}")
+        require(source not in BROAD_MOUNT_PATHS, f"{context} broad mount source {source}")
+    for target in mount_targets(service):
+        lowered_target = target.lower()
+        require(target not in BROAD_MOUNT_PATHS, f"{context} broad mount target {target}")
+        require(not any(marker in lowered_target for marker in SOCKET_MARKERS), f"{context} engine socket target {target}")
+        require("tmux" not in lowered_target, f"{context} tmux mount {target}")
+        require("control" not in lowered_target, f"{context} control mount {target}")
+
+
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
     path = Path(path_value)
     if not path.is_absolute():
@@ -246,15 +260,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {name} environment")
         require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
-        for source in mount_sources(service):
-            lowered = source.lower()
-            require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
-        for target in mount_targets(service):
-            lowered_target = target.lower()
-            require(target not in {"/", "/root", "/home", "/opt", "/usr/local"}, f"{path}: {name} broad mount target {target}")
-            require(not any(marker in lowered_target for marker in SOCKET_MARKERS), f"{path}: {name} engine socket target {target}")
-            require("tmux" not in target.lower(), f"{path}: {name} tmux mount {target}")
-            require("control" not in target.lower(), f"{path}: {name} control mount {target}")
+        validate_mount_safety(service, f"{path}: {name}")
 
     require(launcher.get("container_name") == "remote-dev-launcher", f"{path}: launcher name")
     require(codex.get("container_name") == "codex-remote-dev", f"{path}: Codex name")
@@ -343,6 +349,12 @@ def validate_rendered_volume_shapes() -> None:
             except AssertionError:
                 continue
             raise AssertionError(f"invalid rendered volume shape was accepted: {volumes!r}")
+    try:
+        validate_mount_safety({"volumes": [{"source": "/", "target": "/workspace"}]}, "regression")
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("broad rendered volume source was accepted")
 
 
 def main() -> int:
