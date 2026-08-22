@@ -462,6 +462,7 @@ assert_hardening_contract() {
     and ($host.Privileged == false)
     and (($host.PidMode // "") != "host")
     and (($host.NetworkMode // "") != "host")
+    and ($host.IpcMode == "private")
     and (($host.GroupAdd // []) | length == 0)
     and (($host.SecurityOpt // []) == ["no-new-privileges:true"])
   ' <<<"$inspection" >/dev/null; then
@@ -473,6 +474,7 @@ assert_hardening_contract() {
       privileged: .HostConfig.Privileged,
       pid_mode: .HostConfig.PidMode,
       network_mode: .HostConfig.NetworkMode,
+      ipc_mode: .HostConfig.IpcMode,
       group_add: .HostConfig.GroupAdd,
       security_opt: .HostConfig.SecurityOpt,
       tmpfs: .HostConfig.Tmpfs
@@ -899,6 +901,29 @@ assert_tmux_socket_private() {
   done
 }
 
+assert_dev_shm_private() {
+  local owner="$1"
+  local role="$2"
+  local marker
+  local path
+  local observer
+
+  marker="$(marker_name "${role}-dev-shm")"
+  path="/dev/shm/$marker"
+  docker_exec "$owner" sh -c '
+    set -eu
+    umask 077
+    printf "%s\\n" "$1" >"$2"
+    test "$(cat -- "$2")" = "$1"
+  ' sh "$marker" "$path" >/dev/null 2>&1 \
+    || fail "$role fixture could not write and verify its private /dev/shm canary"
+  for observer in "$launcher_name" "$codex_name" "$antigravity_name"; do
+    [[ "$observer" == "$owner" ]] && continue
+    docker_exec "$observer" sh -c 'test ! -e "$1"' sh "$path" >/dev/null 2>&1 \
+      || fail "$role /dev/shm canary is visible outside its private IPC namespace"
+  done
+}
+
 declare -a codex_targets=(
   /workspace
   /root/.codex
@@ -1150,6 +1175,9 @@ codex_socket="$(start_tmux_fixture "$codex_name" codex)"
 antigravity_socket="$(start_tmux_fixture "$antigravity_name" antigravity)"
 assert_tmux_socket_private "$codex_name" "$codex_socket" Codex
 assert_tmux_socket_private "$antigravity_name" "$antigravity_socket" Antigravity
+assert_dev_shm_private "$launcher_name" launcher
+assert_dev_shm_private "$codex_name" codex
+assert_dev_shm_private "$antigravity_name" antigravity
 
 assert_antigravity_missing_runtime_rejection
 verify_canaries codex_invariants "$codex_name"

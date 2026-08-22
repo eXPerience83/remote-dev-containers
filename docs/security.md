@@ -52,7 +52,7 @@ Codex and Antigravity keep the established root-agent model because the authenti
 
 All other capabilities are dropped. In particular, no role receives `SYS_ADMIN`, `NET_ADMIN`, `NET_RAW`, `MKNOD`, `SETPCAP`, `SETFCAP`, `SYS_CHROOT` or `NET_BIND_SERVICE`.
 
-The only transient writable filesystems are private per-container tmpfs mounts:
+The application-managed transient writable filesystems are private per-container tmpfs mounts:
 
 | Role | `/tmp` | `/run` |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ The only transient writable filesystems are private per-container tmpfs mounts:
 | Codex | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,exec,nosuid,nodev,size=1536m,mode=755` |
 | Antigravity | `rw,noexec,nosuid,nodev,size=512m,mode=1777` | `rw,noexec,nosuid,nodev,size=64m,mode=755` |
 
-Codex `/run` deliberately remains executable for the bounded `/run/remote-dev-codex-update` staging contract and transient Context7 device-login tooling. Its `1536m` ceiling covers the published 300 MiB package and 1 GiB unpacked limits plus working overhead; tmpfs size is a ceiling, not preallocated memory. npm and uv caches use narrow paths below the existing `/tmp` tmpfs and are transient. Antigravity installation/update staging remains in its private persistent runtime state rather than moving into `/tmp`.
+Docker also provides each role a private per-container `/dev/shm` shared-memory tmpfs. Codex and Antigravity retain their configured `shm_size: 256m` ceilings. `/dev/shm` is transient rather than persistent state and is not shared between role containers. Codex `/run` deliberately remains executable for the bounded `/run/remote-dev-codex-update` staging contract and transient Context7 device-login tooling. Its `1536m` ceiling covers the published 300 MiB package and 1 GiB unpacked limits plus working overhead; tmpfs size is a ceiling, not preallocated memory. npm and uv caches use narrow paths below the existing `/tmp` tmpfs and are transient. Antigravity installation/update staging remains in its private persistent runtime state rather than moving into `/tmp`.
 
 Everything in `/tmp` and `/run`, including tool caches and tmux sockets, disappears when a container is recreated. Credentials, configuration, workspaces and admitted runtimes persist only through the existing role-private binds. Generic Compose file-backed secrets remain read-only below `/run/secrets`; the TrueNAS reference keeps its distinct environment-backed terminal-password mode.
 

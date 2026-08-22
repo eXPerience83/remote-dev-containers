@@ -224,6 +224,12 @@ def validate_service_hardening(
     require(group_add == [], f"{context} configures supplementary groups")
 
 
+def validate_private_ipc_namespace(service: dict[str, object], context: str) -> None:
+    ipc = service.get("ipc")
+    require(ipc is None or isinstance(ipc, str), f"{context} IPC mode shape")
+    require(ipc is None or ipc == "private", f"{context} IPC namespace is not private")
+
+
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
     path = Path(path_value)
     if not path.is_absolute():
@@ -345,6 +351,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
         )
         require(pid_mode != "host", f"{path}: {name} host PID namespace")
         validate_service_hardening(service, name, f"{path}: {name}")
+        validate_private_ipc_namespace(service, f"{path}: {name}")
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {name} environment")
         require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
@@ -446,8 +453,20 @@ def validate_rendered_volume_shapes() -> None:
         raise AssertionError("broad rendered volume source was accepted")
 
 
+def validate_rendered_ipc_modes() -> None:
+    for ipc in ("host", "shareable", "service:codex", "container:fixture", ["private"]):
+        try:
+            validate_private_ipc_namespace({"ipc": ipc}, "regression")
+        except AssertionError:
+            continue
+        raise AssertionError(f"unsafe rendered IPC mode was accepted: {ipc!r}")
+    validate_private_ipc_namespace({}, "regression")
+    validate_private_ipc_namespace({"ipc": "private"}, "regression")
+
+
 def main() -> int:
     validate_rendered_volume_shapes()
+    validate_rendered_ipc_modes()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)
