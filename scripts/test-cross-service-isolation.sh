@@ -432,9 +432,9 @@ assert_hardening_contract() {
   if ! jq -e --arg role "$role" '
     .[0].HostConfig as $host
     | (if $role == "launcher" then
-         ["DAC_READ_SEARCH", "SETGID", "SETUID"]
+         ["CAP_DAC_READ_SEARCH", "CAP_SETGID", "CAP_SETUID"]
        else
-         ["CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID"]
+         ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_KILL", "CAP_SETGID", "CAP_SETUID"]
        end) as $expected_caps
     | (if $role == "launcher" then 64 else 1024 end) as $expected_pids
     | (if $role == "launcher" then "size=64m"
