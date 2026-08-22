@@ -17,6 +17,7 @@ COMPOSE_FILES = (GENERIC_COMPOSE, TRUENAS_COMPOSE)
 AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
+BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
 
 
 def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -75,17 +76,34 @@ def published_targets(service: dict[str, object]) -> set[int]:
     }
 
 
+def rendered_volumes(service: dict[str, object]) -> list[dict[str, object]]:
+    if "volumes" not in service:
+        return []
+    volumes = service["volumes"]
+    require(isinstance(volumes, list), "rendered service volumes must be a list")
+    for mount in volumes:
+        require(isinstance(mount, dict), "rendered service volume must be a mapping")
+    return volumes
+
+
 def mount_sources(service: dict[str, object], target: str | None = None) -> list[str]:
     sources: list[str] = []
-    for mount in service.get("volumes", []):
-        if not isinstance(mount, dict):
-            continue
+    for mount in rendered_volumes(service):
         if target is not None and mount.get("target") != target:
             continue
         source = mount.get("source")
         if source is not None:
             sources.append(str(source))
     return sources
+
+
+def mount_targets(service: dict[str, object]) -> list[str]:
+    targets: list[str] = []
+    for mount in rendered_volumes(service):
+        target = mount.get("target")
+        if target is not None:
+            targets.append(str(target))
+    return targets
 
 
 def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
@@ -121,6 +139,19 @@ def credential_sources(
         require(secret_file is not None, f"secret {secret_name} has no file source")
         sources.append(f"secret:{secret_file}")
     return sources
+
+
+def validate_mount_safety(service: dict[str, object], context: str) -> None:
+    for source in mount_sources(service):
+        lowered = source.lower()
+        require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{context} engine socket {source}")
+        require(source not in BROAD_MOUNT_PATHS, f"{context} broad mount source {source}")
+    for target in mount_targets(service):
+        lowered_target = target.lower()
+        require(target not in BROAD_MOUNT_PATHS, f"{context} broad mount target {target}")
+        require(not any(marker in lowered_target for marker in SOCKET_MARKERS), f"{context} engine socket target {target}")
+        require("tmux" not in lowered_target, f"{context} tmux mount {target}")
+        require("control" not in lowered_target, f"{context} control mount {target}")
 
 
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
@@ -226,9 +257,10 @@ def validate(path: Path, config: dict[str, object]) -> None:
         require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
         require(service.get("network_mode") != "host", f"{path}: {name} host network")
         require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
-        for source in mount_sources(service):
-            lowered = source.lower()
-            require(not any(marker in lowered for marker in SOCKET_MARKERS), f"{path}: {name} engine socket {source}")
+        environment = service.get("environment")
+        require(isinstance(environment, dict), f"{path}: {name} environment")
+        require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
+        validate_mount_safety(service, f"{path}: {name}")
 
     require(launcher.get("container_name") == "remote-dev-launcher", f"{path}: launcher name")
     require(codex.get("container_name") == "codex-remote-dev", f"{path}: Codex name")
@@ -309,7 +341,24 @@ def validate_truenas_launcher_password_free_source() -> None:
         require(marker not in launcher_source, f"TrueNAS launcher source contains {marker}")
 
 
+def validate_rendered_volume_shapes() -> None:
+    for volumes in (["../data:/root/.ssh"], {"source": "../data", "target": "/root/.ssh"}):
+        for validator in (mount_sources, mount_targets):
+            try:
+                validator({"volumes": volumes})
+            except AssertionError:
+                continue
+            raise AssertionError(f"invalid rendered volume shape was accepted: {volumes!r}")
+    try:
+        validate_mount_safety({"volumes": [{"source": "/", "target": "/workspace"}]}, "regression")
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("broad rendered volume source was accepted")
+
+
 def main() -> int:
+    validate_rendered_volume_shapes()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)

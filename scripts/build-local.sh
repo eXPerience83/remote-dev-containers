@@ -114,6 +114,7 @@ codex_noexec_smoke_command=(
 )
 timeout --foreground 60s "${codex_noexec_smoke_command[@]}"
 bash "$ROOT/scripts/runtime-smoke-test.sh" "$remote_dev_image"
+bash "$ROOT/scripts/test-cross-service-isolation.sh" "$remote_dev_image"
 
 canonical_base_id="$(docker image inspect remote-dev-base:local --format '{{.Id}}')"
 legacy_base_id="$(docker image inspect codex-remote-dev-base:local --format '{{.Id}}')"
