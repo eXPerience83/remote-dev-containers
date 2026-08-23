@@ -277,11 +277,15 @@ for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   echo "== $container =="
   configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
   image_id="$(sudo docker inspect "$container" --format '{{.Image}}')"
-  test "$configured_image" = "$pinned_image"
+  if [[ "$configured_image" != "$pinned_image" ]]; then
+    echo "ERROR: $container configured image does not match the selected pinned image" >&2
+    exit 1
+  fi
   if test -z "$expected_image_id"; then
     expected_image_id="$image_id"
-  else
-    test "$image_id" = "$expected_image_id"
+  elif [[ "$image_id" != "$expected_image_id" ]]; then
+    echo "ERROR: $container image ID differs from the first role image ID" >&2
+    exit 1
   fi
   sudo docker inspect "$container" --format \
     'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'

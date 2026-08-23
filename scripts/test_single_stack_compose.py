@@ -235,6 +235,10 @@ def validate_private_pid_and_network_namespaces(service: dict[str, object], cont
     require(service.get("network_mode") is None, f"{context} configures a network namespace")
 
 
+def validate_absent_volumes_from(service: dict[str, object], context: str) -> None:
+    require("volumes_from" not in service, f"{context} configures volumes_from")
+
+
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
     path = Path(path_value)
     if not path.is_absolute():
@@ -344,6 +348,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
     for name, service in services.items():
         require(service.get("privileged", False) is False, f"{path}: {name} privileged")
         validate_private_pid_and_network_namespaces(service, f"{path}: {name}")
+        validate_absent_volumes_from(service, f"{path}: {name}")
         validate_service_hardening(service, name, f"{path}: {name}")
         validate_private_ipc_namespace(service, f"{path}: {name}")
         environment = service.get("environment")
@@ -422,6 +427,7 @@ def validate_auth_override_separation(env_path: Path) -> None:
     validate_service_hardening(launcher, "launcher", "launcher auth override")
     validate_private_ipc_namespace(launcher, "launcher auth override")
     validate_private_pid_and_network_namespaces(launcher, "launcher auth override")
+    validate_absent_volumes_from(launcher, "launcher auth override")
     require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
     require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
@@ -473,10 +479,28 @@ def validate_rendered_pid_and_network_modes() -> None:
     validate_private_pid_and_network_namespaces({}, "regression")
 
 
+def validate_rendered_volumes_from() -> None:
+    for volumes_from in (
+        ["codex"],
+        ["service:codex"],
+        ["container:fixture"],
+        None,
+        "codex",
+        {"service": "codex"},
+    ):
+        try:
+            validate_absent_volumes_from({"volumes_from": volumes_from}, "regression")
+        except AssertionError:
+            continue
+        raise AssertionError(f"rendered volumes_from was accepted: {volumes_from!r}")
+    validate_absent_volumes_from({}, "regression")
+
+
 def main() -> int:
     validate_rendered_volume_shapes()
     validate_rendered_ipc_modes()
     validate_rendered_pid_and_network_modes()
+    validate_rendered_volumes_from()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)

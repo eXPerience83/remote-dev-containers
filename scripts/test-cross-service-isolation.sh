@@ -668,6 +668,164 @@ assert_read_only_rootfs() {
   ' >/dev/null 2>&1 || fail "$role fixture unexpectedly permits writes to the immutable root filesystem"
 }
 
+readonly hardened_codex_policy_default=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: default'
+readonly hardened_codex_policy_guarded=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: guarded\nCodex approval policy: untrusted\nMode source: deployment'
+readonly hardened_codex_policy_override=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: per-launch'
+hardened_codex_output=""
+
+run_hardened_codex_assertion() {
+  local description="$1"
+  shift
+  local status=0
+  hardened_codex_output="$(docker_exec "$codex_name" "$@" 2>&1)" || status=$?
+  if (( status != 0 )); then
+    if docker_exec_infrastructure_failure "$status"; then
+      fail "$description docker exec failed"
+    fi
+    printf '%s\n' "${hardened_codex_output:0:32768}" >&2
+    fail "$description"
+  fi
+}
+
+assert_hardened_codex_policy() {
+  local description="$1"
+  local expected="$2"
+  shift 2
+  run_hardened_codex_assertion "$description" "$@"
+  if [[ "$hardened_codex_output" != "$expected" ]]; then
+    printf 'Expected:\n%s\nActual:\n%s\n' "$expected" "$hardened_codex_output" >&2
+    fail "$description policy output differs"
+  fi
+}
+
+assert_hardened_codex_policy_and_doctor() {
+  assert_hardened_codex_policy "hardened Codex default policy" \
+    "$hardened_codex_policy_default" \
+    env -u REMOTE_DEV_CODEX_APPROVAL_MODE run-codex --print-policy
+  assert_hardened_codex_policy "hardened Codex guarded deployment policy" \
+    "$hardened_codex_policy_guarded" \
+    env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded run-codex --print-policy
+  assert_hardened_codex_policy "hardened Codex per-launch policy override" \
+    "$hardened_codex_policy_override" \
+    env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded run-codex --approval-mode autonomous --print-policy
+  run_hardened_codex_assertion "hardened Codex diagnostics" \
+    env -u REMOTE_DEV_CODEX_APPROVAL_MODE codex-doctor
+  for expected in \
+    'Inner sandbox: disabled explicitly' \
+    'Isolation boundary: outer container' \
+    'Codex approval mode: autonomous' \
+    'Codex approval policy: never' \
+    'Mode source: default' \
+    'INFO: danger-full-access disables only the unsupported inner sandbox; the outer container remains the supported isolation boundary.'; do
+    grep -Fxq -- "$expected" <<<"$hardened_codex_output" \
+      || fail "hardened Codex diagnostics did not retain its default approval contract"
+  done
+}
+
+run_hardened_codex_regression() {
+  local description="$1"
+  shift
+  local status=0
+  hardened_codex_output="$(docker_exec "$codex_name" "$@" 2>&1)" || status=$?
+  if (( status != 0 )); then
+    if docker_exec_infrastructure_failure "$status"; then
+      return "$status"
+    fi
+    printf '%s\n' "${hardened_codex_output:0:32768}" >&2
+    return "$status"
+  fi
+  return 0
+}
+
+assert_hardened_codex_runtime_regressions() {
+  local fixture_root="/workspace/hardening-codex-regressions-$run_id"
+  local copy_status=0
+  local regression_status=0
+  local regression_description=""
+  local script=""
+
+  docker_exec "$codex_name" install -d -m 0700 -- "$fixture_root" >/dev/null 2>&1 \
+    || fail "hardened Codex regression fixture root could not be prepared"
+  for script in test-codex-runtime-noexec-staging.py test-remote-dev-context7-runtime-isolation.py; do
+    copy_status=0
+    timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+      "${docker_exec_timeout_seconds}s" \
+      docker cp "$source_root/scripts/$script" "$codex_name:$fixture_root/" \
+      >/dev/null 2>&1 || copy_status=$?
+    case "$copy_status" in
+      0) ;;
+      124) fail "Codex regression fixture copy timed out" ;;
+      125) fail "Codex regression fixture copy timeout invocation failed" ;;
+      137) fail "Codex regression fixture copy required KILL escalation" ;;
+      *) fail "Codex regression fixture copy failed" ;;
+    esac
+  done
+  docker_exec "$codex_name" chmod a+r -- \
+    "$fixture_root/test-codex-runtime-noexec-staging.py" \
+    "$fixture_root/test-remote-dev-context7-runtime-isolation.py" >/dev/null 2>&1 \
+    || fail "hardened Codex regression fixture sources could not be made readable"
+
+  if run_hardened_codex_regression "hardened Codex noexec staging regression failed" \
+    env REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
+      python "$fixture_root/test-codex-runtime-noexec-staging.py"; then
+    :
+  else
+    regression_status=$?
+    regression_description="hardened Codex noexec staging regression failed"
+  fi
+  if (( regression_status == 0 )); then
+    if run_hardened_codex_regression "hardened Context7 runtime isolation regression failed" \
+      env REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
+      python "$fixture_root/test-remote-dev-context7-runtime-isolation.py"; then
+      :
+    else
+      regression_status=$?
+      regression_description="hardened Context7 runtime isolation regression failed"
+    fi
+  fi
+  docker_exec "$codex_name" rm -rf -- "$fixture_root" >/dev/null 2>&1 \
+    || fail "hardened Codex regression fixtures did not clean up"
+  if (( regression_status != 0 )); then
+    if docker_exec_infrastructure_failure "$regression_status"; then
+      fail "hardened Codex regression docker exec failed"
+    fi
+    fail "$regression_description"
+  fi
+  wait_for_health_command "$codex_name"
+}
+
+assert_agent_ttyd_security() {
+  local name="$1"
+  local role="$2"
+  local username="$3"
+  local port="$4"
+  local status=""
+
+  docker_exec "$name" remote-dev-healthcheck >/dev/null 2>&1 \
+    || fail "$role credential-independent health check failed under hardening"
+  status="$(docker_exec "$name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    "http://127.0.0.1:$port/")" \
+    || fail "$role unauthenticated ttyd request could not be evaluated"
+  [[ "$status" == 401 ]] || fail "$role ttyd accepted an unauthenticated request"
+  status="$(docker_exec "$name" sh -c '
+    password="$(cat -- /run/secrets/web_password)"
+    curl --silent --output /dev/null --write-out "%{http_code}" --user "$1:$password" \
+      "http://127.0.0.1:$2/"
+  ' sh "$username" "$port")" \
+    || fail "$role authenticated ttyd request could not be evaluated"
+  [[ "$status" == 200 ]] || fail "$role ttyd rejected its synthetic credential"
+  docker_exec "$name" bash -c '
+    set -eu
+    pid="$(pgrep -xo ttyd)"
+    argv="$(tr "\\0" "\\n" < "/proc/$pid/cmdline")"
+    grep -Fxq -- --check-origin <<<"$argv"
+    max_clients="$(awk '\''$0 == "--max-clients" { getline; print; exit }'\'' <<<"$argv")"
+    test "$max_clients" = 1
+    grep -Fxq -- --credential <<<"$argv"
+  ' >/dev/null 2>&1 \
+    || fail "$role ttyd did not retain its hardened authentication/origin/client-limit arguments"
+}
+
 assert_codex_toolchain_workflow() {
   local output=""
   local status=0
@@ -1117,7 +1275,10 @@ start_codex() {
     --env REMOTE_DEV_CODEX_RUNTIME_ROOT=/root/.local/share/remote-dev/codex-runtime \
     --env GH_CONFIG_DIR=/root/.config/gh \
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
+    --env WEB_USERNAME=codex \
     --env WEB_PASSWORD_FILE=/run/secrets/web_password \
+    --env WEB_MAX_CLIENTS=1 \
+    --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7681 \
     --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
     --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
@@ -1161,7 +1322,10 @@ start_antigravity() {
     --env WORKSPACE=/workspace \
     --env GH_CONFIG_DIR=/root/.config/gh \
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
+    --env WEB_USERNAME=antigravity \
     --env WEB_PASSWORD_FILE=/run/secrets/web_password \
+    --env WEB_MAX_CLIENTS=1 \
+    --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7682 \
     --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
     --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
@@ -1205,13 +1369,17 @@ assert_launcher_runtime_identity
 assert_agent_runtime_identity "$codex_name" Codex
 assert_agent_runtime_identity "$antigravity_name" Antigravity
 assert_launcher_http_security base
+assert_agent_ttyd_security "$codex_name" Codex codex 7681
+assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682
 assert_read_only_rootfs "$launcher_name" launcher
 assert_read_only_rootfs "$codex_name" Codex
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
 assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
+assert_hardened_codex_policy_and_doctor
 assert_codex_toolchain_workflow
+assert_hardened_codex_runtime_regressions
 assert_hardened_antigravity_host_fixtures
 
 remove_owned_container "$launcher_name" "$launcher_id" \
