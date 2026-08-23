@@ -426,6 +426,7 @@ def validate_auth_override_separation(env_path: Path) -> None:
     require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
     launcher = hardened["services"]["launcher"]
     validate_service_hardening(launcher, "launcher", "launcher auth override")
+    validate_private_ipc_namespace(launcher, "launcher auth override")
     require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
     require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
