@@ -302,6 +302,7 @@ prepare_synthetic_codex_runtime_source() {
   local runtime_source="$test_root/codex/runtime"
   local create_status=0
   local start_status=0
+  local start_output=""
 
   [[ -d "$runtime_source" && ! -L "$runtime_source" ]] \
     || fail "synthetic Codex runtime source is unavailable or unsafe"
@@ -317,6 +318,7 @@ prepare_synthetic_codex_runtime_source() {
       --user 0:0 \
       --cap-drop ALL \
       --cap-add CHOWN \
+      --cap-add DAC_OVERRIDE \
       --cap-add FOWNER \
       --pids-limit 16 \
       --security-opt no-new-privileges:true \
@@ -324,11 +326,31 @@ prepare_synthetic_codex_runtime_source() {
       --entrypoint /bin/bash \
       "$image_id" -c '
         set -euo pipefail
-        test -d /runtime
-        test ! -L /runtime
-        chown 0:0 /runtime
-        chmod 0700 /runtime
-        test "$(stat -c "%u:%g:%a" /runtime)" = 0:0:700
+        printf "stage=check-directory\\n" >&2
+        if ! test -d /runtime; then
+          printf "ERROR: stage=check-directory failed\\n" >&2
+          exit 1
+        fi
+        printf "stage=check-symlink\\n" >&2
+        if test -L /runtime; then
+          printf "ERROR: stage=check-symlink failed\\n" >&2
+          exit 1
+        fi
+        printf "stage=chown\\n" >&2
+        if ! chown 0:0 /runtime; then
+          printf "ERROR: stage=chown failed\\n" >&2
+          exit 1
+        fi
+        printf "stage=chmod\\n" >&2
+        if ! chmod 0700 /runtime; then
+          printf "ERROR: stage=chmod failed\\n" >&2
+          exit 1
+        fi
+        printf "stage=verify\\n" >&2
+        if test "$(stat -c "%u:%g:%a" /runtime)" != 0:0:700; then
+          printf "ERROR: stage=verify failed\\n" >&2
+          exit 1
+        fi
       ')" || create_status=$?
   if (( create_status != 0 )); then
     runtime_prepare_id="$(capture_owned_container_id "$runtime_prepare_name" || true)"
@@ -343,15 +365,18 @@ prepare_synthetic_codex_runtime_source() {
   owned_container_matches "$runtime_prepare_name" "$runtime_prepare_id" \
     || fail "synthetic Codex runtime preparation ownership could not be verified"
 
-  timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+  start_output="$(timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
     "${docker_exec_timeout_seconds}s" \
-    docker start -a "$runtime_prepare_id" >/dev/null 2>&1 || start_status=$?
+    docker start -a "$runtime_prepare_id" 2>&1)" || start_status=$?
   case "$start_status" in
     0) ;;
     124) fail "synthetic Codex runtime preparation timed out" ;;
     125) fail "synthetic Codex runtime preparation timeout invocation failed" ;;
     137) fail "synthetic Codex runtime preparation required KILL escalation" ;;
-    *) fail "synthetic Codex runtime preparation failed" ;;
+    *)
+      printf '%s\n' "${start_output:0:8192}" >&2
+      fail "synthetic Codex runtime preparation failed"
+      ;;
   esac
   remove_owned_container "$runtime_prepare_name" "$runtime_prepare_id" \
     || fail "synthetic Codex runtime preparation container could not be removed"
