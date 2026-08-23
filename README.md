@@ -214,7 +214,7 @@ REMOTE_DEV_DATA_ROOT/
 
 The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
+`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions; current preflight does not validate the runtime directory owner. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
 There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
@@ -255,12 +255,20 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex/example-project \
-  data/state/codex/{agent,runtime,gh,git,ssh} \
+  data/state/codex/{agent,gh,git,ssh} \
   data/secrets/codex
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
 printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
 make preflight
 ./scripts/build-local.sh
+```
+
+To correct an existing empty runtime directory with the wrong owner, run only:
+
+```bash
+sudo chown root:root data/state/codex/runtime
+sudo chmod 0700 data/state/codex/runtime
 ```
 
 For a custom root, set `REMOTE_DEV_DATA_ROOT=/absolute/host/path` in `.env` and run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.

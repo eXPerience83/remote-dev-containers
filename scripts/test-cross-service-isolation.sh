@@ -41,12 +41,14 @@ launcher_name="${project_name}-launcher"
 codex_name="${project_name}-codex"
 antigravity_name="${project_name}-antigravity"
 cleanup_name="${project_name}-cleanup"
+runtime_prepare_name="${project_name}-codex-runtime-prepare"
 readonly ownership_label="remote-dev.isolation-test"
 network_id=""
 launcher_id=""
 codex_id=""
 antigravity_id=""
 cleanup_helper_id=""
+runtime_prepare_id=""
 readonly cleanup_helper_timeout_seconds=30
 readonly docker_exec_timeout_seconds=30
 readonly docker_exec_kill_after_seconds=5
@@ -280,6 +282,7 @@ cleanup() {
   local prior_status=$?
   local cleanup_status=0
   trap - EXIT INT TERM
+  remove_owned_container "$runtime_prepare_name" "$runtime_prepare_id" || cleanup_status=1
   remove_owned_container "$launcher_name" "$launcher_id" || cleanup_status=1
   remove_owned_container "$codex_name" "$codex_id" || cleanup_status=1
   remove_owned_container "$antigravity_name" "$antigravity_id" || cleanup_status=1
@@ -294,6 +297,65 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+prepare_synthetic_codex_runtime_source() {
+  local runtime_source="$test_root/codex/runtime"
+  local create_status=0
+  local start_status=0
+
+  [[ -d "$runtime_source" && ! -L "$runtime_source" ]] \
+    || fail "synthetic Codex runtime source is unavailable or unsafe"
+  prepare_container_name "$runtime_prepare_name" \
+    || fail "synthetic Codex runtime preparation name is already owned by another resource"
+  runtime_prepare_id="$(timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+    "${docker_exec_timeout_seconds}s" \
+    docker create --pull never --name "$runtime_prepare_name" \
+      --label "$ownership_label=$run_id" \
+      --network none \
+      --ipc private \
+      --read-only \
+      --user 0:0 \
+      --cap-drop ALL \
+      --cap-add CHOWN \
+      --cap-add FOWNER \
+      --pids-limit 16 \
+      --security-opt no-new-privileges:true \
+      --mount "type=bind,src=$runtime_source,dst=/runtime" \
+      --entrypoint /bin/bash \
+      "$image_id" -c '
+        set -euo pipefail
+        test -d /runtime
+        test ! -L /runtime
+        chown 0:0 /runtime
+        chmod 0700 /runtime
+        test "$(stat -c "%u:%g:%a" /runtime)" = 0:0:700
+      ')" || create_status=$?
+  if (( create_status != 0 )); then
+    runtime_prepare_id="$(capture_owned_container_id "$runtime_prepare_name" || true)"
+  fi
+  case "$create_status" in
+    0) ;;
+    124) fail "synthetic Codex runtime preparation creation timed out" ;;
+    125) fail "synthetic Codex runtime preparation timeout invocation failed" ;;
+    137) fail "synthetic Codex runtime preparation creation required KILL escalation" ;;
+    *) fail "synthetic Codex runtime preparation container could not be created" ;;
+  esac
+  owned_container_matches "$runtime_prepare_name" "$runtime_prepare_id" \
+    || fail "synthetic Codex runtime preparation ownership could not be verified"
+
+  timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+    "${docker_exec_timeout_seconds}s" \
+    docker start -a "$runtime_prepare_id" >/dev/null 2>&1 || start_status=$?
+  case "$start_status" in
+    0) ;;
+    124) fail "synthetic Codex runtime preparation timed out" ;;
+    125) fail "synthetic Codex runtime preparation timeout invocation failed" ;;
+    137) fail "synthetic Codex runtime preparation required KILL escalation" ;;
+    *) fail "synthetic Codex runtime preparation failed" ;;
+  esac
+  remove_owned_container "$runtime_prepare_name" "$runtime_prepare_id" \
+    || fail "synthetic Codex runtime preparation container could not be removed"
+}
 
 marker_name() {
   printf 'marker-%s-%s\n' "$1" "$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
@@ -1175,6 +1237,7 @@ for index in "${!antigravity_categories[@]}"; do
   antigravity_markers[index]="$marker"
   make_marker "$test_root/antigravity/$category" "$marker"
 done
+prepare_synthetic_codex_runtime_source
 printf 'capability-probe\n' >"$test_root/codex/workspace/.hardening-capability-probe"
 printf 'capability-probe\n' >"$test_root/antigravity/workspace/.hardening-capability-probe"
 chmod 0711 -- "$test_root/antigravity/workspace"

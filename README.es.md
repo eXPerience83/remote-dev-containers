@@ -197,7 +197,7 @@ REMOTE_DEV_DATA_ROOT/
 
 El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
+`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos; el preflight actual no valida el propietario del directorio de runtime. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
 No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 
@@ -219,12 +219,20 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex/proyecto-ejemplo \
-  data/state/codex/{agent,runtime,gh,git,ssh} \
+  data/state/codex/{agent,gh,git,ssh} \
   data/secrets/codex
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
 printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
 make preflight
 ./scripts/build-local.sh
+```
+
+Para corregir un directorio de runtime vacío existente con propietario incorrecto, ejecuta únicamente:
+
+```bash
+sudo chown root:root data/state/codex/runtime
+sudo chmod 0700 data/state/codex/runtime
 ```
 
 Para una raíz personalizada, define `REMOTE_DEV_DATA_ROOT=/ruta/absoluta/del/host` en `.env` y ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar. También puedes dejar inicialmente vacía `data/workspaces/codex` y crear el primer proyecto desde **Projects...** después de arrancar el servicio.
