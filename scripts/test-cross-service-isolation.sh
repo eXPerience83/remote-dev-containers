@@ -604,7 +604,7 @@ assert_launcher_http_security() {
   [[ "$status" == 200 ]] || fail "launcher secret-free health endpoint returned an unexpected status"
 
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
-    "${auth_args[@]}" http://127.0.0.1:7680/)" \
+    http://127.0.0.1:7680/)" \
     || fail "launcher unauthenticated request could not be evaluated"
   if [[ "$mode" == base ]]; then
     [[ "$status" == 200 ]] || fail "passwordless launcher rejected normal navigation"
