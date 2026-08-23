@@ -61,31 +61,55 @@ Never print password environment values or credential-file contents.
 
 ## Verify and pin one complete release unit
 
-Pull the public AMD64 edge tag:
+Choose one channel reference for the whole validation. The normal integrated
+path uses `edge-amd64`:
 
 ```bash
-sudo docker pull ghcr.io/experience83/remote-dev:edge-amd64
+validation_image=ghcr.io/experience83/remote-dev:edge-amd64
+expected_revision=""
 ```
 
-Read and validate the immutable source revision embedded in that exact image:
+For the exact pre-merge #42 gate, first publish the exact current PR head using
+the existing owner-authorized `/publish-candidate <full-head-sha>` workflow;
+do not publish a candidate as part of an ordinary validation run. Then select
+`ghcr.io/experience83/remote-dev:dev-amd64` instead, and record the published
+full PR head as `expected_revision`. That candidate's embedded revision must
+equal `expected_revision` before proceeding.
 
 ```bash
+# Exact pre-merge #42 candidate only: replace with the published full PR head.
+validation_image=ghcr.io/experience83/remote-dev:dev-amd64
+expected_revision="REPLACE_WITH_PUBLISHED_FULL_PR_HEAD"
+```
+
+Pull the selected reference and read its embedded immutable source revision:
+
+```bash
+sudo docker pull "$validation_image"
+
 release_revision="$(
-  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+  sudo docker image inspect "$validation_image" \
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
 case "$release_revision" in
   [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
   *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
 esac
+if test -n "$expected_revision" && test "$release_revision" != "$expected_revision"; then
+  echo "Selected image does not contain the expected candidate revision" >&2
+  exit 1
+fi
 printf 'release_revision=%s\n' "$release_revision"
 ```
+
+For the #42 candidate path, compare `release_revision` with the recorded
+`expected_revision` exactly; do not accept an older `dev-amd64` publication.
 
 Record the immutable repository digest and keep it in the same shell session:
 
 ```bash
 pinned_image="$(
-  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+  sudo docker image inspect "$validation_image" \
     --format '{{range .RepoDigests}}{{println .}}{{end}}' \
   | sed -n '1p'
 )"
@@ -96,9 +120,9 @@ esac
 printf 'pinned_image=%s\n' "$pinned_image"
 ```
 
-Use that digest reference in the TrueNAS validation YAML. Download all host-side
-files from `$release_revision`; image and host files must be updated together as
-one release unit.
+Use `$pinned_image` in the TrueNAS validation YAML. Download all host-side files
+from `$release_revision`; the selected channel image, immutable digest and host
+files must be updated together as one release unit.
 
 ## Dataset boundary
 
@@ -211,9 +235,9 @@ Before pasting it into the TrueNAS Custom App editor:
 5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
    password;
 6. keep both values quoted and never commit the personalized YAML to Git;
-7. preserve the reviewed `cap_drop: [ALL]` plus role-specific `cap_add` lists;
-   do not add privileged mode, host networking, host-root mounts or a Docker
-   socket;
+7. preserve `ipc: private`, the reviewed `cap_drop: [ALL]` plus role-specific
+   `cap_add` lists; do not add privileged mode, host or joined PID/network/IPC
+   namespaces, host-root mounts or a Docker socket;
 8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
    validation.
 
@@ -239,7 +263,8 @@ sudo docker exec antigravity-remote-dev remote-dev-version
 sudo docker exec antigravity-remote-dev remote-dev-doctor
 ```
 
-Confirm the embedded revision and digest match the pinned image. The
+Confirm the embedded revision matches `release_revision`, and that all three
+containers use the same configured `$pinned_image` and image ID. The
 Antigravity diagnostic should report `not installed` without making the
 container unhealthy.
 
@@ -247,12 +272,19 @@ Inspect only redacted configuration facts and assert the configured immutable
 reference, not only the local content-addressable image ID:
 
 ```bash
+expected_image_id=""
 for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   echo "== $container =="
   configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
+  image_id="$(sudo docker inspect "$container" --format '{{.Image}}')"
   test "$configured_image" = "$pinned_image"
+  if test -z "$expected_image_id"; then
+    expected_image_id="$image_id"
+  else
+    test "$image_id" = "$expected_image_id"
+  fi
   sudo docker inspect "$container" --format \
-    'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
+    'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
   sudo docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
@@ -267,14 +299,16 @@ Keep issue #42 open until this checklist passes against the exact PR candidate.
 Record sanitized facts only; do not infer success from an older image or a
 different source revision.
 
-- Record the TrueNAS version, test date, exact source revision and exact
-  `dev-amd64` repository digest. Confirm launcher, Codex and Antigravity resolve
-  to the same image ID/digest.
+- Record the TrueNAS version, test date, exact `expected_revision`,
+  `$pinned_image` immutable repository digest and `dev-amd64` channel selected
+  after publishing that exact head. Confirm the embedded revision equals the
+  published head and launcher, Codex and Antigravity all use the same configured
+  `$pinned_image` and image ID.
 - Save the rendered/serialized App configuration and the inspect fields above.
   Confirm every role has a read-only root filesystem,
   `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
-  groups, no privileged/host PID/host network mode and no engine socket or broad
-  mount.
+  groups, no privileged or host/joined PID/network namespace, `ipc=private`, and
+  no engine socket or broad mount.
 - Confirm launcher has only `DAC_READ_SEARCH,SETGID,SETUID`, PID limit `64`, `/tmp` at
   `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
   `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as

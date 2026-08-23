@@ -367,10 +367,11 @@ assert_image_id() {
 assert_no_broad_mounts_or_environment() {
   local name="$1"
   local role="$2"
+  local launcher_mode="${3:-authenticated}"
   local inspection
   inspection="$(docker inspect "$name")"
 
-  jq -e --arg test_root "$test_root" --arg role "$role" '
+  jq -e --arg test_root "$test_root" --arg role "$role" --arg launcher_mode "$launcher_mode" '
     .[0] as $container
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
@@ -390,10 +391,14 @@ assert_no_broad_mounts_or_environment() {
        and (($container.HostConfig.Tmpfs // {}) | keys | sort == ["/run", "/tmp"])
        and (if $role == "launcher" then
               (($mounts | map(select(.Type == "bind"))) as $binds
-               | ($binds | length == 1)
-               and ($binds[0].Source == ($test_root + "/launcher/password/web_password"))
-               and ($binds[0].Destination == "/run/secrets/launcher_password")
-               and ($binds[0].RW == false))
+               | if $launcher_mode == "base" then
+                   ($binds | length == 0)
+                 else
+                   (($binds | length == 1)
+                    and ($binds[0].Source == ($test_root + "/launcher/password/web_password"))
+                    and ($binds[0].Destination == "/run/secrets/launcher_password")
+                    and ($binds[0].RW == false))
+                 end)
             else true
             end))
   ' <<<"$inspection" >/dev/null || fail "$role fixture has a broad, engine, parent-root, tmux/control, or data-root escape"
@@ -402,17 +407,22 @@ assert_no_broad_mounts_or_environment() {
 assert_mount_contract() {
   local name="$1"
   local role="$2"
+  local launcher_mode="${3:-authenticated}"
   local inspection
   inspection="$(docker inspect "$name")"
 
-  jq -e --arg root "$test_root" --arg role "$role" '
+  jq -e --arg root "$test_root" --arg role "$role" --arg launcher_mode "$launcher_mode" '
     .[0].Mounts as $mounts
     | ($mounts | map(select(.Type == "bind"))) as $binds
     | if $role == "launcher" then
-        (($binds | length == 1)
-         and ($binds[0].Source == ($root + "/launcher/password/web_password"))
-         and ($binds[0].Destination == "/run/secrets/launcher_password")
-         and ($binds[0].RW == false))
+        if $launcher_mode == "base" then
+          ($binds | length == 0)
+        else
+          (($binds | length == 1)
+           and ($binds[0].Source == ($root + "/launcher/password/web_password"))
+           and ($binds[0].Destination == "/run/secrets/launcher_password")
+           and ($binds[0].RW == false))
+        end
       else
         (($binds | length > 0)
          and ($binds | all(.Source | startswith($root + "/")))
@@ -429,7 +439,7 @@ assert_hardening_contract() {
   local inspection
   inspection="$(docker inspect "$name")"
 
-  if ! jq -e --arg role "$role" '
+  if ! jq -e --arg role "$role" --arg fixture_network "$network_name" '
     .[0].HostConfig as $host
     | (if $role == "launcher" then
          ["CAP_DAC_READ_SEARCH", "CAP_SETGID", "CAP_SETUID"]
@@ -460,8 +470,12 @@ assert_hardening_contract() {
     and ((($host.CapAdd // []) | sort) == ($expected_caps | sort))
     and ($host.PidsLimit == $expected_pids)
     and ($host.Privileged == false)
-    and (($host.PidMode // "") != "host")
-    and (($host.NetworkMode // "") != "host")
+    and (($host.PidMode // "") == "")
+    and (if $role == "launcher" then
+           $host.NetworkMode == $fixture_network
+         else
+           $host.NetworkMode == "none"
+         end)
     and ($host.IpcMode == "private")
     and (($host.GroupAdd // []) | length == 0)
     and (($host.SecurityOpt // []) == ["no-new-privileges:true"])
@@ -575,26 +589,43 @@ assert_agent_runtime_identity() {
 }
 
 assert_launcher_http_security() {
+  local mode="$1"
   local status=""
+  local -a auth_args=()
+  case "$mode" in
+    base) ;;
+    authenticated) auth_args=(--user "isolation-launcher:$launcher_password") ;;
+    *) fail "internal unknown launcher fixture mode" ;;
+  esac
+
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
     http://127.0.0.1:7680/healthz)" \
     || fail "launcher secret-free health endpoint could not be reached"
   [[ "$status" == 200 ]] || fail "launcher secret-free health endpoint returned an unexpected status"
 
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
-    http://127.0.0.1:7680/)" \
+    "${auth_args[@]}" http://127.0.0.1:7680/)" \
     || fail "launcher unauthenticated request could not be evaluated"
-  [[ "$status" == 401 ]] || fail "launcher did not enforce Basic authentication"
+  if [[ "$mode" == base ]]; then
+    [[ "$status" == 200 ]] || fail "passwordless launcher rejected normal navigation"
+  else
+    [[ "$status" == 401 ]] || fail "launcher did not enforce Basic authentication"
+  fi
 
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
-    --user "isolation-launcher:$launcher_password" \
+    "${auth_args[@]}" http://127.0.0.1:7680/unexpected-path)" \
+    || fail "launcher path rejection request could not be evaluated"
+  [[ "$status" == 404 ]] || fail "launcher did not retain its fixed path boundary"
+
+  status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    "${auth_args[@]}" \
     --header 'Origin: http://127.0.0.1:7680' \
     http://127.0.0.1:7680/)" \
-    || fail "launcher authenticated request could not be evaluated"
-  [[ "$status" == 200 ]] || fail "launcher rejected its synthetic authenticated request"
+    || fail "launcher same-origin request could not be evaluated"
+  [[ "$status" == 200 ]] || fail "launcher rejected its same-origin request"
 
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
-    --user "isolation-launcher:$launcher_password" \
+    "${auth_args[@]}" \
     --header 'Origin: https://invalid.example' \
     http://127.0.0.1:7680/)" \
     || fail "launcher origin rejection request could not be evaluated"
@@ -602,7 +633,7 @@ assert_launcher_http_security() {
 
   status="$(docker_exec "$launcher_name" curl --silent --output /dev/null --write-out '%{http_code}' \
     --request POST \
-    --user "isolation-launcher:$launcher_password" \
+    "${auth_args[@]}" \
     http://127.0.0.1:7680/)" \
     || fail "launcher method rejection request could not be evaluated"
   [[ "$status" == 405 ]] || fail "launcher did not reject a state-changing method"
@@ -611,11 +642,16 @@ assert_launcher_http_security() {
     set -eu
     headers="$(mktemp /tmp/launcher-headers.XXXXXX)"
     trap '\''rm -f -- "$headers"'\'' EXIT
-    curl --fail --silent --show-error --dump-header "$headers" --output /dev/null \
-      --user "$1:$2" --header "Origin: http://127.0.0.1:7680" \
-      http://127.0.0.1:7680/
-    grep -Fqi -- "$3" "$headers"
-  ' sh isolation-launcher "$launcher_password" "Content-Security-Policy: default-src 'none'" \
+    if test "$1" = authenticated; then
+      curl --fail --silent --show-error --dump-header "$headers" --output /dev/null \
+        --user "$2:$3" --header "Origin: http://127.0.0.1:7680" \
+        http://127.0.0.1:7680/
+    else
+      curl --fail --silent --show-error --dump-header "$headers" --output /dev/null \
+        --header "Origin: http://127.0.0.1:7680" http://127.0.0.1:7680/
+    fi
+    grep -Fqi -- "$4" "$headers"
+  ' sh "$mode" isolation-launcher "$launcher_password" "Content-Security-Policy: default-src 'none'" \
     >/dev/null 2>&1 \
     || fail "launcher response did not retain its restrictive CSP"
 }
@@ -633,7 +669,9 @@ assert_read_only_rootfs() {
 }
 
 assert_codex_toolchain_workflow() {
-  docker_exec "$codex_name" bash -c '
+  local output=""
+  local status=0
+  output="$(docker_exec "$codex_name" bash -c '
     set -euo pipefail
     project="/workspace/hardening-toolchain"
     rm -rf -- "$project"
@@ -674,8 +712,31 @@ assert_codex_toolchain_workflow() {
     tmux -L "$socket" has-session -t hardening
     tmux -L "$socket" list-sessions | grep -q '\''^hardening:'\''
     tmux -L "$socket" kill-server
-  ' >/dev/null 2>&1 || fail "hardened Codex fixture could not complete the offline development-toolchain workflow"
+  ' 2>&1)" || status=$?
+  if (( status != 0 )); then
+    if docker_exec_infrastructure_failure "$status"; then
+      fail "hardened Codex fixture toolchain docker exec failed"
+    fi
+    printf '%s\n' "${output:0:32768}" >&2
+    fail "hardened Codex fixture could not complete the offline development-toolchain workflow"
+  fi
   wait_for_health_command "$codex_name"
+}
+
+run_hardened_antigravity_fixture() {
+  local description="$1"
+  local fixture_tmp="$2"
+  shift 2
+  local output=""
+  local status=0
+  output="$(docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" "$@" 2>&1)" || status=$?
+  if (( status != 0 )); then
+    if docker_exec_infrastructure_failure "$status"; then
+      fail "$description docker exec failed"
+    fi
+    printf '%s\n' "${output:0:32768}" >&2
+    fail "$description"
+  fi
 }
 
 assert_hardened_antigravity_host_fixtures() {
@@ -707,30 +768,22 @@ assert_hardened_antigravity_host_fixtures() {
   # binaries. The production root manager correctly ignores such PATH shadows,
   # so exercise the harnesses as the same fixed unprivileged identity used for
   # candidate execution while the surrounding container remains hardened.
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-antigravity-runtime.sh" >/dev/null 2>&1 \
-    || fail "Antigravity runtime/admission fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-antigravity-security-regressions.sh" >/dev/null 2>&1 \
-    || fail "Antigravity security fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-antigravity-repair-download-hardening.sh" >/dev/null 2>&1 \
-    || fail "Antigravity repair fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-antigravity-staging-wrappers.sh" >/dev/null 2>&1 \
-    || fail "Antigravity private-staging fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-antigravity-redirects.sh" >/dev/null 2>&1 \
-    || fail "Antigravity installer-origin fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    python "$fixture_root/scripts/test-antigravity-oauth.py" >/dev/null 2>&1 \
-    || fail "Antigravity OAuth fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    python "$fixture_root/scripts/test-antigravity-picker.py" >/dev/null 2>&1 \
-    || fail "Antigravity picker fixture failed under hardening"
-  docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" \
-    bash "$fixture_root/scripts/test-run-antigravity-picker.sh" >/dev/null 2>&1 \
-    || fail "Antigravity resume helper fixture failed under hardening"
+  run_hardened_antigravity_fixture "Antigravity runtime/admission fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-runtime.sh"
+  run_hardened_antigravity_fixture "Antigravity security fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-security-regressions.sh"
+  run_hardened_antigravity_fixture "Antigravity repair fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-repair-download-hardening.sh"
+  run_hardened_antigravity_fixture "Antigravity private-staging fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-staging-wrappers.sh"
+  run_hardened_antigravity_fixture "Antigravity installer-origin fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-redirects.sh"
+  run_hardened_antigravity_fixture "Antigravity OAuth fixture failed under hardening" \
+    "$fixture_tmp" python "$fixture_root/scripts/test-antigravity-oauth.py"
+  run_hardened_antigravity_fixture "Antigravity picker fixture failed under hardening" \
+    "$fixture_tmp" python "$fixture_root/scripts/test-antigravity-picker.py"
+  run_hardened_antigravity_fixture "Antigravity resume helper fixture failed under hardening" \
+    "$fixture_tmp" bash "$fixture_root/scripts/test-run-antigravity-picker.sh"
 
   docker_exec "$antigravity_name" rm -rf -- "$fixture_root" "$fixture_tmp" >/dev/null 2>&1 \
     || fail "Antigravity hardened fixtures did not clean up"
@@ -919,8 +972,7 @@ assert_dev_shm_private() {
     || fail "$role fixture could not write and verify its private /dev/shm canary"
   for observer in "$launcher_name" "$codex_name" "$antigravity_name"; do
     [[ "$observer" == "$owner" ]] && continue
-    docker_exec "$observer" sh -c 'test ! -e "$1"' sh "$path" >/dev/null 2>&1 \
-      || fail "$role /dev/shm canary is visible outside its private IPC namespace"
+    assert_path_absent "$observer" "$role /dev/shm canary" "$path"
   done
 }
 
@@ -997,10 +1049,27 @@ fi
   || fail "fixture network ownership could not be verified"
 
 start_launcher() {
+  local mode="${1:-base}"
+  local -a launcher_auth_args=()
+  case "$mode" in
+    base)
+      launcher_auth_args=(--env ALLOW_INSECURE_WEB=1)
+      ;;
+    authenticated)
+      launcher_auth_args=(
+        --env ALLOW_INSECURE_WEB=0
+        --env WEB_USERNAME=isolation-launcher
+        --env WEB_PASSWORD_FILE=/run/secrets/launcher_password
+        --mount "type=bind,src=$launcher_password_source,dst=/run/secrets/launcher_password,readonly"
+      )
+      ;;
+    *) fail "internal unknown launcher fixture mode" ;;
+  esac
   prepare_container_name "$launcher_name" || fail "launcher fixture name is already owned by another resource"
   if ! launcher_id="$(docker run -d --name "$launcher_name" \
     --label "$ownership_label=$run_id" \
     --network "$network_name" \
+    --ipc private \
     --read-only \
     --cap-drop ALL \
     --cap-add DAC_READ_SEARCH \
@@ -1012,11 +1081,9 @@ start_launcher() {
     --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
     --env REMOTE_DEV_ROLE=launcher \
     --env REMOTE_DEV_START_MODE=menu \
-    --env WEB_USERNAME=isolation-launcher \
-    --env WEB_PASSWORD_FILE=/run/secrets/launcher_password \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7680 \
-    --mount "type=bind,src=$launcher_password_source,dst=/run/secrets/launcher_password,readonly" \
+    "${launcher_auth_args[@]}" \
     "$image_id")"; then
     launcher_id="$(capture_owned_container_id "$launcher_name" || true)"
     fail "failed to start launcher fixture"
@@ -1031,6 +1098,7 @@ start_codex() {
   if ! codex_id="$(docker run -d --name "$codex_name" \
     --label "$ownership_label=$run_id" \
     --network none \
+    --ipc private \
     --read-only \
     --cap-drop ALL \
     --cap-add CHOWN \
@@ -1074,6 +1142,7 @@ start_antigravity() {
   if ! antigravity_id="$(docker run -d --name "$antigravity_name" \
     --label "$ownership_label=$run_id" \
     --network none \
+    --ipc private \
     --read-only \
     --cap-drop ALL \
     --cap-add CHOWN \
@@ -1113,17 +1182,17 @@ start_antigravity() {
     || fail "Antigravity fixture ownership could not be verified"
 }
 
-start_launcher
+start_launcher base
 start_codex
 start_antigravity
 for name in "$launcher_name" "$codex_name" "$antigravity_name"; do
   wait_for_health_command "$name"
   assert_image_id "$name"
 done
-assert_no_broad_mounts_or_environment "$launcher_name" launcher
+assert_no_broad_mounts_or_environment "$launcher_name" launcher base
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
-assert_mount_contract "$launcher_name" launcher
+assert_mount_contract "$launcher_name" launcher base
 assert_mount_contract "$codex_name" codex
 assert_mount_contract "$antigravity_name" antigravity
 assert_hardening_contract "$launcher_name" launcher
@@ -1135,7 +1204,7 @@ assert_runtime_mount_options "$antigravity_name" antigravity
 assert_launcher_runtime_identity
 assert_agent_runtime_identity "$codex_name" Codex
 assert_agent_runtime_identity "$antigravity_name" Antigravity
-assert_launcher_http_security
+assert_launcher_http_security base
 assert_read_only_rootfs "$launcher_name" launcher
 assert_read_only_rootfs "$codex_name" Codex
 assert_read_only_rootfs "$antigravity_name" Antigravity
@@ -1144,6 +1213,18 @@ assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement
 assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 assert_codex_toolchain_workflow
 assert_hardened_antigravity_host_fixtures
+
+remove_owned_container "$launcher_name" "$launcher_id" \
+  || fail "failed to remove the owned passwordless launcher fixture for authentication coverage"
+start_launcher authenticated
+wait_for_health_command "$launcher_name"
+assert_image_id "$launcher_name"
+assert_no_broad_mounts_or_environment "$launcher_name" launcher authenticated
+assert_mount_contract "$launcher_name" launcher authenticated
+assert_hardening_contract "$launcher_name" launcher
+assert_runtime_mount_options "$launcher_name" launcher
+assert_launcher_runtime_identity
+assert_launcher_http_security authenticated
 
 for index in "${!codex_targets[@]}"; do
   target="${codex_targets[$index]}"

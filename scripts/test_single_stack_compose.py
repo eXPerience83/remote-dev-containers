@@ -226,8 +226,13 @@ def validate_service_hardening(
 
 def validate_private_ipc_namespace(service: dict[str, object], context: str) -> None:
     ipc = service.get("ipc")
-    require(ipc is None or isinstance(ipc, str), f"{context} IPC mode shape")
-    require(ipc is None or ipc == "private", f"{context} IPC namespace is not private")
+    require(isinstance(ipc, str), f"{context} IPC mode shape")
+    require(ipc == "private", f"{context} IPC namespace is not private")
+
+
+def validate_private_pid_and_network_namespaces(service: dict[str, object], context: str) -> None:
+    require(service.get("pid") is None, f"{context} configures a PID namespace")
+    require(service.get("network_mode") is None, f"{context} configures a network namespace")
 
 
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
@@ -338,18 +343,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
 
     for name, service in services.items():
         require(service.get("privileged", False) is False, f"{path}: {name} privileged")
-        network_mode = service.get("network_mode")
-        require(
-            network_mode is None or isinstance(network_mode, str),
-            f"{path}: {name} network mode shape",
-        )
-        require(network_mode != "host", f"{path}: {name} host network")
-        pid_mode = service.get("pid")
-        require(
-            pid_mode is None or isinstance(pid_mode, str),
-            f"{path}: {name} PID mode shape",
-        )
-        require(pid_mode != "host", f"{path}: {name} host PID namespace")
+        validate_private_pid_and_network_namespaces(service, f"{path}: {name}")
         validate_service_hardening(service, name, f"{path}: {name}")
         validate_private_ipc_namespace(service, f"{path}: {name}")
         environment = service.get("environment")
@@ -455,19 +449,33 @@ def validate_rendered_volume_shapes() -> None:
 
 
 def validate_rendered_ipc_modes() -> None:
-    for ipc in ("host", "shareable", "service:codex", "container:fixture", ["private"]):
+    for ipc in (None, "host", "shareable", "service:codex", "container:fixture", ["private"]):
         try:
             validate_private_ipc_namespace({"ipc": ipc}, "regression")
         except AssertionError:
             continue
         raise AssertionError(f"unsafe rendered IPC mode was accepted: {ipc!r}")
-    validate_private_ipc_namespace({}, "regression")
     validate_private_ipc_namespace({"ipc": "private"}, "regression")
+
+
+def validate_rendered_pid_and_network_modes() -> None:
+    for key, modes in {
+        "pid": ("host", "service:codex", "container:fixture", ["private"]),
+        "network_mode": ("host", "service:codex", "container:fixture", ["none"]),
+    }.items():
+        for mode in modes:
+            try:
+                validate_private_pid_and_network_namespaces({key: mode}, "regression")
+            except AssertionError:
+                continue
+            raise AssertionError(f"unsafe rendered {key} was accepted: {mode!r}")
+    validate_private_pid_and_network_namespaces({}, "regression")
 
 
 def main() -> int:
     validate_rendered_volume_shapes()
     validate_rendered_ipc_modes()
+    validate_rendered_pid_and_network_modes()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)

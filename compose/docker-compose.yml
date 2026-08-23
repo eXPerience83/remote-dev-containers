@@ -15,6 +15,7 @@ services:
       - SETGID
       - SETUID
     pids_limit: 64
+    ipc: private
 
     environment:
       TZ: ${TZ:-Europe/Madrid}
@@ -67,6 +68,7 @@ services:
       - SETGID
       - SETUID
     pids_limit: 1024
+    ipc: private
 
     environment:
       TZ: ${TZ:-Europe/Madrid}
@@ -174,6 +176,7 @@ services:
       - SETGID
       - SETUID
     pids_limit: 1024
+    ipc: private
 
     environment:
       TZ: ${TZ:-Europe/Madrid}
