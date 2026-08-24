@@ -62,6 +62,7 @@ EOF_AGENT
       echo "Antigravity executable: $ANTIGRAVITY_BINARY"
       echo "Antigravity local state: $ANTIGRAVITY_STATE_DIR"
       echo "Antigravity vendor state: $ANTIGRAVITY_VENDOR_STATE_DIR"
+      echo "Antigravity project config: $ANTIGRAVITY_CONFIG_STATE_DIR"
     else
       echo "Antigravity path definitions: MISSING"
       status=1
@@ -220,6 +221,7 @@ if [[ "$role" != launcher ]]; then
       "$ANTIGRAVITY_BIN_DIR"
       "$ANTIGRAVITY_STATE_DIR"
       "$ANTIGRAVITY_VENDOR_STATE_DIR"
+      "$ANTIGRAVITY_CONFIG_STATE_DIR"
     )
   fi
   for path in "${writable_paths[@]}"; do

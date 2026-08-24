@@ -172,6 +172,14 @@ The Codex service receives only these child paths:
 | `state/codex/ssh` | `/root/.ssh` |
 | `secrets/codex/web_password.txt` | `/run/secrets/web_password` |
 
+When the experimental Antigravity service is enabled, it receives a disjoint
+set of role-private children. In particular,
+`state/antigravity/config -> /root/.gemini/config` supplies project state below
+`projects/`, while `state/antigravity/vendor ->
+/root/.gemini/antigravity-cli` remains a separate vendor/settings boundary.
+Neither Codex nor the launcher receives either path, and `/root/.gemini` is
+never mounted wholesale.
+
 The base launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 Before deployment, `scripts/preflight-data-layout.py` validates that every canonical directory exists, that none is a symlink, and that the password path is a non-empty regular file with restrictive permissions. This host-side preflight is authoritative. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.

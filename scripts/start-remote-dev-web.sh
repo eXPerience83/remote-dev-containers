@@ -35,7 +35,11 @@ elif [[ "$role" == antigravity ]]; then
   }
   # shellcheck source=/usr/local/lib/remote-dev/antigravity-paths.sh
   source "$paths_lib"
-  mkdir -p "$ANTIGRAVITY_BIN_DIR" "$ANTIGRAVITY_STATE_DIR" "$ANTIGRAVITY_VENDOR_STATE_DIR"
+  mkdir -p \
+    "$ANTIGRAVITY_BIN_DIR" \
+    "$ANTIGRAVITY_STATE_DIR" \
+    "$ANTIGRAVITY_VENDOR_STATE_DIR" \
+    "$ANTIGRAVITY_CONFIG_STATE_DIR"
 fi
 /usr/local/bin/secure-persistent-state
 

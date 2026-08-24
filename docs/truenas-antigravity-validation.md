@@ -154,6 +154,7 @@ sudo install -d -m 0700 \
   /mnt/Pool1/remote-dev/state/antigravity/bin \
   /mnt/Pool1/remote-dev/state/antigravity/runtime \
   /mnt/Pool1/remote-dev/state/antigravity/vendor \
+  /mnt/Pool1/remote-dev/state/antigravity/config \
   /mnt/Pool1/remote-dev/state/antigravity/gh \
   /mnt/Pool1/remote-dev/state/antigravity/git \
   /mnt/Pool1/remote-dev/state/antigravity/ssh
@@ -178,10 +179,18 @@ The resulting host tree is:
         ├── bin/
         ├── runtime/
         ├── vendor/
+        ├── config/
         ├── gh/
         ├── git/
         └── ssh/
 ```
+
+`state/antigravity/config` is mounted only into the Antigravity service at
+`/root/.gemini/config`. The official CLI uses its `projects/` child for
+project-specific runtime configuration. This mount remains separate from
+`state/antigravity/vendor -> /root/.gemini/antigravity-cli`; only these narrow
+Antigravity-private paths are writable, and the container root filesystem
+remains read-only.
 
 ## Download and run the matching host preflight
 
@@ -337,8 +346,10 @@ different source revision.
   key or account data.
 - Record Antigravity's installed/review state, explicit launch, OAuth
   persistence, native in-TUI `/resume` conversation picker and `--continue`
-  behavior. Antigravity remains experimental; a real account result must not be
-  replaced with a synthetic claim.
+  behavior. Confirm that `/root/.gemini/config/projects` can be created and
+  remains separate from `/root/.gemini/antigravity-cli` while the root
+  filesystem stays read-only. Antigravity remains experimental; a real account
+  result must not be replaced with a synthetic claim.
 - Place existence-only synthetic canaries in every role-private mount category.
   Stop/start and recreate launcher, Codex and Antigravity separately; after each
   recreation, repeat the mount/security inspection and confirm other-role
@@ -362,7 +373,9 @@ Starting from the Antigravity menu:
 2. run the explicit installer and review the vendor/non-affiliation notice;
 3. record the installed version without publishing account details;
 4. complete the official individual/free login flow;
-5. record filesystem changes as path names and metadata only;
+5. confirm `/root/.gemini/config/projects` is writable through only the narrow
+   Antigravity config mount, and record filesystem changes as path names and
+   metadata only;
 6. run a disposable repository test;
 7. stop/start the App;
 8. recreate all three containers with the same dataset;

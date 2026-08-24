@@ -240,6 +240,11 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/config
+        target: /root/.gemini/config
+        bind:
+          create_host_path: false
+      - type: bind
         source: /mnt/Pool1/remote-dev/state/antigravity/gh
         target: /root/.config/gh
         bind:

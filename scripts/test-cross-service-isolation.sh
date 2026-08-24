@@ -755,6 +755,30 @@ assert_read_only_rootfs() {
   ' >/dev/null 2>&1 || fail "$role fixture unexpectedly permits writes to the immutable root filesystem"
 }
 
+assert_antigravity_project_config_state() {
+  local project_state="/root/.gemini/config/projects"
+  local project_marker="$project_state/.remote-dev-project-state-$run_id"
+
+  docker_exec "$antigravity_name" sh -c '
+    set -eu
+    test -d /root/.gemini/config
+    test ! -L /root/.gemini/config
+    test "$(stat -c %a /root/.gemini/config)" = 700
+    install -d -m 0777 -- "$1"
+    printf "synthetic-project-state\n" >"$2"
+    chmod 0666 -- "$2"
+    /usr/local/bin/secure-persistent-state
+    test "$(stat -c %a "$1")" = 700
+    test "$(stat -c %a "$2")" = 600
+  ' sh "$project_state" "$project_marker" >/dev/null 2>&1 \
+    || fail "Antigravity could not initialize and harden project config under a read-only root"
+
+  record_canary antigravity_invariants "$antigravity_name" \
+    "Antigravity project config" "$project_marker"
+  assert_path_absent "$codex_name" "Antigravity project config" "$project_marker"
+  assert_path_absent "$launcher_name" "Antigravity project config" "$project_marker"
+}
+
 readonly hardened_codex_policy_default=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: default'
 readonly hardened_codex_policy_guarded=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: guarded\nProject trust: untrusted (launch-scoped)\nApproval behavior: prompt for commands except explicit exec-policy allows\nMode source: deployment'
 readonly hardened_codex_policy_override=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: per-launch'
@@ -1255,12 +1279,13 @@ declare -a antigravity_targets=(
   /root/.local/bin
   /root/.local/share/remote-dev/antigravity
   /root/.gemini/antigravity-cli
+  /root/.gemini/config
   /root/.config/gh
   /root/.config/git
   /root/.ssh
 )
 declare -a codex_categories=(workspace agent context7 runtime gh git ssh)
-declare -a antigravity_categories=(workspace bin runtime vendor gh git ssh)
+declare -a antigravity_categories=(workspace bin runtime vendor config gh git ssh)
 declare -a codex_markers=()
 declare -a antigravity_markers=()
 declare -a codex_invariants=()
@@ -1441,6 +1466,7 @@ start_antigravity() {
     --mount "type=bind,src=$test_root/antigravity/bin,dst=/root/.local/bin" \
     --mount "type=bind,src=$test_root/antigravity/runtime,dst=/root/.local/share/remote-dev/antigravity" \
     --mount "type=bind,src=$test_root/antigravity/vendor,dst=/root/.gemini/antigravity-cli" \
+    --mount "type=bind,src=$test_root/antigravity/config,dst=/root/.gemini/config" \
     --mount "type=bind,src=$test_root/antigravity/gh,dst=/root/.config/gh" \
     --mount "type=bind,src=$test_root/antigravity/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/antigravity/ssh,dst=/root/.ssh" \
@@ -1526,6 +1552,7 @@ for index in "${!antigravity_targets[@]}"; do
   assert_path_absent "$codex_name" "$category" "$target/$marker"
   assert_path_absent "$launcher_name" "$category" "$target/$marker"
 done
+assert_antigravity_project_config_state
 assert_path_absent "$launcher_name" "agent terminal password source" "/run/secrets/web_password"
 
 codex_socket="$(start_tmux_fixture "$codex_name" codex)"

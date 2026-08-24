@@ -18,6 +18,8 @@ AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
 BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
+ANTIGRAVITY_CONFIG_TARGET = "/root/.gemini/config"
+ANTIGRAVITY_VENDOR_TARGET = "/root/.gemini/antigravity-cli"
 AGENT_CAPABILITIES = frozenset(
     ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID")
 )
@@ -344,6 +346,37 @@ def validate(path: Path, config: dict[str, object]) -> None:
     codex_sources = set(mount_sources(codex))
     antigravity_sources = set(mount_sources(antigravity))
     require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
+
+    config_mounts = [
+        mount
+        for mount in rendered_volumes(antigravity)
+        if mount.get("target") == ANTIGRAVITY_CONFIG_TARGET
+    ]
+    require(len(config_mounts) == 1, f"{path}: exact Antigravity config mount missing")
+    config_mount = config_mounts[0]
+    require(config_mount.get("type") == "bind", f"{path}: Antigravity config is not a bind")
+    require(
+        str(config_mount.get("source", "")).endswith("/state/antigravity/config"),
+        f"{path}: Antigravity config source is outside its role-private state",
+    )
+    bind_options = config_mount.get("bind")
+    require(isinstance(bind_options, dict), f"{path}: Antigravity config bind options missing")
+    require(
+        bind_options.get("create_host_path") is not True,
+        f"{path}: Antigravity config enables automatic host-path creation",
+    )
+    require(config_mount.get("read_only") is not True, f"{path}: Antigravity config is not writable")
+    require(
+        ANTIGRAVITY_CONFIG_TARGET not in mount_targets(launcher)
+        and ANTIGRAVITY_CONFIG_TARGET not in mount_targets(codex),
+        f"{path}: Antigravity config leaked to another role",
+    )
+    require(
+        len(mount_sources(antigravity, ANTIGRAVITY_VENDOR_TARGET)) == 1
+        and mount_sources(antigravity, ANTIGRAVITY_VENDOR_TARGET)
+        != mount_sources(antigravity, ANTIGRAVITY_CONFIG_TARGET),
+        f"{path}: Antigravity vendor and project config state are not separate",
+    )
 
     for name, service in services.items():
         require(service.get("privileged", False) is False, f"{path}: {name} privileged")

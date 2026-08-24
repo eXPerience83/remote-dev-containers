@@ -22,6 +22,7 @@ ANTIGRAVITY_DIRECTORY_SUFFIXES = (
     "state/antigravity/bin",
     "state/antigravity/runtime",
     "state/antigravity/vendor",
+    "state/antigravity/config",
     "state/antigravity/gh",
     "state/antigravity/git",
     "state/antigravity/ssh",

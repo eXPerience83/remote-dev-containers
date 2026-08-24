@@ -80,6 +80,13 @@ state/codex/ssh                -> /root/.ssh
 secrets/codex/web_password.txt -> /run/secrets/web_password
 ```
 
+The experimental Antigravity service uses only its own corresponding private
+children. Its project configuration mount is narrowly scoped as
+`state/antigravity/config -> /root/.gemini/config` and remains separate from
+`state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the
+launcher receive neither source or target, and the stack never makes all of
+`/root/.gemini` writable.
+
 The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
 The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths, symlinks, a missing or empty password file, and password permissions broader than `0600` on POSIX hosts before deployment. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.

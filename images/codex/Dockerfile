@@ -241,6 +241,7 @@ RUN --network=none \
       /root/.local/share/remote-dev/codex-runtime \
       /root/.local/share/remote-dev/antigravity \
       /root/.gemini/antigravity-cli \
+      /root/.gemini/config \
     && /usr/local/bin/secure-persistent-state \
     && if REMOTE_DEV_ROLE=codex REMOTE_DEV_CODEX_RUNTIME_ROOT=/workspace /usr/local/bin/secure-persistent-state >/dev/null 2>&1; then \
       echo 'unsafe Codex runtime root was accepted' >&2; exit 1; \

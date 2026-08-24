@@ -115,9 +115,32 @@ Official documentation places persistent CLI settings at:
 ~/.gemini/antigravity-cli/settings.json
 ```
 
+### Project configuration path follow-up (2026-08-24)
+
+The [official public Antigravity CLI changelog for version
+1.0.12](https://github.com/google-antigravity/antigravity-cli/blob/ee5766c17fce8f27ea85185f97183575058218ec/CHANGELOG.md#1012)
+identifies project-specific configuration below:
+
+```text
+~/.gemini/config/projects/
+```
+
+Exact-candidate TrueNAS validation later confirmed that an explicitly admitted
+Antigravity 1.1.19 session attempts to create that directory and cannot start
+when the container root is read-only without a narrow writable mount. Remote
+Dev therefore treats `/root/.gemini/config` as separate Antigravity-private
+persistent state; it does not make all of `/root/.gemini` writable or merge the
+path with `/root/.gemini/antigravity-cli`.
+
+This path-topology follow-up is not a completed installer or binary review of
+1.1.19 and does not change its truthful `official source; Remote Dev review
+pending` status. The exact artifact evidence and inspection date above remain
+the reviewed evidence for the version recorded there.
+
 Authentication uses the official client and Google Sign-In, including a remote/SSH authorization URL flow. Credentials, histories, settings, updater files and optional plugins must remain inside the Antigravity service's private state mounts. Remote Dev must not inspect, print, transform, share or reuse those credentials.
 
-Real authentication and exact post-login state paths remain manual TrueNAS validation items; CI deliberately performs no account login.
+Other real authentication and post-login state paths remain manual TrueNAS
+validation items; CI deliberately performs no account login.
 
 ## Distribution decision
 

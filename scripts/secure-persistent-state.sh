@@ -136,4 +136,5 @@ if [[ "$role" == antigravity ]]; then
   fi
   secure_private_tree "$ANTIGRAVITY_STATE_DIR"
   secure_private_tree "$ANTIGRAVITY_VENDOR_STATE_DIR"
+  secure_private_tree "$ANTIGRAVITY_CONFIG_STATE_DIR"
 fi

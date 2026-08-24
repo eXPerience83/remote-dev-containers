@@ -31,6 +31,7 @@ EXPECTED_TARGET_SUFFIXES = {
         "/root/.local/bin": "/state/antigravity/bin",
         "/root/.local/share/remote-dev/antigravity": "/state/antigravity/runtime",
         "/root/.gemini/antigravity-cli": "/state/antigravity/vendor",
+        "/root/.gemini/config": "/state/antigravity/config",
         "/root/.config/gh": "/state/antigravity/gh",
         "/root/.config/git": "/state/antigravity/git",
         "/root/.ssh": "/state/antigravity/ssh",
@@ -233,8 +234,8 @@ def validate_sources() -> None:
     require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
     require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
-    require(generic_text.count("create_host_path: false") == 14, "generic bind protection count")
-    require(truenas_text.count("create_host_path: false") == 13, "TrueNAS bind protection count")
+    require(generic_text.count("create_host_path: false") == 15, "generic bind protection count")
+    require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     require("--password-source" in preflight_text, "password source preflight option missing")
     require("\n      WEB_PASSWORD_FILE:" not in truenas_text, "TrueNAS home mode still uses password files")
@@ -249,6 +250,7 @@ def validate_sources() -> None:
         "state/antigravity/bin",
         "state/antigravity/runtime",
         "state/antigravity/vendor",
+        "state/antigravity/config",
         "state/antigravity/gh",
         "state/antigravity/git",
         "state/antigravity/ssh",
