@@ -125,12 +125,15 @@ identifies project-specific configuration below:
 ~/.gemini/config/projects/
 ```
 
-Exact-candidate TrueNAS validation later confirmed that an explicitly admitted
-Antigravity 1.1.19 session attempts to create that directory and cannot start
-when the container root is read-only without a narrow writable mount. Remote
-Dev therefore treats `/root/.gemini/config` as separate Antigravity-private
-persistent state; it does not make all of `/root/.gemini` writable or merge the
-path with `/root/.gemini/antigravity-cli`.
+Historical exact-candidate TrueNAS validation of
+`030396a581187c44c847cbe4b50d71e50d8f9ba6` observed an explicitly admitted
+Antigravity 1.1.19 session attempt to create `/root/.gemini/config/projects`;
+it failed because the hardened container root was read-only and no narrow
+writable mount covered that path. The subsequent PR fix adds the dedicated
+Antigravity-private `state/antigravity/config` mount at
+`/root/.gemini/config`, separate from `/root/.gemini/antigravity-cli` and
+without making all of `/root/.gemini` writable. Validation of that new mount
+through a newly published exact candidate on TrueNAS remains pending.
 
 This path-topology follow-up is not a completed installer or binary review of
 1.1.19 and does not change its truthful `official source; Remote Dev review
