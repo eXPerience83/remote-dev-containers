@@ -147,7 +147,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
 - `autonomous` is the default and maps to `--ask-for-approval never`.
-- `guarded` maps to `--ask-for-approval untrusted`.
+- `guarded` marks only the active project untrusted for that launch. Codex then prompts for commands unless an explicit exec-policy rule allows them; plain `on-request` in a trusted project is not Remote Dev guarded mode.
 
 The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. Start and Resume pass the selected project to Codex with its working-directory option, so Codex starts in `/workspace/<project>` and uses it as the default working directory for repository discovery and `AGENTS.md` lookup. This working-directory selection does not restrict filesystem access to that child; sibling projects under the same mounted `/workspace` remain reachable. The approval selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
 
@@ -173,7 +173,7 @@ The optional package is stored outside `CODEX_HOME` under the Codex-only runtime
 
 ### Isolation on TrueNAS
 
-The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
+The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode applies launch-scoped untrusted project trust so commands prompt unless an explicit exec-policy rule allows them. Every supported menu, resume and direct Codex path uses that same resolver. Approval prompts are not a sandbox; the outer container remains the isolation boundary.
 
 Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Approval prompts are not a sandbox and do not protect files or credentials already mounted into the service.
 

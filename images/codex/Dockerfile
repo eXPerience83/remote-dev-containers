@@ -3,11 +3,11 @@ ARG BASE_IMAGE=remote-dev-base:local
 FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
-ARG CODEX_RELEASE_TAG=rust-v0.148.0
-ARG CODEX_AMD64_SHA256=1a36f762f6b3bef533bb86345ad9517661c2d84d53996a250cf2ca89d2cfee5a
-ARG CODEX_ARM64_SHA256=410c6ae0c763eb39c6da17665e63f9aa4a98e6ee663d81f8e8b779c97cb175ac
-ARG CODEX_CODE_MODE_HOST_AMD64_SHA256=8e6e559b228fa61b18fb2c28c31ec02068751025bcce3f00cf63c79499d59829
-ARG CODEX_CODE_MODE_HOST_ARM64_SHA256=1c410fe4bb174949649efe05c150b1512fb4775d5874eb54b2edb624cf7513a4
+ARG CODEX_RELEASE_TAG=rust-v0.149.1
+ARG CODEX_AMD64_SHA256=e24fb784c7d71140d67afb620f56e9137496cf7f6c9e19217fa3666dcf306278
+ARG CODEX_ARM64_SHA256=14df6802e39a956de994e844b90d51d8254bcc8057b6e66f0f3e3b8f7e2da5b0
+ARG CODEX_CODE_MODE_HOST_AMD64_SHA256=62fa2c3e5d4bc58720bd72b2ee2ab8636e1aaa9d8236ddae41a1cce628b59aeb
+ARG CODEX_CODE_MODE_HOST_ARM64_SHA256=962e029df772b53cb977a0204ec4284d0c693207a25a491106e8294aae8dfa04
 ARG PROJECT_VERSION=0.1.0-dev
 ARG SOURCE_REVISION=local-untracked
 
@@ -108,6 +108,7 @@ COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 RUN --network=none \
     --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
+    --mount=type=bind,source=scripts/test-real-codex-project-trust.py,target=/tmp/test-real-codex-project-trust.py,ro \
     --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
@@ -175,6 +176,11 @@ RUN --network=none \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
     && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
     && bash /tmp/test-run-codex-policy \
+    && python /tmp/test-real-codex-project-trust.py \
+    && real_policy_project="$(mktemp -d)" \
+    && run-codex --approval-mode autonomous --cd "$real_policy_project" --help >/dev/null \
+    && run-codex --approval-mode guarded --cd "$real_policy_project" resume --help >/dev/null \
+    && rmdir "$real_policy_project" \
     && test -x /usr/local/bin/codex-code-mode-host \
     && python /tmp/test-codex-code-mode-host.py \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/start-codex-web \

@@ -328,7 +328,9 @@ different source revision.
   retain independent authentication, origin checking, client limits and
   role-specific credential-independent health.
 - Exercise Codex autonomous (`danger-full-access` + `never`) and guarded
-  (`danger-full-access` + `untrusted`) workflows. Record successful Start,
+  (`danger-full-access` + launch-scoped untrusted trust for the active project)
+  workflows. Confirm guarded prompts for commands except explicit exec-policy
+  allows and is not merely trusted-project `on-request`. Record successful Start,
   Resume, Shell, login and doctor behavior, and confirm diagnostics still name
   the outer container as the boundary. Where Context7 is already configured,
   confirm that existing managed path remains functional without recording its

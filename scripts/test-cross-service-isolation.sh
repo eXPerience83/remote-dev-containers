@@ -756,7 +756,7 @@ assert_read_only_rootfs() {
 }
 
 readonly hardened_codex_policy_default=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: default'
-readonly hardened_codex_policy_guarded=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: guarded\nCodex approval policy: untrusted\nMode source: deployment'
+readonly hardened_codex_policy_guarded=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: guarded\nProject trust: untrusted (launch-scoped)\nApproval behavior: prompt for commands except explicit exec-policy allows\nMode source: deployment'
 readonly hardened_codex_policy_override=$'Inner sandbox: disabled explicitly\nIsolation boundary: outer container\nCodex approval mode: autonomous\nCodex approval policy: never\nMode source: per-launch'
 hardened_codex_output=""
 
@@ -807,6 +807,15 @@ assert_hardened_codex_policy_and_doctor() {
     grep -Fxq -- "$expected" <<<"$hardened_codex_output" \
       || fail "hardened Codex diagnostics did not retain its default approval contract"
   done
+  local policy_project="/workspace/hardening-policy-$run_id"
+  docker_exec "$codex_name" install -d -m 0700 -- "$policy_project" >/dev/null 2>&1 \
+    || fail "hardened Codex policy fixture could not be prepared"
+  run_hardened_codex_assertion "hardened real Codex autonomous launch contract failed" \
+    run-codex --approval-mode autonomous --cd "$policy_project" --help
+  run_hardened_codex_assertion "hardened real Codex guarded resume contract failed" \
+    run-codex --approval-mode guarded --cd "$policy_project" resume --help
+  docker_exec "$codex_name" rmdir -- "$policy_project" >/dev/null 2>&1 \
+    || fail "hardened Codex policy fixture did not clean up"
 }
 
 run_hardened_codex_regression() {
@@ -833,7 +842,7 @@ assert_hardened_codex_runtime_regressions() {
 
   docker_exec "$codex_name" install -d -m 0700 -- "$fixture_root" >/dev/null 2>&1 \
     || fail "hardened Codex regression fixture root could not be prepared"
-  for script in test-codex-runtime-noexec-staging.py test-remote-dev-context7-runtime-isolation.py; do
+  for script in test-codex-runtime-noexec-staging.py test-remote-dev-context7-runtime-isolation.py test-real-codex-project-trust.py; do
     copy_status=0
     timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
       "${docker_exec_timeout_seconds}s" \
@@ -849,7 +858,8 @@ assert_hardened_codex_runtime_regressions() {
   done
   docker_exec "$codex_name" chmod a+r -- \
     "$fixture_root/test-codex-runtime-noexec-staging.py" \
-    "$fixture_root/test-remote-dev-context7-runtime-isolation.py" >/dev/null 2>&1 \
+    "$fixture_root/test-remote-dev-context7-runtime-isolation.py" \
+    "$fixture_root/test-real-codex-project-trust.py" >/dev/null 2>&1 \
     || fail "hardened Codex regression fixture sources could not be made readable"
 
   if run_hardened_codex_regression "hardened Codex noexec staging regression failed" \
@@ -859,6 +869,16 @@ assert_hardened_codex_runtime_regressions() {
   else
     regression_status=$?
     regression_description="hardened Codex noexec staging regression failed"
+  fi
+  if (( regression_status == 0 )); then
+    if run_hardened_codex_regression "hardened real Codex project-trust regression failed" \
+      env REMOTE_DEV_BUNDLED_CODEX=/usr/local/bin/codex \
+      python "$fixture_root/test-real-codex-project-trust.py"; then
+      :
+    else
+      regression_status=$?
+      regression_description="hardened real Codex project-trust regression failed"
+    fi
   fi
   if (( regression_status == 0 )); then
     if run_hardened_codex_regression "hardened Context7 runtime isolation regression failed" \

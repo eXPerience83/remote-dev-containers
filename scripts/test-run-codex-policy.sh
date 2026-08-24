@@ -166,7 +166,7 @@ assert_args 'deployment autonomous mode' \
 run_launcher guarded resume --last
 assert_args 'deployment guarded mode' \
   --sandbox danger-full-access \
-  --ask-for-approval untrusted \
+  -c "projects={\"$PWD\"={trust_level=\"untrusted\"}}" \
   resume --last
 
 run_launcher guarded resume --approval-mode autonomous --last
@@ -178,9 +178,27 @@ assert_args 'per-launch override precedence' \
 run_launcher autonomous --approval-mode=guarded resume
 assert_args 'inline per-launch guarded mode' \
   --sandbox danger-full-access \
-  --ask-for-approval untrusted \
+  -c "projects={\"$PWD\"={trust_level=\"untrusted\"}}" \
   resume
 echo 'Codex deployment and per-launch approval modes: OK'
+
+mkdir -p "$workdir/project-a" "$workdir/project-b"
+run_launcher guarded --cd "$workdir/project-a" resume --last
+assert_args 'guarded resume project A' \
+  --sandbox danger-full-access \
+  -c "projects={\"$workdir/project-a\"={trust_level=\"untrusted\"}}" \
+  --cd "$workdir/project-a" resume --last
+run_launcher guarded --cd "$workdir/project-b"
+assert_args 'guarded start project B' \
+  --sandbox danger-full-access \
+  -c "projects={\"$workdir/project-b\"={trust_level=\"untrusted\"}}" \
+  --cd "$workdir/project-b"
+run_launcher guarded --approval-mode autonomous --cd "$workdir/project-a" resume
+assert_args 'autonomous override does not inherit guarded trust' \
+  --sandbox danger-full-access \
+  --ask-for-approval never \
+  --cd "$workdir/project-a" resume
+echo 'Codex guarded trust: exact selected start/resume project; no autonomous inheritance'
 
 rm -f "$args_file" "$identity_file"
 env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
@@ -201,18 +219,21 @@ echo 'Codex resolver failure: immutable bundled fallback selected'
 assert_policy_output() {
   local label="$1"
   local expected_mode="$2"
-  local expected_policy="$3"
-  local expected_source="$4"
-  shift 4
+  local expected_source="$3"
+  shift 3
   local output=""
 
   output="$("$@")"
   expected_output="$(printf '%s\n' \
     'Inner sandbox: disabled explicitly' \
     'Isolation boundary: outer container' \
-    "Codex approval mode: $expected_mode" \
-    "Codex approval policy: $expected_policy" \
-    "Mode source: $expected_source")"
+    "Codex approval mode: $expected_mode")"
+  if [[ "$expected_mode" == guarded ]]; then
+    expected_output+=$'\nProject trust: untrusted (launch-scoped)\nApproval behavior: prompt for commands except explicit exec-policy allows'
+  else
+    expected_output+=$'\nCodex approval policy: never'
+  fi
+  expected_output+=$'\n'"Mode source: $expected_source"
   if [[ "$output" != "$expected_output" ]]; then
     printf 'ERROR: %s policy output differs\nExpected:\n%s\nActual:\n%s\n' \
       "$label" "$expected_output" "$output" >&2
@@ -220,11 +241,11 @@ assert_policy_output() {
   fi
 }
 
-assert_policy_output 'default policy report' autonomous never default \
+assert_policy_output 'default policy report' autonomous default \
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --print-policy
-assert_policy_output 'deployment policy report' guarded untrusted deployment \
+assert_policy_output 'deployment policy report' guarded deployment \
   env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded "$test_launcher" --print-policy
-assert_policy_output 'per-launch policy report' autonomous never per-launch \
+assert_policy_output 'per-launch policy report' autonomous per-launch \
   env REMOTE_DEV_CODEX_APPROVAL_MODE=guarded "$test_launcher" --approval-mode autonomous --print-policy
 
 echo 'Codex approval diagnostics: exact mode, policy and source'
@@ -275,6 +296,8 @@ assert_rejected 'long config approval override' --config 'approval_policy="never
 assert_rejected 'spaced config approval override' --config ' approval_policy = "never" '
 assert_rejected 'inline config sandbox override' '--config=sandbox_mode="workspace-write"'
 assert_rejected 'profile config approval override' -c 'profiles.test.approval_policy="never"'
+assert_rejected 'project trust override' -c 'projects={"/workspace"={trust_level="trusted"}}'
+assert_rejected 'profile selection' --profile test
 
 echo 'Direct upstream Codex policy overrides: rejected'
 
@@ -330,6 +353,6 @@ echo 'Invalid Codex approval modes: rejected without execution'
 run_launcher guarded -- --approval-mode autonomous --sandbox-is-prompt-text
 assert_args 'option separator preservation' \
   --sandbox danger-full-access \
-  --ask-for-approval untrusted \
+  -c "projects={\"$PWD\"={trust_level=\"untrusted\"}}" \
   -- --approval-mode autonomous --sandbox-is-prompt-text
 echo 'Codex launcher option separator: preserved'

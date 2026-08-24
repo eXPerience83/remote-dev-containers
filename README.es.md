@@ -132,7 +132,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
 - `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
-- `guarded` se traduce a `--ask-for-approval untrusted`.
+- `guarded` marca como no confiable solo el proyecto activo durante ese lanzamiento. Codex pide aprobación para los comandos salvo que una regla explícita de exec-policy los permita; `on-request` en un proyecto confiable no es el modo guarded de Remote Dev.
 
 El menú separa **Start Codex** y **Resume a Codex session**, añade **Projects...** y mantiene **Approval mode for next launch**. Start y Resume pasan a Codex el proyecto seleccionado como directorio de trabajo, de modo que Codex arranca en `/workspace/<proyecto>` y lo utiliza como directorio predeterminado para detectar el repositorio y localizar `AGENTS.md`. Esta selección del directorio de trabajo no restringe el acceso al sistema de archivos a ese hijo; los proyectos hermanos del mismo `/workspace` montado siguen siendo accesibles. El selector de aprobación permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
 

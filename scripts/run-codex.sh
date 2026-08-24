@@ -41,7 +41,7 @@ is_policy_config_override() {
   local key="${normalized%%=*}"
 
   case "$key" in
-    sandbox_mode|approval_policy|ask_for_approval|sandbox|profiles.*.sandbox_mode|profiles.*.approval_policy)
+    sandbox_mode|approval_policy|ask_for_approval|sandbox|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*)
       return 0
       ;;
     *)
@@ -109,15 +109,7 @@ else
   mode_source=default
 fi
 
-case "$approval_mode" in
-  autonomous) approval_policy=never ;;
-  guarded) approval_policy=untrusted ;;
-  *)
-    echo "ERROR: internal unsupported Codex approval mode: $approval_mode" >&2
-    exit 2
-    ;;
-esac
-readonly approval_mode approval_policy mode_source
+readonly approval_mode mode_source
 
 if (( print_policy == 1 )); then
   if (( ${#forwarded[@]} > 0 )); then
@@ -126,9 +118,15 @@ if (( print_policy == 1 )); then
   printf '%s\n' \
     'Inner sandbox: disabled explicitly' \
     'Isolation boundary: outer container' \
-    "Codex approval mode: $approval_mode" \
-    "Codex approval policy: $approval_policy" \
-    "Mode source: $mode_source"
+    "Codex approval mode: $approval_mode"
+  if [[ "$approval_mode" == guarded ]]; then
+    printf '%s\n' \
+      'Project trust: untrusted (launch-scoped)' \
+      'Approval behavior: prompt for commands except explicit exec-policy allows'
+  else
+    printf '%s\n' 'Codex approval policy: never'
+  fi
+  printf '%s\n' "Mode source: $mode_source"
   exit 0
 fi
 
@@ -154,6 +152,9 @@ for argument in "${forwarded[@]}"; do
       reject_policy_override "$argument"
       ;;
     --dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-approvals-and-sandbox=*|--dangerously-auto-approve-everything|--yolo|--full-auto)
+      reject_policy_override "$argument"
+      ;;
+    --profile|--profile=*|-p|-p=*|-p?*)
       reject_policy_override "$argument"
       ;;
     -c|--config)
@@ -298,7 +299,38 @@ finally:
 
 configure_context7_environment
 
-exec "$resolved_codex_binary" \
-  --sandbox "$sandbox_mode" \
-  --ask-for-approval "$approval_policy" \
-  "${forwarded[@]}"
+owned_policy_args=(--sandbox "$sandbox_mode")
+if [[ "$approval_mode" == autonomous ]]; then
+  owned_policy_args+=(--ask-for-approval never)
+else
+  active_project=""
+  expect_cd_value=0
+  for argument in "${forwarded[@]}"; do
+    if (( expect_cd_value == 1 )); then
+      active_project="$argument"
+      expect_cd_value=0
+      continue
+    fi
+    case "$argument" in
+      --) break ;;
+      --cd|-C) expect_cd_value=1 ;;
+      --cd=*) active_project="${argument#*=}" ;;
+      -C?*) active_project="${argument#-C}" ;;
+    esac
+  done
+  if (( expect_cd_value == 1 )); then
+    fail_usage "--cd requires a project directory"
+  fi
+  if [[ -z "$active_project" ]]; then
+    active_project="$PWD"
+  elif [[ "$active_project" != /* ]]; then
+    active_project="$PWD/$active_project"
+  fi
+  if ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
+    fail_usage "guarded mode requires an existing project directory"
+  fi
+  project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
+  owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
+fi
+
+exec "$resolved_codex_binary" "${owned_policy_args[@]}" "${forwarded[@]}"

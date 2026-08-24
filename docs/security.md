@@ -111,7 +111,7 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 The project-owned Codex command launcher accepts only:
 
 - `autonomous`, mapped to `--ask-for-approval never`;
-- `guarded`, mapped to `--ask-for-approval untrusted`.
+- `guarded`, which marks only the active project untrusted through an in-memory launch override. Codex then prompts for commands unless an explicit exec-policy rule allows them; trusted-project `on-request` is not this guarded contract.
 
 Configure the permanent service value with:
 
@@ -122,7 +122,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 
 The menu can select another mode for one start or resume. That override is consumed before invocation and does not rewrite the deployment setting.
 
-The command launcher rejects raw sandbox/approval flags and relevant configuration overrides before Codex starts. Users may invoke the raw Codex binary manually from a shell, but that is outside the supported launcher contract.
+The command launcher rejects raw sandbox/approval flags, profiles and project-trust configuration overrides before Codex starts. The guarded override is not written to the user's `config.toml`, so another project or a later autonomous launch cannot inherit it. Users may invoke the raw Codex binary manually from a shell, but that is outside the supported launcher contract. Approval prompts do not change the outer-container isolation boundary.
 
 ## Optional vendor agents
 

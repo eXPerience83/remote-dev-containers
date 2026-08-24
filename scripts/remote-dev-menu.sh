@@ -348,7 +348,7 @@ MENU
 
 codex_policy_summary() {
   /usr/local/bin/run-codex --print-policy \
-    | grep -E '^(Codex approval mode|Codex approval policy|Mode source):'
+    | grep -E '^(Codex approval mode|Codex approval policy|Project trust|Approval behavior|Mode source):'
 }
 
 codex_runtime_status_summary() {
