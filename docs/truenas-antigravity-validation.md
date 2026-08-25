@@ -139,7 +139,10 @@ snapshot or replication policy needs a separate boundary.
 
 ## Create the persistent directories
 
-Run from the TrueNAS shell after the single dataset exists:
+Run from the TrueNAS shell after the single dataset exists. These host
+subdirectories are required before saving the Custom App because the canonical
+YAML uses `create_host_path: false`; Compose must not create missing persistent
+paths implicitly.
 
 ```bash
 sudo install -d -m 0755 \
@@ -222,7 +225,11 @@ the actual passwords are validated by the runtime when the containers start.
 
 ## Download the matching TrueNAS YAML
 
-Use `compose/truenas.yml` from the same revision as the image and preflight:
+`compose/truenas.yml` is the canonical complete TrueNAS Custom App YAML. Do not
+maintain a hand-copied second YAML in this runbook: download that file from the
+same source revision as the image and preflight, then apply only the documented
+site-specific substitutions below. This keeps future mount and hardening
+changes in one source of truth.
 
 ```bash
 : "${release_revision:?Run the release verification section first}"
