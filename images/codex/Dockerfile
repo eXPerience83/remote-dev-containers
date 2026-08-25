@@ -147,7 +147,6 @@ RUN --network=none \
       /usr/local/bin/remote-dev-version \
       /usr/local/bin/secure-persistent-state \
       /usr/local/bin/codex-smoke-test \
-      /tmp/test-development-scratch.py \
     && chmod 0644 \
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
