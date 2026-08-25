@@ -105,6 +105,19 @@ If you aren't automatically redirected, paste the authorization code below:
             finally:
                 link.unlink(missing_ok=True)
 
+    def test_url_file_ignores_development_temporary_environment(self) -> None:
+        development = "/workspace/.remote-dev-tmp/tmp"
+        with mock.patch.dict(
+            os.environ,
+            {"TMPDIR": development, "TMP": development, "TEMP": development},
+        ):
+            url_file = OAUTH.create_url_file(VALID_URL)
+        try:
+            self.assertEqual(url_file.parent, Path("/tmp"))
+            self.assertEqual(OAUTH.read_url_file(url_file), VALID_URL)
+        finally:
+            url_file.unlink(missing_ok=True)
+
     def test_popup_uses_one_compact_osc8_link(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

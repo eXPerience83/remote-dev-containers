@@ -465,8 +465,19 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             "CONTEXT7_API_KEY": "context7-old-test-secret",
             "CODEX_HOME": "/private/codex-home",
         }
-        previous = {name: os.environ.get(name) for name in sensitive}
+        development = {
+            "TMPDIR": "/workspace/.remote-dev-tmp/tmp",
+            "TMP": "/workspace/.remote-dev-tmp/tmp",
+            "TEMP": "/workspace/.remote-dev-tmp/tmp",
+            "UV_CACHE_DIR": "/workspace/.remote-dev-tmp/uv-cache",
+            "NPM_CONFIG_CACHE": "/workspace/.remote-dev-tmp/npm-cache",
+            "PIP_CACHE_DIR": "/workspace/.remote-dev-tmp/pip-cache",
+        }
+        previous = {
+            name: os.environ.get(name) for name in (*sensitive, *development)
+        }
         os.environ.update(sensitive)
+        os.environ.update(development)
         try:
             module.run_login_process = fake_login_process
             value, version, reviewed = module.acquire_api_key(
@@ -545,6 +556,13 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             if name in environment or secret in "\n".join(command):
                 raise AssertionError(
                     f"sensitive caller state leaked into transient login: {name}"
+                )
+        if environment.get("TMPDIR") == development["TMPDIR"]:
+            raise AssertionError("Context7 login inherited development TMPDIR")
+        for name in ("TMP", "TEMP", "UV_CACHE_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR"):
+            if name in environment:
+                raise AssertionError(
+                    f"Context7 login inherited development environment: {name}"
                 )
         if environment.get("CTX7_TELEMETRY_DISABLED") != "1":
             raise AssertionError(

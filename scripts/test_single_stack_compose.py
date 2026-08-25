@@ -29,6 +29,9 @@ ROLE_CAPABILITIES = {
     "antigravity": AGENT_CAPABILITIES,
 }
 ROLE_PIDS_LIMITS = {"launcher": 64, "codex": 1024, "antigravity": 1024}
+DEVELOPMENT_ENVIRONMENT = frozenset(
+    ("TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR")
+)
 ROLE_TMPFS = {
     "launcher": frozenset(
         (
@@ -269,6 +272,15 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(launcher_env.get("REMOTE_DEV_ROLE") == "launcher", f"{path}: launcher role")
     require(codex_env.get("REMOTE_DEV_ROLE") == "codex", f"{path}: Codex role")
     require(antigravity_env.get("REMOTE_DEV_ROLE") == "antigravity", f"{path}: Antigravity role")
+    for name, environment in (
+        ("launcher", launcher_env),
+        ("Codex", codex_env),
+        ("Antigravity", antigravity_env),
+    ):
+        require(
+            DEVELOPMENT_ENVIRONMENT.isdisjoint(environment),
+            f"{path}: {name} received Compose-scoped development scratch",
+        )
     require("REMOTE_DEV_PROJECT" not in launcher_env, f"{path}: launcher received project selector")
     require(codex_env.get("REMOTE_DEV_PROJECT") == "", f"{path}: Codex project selector default")
     require(antigravity_env.get("REMOTE_DEV_PROJECT") == "", f"{path}: Antigravity project selector default")
@@ -289,14 +301,6 @@ def validate(path: Path, config: dict[str, object]) -> None:
         else:
             require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
             require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
-        require(
-            environment.get("NPM_CONFIG_CACHE") == "/tmp/remote-dev-npm-cache",
-            f"{path}: {name} transient npm cache",
-        )
-        require(
-            environment.get("UV_CACHE_DIR") == "/tmp/remote-dev-uv-cache",
-            f"{path}: {name} transient uv cache",
-        )
 
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 

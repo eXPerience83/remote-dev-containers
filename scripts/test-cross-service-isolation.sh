@@ -463,6 +463,7 @@ assert_no_broad_mounts_or_environment() {
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
     | (($environment | all(startswith("REMOTE_DEV_DATA_ROOT=") | not))
+       and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=") | not))
        and ($mounts | all(.Source != $test_root))
        and ($mounts | all(.Source != "/"))
        and ($mounts | all(.Source != "/root" and .Source != "/home"
@@ -673,6 +674,64 @@ assert_agent_runtime_identity() {
     ' >&2 || true
     fail "$role fixture did not preserve the reviewed root and unprivileged-child identities"
   }
+}
+
+assert_development_scratch_environment() {
+  local name="$1"
+  local role="$2"
+  if ! docker_exec "$name" bash -c '
+    set -euo pipefail
+    pid="$(pgrep -xo ttyd)"
+    environment="$(tr "\0" "\n" < "/proc/$pid/environ")"
+    read_value() {
+      sed -n "s/^$1=//p" <<<"$environment"
+    }
+
+    scratch=/workspace/.remote-dev-tmp
+    test "$(read_value TMPDIR)" = "$scratch/tmp"
+    test "$(read_value TMP)" = "$scratch/tmp"
+    test "$(read_value TEMP)" = "$scratch/tmp"
+    test "$(read_value UV_CACHE_DIR)" = "$scratch/uv-cache"
+    test "$(read_value NPM_CONFIG_CACHE)" = "$scratch/npm-cache"
+    test "$(read_value PIP_CACHE_DIR)" = "$scratch/pip-cache"
+
+    for path in "$scratch" "$scratch/tmp" "$scratch/uv-cache" "$scratch/npm-cache" "$scratch/pip-cache"; do
+      test -d "$path"
+      test ! -L "$path"
+      test "$(stat -c "%u:%g:%a" -- "$path")" = 0:0:700
+    done
+    test "$(stat -c %d -- "$scratch")" = "$(stat -c %d -- /workspace)"
+    test "$(stat -c %d -- "$scratch")" != "$(stat -c %d -- /tmp)"
+
+    export TMPDIR="$scratch/tmp"
+    export TMP="$scratch/tmp"
+    export TEMP="$scratch/tmp"
+    export UV_CACHE_DIR="$scratch/uv-cache"
+    export NPM_CONFIG_CACHE="$scratch/npm-cache"
+    export PIP_CACHE_DIR="$scratch/pip-cache"
+    test "$(python -c "import tempfile; print(tempfile.gettempdir())")" = "$TMPDIR"
+    test "$(uv cache dir)" = "$UV_CACHE_DIR"
+    test "$(npm config get cache)" = "$NPM_CONFIG_CACHE"
+    test "$(python -m pip cache dir)" = "$PIP_CACHE_DIR"
+  ' >/dev/null 2>&1; then
+    docker_exec "$name" sh -c '
+      pid="$(pgrep -xo ttyd)"
+      tr "\0" "\n" < "/proc/$pid/environ" \
+        | grep -E "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=" || true
+      stat -c "%n %u:%g:%a device=%d" /workspace /workspace/.remote-dev-tmp /tmp 2>/dev/null || true
+    ' >&2 || true
+    fail "$role fixture development scratch/session environment is invalid"
+  fi
+}
+
+assert_launcher_has_no_development_scratch() {
+  docker_exec "$launcher_name" sh -c '
+    set -eu
+    pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
+    ! tr "\0" "\n" < "/proc/$pid/environ" \
+      | grep -Eq "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)="
+    test ! -e /workspace/.remote-dev-tmp
+  ' >/dev/null 2>&1 || fail "launcher received development scratch state"
 }
 
 assert_launcher_http_security() {
@@ -962,6 +1021,18 @@ assert_codex_toolchain_workflow() {
   local status=0
   output="$(docker_exec "$codex_name" bash -c '
     set -euo pipefail
+    pid="$(pgrep -xo ttyd)"
+    environment="$(tr "\0" "\n" < "/proc/$pid/environ")"
+    read_value() {
+      sed -n "s/^$1=//p" <<<"$environment"
+    }
+    export TMPDIR="$(read_value TMPDIR)"
+    export TMP="$(read_value TMP)"
+    export TEMP="$(read_value TEMP)"
+    export UV_CACHE_DIR="$(read_value UV_CACHE_DIR)"
+    export NPM_CONFIG_CACHE="$(read_value NPM_CONFIG_CACHE)"
+    export PIP_CACHE_DIR="$(read_value PIP_CACHE_DIR)"
+
     project="/workspace/hardening-toolchain"
     rm -rf -- "$project"
     mkdir -p "$project/local-dependency"
@@ -984,6 +1055,8 @@ assert_codex_toolchain_workflow() {
     node -e '\''if (require("remote-dev-local-dependency") !== 42) process.exit(1)'\''
     test -d "$NPM_CONFIG_CACHE"
     test -d "$UV_CACHE_DIR"
+    test "$(python -m pip cache dir)" = "$PIP_CACHE_DIR"
+    test "$(python -c "import tempfile; print(tempfile.gettempdir())")" = "$TMPDIR"
 
     printf '\''#include <stdio.h>\nint main(void) { return puts("ok") < 0; }\n'\'' > smoke.c
     printf '\''smoke: smoke.c\n\t$(CC) -Wall -Wextra -Werror -o $@ $<\n'\'' > Makefile
@@ -1018,7 +1091,14 @@ run_hardened_antigravity_fixture() {
   shift 2
   local output=""
   local status=0
-  output="$(docker_exec --user 65534:65534 "$antigravity_name" env TMPDIR="$fixture_tmp" "$@" 2>&1)" || status=$?
+  output="$(docker_exec --user 65534:65534 "$antigravity_name" env \
+    TMPDIR="$fixture_tmp" \
+    TMP="$fixture_tmp" \
+    TEMP="$fixture_tmp" \
+    UV_CACHE_DIR="$fixture_tmp" \
+    NPM_CONFIG_CACHE="$fixture_tmp" \
+    PIP_CACHE_DIR="$fixture_tmp" \
+    "$@" 2>&1)" || status=$?
   if (( status != 0 )); then
     if docker_exec_infrastructure_failure "$status"; then
       fail "$description docker exec failed"
@@ -1221,6 +1301,21 @@ verify_canaries() {
   done
 }
 
+assert_role_private_development_scratch() {
+  local codex_marker="/workspace/.remote-dev-tmp/.codex-scratch-$run_id"
+  local antigravity_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
+
+  write_owned_marker "$codex_name" "Codex development scratch" "$codex_marker"
+  write_owned_marker "$antigravity_name" "Antigravity development scratch" "$antigravity_marker"
+  record_canary codex_invariants "$codex_name" "Codex development scratch marker" "$codex_marker"
+  record_canary antigravity_invariants "$antigravity_name" \
+    "Antigravity development scratch marker" "$antigravity_marker"
+  assert_path_absent "$antigravity_name" "Codex development scratch marker" "$codex_marker"
+  assert_path_absent "$codex_name" "Antigravity development scratch marker" "$antigravity_marker"
+  assert_path_absent "$launcher_name" "Codex development scratch marker" "$codex_marker"
+  assert_path_absent "$launcher_name" "Antigravity development scratch marker" "$antigravity_marker"
+}
+
 start_tmux_fixture() {
   local name="$1"
   local role="$2"
@@ -1413,8 +1508,6 @@ start_codex() {
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7681 \
-    --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
-    --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
     --mount "type=bind,src=$test_root/codex/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/codex/agent,dst=/root/.codex" \
     --mount "type=bind,src=$test_root/codex/runtime,dst=/root/.local/share/remote-dev/codex-runtime" \
@@ -1460,8 +1553,6 @@ start_antigravity() {
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7682 \
-    --env NPM_CONFIG_CACHE=/tmp/remote-dev-npm-cache \
-    --env UV_CACHE_DIR=/tmp/remote-dev-uv-cache \
     --mount "type=bind,src=$test_root/antigravity/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/antigravity/bin,dst=/root/.local/bin" \
     --mount "type=bind,src=$test_root/antigravity/runtime,dst=/root/.local/share/remote-dev/antigravity" \
@@ -1502,6 +1593,9 @@ assert_runtime_mount_options "$antigravity_name" antigravity
 assert_launcher_runtime_identity
 assert_agent_runtime_identity "$codex_name" Codex
 assert_agent_runtime_identity "$antigravity_name" Antigravity
+assert_launcher_has_no_development_scratch
+assert_development_scratch_environment "$codex_name" Codex
+assert_development_scratch_environment "$antigravity_name" Antigravity
 assert_launcher_http_security base
 assert_agent_ttyd_security "$codex_name" Codex codex 7681
 assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682
@@ -1554,6 +1648,7 @@ for index in "${!antigravity_targets[@]}"; do
 done
 assert_antigravity_project_config_state
 assert_path_absent "$launcher_name" "agent terminal password source" "/run/secrets/web_password"
+assert_role_private_development_scratch
 
 codex_socket="$(start_tmux_fixture "$codex_name" codex)"
 antigravity_socket="$(start_tmux_fixture "$antigravity_name" antigravity)"
@@ -1585,6 +1680,7 @@ assert_mount_contract "$codex_name" codex
 assert_hardening_contract "$codex_name" codex
 assert_runtime_mount_options "$codex_name" codex
 assert_agent_runtime_identity "$codex_name" Codex
+assert_development_scratch_environment "$codex_name" Codex
 assert_read_only_rootfs "$codex_name" Codex
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
@@ -1608,6 +1704,7 @@ assert_mount_contract "$antigravity_name" antigravity
 assert_hardening_contract "$antigravity_name" antigravity
 assert_runtime_mount_options "$antigravity_name" antigravity
 assert_agent_runtime_identity "$antigravity_name" Antigravity
+assert_development_scratch_environment "$antigravity_name" Antigravity
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
@@ -1619,5 +1716,18 @@ assert_equal "Antigravity terminal password canary" "$antigravity_password_measu
   "$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
+
+antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
+antigravity_scratch_measurement="$(measure_canary \
+  "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
+remove_owned_container "$codex_name" "$codex_id" \
+  || fail "failed to remove the owned Codex fixture for scratch recreation"
+rm -rf -- "$test_root/codex/workspace/.remote-dev-tmp"
+start_codex
+wait_for_health_command "$codex_name"
+assert_development_scratch_environment "$codex_name" Codex
+assert_equal "Antigravity scratch during Codex recreation" "$antigravity_scratch_measurement" \
+  "$(measure_canary \
+    "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
 
 echo "Hardened cross-service isolation and offline toolchain canaries: OK"

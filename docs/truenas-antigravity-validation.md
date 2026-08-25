@@ -364,6 +364,54 @@ different source revision.
 - Record no password, token, OAuth URL/code, account name, credential content or
   private repository name in the evidence.
 
+## Issue #158 development-scratch candidate gate
+
+This is a manual gate for one exact candidate image digest and embedded source
+revision. Do not record it as passed until every check below has been observed on
+the real TrueNAS deployment. Use only sanitized paths and filesystem facts; do
+not dump a complete process environment.
+
+1. Record the candidate digest and `remote-dev-version` revision. Confirm the
+   launcher, Codex and Antigravity containers use that same image ID.
+2. In each agent container, inspect `findmnt -T /tmp` and `df -h /tmp`. Confirm
+   `/tmp` is still the private 512 MiB tmpfs mounted
+   `rw,noexec,nosuid,nodev`. Confirm the launcher retains its existing smaller
+   private tmpfs and has no `/workspace` mount.
+3. Start a normal Codex session and a normal Antigravity session. Read only
+   `TMPDIR`, `TMP`, `TEMP`, `UV_CACHE_DIR`, `NPM_CONFIG_CACHE` and
+   `PIP_CACHE_DIR` from the session process. Confirm they resolve respectively
+   to `tmp`, `uv-cache`, `npm-cache` and `pip-cache` below
+   `/workspace/.remote-dev-tmp`.
+4. For both agents, compare `stat -c '%d' /workspace
+   /workspace/.remote-dev-tmp/tmp /tmp`. The workspace and scratch device IDs
+   must match, while the `/tmp` device ID must differ. Confirm the five fixed
+   scratch directories have the service UID/GID and mode `0700`.
+5. Put distinct existence-only markers in the Codex and Antigravity scratch
+   roots. Confirm neither marker is visible from the other role and neither is
+   visible from the launcher. This must agree with the distinct host workspace
+   sources reported by container inspection.
+6. Run a representative uv resolution/install workload in the Codex session
+   that previously pressured the 512 MiB tmpfs. Sample `du` for the fixed
+   scratch tree and `df` for both its backing filesystem and `/tmp` before and
+   after. Confirm temporary/cache growth occurs on workspace-backed storage and
+   `/tmp` remains available for its intended small runtime uses. Do not add a
+   synthetic oversized fixture to CI.
+7. Re-run the fixed-path sensitive-operation checks: Codex updater staging must
+   remain below `/run/remote-dev-codex-update`; Context7 device login must retain
+   its private `/run` roots; Antigravity install/admission/publication must use
+   canonical private runtime state; Context7 atomic writes must remain adjacent
+   to their target; and Antigravity OAuth must retain its explicit small `/tmp`
+   files. Do not include credentials or vendor login output in evidence.
+8. Stop one agent service, delete only its `.remote-dev-tmp` host-workspace
+   child, and restart it. Confirm the five fixed directories are safely
+   recreated and the other role's marker remains unchanged. Restore or remove
+   test markers after recording the result.
+
+Expected result: large normal development temporary/cache activity is
+disk-backed and role-private, while `/tmp`, launcher isolation and every reviewed
+trusted-staging boundary remain unchanged. Candidate-specific evidence is
+intentionally pending until a human performs this gate before merge.
+
 ## Browser checks
 
 - Port 7680 opens the launcher without a password on the trusted network.

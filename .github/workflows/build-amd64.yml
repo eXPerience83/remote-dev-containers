@@ -31,6 +31,8 @@ jobs:
           python3 -m py_compile \
             scripts/remote-dev-launcher.py \
             scripts/remote-dev-codex-runtime.py \
+            scripts/remote-dev-prepare-development-scratch.py \
+            scripts/test-development-scratch.py \
             scripts/test-remote-dev-codex-runtime.py \
             scripts/test-codex-runtime-noexec-staging.py \
             scripts/remote-dev-context7.py \

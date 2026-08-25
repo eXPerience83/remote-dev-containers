@@ -10,6 +10,10 @@ start_mode="$(remote_dev_resolve_start_mode "$role")"
 export REMOTE_DEV_ROLE="$role"
 export REMOTE_DEV_START_MODE="$start_mode"
 
+# Development scratch is a child-session default, never a startup or launcher
+# trust boundary. Discard caller values before touching persistent state.
+unset TMPDIR TMP TEMP UV_CACHE_DIR NPM_CONFIG_CACHE PIP_CACHE_DIR
+
 if [[ "$role" == launcher ]]; then
   exec /usr/local/bin/remote-dev-launcher
 fi
@@ -24,7 +28,12 @@ gh_config_dir="${GH_CONFIG_DIR:-/root/.config/gh}"
 git_config_global="${GIT_CONFIG_GLOBAL:-/root/.config/git/config}"
 
 umask 077
-mkdir -p "$workspace" "$gh_config_dir" "$(dirname "$git_config_global")" /root/.ssh
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || exit $?
+else
+  mkdir -p "$workspace"
+fi
+mkdir -p "$gh_config_dir" "$(dirname "$git_config_global")" /root/.ssh
 if [[ "$role" == codex ]]; then
   mkdir -p "${CODEX_HOME:-/root/.codex}"
 elif [[ "$role" == antigravity ]]; then
@@ -74,6 +83,10 @@ Set WEB_PASSWORD_FILE (recommended) or WEB_PASSWORD.
 Set ALLOW_INSECURE_WEB=1 only on an already protected private endpoint.
 MSG
   exit 1
+fi
+
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  remote_dev_prepare_development_environment "$role" "$workspace" || exit $?
 fi
 
 cmd=(

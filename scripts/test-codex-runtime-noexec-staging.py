@@ -90,8 +90,16 @@ def run_regression() -> int:
         shutil.rmtree(unsafe_parent, ignore_errors=True)
 
     caller_tmp = Path(tempfile.mkdtemp(prefix="caller-controlled-codex-tmp-", dir="/tmp"))
-    old_tmpdir = os.environ.get("TMPDIR")
-    os.environ["TMPDIR"] = str(caller_tmp)
+    development_names = (
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "UV_CACHE_DIR",
+        "NPM_CONFIG_CACHE",
+        "PIP_CACHE_DIR",
+    )
+    old_development = {name: os.environ.get(name) for name in development_names}
+    os.environ.update({name: str(caller_tmp) for name in development_names})
     staging = None
     try:
         with manager.update_staging() as staging:
@@ -160,14 +168,15 @@ def run_regression() -> int:
                 )
     finally:
         active_error = sys.exception()
-        if old_tmpdir is None:
-            os.environ.pop("TMPDIR", None)
-        else:
-            os.environ["TMPDIR"] = old_tmpdir
+        for name, old_value in old_development.items():
+            if old_value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = old_value
         leaked = sorted(entry.name for entry in caller_tmp.iterdir())
         shutil.rmtree(caller_tmp, ignore_errors=True)
         if leaked:
-            message = f"staging honoured caller TMPDIR; leaked entries: {leaked}"
+            message = f"staging honoured caller development environment; leaked entries: {leaked}"
             if active_error is None:
                 raise AssertionError(message)
             active_error.add_note(message)
