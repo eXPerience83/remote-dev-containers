@@ -12,7 +12,7 @@ Este documento define el modelo de disponibilidad e integridad implementado en e
 
 Una versión compatible de Antigravity puede instalarse o actualizarse desde el endpoint oficial fijo de Google sin esperar a una imagen nueva de Remote Dev. La evidencia incluida en la imagen describe la versión exacta que Remote Dev ya ha revisado; no es una lista de versiones permitidas y la ausencia de una versión no equivale a revocarla.
 
-El arranque normal del contenedor, las comprobaciones de estado y el inicio del agente nunca contactan con el instalador ni actualizan el ejecutable. El estado verifica la identidad del archivo local y ejecuta una comprobación acotada de `--version` con un HOME temporal privado y la autoactualización del proveedor desactivada. `AGY_CLI_DISABLE_AUTO_UPDATE=true` continúa siendo obligatorio durante las sesiones normales.
+El arranque normal del contenedor, las comprobaciones de estado, la verificación completa y el inicio del agente nunca contactan con el instalador ni actualizan el ejecutable. Los comandos informativos `status` y `status --menu` validan la estructura del ejecutable/manifiesto y el estado de revisión sin calcular el hash del ejecutable completo ni ejecutar código del proveedor. Justo antes de una sesión real, Remote Dev realiza una única verificación SHA-256 completa del ejecutable canónico contra su manifiesto privado. `remote-dev-antigravity verify` realiza expresamente la misma comprobación completa sin red y Ejecutar diagnósticos la invoca antes de mostrar el estado ligero. `AGY_CLI_DISABLE_AUTO_UPDATE=true` continúa siendo obligatorio durante las sesiones normales.
 
 ## Instalación y actualización expresas
 
@@ -32,10 +32,10 @@ Un cambio incompatible del contrato del proveedor se rechaza. El gestor no rebaj
 
 ## Estados del runtime
 
-El menú y los diagnósticos muestran únicamente información acotada y no secreta:
+El menú y los diagnósticos muestran únicamente información acotada y no secreta. El estado del menú es informativo; antes de ejecutar sigue siendo obligatoria una verificación completa correcta:
 
-- **Oficial y revisada**: ejecutable y manifiesto están íntegros y coinciden con la evidencia de inspección incluida por Remote Dev.
-- **Origen oficial; revisión de Remote Dev pendiente**: la versión fue admitida mediante el flujo expreso desde el origen oficial y sigue coincidiendo con su manifiesto privado, pero aún no aparece en la evidencia de la imagen. Puede seguir utilizándose.
+- **Oficial y revisada**: el manifiesto privado estructuralmente válido coincide con la evidencia de inspección incluida por Remote Dev. La integridad completa del ejecutable se comprueba antes del inicio y mediante la verificación expresa/los diagnósticos.
+- **Origen oficial; revisión de Remote Dev pendiente**: el manifiesto privado estructuralmente válido registra un payload admitido mediante el flujo expreso desde el origen oficial, pero el instalador/payload exacto aún no aparece en la evidencia de la imagen. Solo puede ejecutarse si supera la verificación completa obligatoria previa al inicio.
 - **Dañada o modificada localmente**: falta el ejecutable o el manifiesto, es un enlace simbólico, tiene permisos inválidos, está mal formado o no coincide su identidad. El inicio se bloquea hasta realizar una actualización expresa.
 
 «Origen oficial; revisión pendiente» describe la ruta controlada de descarga y la integridad local respecto al manifiesto. No significa firma criptográfica de Google, certificación de Remote Dev, inclusión en el SBOM de la imagen ni cobertura por Apache-2.0.

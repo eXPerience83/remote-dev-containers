@@ -49,7 +49,6 @@ readonly INSTALLER_RUN_FILE_LIMIT_BLOCKS=$(((MAX_BINARY_SIZE + 1023) / 1024))
 # shellcheck disable=SC2034
 declare -g \
   cleanup_root="" \
-  verification_root="" \
   publish_in_progress=0 \
   publish_had_old_binary=0 \
   publish_had_old_manifest=0 \
@@ -93,6 +92,7 @@ main() {
   case "$command" in
     install|update) install_or_update "$command" "$assume_yes" ;;
     status) status_command "$menu" ;;
+    verify) verify_command ;;
     path) printf '%s\n' "$binary" ;;
     -h|--help|help) usage ;;
     *) usage >&2; exit 2 ;;

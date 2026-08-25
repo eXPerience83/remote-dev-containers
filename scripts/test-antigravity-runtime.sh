@@ -95,6 +95,17 @@ printf '%s\n' \
 READELF_FIXTURE
 chmod 0755 "$test_bin/readelf"
 
+real_sha256sum="$(command -v sha256sum)"
+cat >"$test_bin/sha256sum" <<EOF_SHA256_FIXTURE
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "\${REMOTE_DEV_TEST_SHA_LOG:-}" ]]; then
+  printf '%s\n' "\$*" >>"\$REMOTE_DEV_TEST_SHA_LOG"
+fi
+exec '$real_sha256sum' "\$@"
+EOF_SHA256_FIXTURE
+chmod 0755 "$test_bin/sha256sum"
+
 # This represents an unrelated host installation. The copied manager must use
 # only the fixture path definitions and tools, never this inherited PATH/HOME
 # state.
@@ -272,9 +283,14 @@ PY
 reset_runtime
 payload_v1="$temporary/payload-v1"
 installer_v1="$temporary/installer-v1.sh"
+vendor_invocation_log="$temporary/vendor-invocations.log"
 make_payload "$payload_v1" '1.0.0'
 make_installer "$installer_v1" "$payload_v1"
 write_evidence "$installer_v1" "$payload_v1" '1.0.0'
+
+test "$(bash "$MANAGER" verify)" = \
+  'Antigravity runtime full integrity: not applicable (not installed)' \
+  || fail "absent full verification result is incorrect"
 
 export REMOTE_DEV_TEST_INSTALLER_FIXTURE="$temporary/does-not-exist"
 export REMOTE_DEV_TEST_CURL_MARKER="$temporary/cancelled-curl"
@@ -302,6 +318,87 @@ test "$(jq -r '.installer_sha256' "$MANIFEST")" = "$(sha256sum "$installer_v1" |
 test "$(bash "$MANAGER" status --menu)" = 'Antigravity: 1.0.0 (official and reviewed)' \
   || fail "reviewed status is incorrect"
 test ! -e "$ambient_agy_marker" || fail "host Antigravity executable affected the fixture"
+
+# Informational status is structural only. Explicit verification and launch each
+# perform one full hash, while only the real launch executes the vendor binary.
+export REMOTE_DEV_TEST_SHA_LOG="$temporary/sha.log"
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+bash "$MANAGER" status >/dev/null
+bash "$MANAGER" status --menu >/dev/null
+test ! -s "$REMOTE_DEV_TEST_SHA_LOG" || fail "lightweight status hashed the canonical executable"
+
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+test "$(bash "$MANAGER" verify)" = 'Antigravity runtime full integrity: OK (1.0.0)' \
+  || fail "explicit full verification result is incorrect"
+test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
+  || fail "explicit verify did not hash the canonical executable exactly once"
+
+export REMOTE_DEV_TEST_SECURE_MARKER="$temporary/verify-launch-secure"
+export REMOTE_DEV_TEST_ARGS_FILE="$vendor_invocation_log"
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+bash "$RUNNER" launch-probe
+test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
+  || fail "launch did not hash the canonical executable exactly once"
+mapfile -t vendor_invocations <"$vendor_invocation_log"
+test "${#vendor_invocations[@]}" = 1 && test "${vendor_invocations[0]}" = launch-probe \
+  || fail "launch did not execute the vendor binary exactly once"
+
+# A manifest-bound executable that would fail if invoked proves that status and
+# explicit verification do not probe vendor --version at runtime.
+probe_payload="$temporary/probe-payload"
+saved_manifest="$temporary/saved-install.json"
+make_payload "$probe_payload" '1.0.0' "touch '$vendor_invocation_log'; exit 91"
+cp -- "$MANIFEST" "$saved_manifest"
+install -m 0700 "$probe_payload" "$BINARY"
+jq \
+  --arg binary_sha "$(sha256sum "$BINARY" | awk '{print $1}')" \
+  --argjson binary_size "$(stat -c '%s' "$BINARY")" \
+  '.binary_sha256 = $binary_sha | .binary_size = $binary_size' \
+  "$MANIFEST" >"$MANIFEST.changed"
+mv "$MANIFEST.changed" "$MANIFEST"
+chmod 0600 "$MANIFEST"
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+bash "$MANAGER" status >/dev/null
+bash "$MANAGER" status --menu >/dev/null
+test ! -s "$REMOTE_DEV_TEST_SHA_LOG" || fail "lightweight status hashed the probe-trap executable"
+test ! -e "$vendor_invocation_log" || fail "lightweight status executed the probe-trap executable"
+bash "$MANAGER" verify >/dev/null
+test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
+  || fail "probe-trap full verify did not hash the executable exactly once"
+test ! -e "$vendor_invocation_log" || fail "explicit verify executed the probe-trap executable"
+install -m 0700 "$payload_v1" "$BINARY"
+install -m 0600 "$saved_manifest" "$MANIFEST"
+
+# Same-size content damage is intentionally outside lightweight status, but
+# full verification and launch must both reject it before vendor execution.
+python3 - "$BINARY" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+content = path.read_bytes()
+path.write_bytes(bytes([content[0] ^ 1]) + content[1:])
+PY
+chmod 0700 "$BINARY"
+test "$(bash "$MANAGER" status --menu)" = 'Antigravity: 1.0.0 (official and reviewed)' \
+  || fail "lightweight status did not preserve informational state after same-size tamper"
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+verify_status=0
+bash "$MANAGER" verify >/dev/null 2>&1 || verify_status=$?
+test "$verify_status" = 3 || fail "same-size tamper full verify returned $verify_status"
+test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
+  || fail "failed full verify did not hash the canonical executable exactly once"
+rm -f "$REMOTE_DEV_TEST_SHA_LOG" "$vendor_invocation_log"
+expect_failure bash "$RUNNER" --version >/dev/null 2>&1
+test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
+  || fail "blocked launch did not hash the canonical executable exactly once"
+test ! -s "$vendor_invocation_log" || fail "damaged runtime executed vendor code"
+install -m 0700 "$payload_v1" "$BINARY"
+
+chmod 0600 "$BINARY"
+expect_failure bash "$MANAGER" status >/dev/null 2>&1
+chmod 0700 "$BINARY"
+unset REMOTE_DEV_TEST_SHA_LOG
+unset REMOTE_DEV_TEST_ARGS_FILE
 
 # The launcher preserves literal arguments, disables vendor self-update, uses the
 # selected project working directory and preserves exit status.

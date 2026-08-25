@@ -128,11 +128,7 @@ write_manifest() {
     }' >"$destination"
 }
 
-verify_local_installation() {
-  local verification_dir="$1"
-  local verification_home="$verification_dir/home"
-  install -d -m 0700 "$verification_home"
-
+inspect_local_installation() {
   current_state="damaged"
   current_version="damaged or locally modified"
 
@@ -149,18 +145,22 @@ verify_local_installation() {
   fi
 
   load_local_manifest || return 1
-  file_identity_matches "$binary" "$manifest_binary_size" "$manifest_binary_sha" || return 1
-  run_binary_bounded "$binary" "$verification_home" "$verification_dir/version.out" "$verification_dir/version.err" root --version \
-    || return 1
-  local observed_version
-  observed_version="$(parse_version_capture "$verification_dir/version.out" "$verification_dir/version.err")" || return 1
-  [[ "$observed_version" == "$manifest_version" ]] || return 1
-  file_identity_matches "$binary" "$manifest_binary_size" "$manifest_binary_sha" || return 1
+  file_metadata_matches "$binary" "$manifest_binary_size" || return 1
 
   current_version="$manifest_version"
   if manifest_is_reviewed; then
     current_state="reviewed"
   else
     current_state="review-pending"
+  fi
+}
+
+verify_local_installation() {
+  inspect_local_installation || return $?
+  [[ "$current_state" == absent ]] && return 0
+  if ! file_identity_matches "$binary" "$manifest_binary_size" "$manifest_binary_sha"; then
+    current_state="damaged"
+    current_version="damaged or locally modified"
+    return 1
   fi
 }

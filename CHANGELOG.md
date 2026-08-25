@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Updated the immutable bundled Codex baseline to `0.149.1` and migrated guarded mode from the retired `approval_policy=untrusted` value to launch-scoped untrusted trust for the active project, preserving the outer-container boundary and one-launch mode precedence.
 - Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
+- Made informational Antigravity status and menu inspection lightweight and offline, added explicit full-SHA `verify`, and retained exactly one mandatory full verification before execution. Antigravity diagnostics now perform full verification and fail on integrity errors; damaged state still blocks launch without a bundled fallback.
 - Migrated the effective base image from Ubuntu 24.04 to Ubuntu 26.04 LTS.
 - Updated maintained GitHub Actions to their current major releases.
 - Changed the edge channel from private validation to public experimental development testing.

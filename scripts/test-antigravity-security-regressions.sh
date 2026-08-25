@@ -232,7 +232,7 @@ test "$status" = 3 || fail "binary tamper returned $status"
 grep -Fq 'damaged or locally modified' <<<"$output" || fail "binary tamper status is unclear"
 export REMOTE_DEV_TEST_INSTALLER_FIXTURE="$installer_v1"
 bash "$MANAGER" update --yes >/dev/null
-jq '.version = "9.9.9"' "$MANIFEST" >"$MANIFEST.changed"
+jq '.source = "locally-modified"' "$MANIFEST" >"$MANIFEST.changed"
 mv "$MANIFEST.changed" "$MANIFEST"
 chmod 0600 "$MANIFEST"
 expect_failure bash "$MANAGER" status >/dev/null 2>&1

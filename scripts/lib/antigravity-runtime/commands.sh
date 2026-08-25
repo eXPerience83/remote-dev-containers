@@ -117,11 +117,8 @@ status_command() {
   require_tools
   load_evidence
 
-  verification_root="$(mktemp -d)"
   local status=0
-  verify_local_installation "$verification_root" || status=$?
-  rm -rf -- "$verification_root"
-  verification_root=""
+  inspect_local_installation || status=$?
 
   if (( status != 0 )) || [[ "$current_state" == damaged ]]; then
     if [[ "$menu" == 1 ]]; then
@@ -156,4 +153,22 @@ status_command() {
       ;;
     *) fail "internal unsupported Antigravity state: $current_state" ;;
   esac
+}
+
+verify_command() {
+  require_tools
+  load_evidence
+
+  local status=0
+  verify_local_installation || status=$?
+  if (( status != 0 )) || [[ "$current_state" == damaged ]]; then
+    echo "Antigravity runtime full integrity: FAILED (damaged or locally modified; explicit update required)" >&2
+    return 3
+  fi
+
+  if [[ "$current_state" == absent ]]; then
+    echo "Antigravity runtime full integrity: not applicable (not installed)"
+  else
+    echo "Antigravity runtime full integrity: OK ($current_version)"
+  fi
 }
