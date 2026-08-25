@@ -44,20 +44,22 @@ done
 
 cp -- "$RUNTIME_SOURCE" "$RUNTIME_LIB"
 chmod 0444 "$RUNTIME_LIB"
-python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" <<'PY'
+python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" "$test_bin" <<'PY'
 from pathlib import Path
 import shlex
 import sys
 
-source, destination, paths_lib, runtime_lib, antigravity_lib_dir = map(Path, sys.argv[1:])
+source, destination, paths_lib, runtime_lib, antigravity_lib_dir, test_bin = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
     "/usr/local/lib/remote-dev/antigravity-paths.sh": shlex.quote(str(paths_lib)),
     "/usr/local/lib/remote-dev/remote-dev-runtime.sh": shlex.quote(str(runtime_lib)),
     "/usr/local/lib/remote-dev/antigravity-runtime": shlex.quote(str(antigravity_lib_dir)),
+    "PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin":
+        f"PATH={shlex.quote(str(test_bin))}:/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin",
 }.items():
     if text.count(old) != 1:
-        raise SystemExit(f"expected one canonical manager path: {old}")
+        raise SystemExit(f"expected one canonical manager fixture anchor: {old}")
     text = text.replace(old, new)
 destination.write_text(text, encoding="utf-8")
 PY

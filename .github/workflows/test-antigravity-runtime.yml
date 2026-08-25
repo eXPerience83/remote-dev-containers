@@ -68,3 +68,9 @@ jobs:
           bash scripts/test-antigravity-repair-download-hardening.sh
           bash scripts/test-antigravity-staging-wrappers.sh
           python scripts/test-antigravity-oauth.py
+
+      - name: Run fixture routing as root
+        run: |
+          sudo bash scripts/test-antigravity-runtime.sh
+          sudo bash scripts/test-antigravity-security-regressions.sh
+          sudo bash scripts/test-antigravity-repair-download-hardening.sh

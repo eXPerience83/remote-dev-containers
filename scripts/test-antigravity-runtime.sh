@@ -25,19 +25,21 @@ expect_failure() { if "$@"; then fail "command unexpectedly succeeded: $*"; fi; 
 
 cp -- "$RUNTIME_SOURCE" "$RUNTIME_LIB"
 chmod 0444 "$RUNTIME_LIB"
-python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" <<'PY'
+python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" "$test_bin" <<'PY'
 from pathlib import Path
 import shlex
 import sys
-source, destination, paths_lib, runtime_lib, antigravity_lib_dir = map(Path, sys.argv[1:])
+source, destination, paths_lib, runtime_lib, antigravity_lib_dir, test_bin = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
     "/usr/local/lib/remote-dev/antigravity-paths.sh": shlex.quote(str(paths_lib)),
     "/usr/local/lib/remote-dev/remote-dev-runtime.sh": shlex.quote(str(runtime_lib)),
     "/usr/local/lib/remote-dev/antigravity-runtime": shlex.quote(str(antigravity_lib_dir)),
+    "PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin":
+        f"PATH={shlex.quote(str(test_bin))}:/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin",
 }.items():
     if text.count(old) != 1:
-        raise SystemExit(f"expected one canonical manager path: {old}")
+        raise SystemExit(f"expected one canonical manager fixture anchor: {old}")
     text = text.replace(old, new)
 destination.write_text(text, encoding="utf-8")
 PY
@@ -93,6 +95,21 @@ printf '%s\n' \
 READELF_FIXTURE
 chmod 0755 "$test_bin/readelf"
 
+# This represents an unrelated host installation. The copied manager must use
+# only the fixture path definitions and tools, never this inherited PATH/HOME
+# state.
+ambient_bin="$temporary/ambient-bin"
+ambient_home="$temporary/ambient-home"
+ambient_agy_marker="$temporary/ambient-agy-called"
+mkdir -p "$ambient_bin" "$ambient_home/.local/bin"
+cat >"$ambient_bin/agy" <<EOF_AMBIENT_AGY
+#!/usr/bin/env bash
+: >"$ambient_agy_marker"
+printf '%s\n' '9.9.9'
+EOF_AMBIENT_AGY
+chmod 0755 "$ambient_bin/agy"
+cp -- "$ambient_bin/agy" "$ambient_home/.local/bin/agy"
+
 cat >"$SECURE_SCRIPT" <<'SECURE_FIXTURE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -100,7 +117,8 @@ set -euo pipefail
 SECURE_FIXTURE
 chmod 0755 "$SECURE_SCRIPT"
 
-export PATH="$test_bin:$PATH"
+export HOME="$ambient_home"
+export PATH="$test_bin:$ambient_bin:$PATH"
 export REMOTE_DEV_ROLE=antigravity
 export REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1
 
@@ -266,13 +284,24 @@ test ! -e "$BINARY" || fail "cancelled install created an executable"
 unset REMOTE_DEV_TEST_CURL_MARKER
 
 export REMOTE_DEV_TEST_INSTALLER_FIXTURE="$installer_v1"
+export REMOTE_DEV_TEST_CURL_MARKER="$temporary/reviewed-curl"
 bash "$MANAGER" install --yes >/dev/null
+test -e "$REMOTE_DEV_TEST_CURL_MARKER" || fail "reviewed install did not use the fixture curl"
+unset REMOTE_DEV_TEST_CURL_MARKER
 test -x "$BINARY" || fail "installation did not publish the executable"
 test "$(stat -c '%a' "$BINARY")" = 700 || fail "executable mode is not 700"
 test "$(stat -c '%a' "$MANIFEST")" = 600 || fail "manifest mode is not 600"
 test "$(jq -r '.schema_version' "$MANIFEST")" = 2 || fail "new install did not write manifest schema 2"
+test "$(bash "$MANAGER" path)" = "$BINARY" || fail "manager did not select the fixture executable"
+test "$(sha256sum "$BINARY" | awk '{print $1}')" = "$(sha256sum "$payload_v1" | awk '{print $1}')" \
+  || fail "published executable does not match the reviewed fixture"
+test "$(jq -r '.binary_sha256' "$MANIFEST")" = "$(sha256sum "$payload_v1" | awk '{print $1}')" \
+  || fail "manifest does not identify the reviewed fixture executable"
+test "$(jq -r '.installer_sha256' "$MANIFEST")" = "$(sha256sum "$installer_v1" | awk '{print $1}')" \
+  || fail "manifest does not identify the reviewed fixture installer"
 test "$(bash "$MANAGER" status --menu)" = 'Antigravity: 1.0.0 (official and reviewed)' \
   || fail "reviewed status is incorrect"
+test ! -e "$ambient_agy_marker" || fail "host Antigravity executable affected the fixture"
 
 # The launcher preserves literal arguments, disables vendor self-update, uses the
 # selected project working directory and preserves exit status.
