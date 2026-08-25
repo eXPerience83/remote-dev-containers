@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.machinery
 import importlib.util
 import os
 from pathlib import Path
@@ -18,7 +19,10 @@ SOURCE = Path(
         Path(__file__).with_name("remote-dev-prepare-development-scratch.py"),
     )
 )
-SPEC = importlib.util.spec_from_file_location("remote_dev_development_scratch", SOURCE)
+LOADER = importlib.machinery.SourceFileLoader(
+    "remote_dev_development_scratch", str(SOURCE)
+)
+SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"cannot load scratch preparer: {SOURCE}")
 scratch = importlib.util.module_from_spec(SPEC)
