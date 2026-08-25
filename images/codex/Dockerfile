@@ -165,7 +165,8 @@ RUN --network=none \
       /tmp/test-codex-code-mode-host.py \
       /tmp/test-development-scratch.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
-    && python /tmp/test-development-scratch.py \
+    && REMOTE_DEV_DEVELOPMENT_SCRATCH_SOURCE=/usr/local/bin/remote-dev-prepare-development-scratch \
+      python /tmp/test-development-scratch.py \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
     && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
     && context7_smoke_home="$(mktemp -d)" \

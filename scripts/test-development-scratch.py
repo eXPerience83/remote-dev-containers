@@ -12,7 +12,12 @@ import unittest
 from unittest import mock
 
 
-SOURCE = Path(__file__).with_name("remote-dev-prepare-development-scratch.py")
+SOURCE = Path(
+    os.environ.get(
+        "REMOTE_DEV_DEVELOPMENT_SCRATCH_SOURCE",
+        Path(__file__).with_name("remote-dev-prepare-development-scratch.py"),
+    )
+)
 SPEC = importlib.util.spec_from_file_location("remote_dev_development_scratch", SOURCE)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"cannot load scratch preparer: {SOURCE}")
