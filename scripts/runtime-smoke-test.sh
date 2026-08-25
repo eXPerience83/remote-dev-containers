@@ -163,10 +163,31 @@ for _ in $(seq 1 30); do
       install -d -m 0755 /tmp/remote-dev-doctor-fixture
       printf "%s\n" \
         "#!/usr/bin/env bash" \
-        "echo \"Antigravity: 1.1.8 (update to reviewed 1.1.9 required)\"" \
-        "exit 3" \
+        "case \"\${1:-}\" in" \
+        "  verify)" \
+        "    if [[ \"\${REMOTE_DEV_TEST_ANTIGRAVITY_VERIFY_FAIL:-0}\" = 1 ]]; then" \
+        "      echo \"Antigravity runtime full integrity: FAILED (synthetic)\" >&2" \
+        "      exit 3" \
+        "    fi" \
+        "    echo \"Antigravity runtime full integrity: OK (1.1.8)\"" \
+        "    ;;" \
+        "  status)" \
+        "    echo \"Antigravity: 1.1.8 (update to reviewed 1.1.9 required)\"" \
+        "    exit 3" \
+        "    ;;" \
+        "  *) exit 2 ;;" \
+        "esac" \
         > /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+      printf "%s\n" \
+        "#!/usr/bin/env bash" \
+        "if [[ \"\${REMOTE_DEV_TEST_ANTIGRAVITY_VERIFY_TIMEOUT:-0}\" = 1 ]]; then exit 124; fi" \
+        "[[ \"\${1:-}\" = --signal=TERM ]] && shift" \
+        "[[ \"\${1:-}\" = --kill-after=5s ]] && shift" \
+        "[[ \"\${1:-}\" = 60s ]] && shift" \
+        "exec \"\$@\"" \
+        > /tmp/remote-dev-doctor-fixture/timeout
       chmod 0755 /tmp/remote-dev-doctor-fixture/remote-dev-antigravity
+      chmod 0755 /tmp/remote-dev-doctor-fixture/timeout
     '
     antigravity_doctor_output="$(
       docker exec \
@@ -176,8 +197,29 @@ for _ in $(seq 1 30); do
     )"
     assert_output_lines 'experimental Antigravity diagnostics' "$antigravity_doctor_output" \
       'Role: antigravity' \
+      'Antigravity runtime full integrity: OK (1.1.8)' \
       'Antigravity: 1.1.8 (update to reviewed 1.1.9 required)' \
       'Antigravity support status: experimental validation only; not yet a supported integration.'
+
+    antigravity_doctor_failure="$(
+      docker exec \
+        --env REMOTE_DEV_ROLE=antigravity \
+        --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+        --env REMOTE_DEV_TEST_ANTIGRAVITY_VERIFY_FAIL=1 \
+        "$name" sh -c 'PATH=/tmp/remote-dev-doctor-fixture:$PATH remote-dev-doctor' 2>&1
+    )" && fail "Antigravity diagnostics accepted failed full integrity"
+    assert_output_lines 'failed Antigravity integrity diagnostics' "$antigravity_doctor_failure" \
+      'Antigravity runtime full integrity: unavailable (exit 3)'
+
+    antigravity_doctor_timeout="$(
+      docker exec \
+        --env REMOTE_DEV_ROLE=antigravity \
+        --env REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 \
+        --env REMOTE_DEV_TEST_ANTIGRAVITY_VERIFY_TIMEOUT=1 \
+        "$name" sh -c 'PATH=/tmp/remote-dev-doctor-fixture:$PATH remote-dev-doctor' 2>&1
+    )" && fail "Antigravity diagnostics accepted a full-integrity timeout"
+    assert_output_lines 'timed-out Antigravity integrity diagnostics' "$antigravity_doctor_timeout" \
+      'Antigravity runtime full integrity: unavailable (exit 124)'
 
     docker run -d \
       --name "$launcher_name" \

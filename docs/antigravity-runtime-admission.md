@@ -12,7 +12,7 @@ This document defines the runtime availability and integrity model implemented u
 
 A compatible Antigravity release may be installed or updated from Google's fixed official installer endpoint without waiting for a new Remote Dev image. Committed inspection evidence describes the exact version already reviewed by Remote Dev; it is not an allowlist and absence from it is not a revocation.
 
-Normal container startup, status checks and agent launches never contact the installer endpoint and never update the executable. Status verifies local file identity and performs a bounded `--version` check with a private temporary home and vendor auto-update disabled. `AGY_CLI_DISABLE_AUTO_UPDATE=true` remains mandatory for normal Antigravity sessions.
+Normal container startup, status checks, full verification and agent launches never contact the installer endpoint and never update the executable. Informational `status` and `status --menu` validate the executable/manifest structure and review state without hashing the complete executable or running vendor code. Immediately before a real session, Remote Dev performs one mandatory full SHA-256 verification of the canonical executable against its private manifest. `remote-dev-antigravity verify` performs the same full offline integrity check explicitly, and Run diagnostics invokes it before reporting lightweight status. `AGY_CLI_DISABLE_AUTO_UPDATE=true` remains mandatory for normal Antigravity sessions.
 
 ## Explicit installation and update
 
@@ -32,10 +32,10 @@ An incompatible upstream contract is rejected. The manager does not relax valida
 
 ## Runtime states
 
-The menu and diagnostics expose only bounded, non-secret state:
+The menu and diagnostics expose only bounded, non-secret state. Menu status is informational; a successful full verification is still required immediately before execution:
 
-- **Official and reviewed**: the executable and private manifest are intact and match the committed Remote Dev inspection evidence.
-- **Official source; Remote Dev review pending**: the executable was admitted through the explicit official-origin flow and still matches its private manifest, but the exact installer/payload is absent from current image evidence. It remains runnable.
+- **Official and reviewed**: the structurally valid private manifest matches the committed Remote Dev inspection evidence. Full executable integrity is checked before launch and by explicit verification/diagnostics.
+- **Official source; Remote Dev review pending**: the structurally valid private manifest records a payload admitted through the explicit official-origin flow, but the exact installer/payload is absent from current image evidence. It remains runnable only after the mandatory pre-execution full verification succeeds.
 - **Damaged or locally modified**: the executable or manifest is missing, symlinked, permission-invalid, malformed or identity-mismatched. Launch is blocked until an explicit update repairs it.
 
 “Official source; review pending” records the controlled download path and local manifest integrity. It is not a claim of cryptographic Google signing, Remote Dev certification, inclusion in the image SBOM or coverage by Apache-2.0.

@@ -59,12 +59,19 @@ owned_regular_file_matches() {
   [[ -f "$path" && ! -L "$path" && "$(stat -c '%u' "$path" 2>/dev/null)" == "$(current_uid)" ]]
 }
 
+file_metadata_matches() {
+  local path="$1"
+  local trusted_size="$2"
+  owned_regular_file_matches "$path" || return 1
+  [[ -x "$path" ]] || return 1
+  [[ "$(stat -c '%s' "$path" 2>/dev/null)" == "$trusted_size" ]] || return 1
+}
+
 file_identity_matches() {
   local path="$1"
   local trusted_size="$2"
   local trusted_sha="$3"
-  owned_regular_file_matches "$path" || return 1
-  [[ "$(stat -c '%s' "$path" 2>/dev/null)" == "$trusted_size" ]] || return 1
+  file_metadata_matches "$path" "$trusted_size" || return 1
   [[ "$(sha256_file "$path" 2>/dev/null)" == "$trusted_sha" ]]
 }
 

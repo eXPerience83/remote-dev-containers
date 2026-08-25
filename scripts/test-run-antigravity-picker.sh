@@ -49,7 +49,7 @@ cat >"$manager" <<MANAGER
 set -euo pipefail
 case "\${1:-}" in
   path) printf '%s\\n' '$binary' ;;
-  status) printf '%s\\n' '1.1.10' ;;
+  verify) printf '%s\\n' 'Antigravity runtime full integrity: OK (1.1.10)' ;;
   *) exit 2 ;;
 esac
 MANAGER

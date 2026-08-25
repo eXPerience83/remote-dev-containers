@@ -10,9 +10,6 @@ cleanup() {
   if [[ -n "$cleanup_root" && -d "$cleanup_root" ]]; then
     rm -rf -- "$cleanup_root"
   fi
-  if [[ -n "$verification_root" && -d "$verification_root" ]]; then
-    rm -rf -- "$verification_root"
-  fi
 }
 trap cleanup EXIT
 trap 'cleanup; exit 130' INT
@@ -20,12 +17,13 @@ trap 'cleanup; exit 143' TERM
 
 usage() {
   cat <<'USAGE'
-Usage: remote-dev-antigravity <install|update|status|path> [--yes] [--menu]
+Usage: remote-dev-antigravity <install|update|status|verify|path> [--yes] [--menu]
 
 Commands:
   install   Install the current compatible Antigravity CLI from Google's official installer.
   update    Explicitly replace the current installation with the current compatible official package.
-  status    Verify the local executable/manifest and report its review state.
+  status    Inspect local executable/manifest structure and report its review state.
+  verify    Fully verify the local executable against its private manifest.
   path      Print the canonical executable path.
 
 Normal startup never downloads or updates Antigravity. Compatible official-source

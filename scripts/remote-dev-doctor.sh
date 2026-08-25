@@ -187,6 +187,15 @@ if [[ "$role" == codex ]]; then
   fi
 elif [[ "$role" == antigravity ]]; then
   echo
+  antigravity_verify_code=0
+  antigravity_verify_command=(timeout --signal=TERM --kill-after=5s 60s remote-dev-antigravity verify)
+  if "${antigravity_verify_command[@]}"; then
+    :
+  else
+    antigravity_verify_code=$?
+    echo "Antigravity runtime full integrity: unavailable (exit $antigravity_verify_code)"
+    status=1
+  fi
   antigravity_status_code=0
   antigravity_status="$(remote-dev-antigravity status --menu 2>&1)" || antigravity_status_code=$?
   echo "$antigravity_status"

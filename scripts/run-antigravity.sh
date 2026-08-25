@@ -44,16 +44,15 @@ EOF
   exit 1
 fi
 
-# Verify the canonical executable against its private manifest before a real
-# session. The bounded version check uses a temporary HOME, disables vendor
-# auto-update and never contacts the installer endpoint.
-status_output=""
-status_result=0
-status_output="$("$manager" status 2>&1)" || status_result=$?
-if (( status_result != 0 )); then
-  echo "ERROR: Antigravity runtime verification failed: $status_output" >&2
+# Fully verify the canonical executable once against its private manifest
+# before a real session. Verification is offline and never executes vendor code.
+verify_output=""
+verify_result=0
+verify_output="$("$manager" verify 2>&1)" || verify_result=$?
+if (( verify_result != 0 )); then
+  echo "ERROR: Antigravity runtime verification failed: $verify_output" >&2
   echo "Run remote-dev-update-antigravity explicitly to repair or replace the installation." >&2
-  exit "$status_result"
+  exit "$verify_result"
 fi
 
 workspace="$(remote_dev_workspace_root)" || exit $?
