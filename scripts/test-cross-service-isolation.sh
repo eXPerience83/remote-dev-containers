@@ -1720,9 +1720,10 @@ wait_for_health_command "$codex_name"
 antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
 antigravity_scratch_measurement="$(measure_canary \
   "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
+docker_exec "$codex_name" rm -rf -- /workspace/.remote-dev-tmp >/dev/null 2>&1 \
+  || fail "failed to remove Codex development scratch through the owned fixture"
 remove_owned_container "$codex_name" "$codex_id" \
   || fail "failed to remove the owned Codex fixture for scratch recreation"
-rm -rf -- "$test_root/codex/workspace/.remote-dev-tmp"
 start_codex
 wait_for_health_command "$codex_name"
 assert_development_scratch_environment "$codex_name" Codex
