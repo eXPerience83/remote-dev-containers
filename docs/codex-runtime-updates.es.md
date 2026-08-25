@@ -149,10 +149,16 @@ El árbol canónico de datos del host añade un directorio exclusivo de Codex:
 state/codex/runtime/
 ```
 
-En el ejemplo genérico debe crearse junto con el resto de directorios de estado de Codex antes de ejecutar el preflight. En el ejemplo de TrueNAS la ruta canónica es:
+En el ejemplo genérico debe crearse por separado como `root:root` con modo `0700` antes de ejecutar el preflight:
+
+```bash
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
+```
+
+Para corregir un directorio de runtime vacío existente, usa `sudo chown root:root` y `sudo chmod 0700` sólo sobre ese directorio exacto; no cambies recursivamente la propiedad de otro estado de Codex ni del workspace. En el ejemplo de TrueNAS la ruta canónica es:
 
 ```text
 /mnt/Pool1/remote-dev/state/codex/runtime
 ```
 
-El preflight del host rechaza symlinks en esta ruta. Al arrancar el contenedor sólo se acepta el target canónico del runtime de Codex y se rechazan componentes de ruta que sean symlinks o no sean directorios antes de aplicar el endurecimiento recursivo de permisos privados.
+El preflight del host rechaza symlinks en esta ruta, pero todavía no valida su propietario. El gestor de runtime exige que el directorio y el estado admitido pertenezcan a su EUID del contenedor (root en el servicio Codex), y al arrancar el contenedor sólo se acepta el target canónico del runtime de Codex y se rechazan componentes de ruta que sean symlinks o no sean directorios antes de aplicar el endurecimiento recursivo de permisos privados.

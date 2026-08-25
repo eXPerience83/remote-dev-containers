@@ -132,7 +132,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
 - `autonomous` es el valor predeterminado y se traduce a `--ask-for-approval never`.
-- `guarded` se traduce a `--ask-for-approval untrusted`.
+- `guarded` marca como no confiable solo el proyecto activo durante ese lanzamiento. Codex pide aprobación para los comandos salvo que una regla explícita de exec-policy los permita; `on-request` en un proyecto confiable no es el modo guarded de Remote Dev.
 
 El menú separa **Start Codex** y **Resume a Codex session**, añade **Projects...** y mantiene **Approval mode for next launch**. Start y Resume pasan a Codex el proyecto seleccionado como directorio de trabajo, de modo que Codex arranca en `/workspace/<proyecto>` y lo utiliza como directorio predeterminado para detectar el repositorio y localizar `AGENTS.md`. Esta selección del directorio de trabajo no restringe el acceso al sistema de archivos a ese hijo; los proyectos hermanos del mismo `/workspace` montado siguen siendo accesibles. El selector de aprobación permite conservar el modo configurado o elegir autonomous/guarded únicamente para el siguiente inicio o reanudación. La selección puntual se consume al arrancar Codex y después el menú vuelve automáticamente al valor del despliegue. Nunca reescribe la configuración permanente.
 
@@ -161,6 +161,10 @@ El paquete opcional se guarda fuera de `CODEX_HOME` en un montaje exclusivo de e
 El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher añade únicamente su propio secreto de contraseña en modo solo lectura.
 
 La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
+
+Los contenedores de producción del launcher, Codex y Antigravity usan un sistema de archivos raíz de solo lectura, `no-new-privileges`, `cap_drop: [ALL]`, ningún grupo suplementario, mounts privados por rol y límites PID explícitos (`64` para el launcher y `1024` para cada agente). El launcher arranca como root únicamente para leer una contraseña opcional protegida y respaldada por archivo, recibe solo `DAC_READ_SEARCH`, `SETGID` y `SETUID`, y después baja permanentemente a UID/GID `65532` con cero capacidades efectivas. `DAC_READ_SEARCH` es necesario porque Compose conserva el propietario del host de un secreto basado en archivo con modo `0600`. Los terminales de agente root reciben solo `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` y `SETUID`; estas capacidades mantienen la propiedad y el endurecimiento de los bind mounts privados y la ejecución acotada de candidatos como UID/GID `65534`, no acceso al host.
+
+Cada rol tiene tmpfs transitorios y privados para `/tmp` y `/run`. `/tmp` usa `noexec,nosuid,nodev`; `/run` de Codex permite deliberadamente ejecución para el staging acotado de actualizaciones de Codex y del login de dispositivo de Context7. Las cachés de npm y uv usan rutas transitorias bajo `/tmp`. El contenido de estos tmpfs, incluidos los sockets tmux, desaparece al recrear el contenedor; solo persisten los mounts estrechos ya existentes de cada rol. El Compose genérico mantiene secretos respaldados por archivo bajo `/run/secrets`, mientras que la referencia TrueNAS conserva su modo de contraseñas por variables de entorno.
 
 No añadas modo privilegiado, `SYS_ADMIN`, perfiles sin restricciones, el socket Docker ni montajes amplios para intentar habilitar un sandbox anidado.
 
@@ -193,7 +197,7 @@ REMOTE_DEV_DATA_ROOT/
 
 El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
+`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos; el preflight actual no valida el propietario del directorio de runtime. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
 No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 
@@ -215,12 +219,20 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex/proyecto-ejemplo \
-  data/state/codex/{agent,runtime,gh,git,ssh} \
+  data/state/codex/{agent,gh,git,ssh} \
   data/secrets/codex
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
 printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
 make preflight
 ./scripts/build-local.sh
+```
+
+Para corregir un directorio de runtime vacío existente con propietario incorrecto, ejecuta únicamente:
+
+```bash
+sudo chown root:root data/state/codex/runtime
+sudo chmod 0700 data/state/codex/runtime
 ```
 
 Para una raíz personalizada, define `REMOTE_DEV_DATA_ROOT=/ruta/absoluta/del/host` en `.env` y ejecuta `make preflight DATA_ROOT=/ruta/absoluta/del/host` antes de desplegar. También puedes dejar inicialmente vacía `data/workspaces/codex` y crear el primer proyecto desde **Projects...** después de arrancar el servicio.

@@ -147,10 +147,16 @@ The canonical host data root adds one Codex-only directory:
 state/codex/runtime/
 ```
 
-For the generic example, create it together with the other Codex state directories before running the preflight. For the TrueNAS example, the canonical host path is:
+For the generic example, create it separately as `root:root` mode `0700` before running the preflight:
+
+```bash
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
+```
+
+To correct an existing empty runtime directory, use `sudo chown root:root` and `sudo chmod 0700` on that exact directory only; do not recursively change other Codex state or workspace ownership. For the TrueNAS example, the canonical host path is:
 
 ```text
 /mnt/Pool1/remote-dev/state/codex/runtime
 ```
 
-The host-side preflight rejects symlinks in this path. Container startup accepts only the canonical Codex runtime target and rejects symlinked/non-directory runtime path components before applying recursive private-mode hardening.
+The host-side preflight rejects symlinks in this path but does not yet validate its owner. The runtime manager requires the directory and admitted state to be owned by its container EUID (root in the Codex service), and container startup rejects symlinked/non-directory runtime path components before applying recursive private-mode hardening.

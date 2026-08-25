@@ -147,7 +147,7 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 ```
 
 - `autonomous` is the default and maps to `--ask-for-approval never`.
-- `guarded` maps to `--ask-for-approval untrusted`.
+- `guarded` marks only the active project untrusted for that launch. Codex then prompts for commands unless an explicit exec-policy rule allows them; plain `on-request` in a trusted project is not Remote Dev guarded mode.
 
 The menu has separate **Start Codex** and **Resume a Codex session** actions plus an **Approval mode for next launch** selector. Start and Resume pass the selected project to Codex with its working-directory option, so Codex starts in `/workspace/<project>` and uses it as the default working directory for repository discovery and `AGENTS.md` lookup. This working-directory selection does not restrict filesystem access to that child; sibling projects under the same mounted `/workspace` remain reachable. The approval selector can keep the configured mode or choose autonomous/guarded for the next start or resume only. A one-launch override is consumed when Codex starts and the menu then returns automatically to the deployment setting. It never rewrites the permanent configuration.
 
@@ -173,11 +173,15 @@ The optional package is stored outside `CODEX_HOME` under the Codex-only runtime
 
 ### Isolation on TrueNAS
 
-The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode uses `--ask-for-approval untrusted`. Every supported menu, resume and direct Codex path uses that same resolver.
+The default image does not install the system Bubblewrap package. The supported Codex command launcher explicitly disables Codex's unsupported nested sandbox with `--sandbox danger-full-access`. Autonomous mode uses `--ask-for-approval never`; guarded mode applies launch-scoped untrusted project trust so commands prompt unless an explicit exec-policy rule allows them. Every supported menu, resume and direct Codex path uses that same resolver. Approval prompts are not a sandbox; the outer container remains the isolation boundary.
 
 Here, `danger-full-access` describes only the Codex inner sandbox. It does not grant Docker privileges or host access. The outer Docker container and its narrow mounts are the supported security boundary. Approval prompts are not a sandbox and do not protect files or credentials already mounted into the service.
 
 Autonomous mode means Codex may read, modify or delete anything mounted into its service and may use credentials available there without asking first. It does not add access beyond the existing container mounts, network and credentials. Guarded mode adds confirmation friction but does not provide filesystem isolation.
+
+The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts as root only to read an optional protected file-backed password, receives only `DAC_READ_SEARCH`, `SETGID` and `SETUID`, then permanently becomes UID/GID `65532` with zero effective capabilities. `DAC_READ_SEARCH` is needed because Compose preserves the host ownership of a mode-`0600` file-backed secret. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
+
+Each role has private transient `/tmp` and `/run` tmpfs mounts. `/tmp` is `noexec,nosuid,nodev`; Codex `/run` deliberately permits execution for bounded Codex update and Context7 device-login staging. npm and uv caches use transient paths below `/tmp`. These tmpfs contents, including tmux sockets, disappear on recreation; only the existing narrow role mounts persist. Generic Compose keeps file-backed secrets below `/run/secrets`, while the TrueNAS reference keeps its environment-backed password mode.
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
@@ -210,7 +214,7 @@ REMOTE_DEV_DATA_ROOT/
 
 The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
+`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions; current preflight does not validate the runtime directory owner. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
 There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
@@ -251,12 +255,20 @@ The default launcher navigates to each agent's own authenticated endpoint and do
 cp .env.example .env
 mkdir -p \
   data/workspaces/codex/example-project \
-  data/state/codex/{agent,runtime,gh,git,ssh} \
+  data/state/codex/{agent,gh,git,ssh} \
   data/secrets/codex
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime
 printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
 chmod 600 data/secrets/codex/web_password.txt
 make preflight
 ./scripts/build-local.sh
+```
+
+To correct an existing empty runtime directory with the wrong owner, run only:
+
+```bash
+sudo chown root:root data/state/codex/runtime
+sudo chmod 0700 data/state/codex/runtime
 ```
 
 For a custom root, set `REMOTE_DEV_DATA_ROOT=/absolute/host/path` in `.env` and run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.

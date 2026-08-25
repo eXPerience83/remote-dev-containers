@@ -18,6 +18,37 @@ AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
 BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
+ANTIGRAVITY_CONFIG_TARGET = "/root/.gemini/config"
+ANTIGRAVITY_VENDOR_TARGET = "/root/.gemini/antigravity-cli"
+AGENT_CAPABILITIES = frozenset(
+    ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID")
+)
+ROLE_CAPABILITIES = {
+    "launcher": frozenset(("DAC_READ_SEARCH", "SETGID", "SETUID")),
+    "codex": AGENT_CAPABILITIES,
+    "antigravity": AGENT_CAPABILITIES,
+}
+ROLE_PIDS_LIMITS = {"launcher": 64, "codex": 1024, "antigravity": 1024}
+ROLE_TMPFS = {
+    "launcher": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+            "/run:rw,noexec,nosuid,nodev,size=16m,mode=755",
+        )
+    ),
+    "codex": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
+            "/run:rw,exec,nosuid,nodev,size=1536m,mode=755",
+        )
+    ),
+    "antigravity": frozenset(
+        (
+            "/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777",
+            "/run:rw,noexec,nosuid,nodev,size=64m,mode=755",
+        )
+    ),
+}
 
 
 def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -154,6 +185,62 @@ def validate_mount_safety(service: dict[str, object], context: str) -> None:
         require("control" not in lowered_target, f"{context} control mount {target}")
 
 
+def rendered_string_list(service: dict[str, object], key: str, context: str) -> list[str]:
+    value = service.get(key)
+    require(isinstance(value, list), f"{context} {key} must be a list")
+    require(
+        all(isinstance(item, str) for item in value),
+        f"{context} {key} entries must be strings",
+    )
+    return value
+
+
+def validate_service_hardening(
+    service: dict[str, object], role: str, context: str
+) -> None:
+    require(service.get("user") == "0:0", f"{context} must start as root")
+    require(service.get("read_only") is True, f"{context} root filesystem is writable")
+    cap_drop = rendered_string_list(service, "cap_drop", context)
+    require(cap_drop == ["ALL"], f"{context} cap_drop must be exactly ALL")
+    cap_add = rendered_string_list(service, "cap_add", context)
+    require(
+        len(cap_add) == len(set(cap_add)) and frozenset(cap_add) == ROLE_CAPABILITIES[role],
+        f"{context} cap_add differs from the reviewed role whitelist",
+    )
+    require(
+        service.get("pids_limit") == ROLE_PIDS_LIMITS[role],
+        f"{context} pids_limit differs from the reviewed role ceiling",
+    )
+    tmpfs = rendered_string_list(service, "tmpfs", context)
+    require(
+        len(tmpfs) == len(set(tmpfs)) and frozenset(tmpfs) == ROLE_TMPFS[role],
+        f"{context} tmpfs contract differs from the reviewed role contract",
+    )
+    security_opt = rendered_string_list(service, "security_opt", context)
+    require(
+        security_opt == ["no-new-privileges:true"],
+        f"{context} security options differ from no-new-privileges",
+    )
+    group_add = service.get("group_add", [])
+    require(isinstance(group_add, list), f"{context} group_add must be a list")
+    require(group_add == [], f"{context} configures supplementary groups")
+
+
+def validate_private_ipc_namespace(service: dict[str, object], context: str) -> None:
+    ipc = service.get("ipc")
+    require(isinstance(ipc, str), f"{context} IPC mode shape")
+    require(ipc == "private", f"{context} IPC namespace is not private")
+
+
+def validate_private_pid_and_network_namespaces(service: dict[str, object], context: str) -> None:
+    require(service.get("pid") is None, f"{context} configures a PID namespace")
+    require(service.get("network_mode") is None, f"{context} configures a network namespace")
+
+
+def validate_absent_volumes_from(service: dict[str, object], context: str) -> None:
+    require("volumes_from" not in service, f"{context} configures volumes_from")
+
+
 def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
     path = Path(path_value)
     if not path.is_absolute():
@@ -202,6 +289,14 @@ def validate(path: Path, config: dict[str, object]) -> None:
         else:
             require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
             require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
+        require(
+            environment.get("NPM_CONFIG_CACHE") == "/tmp/remote-dev-npm-cache",
+            f"{path}: {name} transient npm cache",
+        )
+        require(
+            environment.get("UV_CACHE_DIR") == "/tmp/remote-dev-uv-cache",
+            f"{path}: {name} transient uv cache",
+        )
 
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 
@@ -252,11 +347,43 @@ def validate(path: Path, config: dict[str, object]) -> None:
     antigravity_sources = set(mount_sources(antigravity))
     require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
 
+    config_mounts = [
+        mount
+        for mount in rendered_volumes(antigravity)
+        if mount.get("target") == ANTIGRAVITY_CONFIG_TARGET
+    ]
+    require(len(config_mounts) == 1, f"{path}: exact Antigravity config mount missing")
+    config_mount = config_mounts[0]
+    require(config_mount.get("type") == "bind", f"{path}: Antigravity config is not a bind")
+    require(
+        str(config_mount.get("source", "")).endswith("/state/antigravity/config"),
+        f"{path}: Antigravity config source is outside its role-private state",
+    )
+    bind_options = config_mount.get("bind")
+    require(isinstance(bind_options, dict), f"{path}: Antigravity config bind options missing")
+    require(
+        bind_options.get("create_host_path") is not True,
+        f"{path}: Antigravity config enables automatic host-path creation",
+    )
+    require(config_mount.get("read_only") is not True, f"{path}: Antigravity config is not writable")
+    require(
+        ANTIGRAVITY_CONFIG_TARGET not in mount_targets(launcher)
+        and ANTIGRAVITY_CONFIG_TARGET not in mount_targets(codex),
+        f"{path}: Antigravity config leaked to another role",
+    )
+    require(
+        len(mount_sources(antigravity, ANTIGRAVITY_VENDOR_TARGET)) == 1
+        and mount_sources(antigravity, ANTIGRAVITY_VENDOR_TARGET)
+        != mount_sources(antigravity, ANTIGRAVITY_CONFIG_TARGET),
+        f"{path}: Antigravity vendor and project config state are not separate",
+    )
+
     for name, service in services.items():
-        require(service.get("privileged") is not True, f"{path}: {name} privileged")
-        require(not service.get("cap_add"), f"{path}: {name} adds capabilities")
-        require(service.get("network_mode") != "host", f"{path}: {name} host network")
-        require("no-new-privileges:true" in service.get("security_opt", []), f"{path}: {name} lost no-new-privileges")
+        require(service.get("privileged", False) is False, f"{path}: {name} privileged")
+        validate_private_pid_and_network_namespaces(service, f"{path}: {name}")
+        validate_absent_volumes_from(service, f"{path}: {name}")
+        validate_service_hardening(service, name, f"{path}: {name}")
+        validate_private_ipc_namespace(service, f"{path}: {name}")
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {name} environment")
         require("REMOTE_DEV_DATA_ROOT" not in environment, f"{path}: {name} received parent data root")
@@ -330,6 +457,10 @@ def validate_auth_override_separation(env_path: Path) -> None:
         )
     require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
     launcher = hardened["services"]["launcher"]
+    validate_service_hardening(launcher, "launcher", "launcher auth override")
+    validate_private_ipc_namespace(launcher, "launcher auth override")
+    validate_private_pid_and_network_namespaces(launcher, "launcher auth override")
+    validate_absent_volumes_from(launcher, "launcher auth override")
     require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
     require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
@@ -357,8 +488,52 @@ def validate_rendered_volume_shapes() -> None:
         raise AssertionError("broad rendered volume source was accepted")
 
 
+def validate_rendered_ipc_modes() -> None:
+    for ipc in (None, "host", "shareable", "service:codex", "container:fixture", ["private"]):
+        try:
+            validate_private_ipc_namespace({"ipc": ipc}, "regression")
+        except AssertionError:
+            continue
+        raise AssertionError(f"unsafe rendered IPC mode was accepted: {ipc!r}")
+    validate_private_ipc_namespace({"ipc": "private"}, "regression")
+
+
+def validate_rendered_pid_and_network_modes() -> None:
+    for key, modes in {
+        "pid": ("host", "service:codex", "container:fixture", ["private"]),
+        "network_mode": ("host", "service:codex", "container:fixture", ["none"]),
+    }.items():
+        for mode in modes:
+            try:
+                validate_private_pid_and_network_namespaces({key: mode}, "regression")
+            except AssertionError:
+                continue
+            raise AssertionError(f"unsafe rendered {key} was accepted: {mode!r}")
+    validate_private_pid_and_network_namespaces({}, "regression")
+
+
+def validate_rendered_volumes_from() -> None:
+    for volumes_from in (
+        ["codex"],
+        ["service:codex"],
+        ["container:fixture"],
+        None,
+        "codex",
+        {"service": "codex"},
+    ):
+        try:
+            validate_absent_volumes_from({"volumes_from": volumes_from}, "regression")
+        except AssertionError:
+            continue
+        raise AssertionError(f"rendered volumes_from was accepted: {volumes_from!r}")
+    validate_absent_volumes_from({}, "regression")
+
+
 def main() -> int:
     validate_rendered_volume_shapes()
+    validate_rendered_ipc_modes()
+    validate_rendered_pid_and_network_modes()
+    validate_rendered_volumes_from()
     validate_truenas_launcher_password_free_source()
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)

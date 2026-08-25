@@ -115,9 +115,40 @@ Official documentation places persistent CLI settings at:
 ~/.gemini/antigravity-cli/settings.json
 ```
 
+### Project configuration path follow-up (2026-08-24)
+
+The [official public Antigravity CLI changelog for version
+1.0.12](https://github.com/google-antigravity/antigravity-cli/blob/ee5766c17fce8f27ea85185f97183575058218ec/CHANGELOG.md#1012)
+identifies project-specific configuration below:
+
+```text
+~/.gemini/config/projects/
+```
+
+Historical exact-candidate TrueNAS validation of
+`030396a581187c44c847cbe4b50d71e50d8f9ba6` observed an explicitly admitted
+Antigravity 1.1.19 session attempt to create `/root/.gemini/config/projects`;
+it failed because the hardened container root was read-only and no narrow
+writable mount covered that path. The subsequent PR fix adds the dedicated
+Antigravity-private `state/antigravity/config` mount at
+`/root/.gemini/config`, separate from `/root/.gemini/antigravity-cli` and
+without making all of `/root/.gemini` writable. Exact-candidate TrueNAS
+validation completed on 2026-08-25 for source revision
+`15df3c3851ffabdc568ce8d2724424a4577f313a` and immutable image digest
+`sha256:f22727a9976f4dfde90d3e40d5d333eaf0e7727f860312bf5adaef73678f118e`.
+It confirmed the dedicated bind is writable, `/root/.gemini/config/projects`
+can be created while the container root remains read-only, and a real
+Antigravity 1.1.19 conversation can start and later continue successfully.
+
+This path-topology follow-up is not a completed installer or binary review of
+1.1.19 and does not change its truthful `official source; Remote Dev review
+pending` status. The exact artifact evidence and inspection date above remain
+the reviewed evidence for the version recorded there.
+
 Authentication uses the official client and Google Sign-In, including a remote/SSH authorization URL flow. Credentials, histories, settings, updater files and optional plugins must remain inside the Antigravity service's private state mounts. Remote Dev must not inspect, print, transform, share or reuse those credentials.
 
-Real authentication and exact post-login state paths remain manual TrueNAS validation items; CI deliberately performs no account login.
+Other real authentication and post-login state paths remain manual TrueNAS
+validation items; CI deliberately performs no account login.
 
 ## Distribution decision
 

@@ -110,15 +110,21 @@ if [[ "${1:-}" == --print-policy ]]; then
   fi
   case "$mode" in
     autonomous) policy=never ;;
-    guarded) policy=untrusted ;;
+    guarded) policy=trust-derived ;;
     *) exit 2 ;;
   esac
   printf '%s\n' \
     'Inner sandbox: disabled explicitly' \
     'Isolation boundary: outer container' \
-    "Codex approval mode: $mode" \
-    "Codex approval policy: $policy" \
-    "Mode source: $source"
+    "Codex approval mode: $mode"
+  if [[ "$mode" == guarded ]]; then
+    printf '%s\n' \
+      'Project trust: untrusted (launch-scoped)' \
+      'Approval behavior: prompt for commands except explicit exec-policy allows'
+  else
+    printf '%s\n' "Codex approval policy: $policy"
+  fi
+  printf '%s\n' "Mode source: $source"
   exit 0
 fi
 

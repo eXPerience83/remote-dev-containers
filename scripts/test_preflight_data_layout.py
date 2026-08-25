@@ -25,6 +25,7 @@ ANTIGRAVITY_DIRECTORY_SUFFIXES = (
     "state/antigravity/bin",
     "state/antigravity/runtime",
     "state/antigravity/vendor",
+    "state/antigravity/config",
     "state/antigravity/gh",
     "state/antigravity/git",
     "state/antigravity/ssh",
@@ -94,7 +95,23 @@ def validate_environment_mode(root: Path) -> None:
     require(missing_antigravity.returncode == 1, "enabled Antigravity layout must exist")
     require("workspaces/antigravity" in missing_antigravity.stderr, missing_antigravity.stderr)
 
-    create_directories(root, ANTIGRAVITY_DIRECTORY_SUFFIXES)
+    antigravity_config_suffix = "state/antigravity/config"
+    create_directories(
+        root,
+        tuple(
+            suffix
+            for suffix in ANTIGRAVITY_DIRECTORY_SUFFIXES
+            if suffix != antigravity_config_suffix
+        ),
+    )
+    missing_config = run_preflight(root, include_antigravity=True)
+    require(missing_config.returncode == 1, "missing Antigravity config state must fail")
+    require(
+        f"required directory is missing: {root / antigravity_config_suffix}"
+        in missing_config.stderr,
+        missing_config.stderr,
+    )
+    (root / antigravity_config_suffix).mkdir()
     complete = run_preflight(root, include_antigravity=True)
     require(complete.returncode == 0, complete.stderr)
     require(
@@ -189,6 +206,15 @@ def validate_symlinks(root: Path, temporary_directory: str) -> None:
     require("must not be a symlink" in final_symlink.stderr, final_symlink.stderr)
     antigravity_vendor.unlink()
     antigravity_vendor.mkdir()
+
+    antigravity_config = root / "state/antigravity/config"
+    antigravity_config.rmdir()
+    antigravity_config.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
+    config_symlink = run_preflight(root, include_antigravity=True)
+    require(config_symlink.returncode == 1, "symlinked Antigravity config directory must fail")
+    require("must not be a symlink" in config_symlink.stderr, config_symlink.stderr)
+    antigravity_config.unlink()
+    antigravity_config.mkdir()
 
     outside_secret_directory = Path(temporary_directory) / "outside-secrets/codex"
     outside_secret_directory.mkdir(parents=True)

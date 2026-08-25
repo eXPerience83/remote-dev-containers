@@ -61,31 +61,55 @@ Never print password environment values or credential-file contents.
 
 ## Verify and pin one complete release unit
 
-Pull the public AMD64 edge tag:
+Choose one channel reference for the whole validation. The normal integrated
+path uses `edge-amd64`:
 
 ```bash
-sudo docker pull ghcr.io/experience83/remote-dev:edge-amd64
+validation_image=ghcr.io/experience83/remote-dev:edge-amd64
+expected_revision=""
 ```
 
-Read and validate the immutable source revision embedded in that exact image:
+For the exact pre-merge #42 gate, first publish the exact current PR head using
+the existing owner-authorized `/publish-candidate <full-head-sha>` workflow;
+do not publish a candidate as part of an ordinary validation run. Then select
+`ghcr.io/experience83/remote-dev:dev-amd64` instead, and record the published
+full PR head as `expected_revision`. That candidate's embedded revision must
+equal `expected_revision` before proceeding.
 
 ```bash
+# Exact pre-merge #42 candidate only: replace with the published full PR head.
+validation_image=ghcr.io/experience83/remote-dev:dev-amd64
+expected_revision="REPLACE_WITH_PUBLISHED_FULL_PR_HEAD"
+```
+
+Pull the selected reference and read its embedded immutable source revision:
+
+```bash
+sudo docker pull "$validation_image"
+
 release_revision="$(
-  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+  sudo docker image inspect "$validation_image" \
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
 case "$release_revision" in
   [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
   *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
 esac
+if test -n "$expected_revision" && test "$release_revision" != "$expected_revision"; then
+  echo "Selected image does not contain the expected candidate revision" >&2
+  exit 1
+fi
 printf 'release_revision=%s\n' "$release_revision"
 ```
+
+For the #42 candidate path, compare `release_revision` with the recorded
+`expected_revision` exactly; do not accept an older `dev-amd64` publication.
 
 Record the immutable repository digest and keep it in the same shell session:
 
 ```bash
 pinned_image="$(
-  sudo docker image inspect ghcr.io/experience83/remote-dev:edge-amd64 \
+  sudo docker image inspect "$validation_image" \
     --format '{{range .RepoDigests}}{{println .}}{{end}}' \
   | sed -n '1p'
 )"
@@ -96,9 +120,9 @@ esac
 printf 'pinned_image=%s\n' "$pinned_image"
 ```
 
-Use that digest reference in the TrueNAS validation YAML. Download all host-side
-files from `$release_revision`; image and host files must be updated together as
-one release unit.
+Use `$pinned_image` in the TrueNAS validation YAML. Download all host-side files
+from `$release_revision`; the selected channel image, immutable digest and host
+files must be updated together as one release unit.
 
 ## Dataset boundary
 
@@ -115,7 +139,10 @@ snapshot or replication policy needs a separate boundary.
 
 ## Create the persistent directories
 
-Run from the TrueNAS shell after the single dataset exists:
+Run from the TrueNAS shell after the single dataset exists. These host
+subdirectories are required before saving the Custom App because the canonical
+YAML uses `create_host_path: false`; Compose must not create missing persistent
+paths implicitly.
 
 ```bash
 sudo install -d -m 0755 \
@@ -130,6 +157,7 @@ sudo install -d -m 0700 \
   /mnt/Pool1/remote-dev/state/antigravity/bin \
   /mnt/Pool1/remote-dev/state/antigravity/runtime \
   /mnt/Pool1/remote-dev/state/antigravity/vendor \
+  /mnt/Pool1/remote-dev/state/antigravity/config \
   /mnt/Pool1/remote-dev/state/antigravity/gh \
   /mnt/Pool1/remote-dev/state/antigravity/git \
   /mnt/Pool1/remote-dev/state/antigravity/ssh
@@ -154,10 +182,18 @@ The resulting host tree is:
         ├── bin/
         ├── runtime/
         ├── vendor/
+        ├── config/
         ├── gh/
         ├── git/
         └── ssh/
 ```
+
+`state/antigravity/config` is mounted only into the Antigravity service at
+`/root/.gemini/config`. The official CLI uses its `projects/` child for
+project-specific runtime configuration. This mount remains separate from
+`state/antigravity/vendor -> /root/.gemini/antigravity-cli`; only these narrow
+Antigravity-private paths are writable, and the container root filesystem
+remains read-only.
 
 ## Download and run the matching host preflight
 
@@ -189,7 +225,11 @@ the actual passwords are validated by the runtime when the containers start.
 
 ## Download the matching TrueNAS YAML
 
-Use `compose/truenas.yml` from the same revision as the image and preflight:
+`compose/truenas.yml` is the canonical complete TrueNAS Custom App YAML. Do not
+maintain a hand-copied second YAML in this runbook: download that file from the
+same source revision as the image and preflight, then apply only the documented
+site-specific substitutions below. This keeps future mount and hardening
+changes in one source of truth.
 
 ```bash
 : "${release_revision:?Run the release verification section first}"
@@ -211,8 +251,9 @@ Before pasting it into the TrueNAS Custom App editor:
 5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
    password;
 6. keep both values quoted and never commit the personalized YAML to Git;
-7. do not add privileged mode, capabilities, host networking, host-root mounts
-   or a Docker socket;
+7. preserve `ipc: private`, the reviewed `cap_drop: [ALL]` plus role-specific
+   `cap_add` lists; do not add privileged mode, host or joined PID/network/IPC
+   namespaces, host-root mounts or a Docker socket;
 8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
    validation.
 
@@ -238,7 +279,8 @@ sudo docker exec antigravity-remote-dev remote-dev-version
 sudo docker exec antigravity-remote-dev remote-dev-doctor
 ```
 
-Confirm the embedded revision and digest match the pinned image. The
+Confirm the embedded revision matches `release_revision`, and that all three
+containers use the same configured `$pinned_image` and image ID. The
 Antigravity diagnostic should report `not installed` without making the
 container unhealthy.
 
@@ -246,12 +288,23 @@ Inspect only redacted configuration facts and assert the configured immutable
 reference, not only the local content-addressable image ID:
 
 ```bash
+expected_image_id=""
 for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
   echo "== $container =="
   configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
-  test "$configured_image" = "$pinned_image"
+  image_id="$(sudo docker inspect "$container" --format '{{.Image}}')"
+  if [[ "$configured_image" != "$pinned_image" ]]; then
+    echo "ERROR: $container configured image does not match the selected pinned image" >&2
+    exit 1
+  fi
+  if test -z "$expected_image_id"; then
+    expected_image_id="$image_id"
+  elif [[ "$image_id" != "$expected_image_id" ]]; then
+    echo "ERROR: $container image ID differs from the first role image ID" >&2
+    exit 1
+  fi
   sudo docker inspect "$container" --format \
-    'configured_image={{.Config.Image}} image_id={{.Image}} privileged={{.HostConfig.Privileged}} network={{.HostConfig.NetworkMode}} cap_add={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}}'
+    'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
   sudo docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
@@ -259,6 +312,57 @@ done
 
 Do not dump complete container environments. Verify only variable names when
 needed.
+
+## Exact #42 candidate checklist
+
+Keep issue #42 open until this checklist passes against the exact PR candidate.
+Record sanitized facts only; do not infer success from an older image or a
+different source revision.
+
+- Record the TrueNAS version, test date, exact `expected_revision`,
+  `$pinned_image` immutable repository digest and `dev-amd64` channel selected
+  after publishing that exact head. Confirm the embedded revision equals the
+  published head and launcher, Codex and Antigravity all use the same configured
+  `$pinned_image` and image ID.
+- Save the rendered/serialized App configuration and the inspect fields above.
+  Confirm every role has a read-only root filesystem,
+  `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
+  groups, no privileged or host/joined PID/network namespace, `ipc=private`, and
+  no engine socket or broad mount.
+- Confirm launcher has only `DAC_READ_SEARCH,SETGID,SETUID`, PID limit `64`, `/tmp` at
+  `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
+  `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
+  UID/GID `65532`, has no supplementary groups, zero effective capabilities and
+  `NoNewPrivs: 1`.
+- Confirm each agent has exactly
+  `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID`, PID limit `1024`, and `/tmp` at
+  `rw,noexec,nosuid,nodev,size=512m,mode=1777`. Confirm Codex `/run` is
+  `rw,exec,nosuid,nodev,size=1536m,mode=755` and Antigravity `/run` is
+  `rw,noexec,nosuid,nodev,size=64m,mode=755`.
+- Verify launcher navigation, its configured authentication mode, origin/CSP,
+  GET/HEAD-only behavior and secret-free `/healthz`. Verify both agent terminals
+  retain independent authentication, origin checking, client limits and
+  role-specific credential-independent health.
+- Exercise Codex autonomous (`danger-full-access` + `never`) and guarded
+  (`danger-full-access` + launch-scoped untrusted trust for the active project)
+  workflows. Confirm guarded prompts for commands except explicit exec-policy
+  allows and is not merely trusted-project `on-request`. Record successful Start,
+  Resume, Shell, login and doctor behavior, and confirm diagnostics still name
+  the outer container as the boundary. Where Context7 is already configured,
+  confirm that existing managed path remains functional without recording its
+  key or account data.
+- Record Antigravity's installed/review state, explicit launch, OAuth
+  persistence, native in-TUI `/resume` conversation picker and `--continue`
+  behavior. Confirm that `/root/.gemini/config/projects` can be created and
+  remains separate from `/root/.gemini/antigravity-cli` while the root
+  filesystem stays read-only. Antigravity remains experimental; a real account
+  result must not be replaced with a synthetic claim.
+- Place existence-only synthetic canaries in every role-private mount category.
+  Stop/start and recreate launcher, Codex and Antigravity separately; after each
+  recreation, repeat the mount/security inspection and confirm other-role
+  canaries, health and private state are unchanged.
+- Record no password, token, OAuth URL/code, account name, credential content or
+  private repository name in the evidence.
 
 ## Browser checks
 
@@ -276,7 +380,9 @@ Starting from the Antigravity menu:
 2. run the explicit installer and review the vendor/non-affiliation notice;
 3. record the installed version without publishing account details;
 4. complete the official individual/free login flow;
-5. record filesystem changes as path names and metadata only;
+5. confirm `/root/.gemini/config/projects` is writable through only the narrow
+   Antigravity config mount, and record filesystem changes as path names and
+   metadata only;
 6. run a disposable repository test;
 7. stop/start the App;
 8. recreate all three containers with the same dataset;
@@ -326,17 +432,19 @@ tree during the validation cycle.
 
 ## Completion evidence
 
-Post sanitized results to #29 and #69:
+Post the hardening/isolation candidate results to #42 and keep the related
+Antigravity lifecycle and password-source evidence linked to #29 and #69:
 
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
+- rendered and inspected hardening fields from the exact candidate;
 - confirmation that YAML and preflight came from that same revision;
 - password source (`environment` or `file`) without its value;
 - Antigravity CLI version;
 - browser/access method without account identity;
 - pass/fail for install, login, stop/start and recreation;
 - confirmed mount destinations and permission metadata;
-- confirmation that launcher has no mounts;
+- confirmation that the base TrueNAS launcher has no mounts;
 - confirmation that Codex and Antigravity use independent credentials;
 - any safe error messages and follow-up issue links.
 

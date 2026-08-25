@@ -115,7 +115,8 @@ for _ in $(seq 1 30); do
       "$name" run-codex --print-policy)"
     assert_output_lines 'guarded deployment policy' "$guarded_output" \
       'Codex approval mode: guarded' \
-      'Codex approval policy: untrusted' \
+      'Project trust: untrusted (launch-scoped)' \
+      'Approval behavior: prompt for commands except explicit exec-policy allows' \
       'Mode source: deployment'
 
     override_output="$(docker exec \

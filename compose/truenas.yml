@@ -6,6 +6,16 @@ services:
     container_name: remote-dev-launcher
     restart: unless-stopped
     user: "0:0"
+    read_only: true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+      - SETGID
+      - SETUID
+    pids_limit: 64
+    ipc: private
 
     environment:
       TZ: Europe/Madrid
@@ -38,7 +48,8 @@ services:
       - "192.168.1.10:7680:7680"
 
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+      - /run:rw,noexec,nosuid,nodev,size=16m,mode=755
 
     stop_grace_period: 10s
 
@@ -47,6 +58,19 @@ services:
     container_name: codex-remote-dev
     restart: unless-stopped
     user: "0:0"
+    read_only: true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETGID
+      - SETUID
+    pids_limit: 1024
+    ipc: private
 
     environment:
       TZ: Europe/Madrid
@@ -79,6 +103,8 @@ services:
       GH_NO_UPDATE_NOTIFIER: "1"
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
       DO_NOT_TRACK: "1"
+      NPM_CONFIG_CACHE: /tmp/remote-dev-npm-cache
+      UV_CACHE_DIR: /tmp/remote-dev-uv-cache
 
       OPENAI_API_KEY: ""
       GIT_USER_NAME: ""
@@ -127,7 +153,8 @@ services:
           create_host_path: false
 
     tmpfs:
-      - /tmp:size=512m,mode=1777
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
+      - /run:rw,exec,nosuid,nodev,size=1536m,mode=755
 
     shm_size: 256m
     stop_grace_period: 30s
@@ -137,6 +164,19 @@ services:
     container_name: antigravity-remote-dev
     restart: unless-stopped
     user: "0:0"
+    read_only: true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETGID
+      - SETUID
+    pids_limit: 1024
+    ipc: private
 
     environment:
       TZ: Europe/Madrid
@@ -167,6 +207,8 @@ services:
       GH_NO_UPDATE_NOTIFIER: "1"
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
       DO_NOT_TRACK: "1"
+      NPM_CONFIG_CACHE: /tmp/remote-dev-npm-cache
+      UV_CACHE_DIR: /tmp/remote-dev-uv-cache
       GIT_USER_NAME: ""
       GIT_USER_EMAIL: ""
 
@@ -198,6 +240,11 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: /mnt/Pool1/remote-dev/state/antigravity/config
+        target: /root/.gemini/config
+        bind:
+          create_host_path: false
+      - type: bind
         source: /mnt/Pool1/remote-dev/state/antigravity/gh
         target: /root/.config/gh
         bind:
@@ -214,7 +261,8 @@ services:
           create_host_path: false
 
     tmpfs:
-      - /tmp:size=512m,mode=1777
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
+      - /run:rw,noexec,nosuid,nodev,size=64m,mode=755
 
     shm_size: 256m
     stop_grace_period: 30s

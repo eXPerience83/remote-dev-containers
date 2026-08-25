@@ -172,6 +172,14 @@ The Codex service receives only these child paths:
 | `state/codex/ssh` | `/root/.ssh` |
 | `secrets/codex/web_password.txt` | `/run/secrets/web_password` |
 
+When the experimental Antigravity service is enabled, it receives a disjoint
+set of role-private children. In particular,
+`state/antigravity/config -> /root/.gemini/config` supplies project state below
+`projects/`, while `state/antigravity/vendor ->
+/root/.gemini/antigravity-cli` remains a separate vendor/settings boundary.
+Neither Codex nor the launcher receives either path, and `/root/.gemini` is
+never mounted wholesale.
+
 The base launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 Before deployment, `scripts/preflight-data-layout.py` validates that every canonical directory exists, that none is a symlink, and that the password path is a non-empty regular file with restrictive permissions. This host-side preflight is authoritative. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
@@ -189,6 +197,8 @@ The default stack does not mount one writable checkout into two agent services. 
 Each outer container is a separate boundary. Anyone with terminal/root access inside an agent service is trusted for the state mounted into that service. The launcher cannot see or authenticate to agent state because neither the state nor the agent password is mounted there.
 
 The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
+
+Both deployment definitions enforce the same outer-container hardening: read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded private `/tmp` and `/run` tmpfs filesystems and PID ceilings of 64 for launcher and 1024 per agent. Launcher restores only `DAC_READ_SEARCH` to read a host-owned mode-`0600` file-backed secret and `SETGID`/`SETUID` for its permanent UID/GID 65532 drop; Codex and Antigravity restore only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID` for role-private host-ownership compatibility, persistent-state hardening and bounded UID/GID 65534 candidate execution. The live isolation canary verifies the effective launcher identity/capability drop, exact configured agent capabilities, transient mounts, same image ID and distinct writable sources.
 
 Project selection neither broadens nor narrows that container boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment; the rest of that mounted workspace remains accessible inside the service.
 

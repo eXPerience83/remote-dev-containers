@@ -24,7 +24,7 @@
 - Persistent data uses one canonical `REMOTE_DEV_DATA_ROOT` contract with separate `workspaces`, per-role `state` and `secrets` boundaries. The launcher remains mount-free.
 - A host-side preflight validates every canonical directory and password file before deployment. Bind mounts also request `create_host_path: false` as defense-in-depth because some Compose implementations may ignore that option at runtime.
 - Implemented runtime roles are `launcher`, `codex` and `shell`; `antigravity` and `claude` remain reserved and unavailable.
-- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and guarded `untrusted` approvals as a deployment or one-launch option.
+- The default image omits the system Bubblewrap package. Codex is launched with its inner sandbox disabled explicitly, autonomous `never` approvals by default and launch-scoped untrusted project trust for guarded deployment or one-launch selections.
 
 ## Must validate before the first stable release
 

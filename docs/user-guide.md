@@ -161,6 +161,8 @@ Remote Dev separates persistent state by purpose:
 - an admitted optional Codex runtime has its own Codex-private runtime state;
 - the active project selection itself is only current menu/tmux process state.
 
+The container root filesystem is read-only. `/tmp` and `/run` are private bounded tmpfs filesystems, so tmux sockets and npm/uv/transient update or login staging disappear on recreation. `/tmp` is also `noexec`; Codex `/run` remains executable because the bounded Codex updater and Context7 device-login lifecycle require execution there; the mount does not enforce execution restrictions per path. Do not store credentials, configuration or project work in either transient path.
+
 Recreating the container with the same reviewed mounts should therefore preserve the project directories and agent state while starting a fresh process. If a project is deleted, Codex history can still contain old-path sessions because that history is not stored in the deleted checkout.
 
 ## 8. Antigravity: current documented boundary
