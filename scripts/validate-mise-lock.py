@@ -125,7 +125,7 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> str | None
     if tool == "uv":
         expected = (
             f"https://github.com/astral-sh/uv/releases/download/{version}/"
-            f"uv-{arch}-unknown-linux-musl.tar.gz"
+            f"uv-{arch}-unknown-linux-gnu.tar.gz"
         )
         if url != expected:
             fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")

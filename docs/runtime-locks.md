@@ -14,6 +14,8 @@ The runtime pins are represented in three places for different purposes:
 
 The Dockerfile copies `mise.toml` and `mise.lock` as read-only inputs and runs `mise install --locked`; a missing artifact entry, dynamic-resolution requirement, provenance failure or checksum mismatch stops the build. `locked_verify_provenance = true` ensures that Python and uv GitHub artifact attestations are checked during installation instead of trusting only the provenance marker already stored in the lockfile.
 
+For the repository's unqualified Ubuntu/glibc Linux targets, uv is intentionally locked to the official GNU artifacts for both AMD64 and ARM64. The exact GNU artifact is part of the fail-closed URL policy: a regenerated musl entry or any other asset requires explicit review and is rejected rather than treated as interchangeable.
+
 The current CI builds Linux AMD64, so it downloads, checksums, installs and re-verifies provenance for the AMD64 artifacts. ARM64 entries are checked for exact schema, platform, backend, URL, checksum and provenance metadata coherence, but are not executed by the current AMD64 job. A future ARM64 image build will use the same locked installation and re-verification path before ARM64 publication.
 
 npm is intentionally excluded from `mise.lock` because the image installs it separately from the npm registry.
