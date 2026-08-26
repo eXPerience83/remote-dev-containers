@@ -88,6 +88,13 @@ Tested native Codex `0.147.0` controls:
 
 These are upstream Codex controls, not a Remote Dev keyboard protocol.
 
+### Useful native Codex commands in 0.150.0
+
+The bundled Codex `0.150.0` adds two useful TUI improvements. They are upstream Codex behavior rather than Remote Dev-specific commands, so a newer optional Codex runtime can evolve the exact UI.
+
+- `/copy` opens a target picker for the latest assistant response. You can copy the full response, an individual fenced code block, or an individual blockquote. Code blocks are labelled by language, previews are shown, and copying an individual target preserves its source whitespace and nested quote Markdown. This is often more convenient than terminal/browser text selection when you only need one code block.
+- Unnamed conversations now receive descriptive titles automatically. `/rename` opens an editable rename prompt and asynchronously suggests a title based on the recent substantive conversation; the suggestion is prefilled without overwriting text you have already started typing. A manual rename remains authoritative rather than being replaced later by the automatic title generator.
+
 ## 4. Browser terminal, tmux and the agent are different layers
 
 ```text
