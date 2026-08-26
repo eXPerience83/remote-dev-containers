@@ -183,7 +183,7 @@ RUN --network=none \
     && REMOTE_DEV_LAUNCHER=/usr/local/bin/remote-dev-launcher bash /tmp/test-remote-dev-launcher \
     && REMOTE_DEV_MENU=/usr/local/bin/remote-dev-menu bash /tmp/test-remote-dev-menu \
     && bash /tmp/test-run-codex-policy \
-    && python /tmp/test-real-codex-project-trust.py \
+    && python /tmp/test-real-codex-project-trust.py "$CODEX_RELEASE_TAG" \
     && real_policy_project="$(mktemp -d)" \
     && run-codex --approval-mode autonomous --cd "$real_policy_project" --help >/dev/null \
     && run-codex --approval-mode guarded --cd "$real_policy_project" resume --help >/dev/null \
