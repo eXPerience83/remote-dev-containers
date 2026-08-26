@@ -88,6 +88,13 @@ Controles nativos probados en Codex `0.147.0`:
 
 Son controles de Codex upstream, no un protocolo de teclado propio de Remote Dev.
 
+### Comandos nativos útiles de Codex en 0.150.0
+
+El Codex `0.150.0` incluido añade dos mejoras útiles en la TUI. Son comportamiento upstream de Codex, no comandos propios de Remote Dev, así que un runtime opcional de Codex más nuevo puede cambiar la UI exacta.
+
+- `/copy` abre un selector de destino para la última respuesta del asistente. Puedes copiar la respuesta completa, un bloque de código fenced individual o una cita en bloque individual. Los bloques de código se etiquetan por lenguaje, se muestra una vista previa y, al copiar un destino individual, se conservan los espacios del texto original y el Markdown de citas anidadas. Suele ser más cómodo que seleccionar texto en el terminal/navegador cuando solo necesitas un bloque de código.
+- Las conversaciones sin nombre reciben ahora títulos descriptivos automáticamente. `/rename` abre un prompt de cambio de nombre editable y sugiere de forma asíncrona un título basado en la conversación sustantiva reciente; la sugerencia se rellena previamente sin sobrescribir el texto que ya hayas empezado a escribir. Un cambio de nombre manual sigue siendo autoritativo y el generador automático no lo reemplaza después.
+
 ## 4. El terminal web, tmux y el agente son capas distintas
 
 ```text

@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.97.0",
+      "version": "2.98.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.97.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.98.0/LICENSE"
         }
       ]
     },
@@ -110,7 +110,7 @@
       "name": "Node.js runtime",
       "image_scope": "both",
       "version_key": "NODE_VERSION",
-      "version": "24.19.0",
+      "version": "24.20.0",
       "source": "https://github.com/nodejs/node",
       "license": "MIT plus third-party terms in the runtime LICENSE",
       "notices": [
@@ -161,19 +161,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.149.1",
+      "version": "rust-v0.150.0",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.149.1/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.150.0/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.149.1/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.150.0/NOTICE"
         }
       ]
     }

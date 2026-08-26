@@ -2,13 +2,24 @@
 import json
 import os
 from pathlib import Path
+import re
 import select
 import subprocess
+import sys
 import tempfile
 import time
 
 
 CODEX = Path(os.environ.get("REMOTE_DEV_BUNDLED_CODEX", "/usr/local/bin/codex"))
+
+
+def expected_cli_version(release_tag: str) -> str:
+    match = re.fullmatch(r"rust-v(\d+\.\d+\.\d+)", release_tag)
+    if match is None:
+        raise SystemExit(
+            f"expected a Codex release tag like rust-v0.150.0, got {release_tag!r}"
+        )
+    return f"codex-cli {match.group(1)}"
 
 
 def start_thread(project: Path, trust: str) -> str:
@@ -77,15 +88,18 @@ def start_thread(project: Path, trust: str) -> str:
 
 
 def main() -> None:
+    if len(sys.argv) != 2:
+        raise SystemExit(f"usage: {sys.argv[0]} CODEX_RELEASE_TAG")
+    expected_version = expected_cli_version(sys.argv[1])
     version = subprocess.run(
         [str(CODEX), "--version"], check=True, capture_output=True, text=True, timeout=10
     ).stdout.strip()
-    assert version == "codex-cli 0.149.1", version
+    assert version == expected_version, version
     with tempfile.TemporaryDirectory() as workspace:
         root = Path(workspace).resolve()
         assert start_thread(root, "trusted") == "on-request"
         assert start_thread(root, "untrusted") == "untrusted"
-    print("Real Codex 0.149.1 project trust: trusted=on-request; untrusted=unless-trusted")
+    print(f"Real {expected_version} project trust: trusted=on-request; untrusted=unless-trusted")
 
 
 if __name__ == "__main__":
