@@ -80,12 +80,12 @@ def main() -> None:
     version = subprocess.run(
         [str(CODEX), "--version"], check=True, capture_output=True, text=True, timeout=10
     ).stdout.strip()
-    assert version == "codex-cli 0.149.1", version
+    assert version == "codex-cli 0.150.0", version
     with tempfile.TemporaryDirectory() as workspace:
         root = Path(workspace).resolve()
         assert start_thread(root, "trusted") == "on-request"
         assert start_thread(root, "untrusted") == "untrusted"
-    print("Real Codex 0.149.1 project trust: trusted=on-request; untrusted=unless-trusted")
+    print("Real Codex 0.150.0 project trust: trusted=on-request; untrusted=unless-trusted")
 
 
 if __name__ == "__main__":
