@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Moved normal Codex and Antigravity temporary files and uv/npm/pip caches from the bounded `/tmp` tmpfs to a safely prepared hidden tree in each role-private disk-backed workspace, while preserving trusted staging and credential-environment boundaries.
 - Updated the immutable bundled Codex baseline to `0.149.1` and migrated guarded mode from the retired `approval_policy=untrusted` value to launch-scoped untrusted trust for the active project, preserving the outer-container boundary and one-launch mode precedence.
 - Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
 - Made informational Antigravity status and menu inspection lightweight and offline, added explicit full-SHA `verify`, and retained exactly one mandatory full verification before execution. Antigravity diagnostics now perform full verification and fail on integrity errors; damaged state still blocks launch without a bundled fallback.

@@ -53,6 +53,36 @@ remote_dev_workspace_root() {
   remote_dev_validate_workspace_root "${WORKSPACE:-/workspace}"
 }
 
+remote_dev_prepare_development_environment() {
+  local role="$1"
+  local workspace="$2"
+  local scratch_root=""
+  local -r preparer=/usr/local/bin/remote-dev-prepare-development-scratch
+
+  case "$role" in
+    codex|antigravity) ;;
+    *)
+      remote_dev_runtime_error "development scratch is unavailable for REMOTE_DEV_ROLE=$role"
+      return 2
+      ;;
+  esac
+
+  workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  if [[ ! -x "$preparer" || -L "$preparer" ]]; then
+    remote_dev_runtime_error "development scratch preparer is unavailable: $preparer"
+    return 1
+  fi
+  "$preparer" "$workspace" || return $?
+
+  scratch_root="$workspace/.remote-dev-tmp"
+  export TMPDIR="$scratch_root/tmp"
+  export TMP="$scratch_root/tmp"
+  export TEMP="$scratch_root/tmp"
+  export UV_CACHE_DIR="$scratch_root/uv-cache"
+  export NPM_CONFIG_CACHE="$scratch_root/npm-cache"
+  export PIP_CACHE_DIR="$scratch_root/pip-cache"
+}
+
 remote_dev_validate_project_name() {
   local name="$1"
 

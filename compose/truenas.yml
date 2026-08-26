@@ -103,8 +103,6 @@ services:
       GH_NO_UPDATE_NOTIFIER: "1"
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
       DO_NOT_TRACK: "1"
-      NPM_CONFIG_CACHE: /tmp/remote-dev-npm-cache
-      UV_CACHE_DIR: /tmp/remote-dev-uv-cache
 
       OPENAI_API_KEY: ""
       GIT_USER_NAME: ""
@@ -207,8 +205,6 @@ services:
       GH_NO_UPDATE_NOTIFIER: "1"
       GH_NO_EXTENSION_UPDATE_NOTIFIER: "1"
       DO_NOT_TRACK: "1"
-      NPM_CONFIG_CACHE: /tmp/remote-dev-npm-cache
-      UV_CACHE_DIR: /tmp/remote-dev-uv-cache
       GIT_USER_NAME: ""
       GIT_USER_EMAIL: ""
 

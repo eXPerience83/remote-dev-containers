@@ -17,8 +17,12 @@ codex_cli_invocations="$workdir/codex-cli-invocations"
 github_invocations="$workdir/github-invocations"
 doctor_invocations="$workdir/doctor-invocations"
 shell_invocations="$workdir/shell-invocations"
+agent_environment="$workdir/agent-environment"
+credential_environment="$workdir/credential-environment"
+shell_environment="$workdir/shell-environment"
 hardening_calls="$workdir/hardening-calls"
 list_counter="$workdir/list-projects-counter"
+development_root="$workdir/workspace/.remote-dev-tmp"
 
 cleanup() {
   rm -rf "$workdir"
@@ -32,7 +36,13 @@ if [[ ! -f "$menu_source" ]]; then
   exit 1
 fi
 
-mkdir -p "$bin_dir" "$workdir/workspace/project"
+mkdir -p \
+  "$bin_dir" \
+  "$workdir/workspace/project" \
+  "$development_root/tmp" \
+  "$development_root/uv-cache" \
+  "$development_root/npm-cache" \
+  "$development_root/pip-cache"
 
 cat > "$runtime_lib" <<'RUNTIME'
 remote_dev_resolve_role() {
@@ -137,6 +147,9 @@ fi
   done
   printf ']\n'
 } >> "$REMOTE_DEV_MENU_INVOCATIONS"
+printf '%s\n' \
+  "TMPDIR=${TMPDIR-<unset>} TMP=${TMP-<unset>} TEMP=${TEMP-<unset>} UV_CACHE_DIR=${UV_CACHE_DIR-<unset>} NPM_CONFIG_CACHE=${NPM_CONFIG_CACHE-<unset>} PIP_CACHE_DIR=${PIP_CACHE_DIR-<unset>}" \
+  >> "$REMOTE_DEV_MENU_AGENT_ENVIRONMENT"
 
 if [[ -n "${REMOTE_DEV_MENU_FAIL_ONCE_FILE:-}" && ! -e "$REMOTE_DEV_MENU_FAIL_ONCE_FILE" ]]; then
   : > "$REMOTE_DEV_MENU_FAIL_ONCE_FILE"
@@ -218,6 +231,9 @@ set -euo pipefail
   done
   printf ']\n'
 } >> "$REMOTE_DEV_MENU_CODEX_CLI_INVOCATIONS"
+printf '%s\n' \
+  "TMPDIR=${TMPDIR-<unset>} TMP=${TMP-<unset>} TEMP=${TEMP-<unset>} UV_CACHE_DIR=${UV_CACHE_DIR-<unset>} NPM_CONFIG_CACHE=${NPM_CONFIG_CACHE-<unset>} PIP_CACHE_DIR=${PIP_CACHE_DIR-<unset>}" \
+  >> "$REMOTE_DEV_MENU_CREDENTIAL_ENVIRONMENT"
 CODEX_CLI
 
 cat > "$bin_dir/gh" <<'GH'
@@ -232,6 +248,9 @@ set -euo pipefail
   done
   printf ']\n'
 } >> "$REMOTE_DEV_MENU_GITHUB_INVOCATIONS"
+printf '%s\n' \
+  "TMPDIR=${TMPDIR-<unset>} TMP=${TMP-<unset>} TEMP=${TEMP-<unset>} UV_CACHE_DIR=${UV_CACHE_DIR-<unset>} NPM_CONFIG_CACHE=${NPM_CONFIG_CACHE-<unset>} PIP_CACHE_DIR=${PIP_CACHE_DIR-<unset>}" \
+  >> "$REMOTE_DEV_MENU_CREDENTIAL_ENVIRONMENT"
 case "${1:-}:${2:-}" in
   auth:login|auth:setup-git) exit 0 ;;
   *) exit 2 ;;
@@ -248,6 +267,9 @@ cat > "$bin_dir/login-shell" <<'LOGIN_SHELL'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' shell >> "$REMOTE_DEV_MENU_SHELL_INVOCATIONS"
+printf '%s\n' \
+  "TMPDIR=${TMPDIR-<unset>} TMP=${TMP-<unset>} TEMP=${TEMP-<unset>} UV_CACHE_DIR=${UV_CACHE_DIR-<unset>} NPM_CONFIG_CACHE=${NPM_CONFIG_CACHE-<unset>} PIP_CACHE_DIR=${PIP_CACHE_DIR-<unset>}" \
+  >> "$REMOTE_DEV_MENU_SHELL_ENVIRONMENT"
 LOGIN_SHELL
 
 chmod 0755 "$bin_dir"/*
@@ -316,6 +338,9 @@ run_menu() {
     "$github_invocations" \
     "$doctor_invocations" \
     "$shell_invocations" \
+    "$agent_environment" \
+    "$credential_environment" \
+    "$shell_environment" \
     "$hardening_calls"
   common_env=(
     PATH="$bin_dir:$PATH"
@@ -328,7 +353,16 @@ run_menu() {
     REMOTE_DEV_MENU_GITHUB_INVOCATIONS="$github_invocations"
     REMOTE_DEV_MENU_DOCTOR_INVOCATIONS="$doctor_invocations"
     REMOTE_DEV_MENU_SHELL_INVOCATIONS="$shell_invocations"
+    REMOTE_DEV_MENU_AGENT_ENVIRONMENT="$agent_environment"
+    REMOTE_DEV_MENU_CREDENTIAL_ENVIRONMENT="$credential_environment"
+    REMOTE_DEV_MENU_SHELL_ENVIRONMENT="$shell_environment"
     REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls"
+    TMPDIR="$development_root/tmp"
+    TMP="$development_root/tmp"
+    TEMP="$development_root/tmp"
+    UV_CACHE_DIR="$development_root/uv-cache"
+    NPM_CONFIG_CACHE="$development_root/npm-cache"
+    PIP_CACHE_DIR="$development_root/pip-cache"
   )
   if [[ "$deployment_mode" == __unset__ ]]; then
     printf '%s' "$input" | env -u REMOTE_DEV_CODEX_APPROVAL_MODE "${common_env[@]}" timeout --foreground 30s "$fixture_menu" > "$output_file" 2>&1
@@ -354,6 +388,8 @@ output="$workdir/output"
 # disappears, the duplicate becomes another action and the exact call count fails.
 run_menu __unset__ $'1\n1\n12\n' "$output"
 assert_file_lines "$invocations" 'configured start' "[--cd][$project_path]"
+assert_file_lines "$agent_environment" 'configured agent environment' \
+  "TMPDIR=$development_root/tmp TMP=$development_root/tmp TEMP=$development_root/tmp UV_CACHE_DIR=$development_root/uv-cache NPM_CONFIG_CACHE=$development_root/npm-cache PIP_CACHE_DIR=$development_root/pip-cache"
 assert_hardening_count 1
 grep -Fxq 'Codex: bundled 0.147.0' "$output"
 grep -Fxq 'Context7: not configured' "$output"
@@ -396,6 +432,12 @@ assert_file_lines "$github_invocations" 'GitHub CLI setup' \
   '[auth][setup-git]'
 assert_file_lines "$doctor_invocations" 'Codex diagnostics' doctor
 assert_file_lines "$shell_invocations" 'Codex login shell' shell
+assert_file_lines "$credential_environment" 'credential action environment' \
+  'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset>' \
+  'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset>' \
+  'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset>'
+assert_file_lines "$shell_environment" 'login shell environment' \
+  "TMPDIR=$development_root/tmp TMP=$development_root/tmp TEMP=$development_root/tmp UV_CACHE_DIR=$development_root/uv-cache NPM_CONFIG_CACHE=$development_root/npm-cache PIP_CACHE_DIR=$development_root/pip-cache"
 assert_hardening_count 3
 echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
 

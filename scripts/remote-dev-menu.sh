@@ -76,12 +76,24 @@ run_context7_action() {
     "$@"
 }
 
+run_credential_command() {
+  env \
+    -u UV_CACHE_DIR \
+    -u NPM_CONFIG_CACHE \
+    -u PIP_CACHE_DIR \
+    TMPDIR=/tmp \
+    TMP=/tmp \
+    TEMP=/tmp \
+    "$@"
+}
+
 run_github_login() {
   local action_status=0
 
   clear
-  if gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
-    if gh auth setup-git; then
+  if run_credential_command \
+    gh auth login --hostname "${GH_HOST:-github.com}" --git-protocol https --web; then
+    if run_credential_command gh auth setup-git; then
       :
     else
       action_status=$?
@@ -593,7 +605,8 @@ MENU
         show_context7_menu
         ;;
       8)
-        if run_interactive_and_harden "Codex login" codex login --device-auth; then :; fi
+        if run_interactive_and_harden \
+          "Codex login" run_credential_command codex login --device-auth; then :; fi
         ;;
       9)
         if run_github_login; then :; fi

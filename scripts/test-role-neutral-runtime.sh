@@ -113,10 +113,21 @@ assert_eq "$workspace/beta" "$(remote_dev_resolve_project "$workspace" beta)" "e
 assert_eq "$workspace/alpha" "$(REMOTE_DEV_PROJECT=alpha remote_dev_resolve_project "$workspace")" "environment project resolution"
 assert_fails_with 2 "project does not exist" remote_dev_resolve_project "$workspace" missing
 
-mkdir "$workspace/.hidden-manual" "$workspace/with space"
+mkdir -p \
+  "$workspace/.hidden-manual" \
+  "$workspace/.remote-dev-tmp/tmp" \
+  "$workspace/.remote-dev-tmp/uv-cache" \
+  "$workspace/.remote-dev-tmp/npm-cache" \
+  "$workspace/.remote-dev-tmp/pip-cache" \
+  "$workspace/with space"
+printf 'scratch\n' > "$workspace/.remote-dev-tmp/npm-cache/preserved"
 ln -s "$workspace/alpha" "$workspace/linked"
 assert_eq $'alpha\nbeta' "$(remote_dev_list_projects "$workspace")" "invalid and symlink entries excluded"
 assert_fails_with 2 "must not be a symlink" remote_dev_project_path "$workspace" linked
+assert_fails_with 2 "invalid project name" remote_dev_project_path "$workspace" .remote-dev-tmp
+assert_fails_with 2 "invalid project name" remote_dev_create_project "$workspace" .remote-dev-tmp
+assert_fails_with 2 "invalid project name" \
+  remote_dev_delete_project "$workspace" .remote-dev-tmp .remote-dev-tmp
 
 printf 'keep\n' > "$workspace/alpha/keep.txt"
 printf 'delete\n' > "$workspace/beta/delete.txt"
@@ -125,6 +136,8 @@ assert_fails_with 2 "confirmation did not match" remote_dev_delete_project "$wor
 remote_dev_delete_project "$workspace" beta beta
 [[ ! -e "$workspace/beta" ]] || { echo "ERROR: confirmed project deletion left project path" >&2; exit 1; }
 [[ -f "$workspace/alpha/keep.txt" ]] || { echo "ERROR: project deletion modified sibling project" >&2; exit 1; }
+[[ "$(<"$workspace/.remote-dev-tmp/npm-cache/preserved")" == scratch ]] \
+  || { echo "ERROR: project deletion modified development scratch" >&2; exit 1; }
 assert_eq alpha "$(remote_dev_list_projects "$workspace")" "project listing after deletion"
 
 # The resolver must preserve the producer's failure status rather than letting

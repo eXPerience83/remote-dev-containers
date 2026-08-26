@@ -83,6 +83,7 @@ COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
+COPY scripts/remote-dev-prepare-development-scratch.py /usr/local/bin/remote-dev-prepare-development-scratch
 COPY scripts/remote-dev-context7.py /usr/local/lib/remote-dev/remote-dev-context7.py
 COPY scripts/remote-dev-context7-entrypoint.sh /usr/local/bin/remote-dev-context7
 COPY scripts/remote-dev-context7-device-login.py /usr/local/bin/remote-dev-context7-device-login
@@ -120,6 +121,7 @@ RUN --network=none \
     --mount=type=bind,source=scripts/test-antigravity-picker.py,target=/tmp/test-antigravity-picker.py,ro \
     --mount=type=bind,source=scripts/test-run-antigravity-picker.sh,target=/tmp/test-run-antigravity-picker.sh,ro \
     --mount=type=bind,source=scripts/test-antigravity-menu.sh,target=/tmp/test-antigravity-menu.sh,ro \
+    --mount=type=bind,source=scripts/test-development-scratch.py,target=/tmp/test-development-scratch.py,ro \
     chmod 0755 \
       /usr/local/bin/start-remote-dev-web \
       /usr/local/bin/start-codex-web \
@@ -127,6 +129,7 @@ RUN --network=none \
       /usr/local/bin/run-direct-session \
       /usr/local/bin/run-codex \
       /usr/local/bin/remote-dev-codex-runtime \
+      /usr/local/bin/remote-dev-prepare-development-scratch \
       /usr/local/bin/remote-dev-context7 \
       /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity \
@@ -154,12 +157,16 @@ RUN --network=none \
     && python -m py_compile \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
+      /usr/local/bin/remote-dev-prepare-development-scratch \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
       /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /tmp/test-codex-code-mode-host.py \
+      /tmp/test-development-scratch.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
+    && REMOTE_DEV_DEVELOPMENT_SCRATCH_SOURCE=/usr/local/bin/remote-dev-prepare-development-scratch \
+      python /tmp/test-development-scratch.py \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
     && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
     && context7_smoke_home="$(mktemp -d)" \

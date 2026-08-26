@@ -112,6 +112,7 @@ The host mount for an agent role is exposed inside that container as `/workspace
 
 ```text
 /workspace/
+├── .remote-dev-tmp/          # hidden development scratch; never a project
 ├── pollenlevels/
 ├── remote-dev-containers/
 └── another-project/
@@ -126,6 +127,8 @@ The role-neutral runtime owns one bounded resolver/manager:
 - create only a validated empty direct child;
 - recursively delete only a validated direct child after exact-name confirmation;
 - reject traversal, arbitrary absolute project selectors and symlink projects.
+
+Before an agent web/session boundary is created, a separate bounded helper prepares the fixed hidden scratch root and its `tmp`, `uv-cache`, `npm-cache` and `pip-cache` children. It uses descriptor-relative no-symlink checks, requires the current service UID/GID and applies mode `0700` to those fixed directories without recursively changing their contents. Normal child sessions receive this disk-backed tree through generic temporary and package-cache variables. Its leading-dot name is naturally absent from direct-child discovery and is invalid under the project-name grammar, so selection, creation and deletion cannot treat it as a project. Launcher and Remote Dev-owned credential onboarding do not receive these defaults.
 
 The interactive selection is transient to the current menu/tmux session. Direct `agent` mode may use `REMOTE_DEV_PROJECT=<name>`; without it, direct mode requires exactly one valid project. It never silently falls back to running an agent at `/workspace` when the project is ambiguous or missing.
 

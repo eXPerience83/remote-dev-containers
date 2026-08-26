@@ -159,9 +159,10 @@ Remote Dev separa el estado persistente por función:
 - la autenticación, configuración e historial de sesiones de Codex persisten en el mount privado de estado de agente de Codex;
 - GitHub CLI, Git y SSH tienen mounts persistentes privados separados por rol;
 - un runtime opcional admitido de Codex tiene su propio estado de runtime privado de Codex;
+- los archivos temporales normales y las cachés de uv/npm/pip persisten bajo el árbol privado del rol `/workspace/.remote-dev-tmp`;
 - la selección activa de proyecto es únicamente estado del proceso menú/tmux actual.
 
-El sistema de archivos raíz del contenedor es de solo lectura. `/tmp` y `/run` son tmpfs privados y acotados, por lo que los sockets tmux y el staging transitorio de cachés npm/uv, actualizaciones o login desaparecen al recrear el contenedor. `/tmp` también usa `noexec`; `/run` de Codex permanece ejecutable porque el ciclo acotado del actualizador de Codex y el login de dispositivo de Context7 requieren ejecución allí; el montaje no impone restricciones de ejecución por ruta. No guardes credenciales, configuración ni trabajo de proyecto en ninguna de estas rutas transitorias.
+El sistema de archivos raíz del contenedor es de solo lectura. `/tmp` y `/run` siguen siendo tmpfs privados y acotados; `/tmp` también usa `noexec`. Las sesiones normales de Codex y Antigravity fijan `TMPDIR`, `TMP`, `TEMP` y las variables de caché de uv/npm/pip en hijos fijos de `/workspace/.remote-dev-tmp`, de modo que las cargas de desarrollo potencialmente grandes usan el workspace privado respaldado por disco. Este directorio oculto no es un proyecto y es scratch no confiable, nunca staging confiable de actualización, admisión, publicación o credenciales. Para limpiarlo, detén el servicio del rol, borra `.remote-dev-tmp` de su workspace en el host y reinicia; el arranque recrea de forma segura los directorios fijos. No guardes credenciales, configuración ni trabajo de proyecto en el scratch ni en los tmpfs transitorios.
 
 Recrear el contenedor con los mismos mounts revisados debería conservar los directorios de proyecto y el estado del agente aunque arranque un proceso nuevo. Si se borra un proyecto, el historial de Codex puede seguir conteniendo sesiones de la ruta antigua porque ese historial no estaba almacenado en el checkout eliminado.
 
