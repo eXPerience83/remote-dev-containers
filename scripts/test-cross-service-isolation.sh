@@ -945,6 +945,32 @@ assert_hardened_codex_runtime_regressions() {
     "$fixture_root/test-real-codex-project-trust.py" >/dev/null 2>&1 \
     || fail "hardened Codex regression fixture sources could not be made readable"
 
+  local codex_build_metadata="/usr/share/doc/remote-dev/third_party/CODEX-BUILD.env"
+  local expected_codex_release_tag=""
+  expected_codex_release_tag="$(docker_exec "$codex_name" awk '
+    BEGIN { prefix = "CODEX_RELEASE_TAG="; count = 0 }
+    index($0, prefix) == 1 {
+      count++
+      value = substr($0, length(prefix) + 1)
+    }
+    END {
+      if (count == 0) {
+        print "CODEX_RELEASE_TAG entry is missing" > "/dev/stderr"
+        exit 1
+      }
+      if (count > 1) {
+        print "CODEX_RELEASE_TAG entry appears more than once" > "/dev/stderr"
+        exit 1
+      }
+      if (value == "") {
+        print "CODEX_RELEASE_TAG value is empty" > "/dev/stderr"
+        exit 1
+      }
+      print value
+    }
+  ' "$codex_build_metadata")" \
+    || fail "hardened Codex build metadata is missing, unreadable, or invalid"
+
   if run_hardened_codex_regression "hardened Codex noexec staging regression failed" \
     env REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
       python "$fixture_root/test-codex-runtime-noexec-staging.py"; then
@@ -956,7 +982,7 @@ assert_hardened_codex_runtime_regressions() {
   if (( regression_status == 0 )); then
     if run_hardened_codex_regression "hardened real Codex project-trust regression failed" \
       env REMOTE_DEV_BUNDLED_CODEX=/usr/local/bin/codex \
-      python "$fixture_root/test-real-codex-project-trust.py"; then
+      python "$fixture_root/test-real-codex-project-trust.py" "$expected_codex_release_tag"; then
       :
     else
       regression_status=$?
