@@ -65,6 +65,26 @@ def append_to_table(path: Path, table_header: str, text: str) -> None:
     path.write_text(content[:end] + "\n" + text + content[end:], encoding="utf-8")
 
 
+def replace_in_table(
+    path: Path, table_header: str, pattern: str, replacement: str
+) -> None:
+    """Replace one expression inside one copied TOML table."""
+    content = path.read_text(encoding="utf-8")
+    start = content.find(table_header)
+    if start < 0:
+        raise AssertionError(f"test fixture table not found in {path}: {table_header!r}")
+    end = content.find("\n[", start + len(table_header))
+    if end < 0:
+        end = len(content)
+    table = content[start:end]
+    updated, count = re.subn(pattern, replacement, table, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise AssertionError(
+            f"test fixture pattern not found in {path} table {table_header}: {pattern!r}"
+        )
+    path.write_text(content[:start] + updated + content[end:], encoding="utf-8")
+
+
 def change_python_x64_build_date(path: Path) -> None:
     """Keep the Python URL valid while making its x64 build date inconsistent."""
     content = path.read_text(encoding="utf-8")
@@ -234,12 +254,96 @@ def main() -> int:
         source_root,
         validator,
         "untrusted uv API URL",
-        lambda root: replace_regex_once(
+        lambda root: replace_in_table(
             root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
             r'^url_api = "https://api\.github\.com/repos/astral-sh/uv/releases/assets/[0-9]+"$',
             'url_api = "https://example.invalid/releases/assets/1"',
         ),
         "mise.lock uv API URL for linux-arm64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "historical musl uv ARM64 artifact",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r"-unknown-linux-gnu\.tar\.gz",
+            "-unknown-linux-musl.tar.gz",
+        ),
+        "mise.lock uv URL for linux-arm64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "historical musl uv x64 artifact",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r"-unknown-linux-gnu\.tar\.gz",
+            "-unknown-linux-musl.tar.gz",
+        ),
+        "mise.lock uv URL for linux-x64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "arbitrary uv artifact URL",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r'^url = "[^"]+"$',
+            'url = "https://example.invalid/uv.tar.gz"',
+        ),
+        "mise.lock uv URL for linux-x64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "invalid uv checksum",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r'^checksum = "[^"]+"$',
+            'checksum = "sha256:INVALID"',
+        ),
+        "mise.lock uv checksum for linux-arm64 must be an exact lowercase SHA-256",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected uv backend",
+        lambda root: replace_regex_once(
+            root / "mise.lock",
+            r'^(backend = "aqua:astral-sh/uv")$',
+            'backend = "aqua:example/uv"',
+        ),
+        "mise.lock uv backend",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "missing uv provenance",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r'^provenance = "github-attestations"\n?',
+            "",
+        ),
+        "mise.lock tools.uv.linux-x64 keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected uv provenance",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r'^provenance = "github-attestations"$',
+            'provenance = "slsa"',
+        ),
+        "mise.lock uv artifact for linux-arm64 must require GitHub artifact attestations",
     )
     expect_failure(
         source_root,
