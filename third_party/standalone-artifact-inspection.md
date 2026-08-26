@@ -4,9 +4,9 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 
 | Component | Version | Packaging | Legal files inside asset | Repository notices |
 |---|---:|---|---|---|
-| github-cli | `2.97.0` | tar.gz | LICENSE | LICENSE |
-| codex-cli | `rust-v0.149.1` | tar.gz | None | LICENSE, NOTICE |
-| codex-code-mode-host | `rust-v0.149.1` | tar.gz | None | LICENSE, NOTICE |
+| github-cli | `2.98.0` | tar.gz | LICENSE | LICENSE |
+| codex-cli | `rust-v0.150.0` | tar.gz | None | LICENSE, NOTICE |
+| codex-code-mode-host | `rust-v0.150.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
 | mise | `2026.8.14` | raw-binary | None | LICENSE |
 | uv | `0.12.6` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
