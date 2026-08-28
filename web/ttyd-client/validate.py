@@ -36,6 +36,8 @@ def validate_source() -> None:
         fail("provenance ttyd tag disagrees with versions.env")
     if versions.get("NODE_VERSION") != provenance["toolchain"]["node"]:
         fail("provenance Node version disagrees with versions.env")
+    if versions.get("NPM_VERSION") != provenance["toolchain"]["npm"]:
+        fail("provenance npm version disagrees with versions.env")
 
     expected: dict[str, str] = {}
     for line in (ROOT / "upstream.sha256").read_text().splitlines():

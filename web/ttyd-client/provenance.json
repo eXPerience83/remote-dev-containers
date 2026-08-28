@@ -11,6 +11,7 @@
   },
   "toolchain": {
     "node": "24.20.0",
+    "npm": "12.0.2",
     "yarn": "3.6.3",
     "yarn_source": "https://repo.yarnpkg.com/3.6.3/packages/yarnpkg-cli/bin/yarn.js",
     "yarn_sha256": "08ead1821a257416e6f217e89365425bf4b6d2430c3279318bedcec1a245fff5"
