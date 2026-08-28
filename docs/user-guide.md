@@ -111,9 +111,13 @@ Inside the Remote Dev menu:
 
 The project selection is menu/tmux process state. A normal browser disconnect/reconnect to the same live tmux session can retain it. A full container/tmux recreation may start a new menu process and therefore require selecting the project again; that does not imply the project directories or agent history were lost.
 
-### Current clipboard and mobile workarounds
+### Native Codex `/copy` and remaining clipboard/mobile work
 
-The supported custom terminal client work tracked by #90/#91 has not landed yet. Until then, the provisional behavior recorded in [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87) applies:
+Remote Dev's ttyd 1.7.7 compatibility asset handles bounded, write-only OSC 52 clipboard updates. In Codex, run `/copy`, choose the whole response or an offered code block, and press `Enter`; on supported clients that places the selected text directly in the device clipboard without another Remote Dev button. The text stays client-side, clipboard-read requests are not supported, and the normal tmux `set-clipboard external` boundary is unchanged.
+
+The definitive check is to paste the exact text into an application outside the browser. The path has been proven on Firefox/Windows over the normal plain-HTTP deployment; the broader browser/mobile matrix and selection UX remain tracked by #91. The compatibility asset is deliberately pinned to ttyd 1.7.7 and must be reevaluated under #174 before any ttyd upgrade.
+
+For selection, paste and mobile behavior outside native Codex `/copy`, the provisional observations recorded in [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87) still apply:
 
 - plain `Ctrl+V` can be consumed by the active TUI; `Ctrl+Shift+V` worked as paste in the tested desktop environment;
 - with tmux/TUI mouse handling, hold `Shift` while dragging to make normal browser/xterm text selections on the tested desktop path;

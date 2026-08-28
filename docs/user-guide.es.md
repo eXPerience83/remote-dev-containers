@@ -111,9 +111,13 @@ Dentro del menú de Remote Dev:
 
 La selección del proyecto es estado del proceso menú/tmux. Una desconexión/reconexión normal del navegador al mismo tmux vivo puede conservarla. Una recreación completa del contenedor/tmux puede iniciar un proceso de menú nuevo y, por tanto, exigir seleccionar el proyecto otra vez; eso no implica que se hayan perdido los directorios de proyecto ni el historial del agente.
 
-### Soluciones provisionales actuales para portapapeles y móvil
+### `/copy` nativo de Codex y trabajo restante de portapapeles/móvil
 
-El cliente de terminal propio previsto en #90/#91 todavía no ha llegado. Hasta entonces se aplica el comportamiento provisional recogido en [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87):
+El asset de compatibilidad de Remote Dev para ttyd 1.7.7 procesa actualizaciones OSC 52 acotadas y de solo escritura. En Codex, ejecuta `/copy`, elige la respuesta completa o uno de los bloques de código ofrecidos y pulsa `Enter`; en los clientes compatibles, el texto seleccionado llega directamente al portapapeles del dispositivo sin otro botón de Remote Dev. El texto permanece en el cliente, no se admiten solicitudes de lectura del portapapeles y se mantiene el límite normal `set-clipboard external` de tmux.
+
+La comprobación definitiva es pegar el texto exacto en una aplicación fuera del navegador. Esta ruta se ha demostrado en Firefox/Windows sobre el despliegue HTTP normal; la matriz más amplia de navegadores/móviles y la UX de selección siguen en #91. El asset de compatibilidad está ligado deliberadamente a ttyd 1.7.7 y debe reevaluarse en #174 antes de cualquier actualización de ttyd.
+
+Para selección, pegado y comportamiento móvil fuera del `/copy` nativo de Codex, siguen aplicándose las observaciones provisionales recogidas en [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87):
 
 - `Ctrl+V` puede ser consumido por la TUI activa; `Ctrl+Shift+V` funcionó para pegar en el entorno de escritorio probado;
 - con el manejo de ratón de tmux/TUI, mantén `Shift` al arrastrar para hacer selección normal de texto del navegador/xterm en el camino de escritorio probado;
