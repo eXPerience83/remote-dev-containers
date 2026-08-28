@@ -84,7 +84,7 @@ The Codex endpoint uses its own password source and authenticates independently.
 
 ## Shared immutable image
 
-The final image contains Ubuntu and Remote Dev scripts, Git/Git LFS/OpenSSH/GitHub CLI, Python, Node.js, npm, uv, mise, ttyd, tmux, tini, the launcher runtime and Codex CLI as the built-in reference agent.
+The final image contains Ubuntu and Remote Dev scripts, Git/Git LFS/OpenSSH/GitHub CLI, Python, Node.js, npm, uv, mise, ttyd, tmux, tini, the launcher runtime and Codex CLI as the built-in reference agent. The unmodified stable ttyd 1.7.7 server serves a reproducibly built, self-contained client derived from the exact 1.7.7 frontend through its public `--index` option. Frontend source, lock, bounded Remote Dev patch, asset hash, notices and a dedicated SPDX document are repository-owned evidence; the frontend toolchain is absent from the runtime layer.
 
 Sharing executable layers does not share mutable state or secrets. Runtime and Compose tests assert that launcher and Codex use the same image reference/ID while retaining separate service boundaries.
 

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Reproducible project-owned ttyd web client derived from the exact stable 1.7.7 frontend, served by the unchanged ttyd server through `--index`, with an empty lifecycle-safe extension boundary, byte-identical double builds, fixed provenance, notices and a dedicated SPDX document. Clipboard behavior remains under #91 and mobile controls remain under #90.
 - Shared remote-development base built on Ubuntu 26.04 LTS.
 - Browser-accessible Codex CLI environment using ttyd and persistent tmux sessions.
 - Git, Git LFS, OpenSSH client and GitHub CLI.

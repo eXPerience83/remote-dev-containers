@@ -113,7 +113,7 @@ La selección del proyecto es estado del proceso menú/tmux. Una desconexión/re
 
 ### Soluciones provisionales actuales para portapapeles y móvil
 
-El cliente de terminal propio previsto en #90/#91 todavía no ha llegado. Hasta entonces se aplica el comportamiento provisional recogido en [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87):
+Remote Dev ahora construye y sirve un cliente propio reproducible derivado del frontend exacto de ttyd 1.7.7. Es solo una base de compatibilidad y extensión: el comportamiento de portapapeles de #91 y los controles móviles de #90 todavía no han llegado. Hasta entonces se aplica el comportamiento provisional recogido en [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87):
 
 - `Ctrl+V` puede ser consumido por la TUI activa; `Ctrl+Shift+V` funcionó para pegar en el entorno de escritorio probado;
 - con el manejo de ratón de tmux/TUI, mantén `Shift` al arrastrar para hacer selección normal de texto del navegador/xterm en el camino de escritorio probado;

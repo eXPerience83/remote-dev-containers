@@ -220,7 +220,7 @@ There is no automatic migration or compatibility alias for the earlier experimen
 
 ## Licenses and optional vendor software
 
-Remote Dev project code is Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv and their dependencies retain their respective upstream licenses and notices. The image preserves package-provided copyright files and copies the license files supplied by the exact installed runtime artifacts.
+Remote Dev project code is Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv and their dependencies retain their respective upstream licenses and notices. The image preserves package-provided copyright files and copies the license files supplied by the exact installed runtime artifacts. The embedded project-owned ttyd client has its own exact component inventory, preserved notices and dedicated SPDX document under `third_party/components/remote-dev-ttyd-client/`.
 
 Inspect the reviewed inventory in `third_party/README.md`, or from a built image:
 

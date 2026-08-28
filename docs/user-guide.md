@@ -113,7 +113,7 @@ The project selection is menu/tmux process state. A normal browser disconnect/re
 
 ### Current clipboard and mobile workarounds
 
-The supported custom terminal client work tracked by #90/#91 has not landed yet. Until then, the provisional behavior recorded in [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87) applies:
+Remote Dev now builds and serves a reproducible project-owned client derived from the exact ttyd 1.7.7 frontend. This is a compatibility and extension foundation only: the clipboard behavior tracked by #91 and mobile controls tracked by #90 have not landed. Until then, the provisional behavior recorded in [#87](https://github.com/eXPerience83/remote-dev-containers/issues/87) applies:
 
 - plain `Ctrl+V` can be consumed by the active TUI; `Ctrl+Shift+V` worked as paste in the tested desktop environment;
 - with tmux/TUI mouse handling, hold `Shift` while dragging to make normal browser/xterm text selections on the tested desktop path;
