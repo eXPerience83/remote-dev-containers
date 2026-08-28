@@ -103,7 +103,7 @@ if [[ "$base_frontend" != "$codex_frontend" ]]; then
   echo "ERROR: Dockerfiles must use the same pinned frontend image" >&2
   exit 1
 fi
-if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}' "$base_dockerfile"; then
+if ! grep -Fxq 'FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST} AS remote-dev-runtime' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must bind Ubuntu to UBUNTU_DIGEST" >&2
   exit 1
 fi
