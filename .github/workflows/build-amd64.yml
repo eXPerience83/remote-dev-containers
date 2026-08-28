@@ -56,7 +56,14 @@ jobs:
             scripts/test_validate_standalone_artifact_inspection.py \
             scripts/validate-release-channel-contract.py \
             scripts/validate-renovate-ownership.py \
-            scripts/test_validate_renovate_ownership.py
+            scripts/test_validate_renovate_ownership.py \
+            web/ttyd-osc52/generate.py \
+            web/ttyd-osc52/validate.py \
+            web/ttyd-osc52/test_generate.py
+          python3 web/ttyd-osc52/validate.py
+          python3 web/ttyd-osc52/generate.py --check
+          node web/ttyd-osc52/test_osc52.js
+          python3 web/ttyd-osc52/test_generate.py
           make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-remote-dev-context7.py
@@ -158,6 +165,7 @@ jobs:
             sbom-remote-dev.spdx.json
             trivy-base.json
             trivy-remote-dev.json
+            third_party/components/remote-dev-ttyd-osc52/remote-dev-ttyd-osc52.spdx.json
           if-no-files-found: warn
           retention-days: 14
 

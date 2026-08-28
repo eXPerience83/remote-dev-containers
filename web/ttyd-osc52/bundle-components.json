@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "source": "ttyd 1.7.7 embedded frontend at 40e79c706be14029b391f369bee6613c31667abb",
+  "components": [
+    {"name": "@xterm/addon-canvas", "version": "0.6.0", "license": "MIT", "license_sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"},
+    {"name": "@xterm/addon-fit", "version": "0.9.0", "license": "MIT", "license_sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"},
+    {"name": "@xterm/addon-image", "version": "0.7.0", "license": "MIT", "license_sha256": "00994f891153ba5d613e2b838a9ad2f47d4484070cb594b46efc547ebea5ca05"},
+    {"name": "@xterm/addon-unicode11", "version": "0.7.0", "license": "MIT", "license_sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"},
+    {"name": "@xterm/addon-web-links", "version": "0.10.0", "license": "MIT", "license_sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"},
+    {"name": "@xterm/addon-webgl", "version": "0.17.0", "license": "MIT", "license_sha256": "21b975c39532001d431dc3b2c29fbff691d83f370833a66b54698bda290fde0e"},
+    {"name": "@xterm/xterm", "version": "5.4.0", "license": "MIT", "license_sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"},
+    {"name": "crc-32", "version": "1.2.0", "license": "Apache-2.0", "license_sha256": "5c1c0425d60afbe464ad9f53ce1a45c294a7dd5c7f2f3eef9aada2535abb0043"},
+    {"name": "css-loader", "version": "6.10.0", "license": "MIT", "license_sha256": "9068a8782d2fb4c6e432cfa25334efa56f722822180570802bf86e71b6003b1e"},
+    {"name": "decko", "version": "1.2.0", "license": "MIT", "license_sha256": "d20ef4c192faa3c560bc50bdd780f686804e355957d4146ddf8cbb58eb2e3dba"},
+    {"name": "file-saver", "version": "2.0.5", "license": "MIT", "license_sha256": "2d1d7a93b46e4274355ac2904428707c4ee47ee8c6029fa394ebf405648d3f63"},
+    {"name": "preact", "version": "10.19.6", "license": "MIT", "license_sha256": "1fe6958409c8c257a70c587a18b6f7f412b179b456630790d30b2ec9a8e4b7d4"},
+    {"name": "trzsz", "version": "1.1.5", "license": "MIT", "license_sha256": "9fcfcc727eea90aa6a1568c598a8950c761ed811903684443a762e8aaf9e8492"},
+    {"name": "whatwg-fetch", "version": "3.6.20", "license": "MIT", "license_sha256": "c887d1c97797646dbb216925ab44a93c6b3e7f03bbe6ef6e0f92b8b8ade63014"},
+    {"name": "zmodem.js", "version": "0.1.10", "license": "Apache-2.0", "license_sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"}
+  ]
+}
