@@ -117,13 +117,15 @@ jobs:
             --env REMOTE_DEV_ROLE=shell \
             --env WEB_USERNAME=synthetic \
             --env WEB_PASSWORD=synthetic-password \
-            remote-dev:local
+            --entrypoint /bin/bash \
+            remote-dev:local -c 'while true; do /usr/local/bin/start-remote-dev-web; sleep 0.2; done'
           for attempt in {1..30}; do
             curl --fail --silent --user synthetic:synthetic-password \
               http://127.0.0.1:17681/ >/dev/null && break
             sleep 1
           done
-          TTYD_TEST_URL=http://127.0.0.1:17681/ \
+          TTYD_TEST_CONTAINER=remote-dev-ttyd-browser-root \
+            TTYD_TEST_URL=http://127.0.0.1:17681/ \
             npm --prefix web/ttyd-client/browser-tests test
           python3 web/ttyd-client/test_server_contract.py http://127.0.0.1:17681
           docker rm -f remote-dev-ttyd-browser-root >/dev/null
@@ -133,13 +135,15 @@ jobs:
             --env WEB_USERNAME=synthetic \
             --env WEB_PASSWORD=synthetic-password \
             --env WEB_BASE_PATH=/terminal \
-            remote-dev:local
+            --entrypoint /bin/bash \
+            remote-dev:local -c 'while true; do /usr/local/bin/start-remote-dev-web; sleep 0.2; done'
           for attempt in {1..30}; do
             curl --fail --silent --user synthetic:synthetic-password \
               http://127.0.0.1:17682/terminal/ >/dev/null && break
             sleep 1
           done
-          TTYD_TEST_URL=http://127.0.0.1:17682/terminal/ \
+          TTYD_TEST_CONTAINER=remote-dev-ttyd-browser-base \
+            TTYD_TEST_URL=http://127.0.0.1:17682/terminal/ \
             npm --prefix web/ttyd-client/browser-tests test
           python3 web/ttyd-client/test_server_contract.py http://127.0.0.1:17682/terminal
 

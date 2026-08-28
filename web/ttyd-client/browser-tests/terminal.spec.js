@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { execFileSync } = require('node:child_process');
 
 test('stable ttyd client preserves authenticated I/O, Unicode, resize, and options', async ({ page }) => {
   await page.goto('./');
@@ -21,6 +22,26 @@ test('stable ttyd client preserves authenticated I/O, Unicode, resize, and optio
     disableLeaveAlert: window.term.options.disableLeaveAlert,
   }));
   expect(options).toEqual({ fontSize: 15, disableLeaveAlert: false });
+});
+
+test('abnormal socket close reconnects without duplicate terminal input', async ({ page }) => {
+  await page.goto('./');
+  await page.waitForFunction(() => window.term && window.term.element);
+  const terminal = page.locator('.xterm-helper-textarea');
+  await terminal.focus();
+  await terminal.pressSequentially('stty -echo');
+  await terminal.press('Enter');
+  execFileSync('docker', [
+    'exec', process.env.TTYD_TEST_CONTAINER, 'sh', '-c',
+    'kill -9 "$(pgrep -xo ttyd)"',
+  ]);
+  await expect(page.getByText('Reconnected', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await terminal.focus();
+  await terminal.pressSequentially("printf 'REMOTE_DEV_RECONNECT_ONCE\\n'", { delay: 5 });
+  await terminal.press('Enter');
+  await expect(page.locator('.xterm-rows')).toContainText('REMOTE_DEV_RECONNECT_ONCE');
+  const text = await page.locator('.xterm-rows').innerText();
+  expect(text.split('REMOTE_DEV_RECONNECT_ONCE').length - 1).toBe(1);
 });
 
 test('renderer failure falls back without losing the terminal', async ({ browser }) => {
