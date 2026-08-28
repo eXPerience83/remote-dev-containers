@@ -1048,7 +1048,7 @@ assert_agent_ttyd_security() {
     grep -Fxq -- --credential <<<"$argv"
     index_path="$(awk '\''$0 == "--index" { getline; print; exit }'\'' <<<"$argv")"
     test "$index_path" = /usr/share/remote-dev/ttyd/index.html
-    test "$(sha256sum "$index_path" | cut -d" " -f1)" = aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48
+    test "$(sha256sum "$index_path" | cut -d" " -f1)" = 2f05fbbeeb9c03849109ecc5f35ea070d5349271072dd6fbe12af679d1ba8446
   ' >/dev/null 2>&1 \
     || fail "$role ttyd did not retain its hardened authentication/origin/client-limit arguments"
 }

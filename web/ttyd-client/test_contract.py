@@ -17,6 +17,11 @@ PYTHON = shutil.which("python3") or "python3"
 
 
 class ProtocolContractTests(unittest.TestCase):
+    def test_runtime_hash_consumers_match_manifest(self) -> None:
+        expected = json.loads((ROOT / "asset-manifest.json").read_text())["sha256"]
+        for relative in ("scripts/base-verify.sh", "scripts/test-cross-service-isolation.sh"):
+            self.assertIn(expected, (REPO / relative).read_text(), relative)
+
     def test_stable_wire_commands_and_opening_message(self) -> None:
         opening = json.dumps(
             {"AuthToken": "synthetic", "columns": 80, "rows": 24}, separators=(",", ":")

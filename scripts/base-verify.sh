@@ -15,7 +15,7 @@ if (( missing != 0 )); then
 fi
 
 ttyd_index=/usr/share/remote-dev/ttyd/index.html
-expected_ttyd_index_sha=aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48
+expected_ttyd_index_sha=2f05fbbeeb9c03849109ecc5f35ea070d5349271072dd6fbe12af679d1ba8446
 if [[ ! -f "$ttyd_index" || -L "$ttyd_index" ]]; then
   echo "ERROR: Remote Dev ttyd client must be a regular non-symlink file" >&2
   exit 1
