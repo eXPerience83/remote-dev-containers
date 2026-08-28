@@ -13,7 +13,7 @@ from typing import Any
 EXPECTED_MANAGERS = ["dockerfile", "github-actions", "custom.regex"]
 UBUNTU_NAMES = ["ubuntu", "docker.io/library/ubuntu"]
 UBUNTU_FILES = ["versions.env", "images/base/Dockerfile"]
-UBUNTU_FROM = "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}"
+UBUNTU_FROM = "FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST} AS remote-dev-runtime"
 DOCKERFILE_FRONTEND_PACKAGE = "docker/dockerfile"
 DOCKERFILE_DEFAULT_DENY = {
     "description": "Deny native Dockerfile ownership unless a later repository rule explicitly allows it",
