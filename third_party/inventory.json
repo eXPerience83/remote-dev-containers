@@ -70,6 +70,21 @@
       ]
     },
     {
+      "id": "remote-dev-ttyd-client-bundle",
+      "name": "Remote Dev embedded ttyd client bundle",
+      "image_scope": "both",
+      "version": "1.7.7",
+      "source": "https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb/html",
+      "license": "MIT and Apache-2.0 components; exact closure in the dedicated SPDX document",
+      "notices": [
+        {
+          "path": "components/remote-dev-ttyd-client/",
+          "source": "repository",
+          "reviewed_from": "web/ttyd-client/bundle-components.json"
+        }
+      ]
+    },
+    {
       "id": "mise",
       "name": "mise",
       "image_scope": "both",

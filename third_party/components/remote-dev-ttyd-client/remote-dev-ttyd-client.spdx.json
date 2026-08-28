@@ -1,0 +1,26 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "remote-dev-ttyd-client-1.7.7",
+  "documentNamespace": "https://github.com/eXPerience83/remote-dev-containers/sbom/remote-dev-ttyd-client/1.7.7/aafc89fde6e1",
+  "creationInfo": {
+    "created": "2026-08-28T00:00:00Z",
+    "creators": ["Tool: remote-dev-ttyd-client-validator"]
+  },
+  "packages": [
+    {"SPDXID":"SPDXRef-Package-ttyd-frontend","name":"ttyd-frontend","versionInfo":"1.7.7","downloadLocation":"https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb/html","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION","checksums":[{"algorithm":"SHA256","checksumValue":"aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48"}]},
+    {"SPDXID":"SPDXRef-Package-xterm","name":"@xterm/xterm and enabled addons","versionInfo":"5.4.0","downloadLocation":"https://registry.yarnpkg.com","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-css-loader","name":"css-loader runtime","versionInfo":"6.10.0","downloadLocation":"https://registry.yarnpkg.com/css-loader/-/css-loader-6.10.0.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-crc32","name":"crc-32","versionInfo":"1.2.0","downloadLocation":"https://registry.yarnpkg.com/crc-32/-/crc-32-1.2.0.tgz","filesAnalyzed":false,"licenseConcluded":"Apache-2.0","licenseDeclared":"Apache-2.0","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-decko","name":"decko","versionInfo":"1.2.0","downloadLocation":"https://registry.yarnpkg.com/decko/-/decko-1.2.0.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-file-saver","name":"file-saver","versionInfo":"2.0.5","downloadLocation":"https://registry.yarnpkg.com/file-saver/-/file-saver-2.0.5.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-preact","name":"preact","versionInfo":"10.19.6","downloadLocation":"https://registry.yarnpkg.com/preact/-/preact-10.19.6.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-trzsz","name":"trzsz","versionInfo":"1.1.5","downloadLocation":"https://registry.yarnpkg.com/trzsz/-/trzsz-1.1.5.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-whatwg-fetch","name":"whatwg-fetch","versionInfo":"3.6.20","downloadLocation":"https://registry.yarnpkg.com/whatwg-fetch/-/whatwg-fetch-3.6.20.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
+    {"SPDXID":"SPDXRef-Package-zmodem","name":"zmodem.js","versionInfo":"0.1.10","downloadLocation":"https://registry.yarnpkg.com/zmodem.js/-/zmodem.js-0.1.10.tgz","filesAnalyzed":false,"licenseConcluded":"Apache-2.0","licenseDeclared":"Apache-2.0","copyrightText":"NOASSERTION"}
+  ],
+  "relationships": [
+    {"spdxElementId":"SPDXRef-DOCUMENT","relationshipType":"DESCRIBES","relatedSpdxElement":"SPDXRef-Package-ttyd-frontend"}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "remote-dev-ttyd-client-browser-tests",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {"test": "playwright test"},
+  "devDependencies": {"@playwright/test": "1.62.1"}
+}

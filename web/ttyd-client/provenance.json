@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/tsl0922/ttyd",
+    "tag": "1.7.7",
+    "commit": "40e79c706be14029b391f369bee6613c31667abb",
+    "tree": "c2abdd80665f8494280a65417a9c21156ff41125",
+    "commit_time": "2024-03-30T03:04:51Z",
+    "source_archive": "https://github.com/tsl0922/ttyd/archive/40e79c706be14029b391f369bee6613c31667abb.tar.gz",
+    "source_archive_sha256": "1f6f53a5021a2cee4af9b975f3dc7a3185bd261c23a84f7b680285f6c1a50341"
+  },
+  "toolchain": {
+    "node": "24.20.0",
+    "yarn": "3.6.3",
+    "yarn_source": "https://repo.yarnpkg.com/3.6.3/packages/yarnpkg-cli/bin/yarn.js",
+    "yarn_sha256": "08ead1821a257416e6f217e89365425bf4b6d2430c3279318bedcec1a245fff5"
+  },
+  "patch": {
+    "path": "patches/0001-remote-dev-client.patch",
+    "sha256": "0e65db1d0dc1ec49b8df225486563f63248f4aa96a9c4e990c7bcd8147229c52"
+  },
+  "registry": "https://registry.yarnpkg.com",
+  "source_date_epoch": 1711767891
+}

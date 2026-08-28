@@ -1,0 +1,269 @@
+diff --git a/src/components/terminal/xterm/index.ts b/src/components/terminal/xterm/index.ts
+index b643f92..4bc059c 100644
+--- a/src/components/terminal/xterm/index.ts
++++ b/src/components/terminal/xterm/index.ts
+@@ -11,6 +11,7 @@ import { OverlayAddon } from './addons/overlay';
+ import { ZmodemAddon } from './addons/zmodem';
+ 
+ import '@xterm/xterm/css/xterm.css';
++import { ConnectionState, ExtensionContext, extensions } from '../../../extensions';
+ 
+ interface TtydTerminal extends Terminal {
+     fit(): void;
+@@ -75,7 +76,9 @@ function addEventListener(target: EventTarget, type: string, listener: EventList
+ }
+ 
+ export class Xterm {
+-    private disposables: IDisposable[] = [];
++    private pageDisposables: IDisposable[] = [];
++    private connectionDisposables: IDisposable[] = [];
++    private connectionListeners = new Set<Parameters<ExtensionContext['onConnectionStateChange']>[0]>();
+     private textEncoder = new TextEncoder();
+     private textDecoder = new TextDecoder();
+     private written = 0;
+@@ -105,18 +108,36 @@ export class Xterm {
+     ) {}
+ 
+     dispose() {
+-        for (const d of this.disposables) {
++        this.doReconnect = false;
++        this.socket?.close();
++        this.disposeConnection();
++        for (const d of this.pageDisposables) {
+             d.dispose();
+         }
+-        this.disposables.length = 0;
++        this.pageDisposables.length = 0;
++        this.connectionListeners.clear();
++        this.terminal?.dispose();
+     }
+ 
+-    @bind
+-    private register<T extends IDisposable>(d: T): T {
+-        this.disposables.push(d);
++    private registerPage<T extends IDisposable>(d: T): T {
++        this.pageDisposables.push(d);
++        return d;
++    }
++
++    private registerConnection<T extends IDisposable>(d: T): T {
++        this.connectionDisposables.push(d);
+         return d;
+     }
+ 
++    private disposeConnection() {
++        for (const d of this.connectionDisposables) d.dispose();
++        this.connectionDisposables.length = 0;
++    }
++
++    private setConnectionState(state: ConnectionState) {
++        for (const listener of this.connectionListeners) listener(state);
++    }
++
+     @bind
+     public sendFile(files: FileList) {
+         this.zmodemAddon?.sendFile(files);
+@@ -161,28 +182,46 @@ export class Xterm {
+ 
+         terminal.open(parent);
+         fitAddon.fit();
++        this.initPageListeners();
++
++        const uiMount = document.createElement('div');
++        uiMount.dataset.remoteDevExtensions = '';
++        parent.appendChild(uiMount);
++        for (const extension of extensions) {
++            const result = extension.activate({
++                terminal,
++                uiMount,
++                sendInput: this.sendData,
++                requestFit: () => fitAddon.fit(),
++                onConnectionStateChange: listener => {
++                    this.connectionListeners.add(listener);
++                    return toDisposable(() => this.connectionListeners.delete(listener));
++                },
++            });
++            if (Array.isArray(result)) result.forEach(disposable => this.registerPage(disposable));
++            else if (result) this.registerPage(result);
++        }
+     }
+ 
+-    @bind
+-    private initListeners() {
+-        const { terminal, fitAddon, overlayAddon, register, sendData } = this;
+-        register(
++    private initPageListeners() {
++        const { terminal, fitAddon, overlayAddon, sendData } = this;
++        this.registerPage(
+             terminal.onTitleChange(data => {
+                 if (data && data !== '' && !this.titleFixed) {
+                     document.title = data + ' | ' + this.title;
+                 }
+             })
+         );
+-        register(terminal.onData(data => sendData(data)));
+-        register(terminal.onBinary(data => sendData(Uint8Array.from(data, v => v.charCodeAt(0)))));
+-        register(
++        this.registerPage(terminal.onData(data => sendData(data)));
++        this.registerPage(terminal.onBinary(data => sendData(Uint8Array.from(data, v => v.charCodeAt(0)))));
++        this.registerPage(
+             terminal.onResize(({ cols, rows }) => {
+                 const msg = JSON.stringify({ columns: cols, rows: rows });
+                 this.socket?.send(this.textEncoder.encode(Command.RESIZE_TERMINAL + msg));
+                 if (this.resizeOverlay) overlayAddon.showOverlay(`${cols}x${rows}`, 300);
+             })
+         );
+-        register(
++        this.registerPage(
+             terminal.onSelectionChange(() => {
+                 if (this.terminal.getSelection() === '') return;
+                 try {
+@@ -193,8 +232,8 @@ export class Xterm {
+                 this.overlayAddon?.showOverlay('\u2702', 200);
+             })
+         );
+-        register(addEventListener(window, 'resize', () => fitAddon.fit()));
+-        register(addEventListener(window, 'beforeunload', this.onWindowUnload));
++        this.registerPage(addEventListener(window, 'resize', () => fitAddon.fit()));
++        this.registerPage(addEventListener(window, 'beforeunload', this.onWindowUnload));
+     }
+ 
+     @bind
+@@ -240,19 +279,22 @@ export class Xterm {
+ 
+     @bind
+     public connect() {
++        this.disposeConnection();
++        this.setConnectionState('connecting');
+         this.socket = new WebSocket(this.options.wsUrl, ['tty']);
+-        const { socket, register } = this;
++        const { socket } = this;
+ 
+         socket.binaryType = 'arraybuffer';
+-        register(addEventListener(socket, 'open', this.onSocketOpen));
+-        register(addEventListener(socket, 'message', this.onSocketData as EventListener));
+-        register(addEventListener(socket, 'close', this.onSocketClose as EventListener));
+-        register(addEventListener(socket, 'error', () => (this.doReconnect = false)));
++        this.registerConnection(addEventListener(socket, 'open', this.onSocketOpen));
++        this.registerConnection(addEventListener(socket, 'message', this.onSocketData as EventListener));
++        this.registerConnection(addEventListener(socket, 'close', this.onSocketClose as EventListener));
++        this.registerConnection(addEventListener(socket, 'error', () => (this.doReconnect = false)));
+     }
+ 
+     @bind
+     private onSocketOpen() {
+         console.log('[ttyd] websocket connection opened');
++        this.setConnectionState('open');
+ 
+         const { textEncoder, terminal, overlayAddon } = this;
+         const msg = JSON.stringify({ AuthToken: this.token, columns: terminal.cols, rows: terminal.rows });
+@@ -267,17 +309,17 @@ export class Xterm {
+         }
+ 
+         this.doReconnect = this.reconnect;
+-        this.initListeners();
+         terminal.focus();
+     }
+ 
+     @bind
+     private onSocketClose(event: CloseEvent) {
+         console.log(`[ttyd] websocket connection closed with code: ${event.code}`);
++        this.setConnectionState('closed');
+ 
+         const { refreshToken, connect, doReconnect, overlayAddon } = this;
+         overlayAddon.showOverlay('Connection Closed');
+-        this.dispose();
++        this.disposeConnection();
+ 
+         // 1000: CLOSE_NORMAL
+         if (event.code !== 1000 && doReconnect) {
+@@ -361,7 +403,7 @@ export class Xterm {
+ 
+     @bind
+     private applyPreferences(prefs: Preferences) {
+-        const { terminal, fitAddon, register } = this;
++        const { terminal, fitAddon } = this;
+         if (prefs.enableZmodem || prefs.enableTrzsz) {
+             this.zmodemAddon = new ZmodemAddon({
+                 zmodem: prefs.enableZmodem,
+@@ -373,7 +415,7 @@ export class Xterm {
+                 writer: this.writeData,
+             });
+             this.writeFunc = data => this.zmodemAddon?.consume(data);
+-            terminal.loadAddon(register(this.zmodemAddon));
++            terminal.loadAddon(this.registerPage(this.zmodemAddon));
+         }
+ 
+         for (const [key, value] of Object.entries(prefs)) {
+@@ -411,7 +453,7 @@ export class Xterm {
+                     break;
+                 case 'enableSixel':
+                     if (value) {
+-                        terminal.loadAddon(register(new ImageAddon()));
++                        terminal.loadAddon(this.registerPage(new ImageAddon()));
+                         console.log('[ttyd] Sixel enabled');
+                     }
+                     break;
+diff --git a/webpack.config.js b/webpack.config.js
+index 18bfcf3..2da201a 100644
+--- a/webpack.config.js
++++ b/webpack.config.js
+@@ -16,7 +16,8 @@ const baseConfig = {
+     },
+     output: {
+         path: path.resolve(__dirname, 'dist'),
+-        filename: devMode ? '[name].js' : '[name].[contenthash].js',
++        filename: devMode ? '[name].js' : '[name].js',
++        chunkFilename: devMode ? '[id].js' : '[id].js',
+     },
+     module: {
+         rules: [
+@@ -43,8 +44,8 @@ const baseConfig = {
+             patterns: [{ from: './favicon.png', to: '.' }],
+         }),
+         new MiniCssExtractPlugin({
+-            filename: devMode ? '[name].css' : '[name].[contenthash].css',
+-            chunkFilename: devMode ? '[id].css' : '[id].[contenthash].css',
++            filename: '[name].css',
++            chunkFilename: '[id].css',
+         }),
+         new HtmlWebpackPlugin({
+             inject: false,
+@@ -93,9 +94,11 @@ const devConfig = {
+ const prodConfig = {
+     mode: 'production',
+     optimization: {
++        moduleIds: 'deterministic',
++        chunkIds: 'deterministic',
+         minimizer: [new TerserPlugin(), new CssMinimizerPlugin()],
+     },
+-    devtool: 'source-map',
++    devtool: false,
+ };
+ 
+ module.exports = merge(baseConfig, devMode ? devConfig : prodConfig);
+diff --git a/web/ttyd-client/work/src/extensions.ts b/src/extensions.ts
+new file mode 100755
+index 0000000..88b5a97
+--- /dev/null
++++ b/src/extensions.ts
+@@ -0,0 +1,19 @@
++import type { IDisposable, Terminal } from '@xterm/xterm';
++
++export type ConnectionState = 'connecting' | 'open' | 'closed';
++
++export interface ExtensionContext {
++    terminal: Terminal;
++    uiMount: HTMLElement;
++    sendInput(data: string | Uint8Array): void;
++    requestFit(): void;
++    onConnectionStateChange(listener: (state: ConnectionState) => void): IDisposable;
++}
++
++export interface RemoteDevExtension {
++    activate(context: ExtensionContext): void | IDisposable | IDisposable[];
++}
++
++// #97 intentionally ships no product behavior. Clipboard and touch extensions
++// are owned by #91 and #90 and must use this single lifecycle-safe registry.
++export const extensions: readonly RemoteDevExtension[] = [];

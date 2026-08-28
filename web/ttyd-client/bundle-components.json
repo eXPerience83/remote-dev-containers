@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "asset_sha256": "aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48",
+  "dependency_source": "https://registry.yarnpkg.com",
+  "integrity_source": "upstream/html/yarn.lock (exact resolution and checksum fields)",
+  "components": [
+    {"name":"ttyd-frontend","version":"1.7.7","license":"MIT","notice":"ttyd/LICENSE"},
+    {"name":"@xterm/addon-canvas","version":"0.6.0","license":"MIT","notice":"_xterm_addon-canvas/LICENSE"},
+    {"name":"@xterm/addon-fit","version":"0.9.0","license":"MIT","notice":"_xterm_addon-fit/LICENSE"},
+    {"name":"@xterm/addon-image","version":"0.7.0","license":"MIT","notice":"_xterm_addon-image/LICENSE"},
+    {"name":"@xterm/addon-unicode11","version":"0.7.0","license":"MIT","notice":"_xterm_addon-unicode11/LICENSE"},
+    {"name":"@xterm/addon-web-links","version":"0.10.0","license":"MIT","notice":"_xterm_addon-web-links/LICENSE"},
+    {"name":"@xterm/addon-webgl","version":"0.17.0","license":"MIT","notice":"_xterm_addon-webgl/LICENSE"},
+    {"name":"@xterm/xterm","version":"5.4.0","license":"MIT","notice":"_xterm_xterm/LICENSE"},
+    {"name":"css-loader","version":"6.10.0","license":"MIT","notice":"css-loader/LICENSE"},
+    {"name":"crc-32","version":"1.2.0","license":"Apache-2.0","notice":"crc-32/LICENSE"},
+    {"name":"decko","version":"1.2.0","license":"MIT","notice":"decko/LICENSE"},
+    {"name":"file-saver","version":"2.0.5","license":"MIT","notice":"file-saver/LICENSE"},
+    {"name":"preact","version":"10.19.6","license":"MIT","notice":"preact/LICENSE"},
+    {"name":"trzsz","version":"1.1.5","license":"MIT","notice":"trzsz/LICENSE"},
+    {"name":"whatwg-fetch","version":"3.6.20","license":"MIT","notice":"whatwg-fetch/LICENSE"},
+    {"name":"zmodem.js","version":"0.1.10","license":"Apache-2.0","notice":"zmodem.js/LICENSE"}
+  ],
+  "build_only": [
+    {"name":"Yarn","version":"3.6.3","license":"BSD-2-Clause","notice":"yarn/LICENSE"}
+  ]
+}
