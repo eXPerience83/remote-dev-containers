@@ -14,6 +14,21 @@ if (( missing != 0 )); then
   exit 1
 fi
 
+ttyd_index=/usr/share/remote-dev/ttyd/index.html
+expected_ttyd_index_sha=aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48
+if [[ ! -f "$ttyd_index" || -L "$ttyd_index" ]]; then
+  echo "ERROR: Remote Dev ttyd client must be a regular non-symlink file" >&2
+  exit 1
+fi
+if [[ "$(stat -c '%u:%g %a' "$ttyd_index")" != "0:0 444" ]]; then
+  echo "ERROR: Remote Dev ttyd client must be root-owned mode 0444" >&2
+  exit 1
+fi
+if [[ "$(sha256sum "$ttyd_index" | cut -d' ' -f1)" != "$expected_ttyd_index_sha" ]]; then
+  echo "ERROR: Remote Dev ttyd client hash mismatch" >&2
+  exit 1
+fi
+
 if command -v bwrap >/dev/null 2>&1; then
   echo "ERROR: the system Bubblewrap executable must not be installed in the default outer-isolation image" >&2
   exit 1

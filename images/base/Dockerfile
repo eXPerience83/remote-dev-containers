@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.26.0@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 ARG UBUNTU_VERSION=26.04
 ARG UBUNTU_DIGEST=sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
-FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}
+FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST} AS remote-dev-runtime
 
 # Re-declare the pre-FROM arguments so they are available inside this build stage.
 ARG UBUNTU_VERSION
@@ -219,9 +219,19 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
 COPY config/tmux.conf /etc/tmux.conf
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify
 RUN chmod 0644 /etc/tmux.conf \
-    && chmod 0755 /usr/local/bin/remote-dev-base-verify \
-    && remote-dev-base-verify
+    && chmod 0755 /usr/local/bin/remote-dev-base-verify
 
 WORKDIR /workspace
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bash", "--login"]
+
+FROM remote-dev-runtime AS ttyd-client-builder
+COPY versions.env /src/versions.env
+COPY web/ttyd-client/ /src/web/ttyd-client/
+RUN REMOTE_DEV_FRONTEND_NODE=/opt/remote-dev/mise/installs/node/24.20.0/bin/node \
+    /src/web/ttyd-client/build.sh
+
+FROM remote-dev-runtime
+COPY --from=ttyd-client-builder --chown=0:0 --chmod=0444 \
+    /src/web/ttyd-client/dist/index.html /usr/share/remote-dev/ttyd/index.html
+RUN remote-dev-base-verify

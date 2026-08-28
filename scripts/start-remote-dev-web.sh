@@ -96,6 +96,7 @@ cmd=(
   --port "${WEB_PORT:-7681}"
   --max-clients "${WEB_MAX_CLIENTS:-1}"
   --terminal-type xterm-256color
+  --index /usr/share/remote-dev/ttyd/index.html
   --client-option "fontSize=15"
   --client-option "disableLeaveAlert=false"
 )

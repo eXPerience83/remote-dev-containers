@@ -1016,6 +1016,7 @@ assert_agent_ttyd_security() {
   local username="$3"
   local port="$4"
   local status=""
+  local html=""
 
   docker_exec "$name" remote-dev-healthcheck >/dev/null 2>&1 \
     || fail "$role credential-independent health check failed under hardening"
@@ -1030,6 +1031,13 @@ assert_agent_ttyd_security() {
   ' sh "$username" "$port")" \
     || fail "$role authenticated ttyd request could not be evaluated"
   [[ "$status" == 200 ]] || fail "$role ttyd rejected its synthetic credential"
+  html="$(docker_exec "$name" sh -c '
+    password="$(cat -- /run/secrets/web_password)"
+    curl --fail --silent --user "$1:$password" "http://127.0.0.1:$2/"
+  ' sh "$username" "$port")" \
+    || fail "$role project-owned ttyd client could not be fetched"
+  grep -Fq remoteDevExtensions <<<"$html" \
+    || fail "$role ttyd endpoint did not serve the project-owned client"
   docker_exec "$name" bash -c '
     set -eu
     pid="$(pgrep -xo ttyd)"
@@ -1038,6 +1046,9 @@ assert_agent_ttyd_security() {
     max_clients="$(awk '\''$0 == "--max-clients" { getline; print; exit }'\'' <<<"$argv")"
     test "$max_clients" = 1
     grep -Fxq -- --credential <<<"$argv"
+    index_path="$(awk '\''$0 == "--index" { getline; print; exit }'\'' <<<"$argv")"
+    test "$index_path" = /usr/share/remote-dev/ttyd/index.html
+    test "$(sha256sum "$index_path" | cut -d" " -f1)" = aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48
   ' >/dev/null 2>&1 \
     || fail "$role ttyd did not retain its hardened authentication/origin/client-limit arguments"
 }

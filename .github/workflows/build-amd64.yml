@@ -56,7 +56,13 @@ jobs:
             scripts/test_validate_standalone_artifact_inspection.py \
             scripts/validate-release-channel-contract.py \
             scripts/validate-renovate-ownership.py \
-            scripts/test_validate_renovate_ownership.py
+            scripts/test_validate_renovate_ownership.py \
+            web/ttyd-client/validate.py \
+            web/ttyd-client/validate_stats.py \
+            web/ttyd-client/test_contract.py \
+            web/ttyd-client/test_server_contract.py
+          python3 web/ttyd-client/validate.py
+          python3 web/ttyd-client/test_contract.py
           make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-remote-dev-context7.py
@@ -94,6 +100,48 @@ jobs:
 
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
+
+      - name: Test project-owned ttyd client in Chromium
+        run: |
+          set -euo pipefail
+          cd web/ttyd-client/browser-tests
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          cd ../../..
+          cleanup() {
+            docker rm -f remote-dev-ttyd-browser-root remote-dev-ttyd-browser-base >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name remote-dev-ttyd-browser-root \
+            --publish 17681:7681 \
+            --env REMOTE_DEV_ROLE=shell \
+            --env WEB_USERNAME=synthetic \
+            --env WEB_PASSWORD=synthetic-password \
+            remote-dev:local
+          for attempt in {1..30}; do
+            curl --fail --silent --user synthetic:synthetic-password \
+              http://127.0.0.1:17681/ >/dev/null && break
+            sleep 1
+          done
+          TTYD_TEST_URL=http://127.0.0.1:17681/ \
+            npm --prefix web/ttyd-client/browser-tests test
+          python3 web/ttyd-client/test_server_contract.py http://127.0.0.1:17681
+          docker rm -f remote-dev-ttyd-browser-root >/dev/null
+          docker run --detach --name remote-dev-ttyd-browser-base \
+            --publish 17682:7681 \
+            --env REMOTE_DEV_ROLE=shell \
+            --env WEB_USERNAME=synthetic \
+            --env WEB_PASSWORD=synthetic-password \
+            --env WEB_BASE_PATH=/terminal \
+            remote-dev:local
+          for attempt in {1..30}; do
+            curl --fail --silent --user synthetic:synthetic-password \
+              http://127.0.0.1:17682/terminal/ >/dev/null && break
+            sleep 1
+          done
+          TTYD_TEST_URL=http://127.0.0.1:17682/terminal/ \
+            npm --prefix web/ttyd-client/browser-tests test
+          python3 web/ttyd-client/test_server_contract.py http://127.0.0.1:17682/terminal
 
       - name: Verify canonical and legacy local aliases
         run: |
@@ -156,6 +204,7 @@ jobs:
           path: |
             sbom-base.spdx.json
             sbom-remote-dev.spdx.json
+            third_party/components/remote-dev-ttyd-client/remote-dev-ttyd-client.spdx.json
             trivy-base.json
             trivy-remote-dev.json
           if-no-files-found: warn
