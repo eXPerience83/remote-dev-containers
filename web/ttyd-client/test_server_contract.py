@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPBasicAuthHandler, HTTPPasswordMgrWithDefaultRealm, build_opener
 
 
-EXPECTED_SHA = "aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48"
+EXPECTED_SHA = "2f05fbbeeb9c03849109ecc5f35ea070d5349271072dd6fbe12af679d1ba8446"
 
 
 def websocket(url: str, username: str, password: str, origin: str) -> tuple[socket.socket, bytes]:

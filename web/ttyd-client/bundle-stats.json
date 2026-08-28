@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "webpack": "5.90.3",
-  "asset": {"html_bytes": 730898, "sha256": "aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48"},
+  "asset": {"html_bytes": 731039, "sha256": "2f05fbbeeb9c03849109ecc5f35ea070d5349271072dd6fbe12af679d1ba8446"},
   "emitted_package_roots": [
     "@xterm/addon-canvas", "@xterm/addon-fit", "@xterm/addon-image",
     "@xterm/addon-unicode11", "@xterm/addon-web-links", "@xterm/addon-webgl",

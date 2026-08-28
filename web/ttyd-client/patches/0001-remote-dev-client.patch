@@ -21,7 +21,7 @@ index b643f92..4bc059c 100644
      private textEncoder = new TextEncoder();
      private textDecoder = new TextDecoder();
      private written = 0;
-@@ -105,18 +108,36 @@ export class Xterm {
+@@ -105,18 +108,39 @@ export class Xterm {
      ) {}
  
      dispose() {
@@ -57,6 +57,9 @@ index b643f92..4bc059c 100644
 +    }
 +
 +    private setConnectionState(state: ConnectionState) {
++        document
++            .querySelector<HTMLElement>('[data-remote-dev-extensions]')
++            ?.setAttribute('data-connection-state', state);
 +        for (const listener of this.connectionListeners) listener(state);
 +    }
 +
@@ -147,7 +150,7 @@ index b643f92..4bc059c 100644
 +        this.registerConnection(addEventListener(socket, 'open', this.onSocketOpen));
 +        this.registerConnection(addEventListener(socket, 'message', this.onSocketData as EventListener));
 +        this.registerConnection(addEventListener(socket, 'close', this.onSocketClose as EventListener));
-+        this.registerConnection(addEventListener(socket, 'error', () => (this.doReconnect = false)));
++        this.registerConnection(addEventListener(socket, 'error', () => this.setConnectionState('closed')));
      }
  
      @bind

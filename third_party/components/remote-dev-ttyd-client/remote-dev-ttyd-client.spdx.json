@@ -9,7 +9,7 @@
     "creators": ["Tool: remote-dev-ttyd-client-validator"]
   },
   "packages": [
-    {"SPDXID":"SPDXRef-Package-ttyd-frontend","name":"ttyd-frontend","versionInfo":"1.7.7","downloadLocation":"https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb/html","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION","checksums":[{"algorithm":"SHA256","checksumValue":"aafc89fde6e1f805d1c78ac49caf41977cb85bf900ba84c108eb57419a6a0a48"}]},
+    {"SPDXID":"SPDXRef-Package-ttyd-frontend","name":"ttyd-frontend","versionInfo":"1.7.7","downloadLocation":"https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb/html","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION","checksums":[{"algorithm":"SHA256","checksumValue":"2f05fbbeeb9c03849109ecc5f35ea070d5349271072dd6fbe12af679d1ba8446"}]},
     {"SPDXID":"SPDXRef-Package-xterm","name":"@xterm/xterm and enabled addons","versionInfo":"5.4.0","downloadLocation":"https://registry.yarnpkg.com","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
     {"SPDXID":"SPDXRef-Package-css-loader","name":"css-loader runtime","versionInfo":"6.10.0","downloadLocation":"https://registry.yarnpkg.com/css-loader/-/css-loader-6.10.0.tgz","filesAnalyzed":false,"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"NOASSERTION"},
     {"SPDXID":"SPDXRef-Package-crc32","name":"crc-32","versionInfo":"1.2.0","downloadLocation":"https://registry.yarnpkg.com/crc-32/-/crc-32-1.2.0.tgz","filesAnalyzed":false,"licenseConcluded":"Apache-2.0","licenseDeclared":"Apache-2.0","copyrightText":"NOASSERTION"},

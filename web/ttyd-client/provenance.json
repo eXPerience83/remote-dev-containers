@@ -18,7 +18,7 @@
   },
   "patch": {
     "path": "patches/0001-remote-dev-client.patch",
-    "sha256": "0e65db1d0dc1ec49b8df225486563f63248f4aa96a9c4e990c7bcd8147229c52"
+    "sha256": "714c633e05a7850ff91bd04b8c1b88786f8cc55f76d13f08be5848e1256865ad"
   },
   "registry": "https://registry.yarnpkg.com",
   "source_date_epoch": 1711767891
