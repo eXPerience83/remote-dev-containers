@@ -228,6 +228,8 @@ CMD ["bash", "--login"]
 FROM remote-dev-runtime AS ttyd-client-builder
 COPY versions.env /src/versions.env
 COPY web/ttyd-client/ /src/web/ttyd-client/
+COPY third_party/components/remote-dev-ttyd-client/ \
+    /src/third_party/components/remote-dev-ttyd-client/
 RUN REMOTE_DEV_FRONTEND_NODE=/opt/remote-dev/mise/installs/node/24.20.0/bin/node \
     /src/web/ttyd-client/build.sh
 
