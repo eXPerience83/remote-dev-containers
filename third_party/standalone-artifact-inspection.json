@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.6",
+      "version": "0.12.7",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.6/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "8681d8921e7d520fb368991dcf5f9c1905b80f5bf2a265a0ed085c8d8e342477",
-          "asset_size": 20274889,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21",
+          "asset_size": 19419908,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.6/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "d58030acd26159499ac82f32da12d1b3c12a3a1bfc414232d9082070c03e128d",
-          "asset_size": 19386077,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "66393193038dd7eb108abd7a218d9cec04ac70ab98242b0720fa94de19223b7c",
+          "asset_size": 18594128,
           "archive_member_count": 3,
           "legal_members": []
         }
