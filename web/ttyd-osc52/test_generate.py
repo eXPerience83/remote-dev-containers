@@ -30,6 +30,7 @@ class GeneratorTests(unittest.TestCase):
         cls.archive = generator.read_archive(None, cls.provenance)
         cls.components = json.loads((HERE / "bundle-components.json").read_text())
         cls.inventory = json.loads((HERE.parents[1] / "third_party" / "inventory.json").read_text())
+        cls.spdx = json.loads((HERE.parents[1] / "third_party" / "components" / "remote-dev-ttyd-osc52" / "remote-dev-ttyd-osc52.spdx.json").read_text())
 
     def repack_header(self, header: bytes) -> bytes:
         output = io.BytesIO()
@@ -122,6 +123,52 @@ class GeneratorTests(unittest.TestCase):
             record[field] = "changed" if field != "notices" else []
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validator.validate_inventory_record(inventory, self.provenance, self.components)
+
+    def test_prebundled_trzsz_closure_is_complete_and_hash_bound(self) -> None:
+        nested = self.components["prebundled_components"]
+        self.assertEqual({record["name"] for record in nested["components"]}, {"base64-js", "pako", "ts-md5", "tslib"})
+        for index, record in enumerate(nested["components"]):
+            for field in ("version", "package_sha256", "package_url", "license", "license_evidence"):
+                components = deepcopy(self.components)
+                components["prebundled_components"]["components"][index][field] = "changed"
+                with self.subTest(component=record["name"], field=field), self.assertRaises(ValueError):
+                    validator.validate_prebundled_components(components)
+        components = deepcopy(self.components)
+        components["prebundled_components"]["components"].pop()
+        with self.assertRaises(ValueError):
+            validator.validate_prebundled_components(components)
+        components = deepcopy(self.components)
+        components["prebundled_components"]["parent"]["package_sha256"] = "changed"
+        with self.assertRaises(ValueError):
+            validator.validate_prebundled_components(components)
+        components = deepcopy(self.components)
+        next(record for record in components["components"] if record["name"] == "trzsz")["version"] = "changed"
+        with self.assertRaises(ValueError):
+            validator.validate_prebundled_components(components)
+
+    def test_pako_zlib_and_zmodem_patch_evidence_are_required(self) -> None:
+        components = deepcopy(self.components)
+        pako = next(record for record in components["prebundled_components"]["components"] if record["name"] == "pako")
+        pako["license"] = "MIT"
+        with self.assertRaises(ValueError):
+            validator.validate_prebundled_components(components)
+        provenance = dict(self.provenance, zmodem_patch=dict(self.provenance["zmodem_patch"], sha256="changed"))
+        with self.assertRaises(ValueError):
+            validator.validate_zmodem_patch(provenance, self.components)
+        with self.assertRaises(generator.GenerationError):
+            generator.validate_zmodem_patch(self.archive, provenance)
+
+    def test_spdx_requires_the_nested_closure_and_zlib(self) -> None:
+        records = self.components["components"] + self.components["prebundled_components"]["components"]
+        spdx = deepcopy(self.spdx)
+        root = next(package for package in spdx["packages"] if package["name"] == "remote-dev-ttyd-osc52-client")
+        root["licenseDeclared"] = "MIT AND Apache-2.0 AND Zlib"
+        with self.assertRaises(ValueError):
+            validator.validate_spdx(spdx, records, self.provenance)
+        spdx = deepcopy(self.spdx)
+        spdx["packages"] = [package for package in spdx["packages"] if package["name"] != "pako"]
+        with self.assertRaises(ValueError):
+            validator.validate_spdx(spdx, records, self.provenance)
 
 
 if __name__ == "__main__":

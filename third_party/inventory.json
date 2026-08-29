@@ -75,7 +75,7 @@
       "image_scope": "both",
       "version": "ttyd-1.7.7+remote-dev-osc52",
       "source": "https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb",
-      "license": "MIT and Apache-2.0 component terms",
+      "license": "MIT, Apache-2.0, Zlib, and 0BSD component terms",
       "notices": [
         {
           "path": "components/ttyd/LICENSE",

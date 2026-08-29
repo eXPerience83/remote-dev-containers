@@ -7,6 +7,12 @@
   "archive_sha256": "1f6f53a5021a2cee4af9b975f3dc7a3185bd261c23a84f7b680285f6c1a50341",
   "html_header_path": "ttyd-40e79c706be14029b391f369bee6613c31667abb/src/html.h",
   "html_header_sha256": "6f3716ebd951e101df883bb14922f067c023f11561aa088ef487814183727cf3",
+  "zmodem_patch": {
+    "ttyd_commit": "40e79c706be14029b391f369bee6613c31667abb",
+    "upstream_path": "ttyd-40e79c706be14029b391f369bee6613c31667abb/html/.yarn/patches/zmodem.js-npm-0.1.10-e5537fa2ed.patch",
+    "sha256": "5411e786ace86f7cc14db4723f129da1c21d04852f3c32a93f7021bdc64e37aa",
+    "evidence_path": "third_party/components/remote-dev-ttyd-osc52/zmodem.js/ttyd-1.7.7.patch"
+  },
   "baseline_html_size": 729693,
   "baseline_html_sha256": "dea8c4fd372afc6984abe3857438421cc2ef3eb37a5ac5306a9080b5403a2140",
   "insertion_anchor": "<script type=\"text/javascript\">",

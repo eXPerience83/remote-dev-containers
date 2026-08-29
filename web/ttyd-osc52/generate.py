@@ -87,7 +87,10 @@ def read_archive(path: Path | None, provenance: dict[str, object]) -> bytes:
 
 
 def extract_header(archive: bytes, provenance: dict[str, object]) -> bytes:
-    member_name = str(provenance["html_header_path"])
+    return extract_member(archive, str(provenance["html_header_path"]))
+
+
+def extract_member(archive: bytes, member_name: str) -> bytes:
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as source:
         matches = [member for member in source.getmembers() if member.name == member_name and member.isfile()]
         if len(matches) != 1:
@@ -96,6 +99,16 @@ def extract_header(archive: bytes, provenance: dict[str, object]) -> bytes:
         if extracted is None:
             raise GenerationError(f"cannot extract {member_name}")
         return extracted.read()
+
+
+def validate_zmodem_patch(archive: bytes, provenance: dict[str, object]) -> None:
+    patch = provenance.get("zmodem_patch")
+    if not isinstance(patch, dict):
+        raise GenerationError("zmodem patch provenance must be an object")
+    require_equal(patch.get("ttyd_commit"), UPSTREAM_COMMIT, "zmodem patch ttyd commit")
+    upstream_path = f"ttyd-{UPSTREAM_COMMIT}/html/.yarn/patches/zmodem.js-npm-0.1.10-e5537fa2ed.patch"
+    require_equal(patch.get("upstream_path"), upstream_path, "zmodem patch upstream path")
+    require_equal(sha256(extract_member(archive, upstream_path)), patch.get("sha256"), "zmodem patch SHA-256")
 
 
 def decode_baseline(header: bytes, provenance: dict[str, object]) -> bytes:
@@ -118,6 +131,7 @@ def generate(archive: bytes, provenance: dict[str, object]) -> bytes:
     require_equal(sha256(archive), provenance["archive_sha256"], "archive SHA-256")
     header = extract_header(archive, provenance)
     require_equal(sha256(header), provenance["html_header_sha256"], "src/html.h SHA-256")
+    validate_zmodem_patch(archive, provenance)
     baseline = decode_baseline(header, provenance)
 
     anchor = str(provenance["insertion_anchor"]).encode()
