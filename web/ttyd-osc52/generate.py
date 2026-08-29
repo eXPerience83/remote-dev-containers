@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -20,6 +21,12 @@ PROVENANCE_PATH = HERE / "provenance.json"
 SCRIPT_PATH = HERE / "osc52-write.js"
 DIST_PATH = HERE / "dist" / "index.html"
 SUPPORTED_TTYD_VERSION = "1.7.7"
+UPSTREAM_OWNER = "tsl0922"
+UPSTREAM_REPOSITORY = "ttyd"
+UPSTREAM_COMMIT = "40e79c706be14029b391f369bee6613c31667abb"
+UPSTREAM_ARCHIVE_URL = (
+    f"https://codeload.github.com/{UPSTREAM_OWNER}/{UPSTREAM_REPOSITORY}/tar.gz/{UPSTREAM_COMMIT}"
+)
 HEADER_PATTERN = re.compile(
     rb"unsigned char index_html\[\] = \{\n(?P<body>.*?)\n\};\n"
     rb"unsigned int index_html_len = (?P<length>\d+);\n"
@@ -53,15 +60,30 @@ def load_provenance() -> dict[str, object]:
     require_equal(data.get("ttyd_version"), SUPPORTED_TTYD_VERSION, "provenance ttyd version")
     require_equal(configured_ttyd_version(), SUPPORTED_TTYD_VERSION, "repository ttyd version")
     require_equal(data.get("compatibility_issue"), 174, "compatibility review issue")
+    require_equal(data.get("ttyd_commit"), UPSTREAM_COMMIT, "upstream ttyd commit")
+    require_equal(data.get("archive_url"), UPSTREAM_ARCHIVE_URL, "upstream archive URL")
     return data
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def read_archive(path: Path | None, provenance: dict[str, object]) -> bytes:
     if path is not None:
         return path.read_bytes()
-    request = urllib.request.Request(str(provenance["archive_url"]), headers={"User-Agent": "remote-dev-ttyd-osc52-generator"})
-    with urllib.request.urlopen(request, timeout=300) as response:
-        return response.read()
+    require_equal(provenance.get("ttyd_commit"), UPSTREAM_COMMIT, "upstream ttyd commit")
+    require_equal(provenance.get("archive_url"), UPSTREAM_ARCHIVE_URL, "upstream archive URL")
+    request = urllib.request.Request(UPSTREAM_ARCHIVE_URL, headers={"User-Agent": "remote-dev-ttyd-osc52-generator"})
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    try:
+        with opener.open(request, timeout=300) as response:
+            require_equal(response.geturl(), UPSTREAM_ARCHIVE_URL, "upstream archive response URL")
+            require_equal(response.getcode(), 200, "upstream archive response status")
+            return response.read()
+    except urllib.error.HTTPError as error:
+        raise GenerationError(f"upstream archive download failed: HTTP {error.code}") from error
 
 
 def extract_header(archive: bytes, provenance: dict[str, object]) -> bytes:

@@ -24,6 +24,43 @@ def license_path(name: str) -> Path:
     return NOTICE_ROOT / name.replace("@", "_").replace("/", "_") / "LICENSE"
 
 
+def expected_inventory_record(provenance: dict[str, object], components: dict[str, object]) -> dict[str, object]:
+    licenses = {str(record["license"]) for record in components["components"]}
+    if licenses != {"MIT", "Apache-2.0"}:
+        fail("bundle component licenses must remain the known MIT and Apache-2.0 terms")
+    version = str(provenance["ttyd_version"])
+    return {
+        "id": "remote-dev-ttyd-osc52-client",
+        "name": f"Remote Dev ttyd {version} OSC 52 client asset",
+        "image_scope": "both",
+        "version": f"ttyd-{version}+remote-dev-osc52",
+        "source": f"https://github.com/tsl0922/ttyd/tree/{provenance['ttyd_commit']}",
+        "license": "MIT and Apache-2.0 component terms",
+        "notices": [
+            {
+                "path": "components/ttyd/LICENSE",
+                "source": "repository",
+                "reviewed_from": f"https://raw.githubusercontent.com/tsl0922/ttyd/{version}/LICENSE",
+            },
+            {
+                "path": "components/remote-dev-ttyd-osc52/",
+                "source": "repository",
+                "reviewed_from": str((HERE / "bundle-components.json").relative_to(ROOT)),
+            },
+        ],
+    }
+
+
+def validate_inventory_record(inventory: dict[str, object], provenance: dict[str, object], components: dict[str, object]) -> None:
+    records = [item for item in inventory["components"] if item.get("id") == "remote-dev-ttyd-osc52-client"]
+    if len(records) != 1:
+        fail("third-party inventory must contain exactly one OSC 52 client record")
+    expected = expected_inventory_record(provenance, components)
+    for field, value in expected.items():
+        if records[0].get(field) != value:
+            fail(f"third-party OSC 52 client inventory {field} does not match provenance/components")
+
+
 def main() -> int:
     try:
         provenance = json.loads((HERE / "provenance.json").read_text())
@@ -68,9 +105,7 @@ def main() -> int:
         if not spdx.get("documentNamespace", "").endswith(provenance["generated_html_sha256"]):
             fail("SPDX namespace must identify the exact generated asset")
 
-        inventory_records = [item for item in inventory["components"] if item["id"] == "remote-dev-ttyd-osc52-client"]
-        if len(inventory_records) != 1:
-            fail("third-party inventory must contain exactly one OSC 52 client record")
+        validate_inventory_record(inventory, provenance, components)
 
         dockerfile = (ROOT / "images" / "base" / "Dockerfile").read_text()
         launcher = (ROOT / "scripts" / "start-remote-dev-web.sh").read_text()
