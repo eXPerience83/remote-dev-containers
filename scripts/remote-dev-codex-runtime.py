@@ -67,6 +67,7 @@ MAX_METADATA = 4 * 1024 * 1024
 MAX_MANIFEST = 4 * 1024 * 1024
 MAX_POINTER = 256
 MAX_PROBE_OUTPUT = 1024 * 1024
+MAX_PROBE_HEALTH_BODY = 4096
 TIMEOUT = 20
 SCHEMA = 1
 NOBODY = 65534
@@ -722,13 +723,73 @@ def candidate_run(
     )
 
 
-def probe_host(host: Path, cwd: Path, home: Path) -> None:
+def code_mode_host_capabilities(help_text: str) -> set[str]:
+    """Read only the main --listen option's advertised transport capabilities."""
+    lines = help_text.splitlines()
+    listen_block: list[str] = []
+    option_line = re.compile(r"^\s*(?:-[A-Za-z0-9],\s*)?--[A-Za-z0-9-]+")
+    capturing = False
+    for line in lines:
+        if not capturing:
+            if re.search(r"(?:^|\s)--listen(?:\s|=|<)", line):
+                capturing = True
+                listen_block.append(line)
+            continue
+        if option_line.match(line):
+            break
+        listen_block.append(line)
+        if len(listen_block) >= 8:
+            break
+    block = "\n".join(listen_block)
+    capabilities: set[str] = set()
+    if "grpc://IP:PORT" in block:
+        capabilities.add("grpc")
+    if "ws://IP:PORT" in block:
+        capabilities.add("websocket")
+    return capabilities
+
+
+def select_code_mode_host_transport(capabilities: set[str]) -> str:
+    if "grpc" in capabilities:
+        return "grpc"
+    if "websocket" in capabilities:
+        return "websocket"
+    fail(
+        "candidate code-mode host does not advertise a supported safe --listen "
+        "transport (expected grpc://IP:PORT or legacy ws://IP:PORT)"
+    )
+
+
+def code_mode_host_published_port(transport: str, published: str) -> int:
+    if transport == "grpc":
+        pattern = r"http://127\.0\.0\.1:([0-9]{1,5})"
+    elif transport == "websocket":
+        pattern = r"ws://127\.0\.0\.1:([0-9]{1,5})"
+    else:
+        fail(f"unsupported internal code-mode host probe transport: {transport}")
+    match = re.fullmatch(pattern, published)
+    if not match or not 1 <= int(match.group(1)) <= 65535:
+        fail(f"candidate code-mode host published unexpected URL: {published!r}")
+    return int(match.group(1))
+
+
+def probe_host(
+    host: Path, cwd: Path, home: Path, *, transport: str = "grpc"
+) -> None:
     require_candidate_path(host, executable=True)
     require_candidate_path(cwd)
     require_candidate_path(home)
+    if transport == "grpc":
+        listen_url = "grpc://127.0.0.1:0"
+        readiness_path = "/healthz"
+    elif transport == "websocket":
+        listen_url = "ws://127.0.0.1:0"
+        readiness_path = "/readyz"
+    else:
+        fail(f"unsupported internal code-mode host probe transport: {transport}")
     try:
         process = subprocess.Popen(
-            [str(host), "--listen", "ws://127.0.0.1:0"],
+            [str(host), "--listen", listen_url],
             cwd=cwd,
             env=candidate_env(home),
             stdin=subprocess.DEVNULL,
@@ -772,10 +833,7 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
         first_line = bytes(stdout).split(b"\n", 1)[0].decode(
             "utf-8", errors="replace"
         )
-        match = re.fullmatch(r"ws://127\.0\.0\.1:([0-9]{1,5})", first_line)
-        if not match or not 1 <= int(match.group(1)) <= 65535:
-            fail(f"candidate code-mode host published unexpected URL: {first_line!r}")
-        port = int(match.group(1))
+        port = code_mode_host_published_port(transport, first_line)
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 fail(
@@ -785,9 +843,11 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
             drain(0)
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
             try:
-                connection.request("GET", "/readyz")
+                connection.request("GET", readiness_path)
                 response = connection.getresponse()
-                response.read()
+                body = response.read(MAX_PROBE_HEALTH_BODY + 1)
+                if len(body) > MAX_PROBE_HEALTH_BODY:
+                    fail("candidate code-mode host health response exceeded output limit")
                 if response.status == 200:
                     return
             except (OSError, http.client.HTTPException):
@@ -816,7 +876,19 @@ def validate_candidate(
         flag not in help_result.stdout for flag in ("--sandbox", "--ask-for-approval")
     ):
         fail("candidate Codex launcher compatibility probe failed")
-    probe_host(package / "bin/codex-code-mode-host", cwd, home)
+    host = package / "bin/codex-code-mode-host"
+    host_help = candidate_run([str(host), "--help"], cwd, home)
+    if host_help.returncode != 0:
+        fail("candidate code-mode host capability probe failed")
+    capabilities = code_mode_host_capabilities(
+        host_help.stdout + "\n" + host_help.stderr
+    )
+    probe_host(
+        host,
+        cwd,
+        home,
+        transport=select_code_mode_host_transport(capabilities),
+    )
 
 
 def records(package: Path) -> list[dict[str, Any]]:
