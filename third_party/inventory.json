@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_on": "2026-08-01",
+  "reviewed_on": "2026-08-29",
   "refreshed_on": "2026-08-28",
   "policy": {
     "source_of_truth": "versions.env",
@@ -66,6 +66,26 @@
           "path": "components/ttyd/LICENSE",
           "source": "repository",
           "reviewed_from": "https://raw.githubusercontent.com/tsl0922/ttyd/1.7.7/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "remote-dev-ttyd-osc52-client",
+      "name": "Remote Dev ttyd 1.7.7 OSC 52 client asset",
+      "image_scope": "both",
+      "version": "ttyd-1.7.7+remote-dev-osc52",
+      "source": "https://github.com/tsl0922/ttyd/tree/40e79c706be14029b391f369bee6613c31667abb",
+      "license": "MIT, Apache-2.0, Zlib, and 0BSD component terms",
+      "notices": [
+        {
+          "path": "components/ttyd/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/tsl0922/ttyd/1.7.7/LICENSE"
+        },
+        {
+          "path": "components/remote-dev-ttyd-osc52/",
+          "source": "repository",
+          "reviewed_from": "web/ttyd-osc52/bundle-components.json"
         }
       ]
     },

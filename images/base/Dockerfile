@@ -217,6 +217,7 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
     && remote-dev-notices --check
 
 COPY config/tmux.conf /etc/tmux.conf
+COPY --chown=0:0 --chmod=0444 web/ttyd-osc52/dist/index.html /usr/share/remote-dev/ttyd/index.html
 COPY scripts/base-verify.sh /usr/local/bin/remote-dev-base-verify
 RUN chmod 0644 /etc/tmux.conf \
     && chmod 0755 /usr/local/bin/remote-dev-base-verify \

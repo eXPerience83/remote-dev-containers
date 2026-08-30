@@ -1037,9 +1037,11 @@ assert_agent_ttyd_security() {
     grep -Fxq -- --check-origin <<<"$argv"
     max_clients="$(awk '\''$0 == "--max-clients" { getline; print; exit }'\'' <<<"$argv")"
     test "$max_clients" = 1
+    index_path="$(awk '\''$0 == "--index" { getline; print; exit }'\'' <<<"$argv")"
+    test "$index_path" = /usr/share/remote-dev/ttyd/index.html
     grep -Fxq -- --credential <<<"$argv"
   ' >/dev/null 2>&1 \
-    || fail "$role ttyd did not retain its hardened authentication/origin/client-limit arguments"
+    || fail "$role ttyd did not retain its hardened authentication/origin/client-limit/index arguments"
 }
 
 assert_codex_toolchain_workflow() {

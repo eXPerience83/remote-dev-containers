@@ -98,6 +98,7 @@ cmd=(
   --terminal-type xterm-256color
   --client-option "fontSize=15"
   --client-option "disableLeaveAlert=false"
+  --index /usr/share/remote-dev/ttyd/index.html
 )
 
 if [[ "${WEB_CHECK_ORIGIN:-1}" == "1" ]]; then

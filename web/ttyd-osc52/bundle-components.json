@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "source": "ttyd 1.7.7 embedded frontend at 40e79c706be14029b391f369bee6613c31667abb",
+  "components": [
+    {"name": "@xterm/addon-canvas", "version": "0.6.0", "license": "MIT", "license_sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"},
+    {"name": "@xterm/addon-fit", "version": "0.9.0", "license": "MIT", "license_sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"},
+    {"name": "@xterm/addon-image", "version": "0.7.0", "license": "MIT", "license_sha256": "00994f891153ba5d613e2b838a9ad2f47d4484070cb594b46efc547ebea5ca05"},
+    {"name": "@xterm/addon-unicode11", "version": "0.7.0", "license": "MIT", "license_sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"},
+    {"name": "@xterm/addon-web-links", "version": "0.10.0", "license": "MIT", "license_sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"},
+    {"name": "@xterm/addon-webgl", "version": "0.17.0", "license": "MIT", "license_sha256": "21b975c39532001d431dc3b2c29fbff691d83f370833a66b54698bda290fde0e"},
+    {"name": "@xterm/xterm", "version": "5.4.0", "license": "MIT", "license_sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"},
+    {"name": "crc-32", "version": "1.2.0", "license": "Apache-2.0", "license_sha256": "5c1c0425d60afbe464ad9f53ce1a45c294a7dd5c7f2f3eef9aada2535abb0043"},
+    {"name": "css-loader", "version": "6.10.0", "license": "MIT", "license_sha256": "9068a8782d2fb4c6e432cfa25334efa56f722822180570802bf86e71b6003b1e"},
+    {"name": "decko", "version": "1.2.0", "license": "MIT", "license_sha256": "d20ef4c192faa3c560bc50bdd780f686804e355957d4146ddf8cbb58eb2e3dba"},
+    {"name": "file-saver", "version": "2.0.5", "license": "MIT", "license_sha256": "2d1d7a93b46e4274355ac2904428707c4ee47ee8c6029fa394ebf405648d3f63"},
+    {"name": "preact", "version": "10.19.6", "license": "MIT", "license_sha256": "1fe6958409c8c257a70c587a18b6f7f412b179b456630790d30b2ec9a8e4b7d4"},
+    {"name": "trzsz", "version": "1.1.5", "license": "MIT", "license_sha256": "9fcfcc727eea90aa6a1568c598a8950c761ed811903684443a762e8aaf9e8492"},
+    {"name": "whatwg-fetch", "version": "3.6.20", "license": "MIT", "license_sha256": "c887d1c97797646dbb216925ab44a93c6b3e7f03bbe6ef6e0f92b8b8ade63014"},
+    {"name": "zmodem.js", "version": "0.1.10", "license": "Apache-2.0", "license_sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1", "modified_by": {"upstream": "ttyd 1.7.7", "provenance": "provenance.json#zmodem_patch"}}
+  ],
+  "prebundled_components": {
+    "parent": {
+      "name": "trzsz",
+      "version": "1.1.5",
+      "package_url": "https://registry.npmjs.org/trzsz/-/trzsz-1.1.5.tgz",
+      "package_sha256": "a968958895e0919d4f15428f461aecb279c6979bd69b79f525c0b7ef79f17b43",
+      "emitted_path": "lib/trzsz.js"
+    },
+    "components": [
+      {
+        "name": "base64-js",
+        "version": "1.5.1",
+        "license": "MIT",
+        "package_url": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
+        "package_sha256": "b1b7a945b52685269083425216d6597e33d97bf21699d656e92fdb3eb5210a85",
+        "emitted_via": "trzsz@1.1.5/lib/trzsz.js",
+        "license_evidence": [{"path": "base64-js/LICENSE", "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1"}]
+      },
+      {
+        "name": "pako",
+        "version": "2.1.0",
+        "license": "MIT AND Zlib",
+        "package_url": "https://registry.npmjs.org/pako/-/pako-2.1.0.tgz",
+        "package_sha256": "49fedc8866b4abfc8e71dc7fe75ad4ef1ff1ac9601b0642cff88ee5bf2338709",
+        "emitted_via": "trzsz@1.1.5/lib/trzsz.js",
+        "license_evidence": [
+          {"path": "pako/LICENSE", "sha256": "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539"},
+          {"path": "pako/ZLIB-README", "sha256": "d8b499598e43d755ea8918448128259ff01820c50d94d5a48c8883d0a594ddb1"}
+        ]
+      },
+      {
+        "name": "ts-md5",
+        "version": "1.3.1",
+        "license": "MIT",
+        "package_url": "https://registry.npmjs.org/ts-md5/-/ts-md5-1.3.1.tgz",
+        "package_sha256": "a71b284c1c1de3f3a0d73ab64dd38f6305b4c9d5ca532ed766ffbd9dcf5207ee",
+        "emitted_via": "trzsz@1.1.5/lib/trzsz.js",
+        "license_evidence": [{"path": "ts-md5/LICENSE", "sha256": "517d129c60daf614ba57d831f262603b2dddbee5117d93ecb45d25a4009a08d7"}]
+      },
+      {
+        "name": "tslib",
+        "version": "2.6.2",
+        "license": "0BSD",
+        "package_url": "https://registry.npmjs.org/tslib/-/tslib-2.6.2.tgz",
+        "package_sha256": "6001e6acf1472b79a2a5044f852f282781270511b45a900850bbceac1ba8d9e2",
+        "emitted_via": "trzsz@1.1.5/lib/trzsz.js",
+        "license_evidence": [
+          {"path": "tslib/LICENSE.txt", "sha256": "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6"},
+          {"path": "tslib/CopyrightNotice.txt", "sha256": "f8b254da37e08406ccb6c9d8321ef584d1b22f44f9e12d5436325aeea0e6d60b"}
+        ]
+      }
+    ]
+  }
+}

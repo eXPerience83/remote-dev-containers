@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Bounded, write-only OSC 52 handling for native Codex `/copy`, served through ttyd 1.7.7's supported `--index` path with deterministic upstream-baseline, provenance, notice and SPDX checks.
 - Shared remote-development base built on Ubuntu 26.04 LTS.
 - Browser-accessible Codex CLI environment using ttyd and persistent tmux sessions.
 - Git, Git LFS, OpenSSH client and GitHub CLI.
