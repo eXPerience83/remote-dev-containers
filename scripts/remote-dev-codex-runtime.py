@@ -86,6 +86,10 @@ class OperationInterrupted(Exception):
         self.signum = signum
 
 
+class ProbeDeadlineExceeded(TimeoutError):
+    """The local health exchange exceeded its absolute readiness deadline."""
+
+
 def fail(message: str) -> NoReturn:
     raise ManagerError(message)
 
@@ -658,6 +662,35 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=2)
 
 
+@contextlib.contextmanager
+def probe_wall_clock_deadline(deadline: float) -> Iterator[None]:
+    """Interrupt blocking local HTTP I/O when the probe deadline expires."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_delay, previous_interval = signal.setitimer(signal.ITIMER_REAL, 0.0)
+    started = time.monotonic() if previous_delay > 0 else 0.0
+
+    def expired(_signum: int, _frame: object) -> NoReturn:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+
+    try:
+        signal.signal(signal.SIGALRM, expired)
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_delay > 0:
+            elapsed = max(0.0, time.monotonic() - started)
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(1e-6, previous_delay - elapsed),
+                previous_interval,
+            )
+
+
 def candidate_run(
     argv: list[str], cwd: Path, home: Path, *, timeout: float = 10
 ) -> subprocess.CompletedProcess[str]:
@@ -834,18 +867,24 @@ def probe_host(
             "utf-8", errors="replace"
         )
         port = code_mode_host_published_port(transport, first_line)
-        while time.monotonic() < deadline:
+        while True:
             if process.poll() is not None:
                 fail(
                     "candidate code-mode host exited before readiness: "
                     + stderr.decode("utf-8", errors="replace")[-4096:]
                 )
             drain(0)
-            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", port, timeout=min(0.5, remaining)
+            )
             try:
-                connection.request("GET", readiness_path)
-                response = connection.getresponse()
-                body = response.read(MAX_PROBE_HEALTH_BODY + 1)
+                with probe_wall_clock_deadline(deadline):
+                    connection.request("GET", readiness_path)
+                    response = connection.getresponse()
+                    body = response.read(MAX_PROBE_HEALTH_BODY + 1)
                 if len(body) > MAX_PROBE_HEALTH_BODY:
                     fail("candidate code-mode host health response exceeded output limit")
                 if response.status == 200:
@@ -854,7 +893,10 @@ def probe_host(
                 pass
             finally:
                 connection.close()
-            time.sleep(0.05)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.05, remaining))
         fail("candidate code-mode host did not become ready")
     finally:
         terminate(process)

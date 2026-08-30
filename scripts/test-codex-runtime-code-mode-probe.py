@@ -22,16 +22,24 @@ def load_manager():
 
 
 class FakeResponse:
-    def __init__(self, status: int):
+    def __init__(self, status: int, body: bytes = b""):
         self.status = status
+        self.body = body
 
-    def read(self, _size: int | None = None) -> bytes:
-        return b""
+    def read(self, size: int | None = None) -> bytes:
+        return self.body if size is None else self.body[:size]
 
 
 class FakeConnection:
-    def __init__(self, *, status: int = 200, request_error: Exception | None = None):
+    def __init__(
+        self,
+        *,
+        status: int = 200,
+        body: bytes = b"",
+        request_error: Exception | None = None,
+    ):
         self.status = status
+        self.body = body
         self.request_error = request_error
         self.closed = False
         self.requests: list[tuple[str, str]] = []
@@ -42,7 +50,7 @@ class FakeConnection:
             raise self.request_error
 
     def getresponse(self) -> FakeResponse:
-        return FakeResponse(self.status)
+        return FakeResponse(self.status, self.body)
 
     def close(self) -> None:
         self.closed = True
@@ -246,7 +254,7 @@ Options:
             self.run_probe(
                 process,
                 connection=connection,
-                monotonic=[0.0, 0.0, 0.0, 6.0],
+                monotonic=[0.0, 0.0, 0.0, 0.0, 6.0],
             )
         self.assertTrue(process.terminated)
         self.assertTrue(process.waited)
@@ -258,8 +266,19 @@ Options:
             self.run_probe(
                 process,
                 connection=connection,
-                monotonic=[0.0, 0.0, 0.0, 6.0],
+                monotonic=[0.0, 0.0, 0.0, 0.0, 6.0],
             )
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.waited)
+
+    def test_oversized_health_response_fails_and_reaps_process(self):
+        process = FakeProcess(b"http://127.0.0.1:43210\n")
+        connection = FakeConnection(body=b"x" * (self.m.MAX_PROBE_HEALTH_BODY + 1))
+        with self.assertRaisesRegex(
+            self.m.ManagerError, "health response exceeded output limit"
+        ):
+            self.run_probe(process, connection=connection)
+        self.assertTrue(connection.closed)
         self.assertTrue(process.terminated)
         self.assertTrue(process.waited)
 
