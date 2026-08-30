@@ -82,7 +82,7 @@ Antes de activar un runtime opcional, Remote Dev:
 6. verifica los metadatos canónicos del paquete de Codex y los ejecutables obligatorios;
 7. ejecuta los bytes nuevos del proveedor con un `HOME`/`CODEX_HOME` sintético sin credenciales, fuera del workspace del usuario y, cuando el proceso principal es root, con un UID/GID fijo sin privilegios;
 8. limita el tiempo y la salida capturada de las pruebas del candidato;
-9. comprueba `codex --version`, las opciones de launcher necesarias y el contrato `codex-code-mode-host --listen ws://127.0.0.1:0` + `/readyz`;
+9. comprueba `codex --version`, las opciones de launcher necesarias y las capacidades del `--listen` principal que anuncia el candidato de `codex-code-mode-host`; prefiere el contrato gRPC común sobre loopback (`grpc://127.0.0.1:0`, publicación `http://127.0.0.1:<puerto>`, `GET /healthz`) y sólo usa la prueba WebSocket heredada con `/readyz` cuando ese transporte se anuncia de forma explícita;
 10. registra la identidad SHA-256 de cada archivo publicado en un manifiesto privado restrictivo;
 11. cambia el puntero activo de forma atómica sólo después de superar todas las comprobaciones.
 
