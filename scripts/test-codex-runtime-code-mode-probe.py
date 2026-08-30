@@ -25,7 +25,7 @@ class FakeResponse:
     def __init__(self, status: int):
         self.status = status
 
-    def read(self) -> bytes:
+    def read(self, _size: int | None = None) -> bytes:
         return b""
 
 
