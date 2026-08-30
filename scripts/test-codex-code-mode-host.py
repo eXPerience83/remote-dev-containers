@@ -9,10 +9,11 @@ import subprocess
 import time
 
 HOST = os.environ.get("CODEX_CODE_MODE_HOST", "/usr/local/bin/codex-code-mode-host")
-LISTEN_URL = "ws://127.0.0.1:0"
+LISTEN_URL = "grpc://127.0.0.1:0"
 STARTUP_TIMEOUT_SECONDS = 5.0
 READY_TIMEOUT_SECONDS = 5.0
-URL_PATTERN = re.compile(r"^ws://127\.0\.0\.1:(?P<port>[0-9]{1,5})$")
+MAX_HEALTH_BODY = 4096
+URL_PATTERN = re.compile(r"^http://127\.0\.0\.1:(?P<port>[0-9]{1,5})$")
 
 
 def process_error(process: subprocess.Popen[str], message: str) -> RuntimeError:
@@ -56,13 +57,14 @@ def wait_until_ready(process: subprocess.Popen[str], listen_url: str) -> None:
             raise process_error(process, "code-mode host exited before becoming ready")
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
         try:
-            connection.request("GET", "/readyz")
+            connection.request("GET", "/healthz")
             response = connection.getresponse()
+            body = response.read(MAX_HEALTH_BODY + 1)
+            if len(body) > MAX_HEALTH_BODY:
+                raise RuntimeError("code-mode host health response exceeded size limit")
             if response.status == 200:
-                response.read()
                 return
             last_error = RuntimeError(f"unexpected readiness status: {response.status}")
-            response.read()
         except OSError as exc:
             last_error = exc
         finally:
