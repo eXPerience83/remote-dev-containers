@@ -34,6 +34,7 @@ jobs:
             scripts/remote-dev-prepare-development-scratch.py \
             scripts/test-development-scratch.py \
             scripts/test-remote-dev-codex-runtime.py \
+            scripts/test-codex-runtime-code-mode-probe.py \
             scripts/test-codex-runtime-noexec-staging.py \
             scripts/remote-dev-context7.py \
             scripts/test-remote-dev-context7.py \
@@ -66,6 +67,7 @@ jobs:
           python3 web/ttyd-osc52/test_generate.py
           make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
+          python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py
           python3 scripts/test-remote-dev-context7-ownership.py
           python3 scripts/test_update_third_party_inventory.py

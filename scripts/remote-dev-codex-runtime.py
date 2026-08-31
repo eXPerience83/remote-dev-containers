@@ -67,6 +67,7 @@ MAX_METADATA = 4 * 1024 * 1024
 MAX_MANIFEST = 4 * 1024 * 1024
 MAX_POINTER = 256
 MAX_PROBE_OUTPUT = 1024 * 1024
+MAX_PROBE_HEALTH_BODY = 4096
 TIMEOUT = 20
 SCHEMA = 1
 NOBODY = 65534
@@ -83,6 +84,10 @@ class OperationInterrupted(Exception):
     def __init__(self, signum: int):
         super().__init__(signum)
         self.signum = signum
+
+
+class ProbeDeadlineExceeded(TimeoutError):
+    """The local health exchange exceeded its absolute readiness deadline."""
 
 
 def fail(message: str) -> NoReturn:
@@ -657,6 +662,35 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=2)
 
 
+@contextlib.contextmanager
+def probe_wall_clock_deadline(deadline: float) -> Iterator[None]:
+    """Interrupt blocking local HTTP I/O when the probe deadline expires."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_delay, previous_interval = signal.setitimer(signal.ITIMER_REAL, 0.0)
+    started = time.monotonic() if previous_delay > 0 else 0.0
+
+    def expired(_signum: int, _frame: object) -> NoReturn:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+
+    try:
+        signal.signal(signal.SIGALRM, expired)
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_delay > 0:
+            elapsed = max(0.0, time.monotonic() - started)
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(1e-6, previous_delay - elapsed),
+                previous_interval,
+            )
+
+
 def candidate_run(
     argv: list[str], cwd: Path, home: Path, *, timeout: float = 10
 ) -> subprocess.CompletedProcess[str]:
@@ -722,13 +756,73 @@ def candidate_run(
     )
 
 
-def probe_host(host: Path, cwd: Path, home: Path) -> None:
+def code_mode_host_capabilities(help_text: str) -> set[str]:
+    """Read only the main --listen option's advertised transport capabilities."""
+    lines = help_text.splitlines()
+    listen_block: list[str] = []
+    option_line = re.compile(r"^\s*(?:-[A-Za-z0-9],\s*)?--[A-Za-z0-9-]+")
+    capturing = False
+    for line in lines:
+        if not capturing:
+            if re.search(r"(?:^|\s)--listen(?:\s|=|<)", line):
+                capturing = True
+                listen_block.append(line)
+            continue
+        if option_line.match(line):
+            break
+        listen_block.append(line)
+        if len(listen_block) >= 8:
+            break
+    block = "\n".join(listen_block)
+    capabilities: set[str] = set()
+    if "grpc://IP:PORT" in block:
+        capabilities.add("grpc")
+    if "ws://IP:PORT" in block:
+        capabilities.add("websocket")
+    return capabilities
+
+
+def select_code_mode_host_transport(capabilities: set[str]) -> str:
+    if "grpc" in capabilities:
+        return "grpc"
+    if "websocket" in capabilities:
+        return "websocket"
+    fail(
+        "candidate code-mode host does not advertise a supported safe --listen "
+        "transport (expected grpc://IP:PORT or legacy ws://IP:PORT)"
+    )
+
+
+def code_mode_host_published_port(transport: str, published: str) -> int:
+    if transport == "grpc":
+        pattern = r"http://127\.0\.0\.1:([0-9]{1,5})"
+    elif transport == "websocket":
+        pattern = r"ws://127\.0\.0\.1:([0-9]{1,5})"
+    else:
+        fail(f"unsupported internal code-mode host probe transport: {transport}")
+    match = re.fullmatch(pattern, published)
+    if not match or not 1 <= int(match.group(1)) <= 65535:
+        fail(f"candidate code-mode host published unexpected URL: {published!r}")
+    return int(match.group(1))
+
+
+def probe_host(
+    host: Path, cwd: Path, home: Path, *, transport: str = "grpc"
+) -> None:
     require_candidate_path(host, executable=True)
     require_candidate_path(cwd)
     require_candidate_path(home)
+    if transport == "grpc":
+        listen_url = "grpc://127.0.0.1:0"
+        readiness_path = "/healthz"
+    elif transport == "websocket":
+        listen_url = "ws://127.0.0.1:0"
+        readiness_path = "/readyz"
+    else:
+        fail(f"unsupported internal code-mode host probe transport: {transport}")
     try:
         process = subprocess.Popen(
-            [str(host), "--listen", "ws://127.0.0.1:0"],
+            [str(host), "--listen", listen_url],
             cwd=cwd,
             env=candidate_env(home),
             stdin=subprocess.DEVNULL,
@@ -772,29 +866,37 @@ def probe_host(host: Path, cwd: Path, home: Path) -> None:
         first_line = bytes(stdout).split(b"\n", 1)[0].decode(
             "utf-8", errors="replace"
         )
-        match = re.fullmatch(r"ws://127\.0\.0\.1:([0-9]{1,5})", first_line)
-        if not match or not 1 <= int(match.group(1)) <= 65535:
-            fail(f"candidate code-mode host published unexpected URL: {first_line!r}")
-        port = int(match.group(1))
-        while time.monotonic() < deadline:
+        port = code_mode_host_published_port(transport, first_line)
+        while True:
             if process.poll() is not None:
                 fail(
                     "candidate code-mode host exited before readiness: "
                     + stderr.decode("utf-8", errors="replace")[-4096:]
                 )
             drain(0)
-            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", port, timeout=min(0.5, remaining)
+            )
             try:
-                connection.request("GET", "/readyz")
-                response = connection.getresponse()
-                response.read()
+                with probe_wall_clock_deadline(deadline):
+                    connection.request("GET", readiness_path)
+                    response = connection.getresponse()
+                    body = response.read(MAX_PROBE_HEALTH_BODY + 1)
+                if len(body) > MAX_PROBE_HEALTH_BODY:
+                    fail("candidate code-mode host health response exceeded output limit")
                 if response.status == 200:
                     return
             except (OSError, http.client.HTTPException):
                 pass
             finally:
                 connection.close()
-            time.sleep(0.05)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.05, remaining))
         fail("candidate code-mode host did not become ready")
     finally:
         terminate(process)
@@ -816,7 +918,19 @@ def validate_candidate(
         flag not in help_result.stdout for flag in ("--sandbox", "--ask-for-approval")
     ):
         fail("candidate Codex launcher compatibility probe failed")
-    probe_host(package / "bin/codex-code-mode-host", cwd, home)
+    host = package / "bin/codex-code-mode-host"
+    host_help = candidate_run([str(host), "--help"], cwd, home)
+    if host_help.returncode != 0:
+        fail("candidate code-mode host capability probe failed")
+    capabilities = code_mode_host_capabilities(
+        host_help.stdout + "\n" + host_help.stderr
+    )
+    probe_host(
+        host,
+        cwd,
+        home,
+        transport=select_code_mode_host_transport(capabilities),
+    )
 
 
 def records(package: Path) -> list[dict[str, Any]]:

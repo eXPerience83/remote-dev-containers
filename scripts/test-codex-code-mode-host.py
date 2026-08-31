@@ -1,18 +1,60 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
 import http.client
 import os
 import re
 import select
+import signal
 import subprocess
 import time
+from collections.abc import Iterator
+from typing import NoReturn
 
 HOST = os.environ.get("CODEX_CODE_MODE_HOST", "/usr/local/bin/codex-code-mode-host")
-LISTEN_URL = "ws://127.0.0.1:0"
+LISTEN_URL = "grpc://127.0.0.1:0"
 STARTUP_TIMEOUT_SECONDS = 5.0
 READY_TIMEOUT_SECONDS = 5.0
-URL_PATTERN = re.compile(r"^ws://127\.0\.0\.1:(?P<port>[0-9]{1,5})$")
+MAX_HEALTH_BODY = 4096
+URL_PATTERN = re.compile(r"^http://127\.0\.0\.1:(?P<port>[0-9]{1,5})$")
+
+
+class ProbeDeadlineExceeded(TimeoutError):
+    """The local health exchange exceeded its absolute readiness deadline."""
+
+
+@contextlib.contextmanager
+def wall_clock_deadline(deadline: float) -> Iterator[None]:
+    """Interrupt blocking local HTTP I/O when the absolute deadline expires."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+    alarm = getattr(signal, "SIGALRM", None)
+    timer = getattr(signal, "ITIMER_REAL", None)
+    if alarm is None or timer is None or not hasattr(signal, "setitimer"):
+        raise RuntimeError("code-mode host smoke requires POSIX interval timers")
+    previous_handler = signal.getsignal(alarm)
+    previous_delay, previous_interval = signal.setitimer(timer, 0.0)
+    started = time.monotonic()
+
+    def expired(_signum: int, _frame: object) -> NoReturn:
+        raise ProbeDeadlineExceeded("code-mode host readiness deadline expired")
+
+    try:
+        signal.signal(alarm, expired)
+        signal.setitimer(timer, remaining)
+        yield
+    finally:
+        signal.setitimer(timer, 0.0)
+        signal.signal(alarm, previous_handler)
+        if previous_delay > 0:
+            elapsed = max(0.0, time.monotonic() - started)
+            signal.setitimer(
+                timer,
+                max(1e-6, previous_delay - elapsed),
+                previous_interval,
+            )
 
 
 def process_error(process: subprocess.Popen[str], message: str) -> RuntimeError:
@@ -54,20 +96,29 @@ def wait_until_ready(process: subprocess.Popen[str], listen_url: str) -> None:
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise process_error(process, "code-mode host exited before becoming ready")
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", port, timeout=min(0.5, remaining)
+        )
         try:
-            connection.request("GET", "/readyz")
-            response = connection.getresponse()
+            with wall_clock_deadline(deadline):
+                connection.request("GET", "/healthz")
+                response = connection.getresponse()
+                body = response.read(MAX_HEALTH_BODY + 1)
+            if len(body) > MAX_HEALTH_BODY:
+                raise RuntimeError("code-mode host health response exceeded size limit")
             if response.status == 200:
-                response.read()
                 return
             last_error = RuntimeError(f"unexpected readiness status: {response.status}")
-            response.read()
         except OSError as exc:
             last_error = exc
         finally:
             connection.close()
-        time.sleep(0.05)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(0.05, remaining))
 
     raise RuntimeError(f"timed out waiting for code-mode host readiness: {last_error}")
 
