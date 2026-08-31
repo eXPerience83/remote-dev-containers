@@ -84,7 +84,7 @@ services:
       WEB_PORT: "7681"
       WEB_BASE_PATH: ${WEB_BASE_PATH:-/}
       WEB_USERNAME: ${WEB_USERNAME:-codex}
-      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
       WEB_MAX_CLIENTS: ${WEB_MAX_CLIENTS:-1}
       WEB_CHECK_ORIGIN: ${WEB_CHECK_ORIGIN:-1}
       ALLOW_INSECURE_WEB: ${ALLOW_INSECURE_WEB:-0}
@@ -146,9 +146,6 @@ services:
         bind:
           create_host_path: false
 
-    secrets:
-      - web_password
-
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
       - /run:rw,exec,nosuid,nodev,size=1536m,mode=755
@@ -189,7 +186,7 @@ services:
       WEB_PORT: "7682"
       WEB_BASE_PATH: ${ANTIGRAVITY_WEB_BASE_PATH:-/}
       WEB_USERNAME: ${ANTIGRAVITY_WEB_USERNAME:-antigravity}
-      WEB_PASSWORD_FILE: /run/secrets/web_password
+      WEB_PASSWORD: ${ANTIGRAVITY_WEB_PASSWORD:-}
       WEB_MAX_CLIENTS: ${ANTIGRAVITY_WEB_MAX_CLIENTS:-1}
       WEB_CHECK_ORIGIN: ${ANTIGRAVITY_WEB_CHECK_ORIGIN:-1}
       ALLOW_INSECURE_WEB: ${ANTIGRAVITY_ALLOW_INSECURE_WEB:-0}
@@ -256,12 +253,6 @@ services:
         target: /root/.ssh
         bind:
           create_host_path: false
-      - type: bind
-        source: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/antigravity/web_password.txt
-        target: /run/secrets/web_password
-        read_only: true
-        bind:
-          create_host_path: false
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
@@ -269,7 +260,3 @@ services:
 
     shm_size: 256m
     stop_grace_period: 30s
-
-secrets:
-  web_password:
-    file: ${REMOTE_DEV_DATA_ROOT:-../data}/secrets/codex/web_password.txt
