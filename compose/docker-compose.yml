@@ -5,14 +5,11 @@ services:
     image: *remote-dev-image
     container_name: remote-dev-launcher
     restart: unless-stopped
-    user: "0:0"
+    user: "65532:65532"
     read_only: true
 
     cap_drop:
       - ALL
-    cap_add:
-      - SETGID
-      - SETUID
     pids_limit: 64
     ipc: private
 
