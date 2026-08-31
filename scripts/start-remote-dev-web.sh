@@ -68,18 +68,17 @@ fi
 
 credential=""
 web_username="${WEB_USERNAME:-codex}"
-if [[ -n "${WEB_PASSWORD_FILE:-}" ]]; then
-  if [[ ! -r "$WEB_PASSWORD_FILE" ]]; then
-    echo "ERROR: WEB_PASSWORD_FILE is not readable: $WEB_PASSWORD_FILE" >&2
+web_password="${WEB_PASSWORD:-}"
+if [[ -n "$web_password" ]]; then
+  if [[ "$web_password" == *$'\r'* || "$web_password" == *$'\n'* ]]; then
+    echo "ERROR: web password must be a single line" >&2
     exit 1
   fi
-  credential="${web_username}:$(<"$WEB_PASSWORD_FILE")"
-elif [[ -n "${WEB_PASSWORD:-}" ]]; then
-  credential="${web_username}:${WEB_PASSWORD}"
+  credential="${web_username}:${web_password}"
 elif [[ "${ALLOW_INSECURE_WEB:-0}" != "1" ]]; then
   cat >&2 <<'MSG'
 ERROR: web authentication is not configured.
-Set WEB_PASSWORD_FILE (recommended) or WEB_PASSWORD.
+Set WEB_PASSWORD for this endpoint.
 Set ALLOW_INSECURE_WEB=1 only on an already protected private endpoint.
 MSG
   exit 1
