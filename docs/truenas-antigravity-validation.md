@@ -5,24 +5,26 @@ The image, `compose/truenas.yml` and `scripts/preflight-data-layout.py` must all
 come from the same immutable source revision. Never combine a pinned image with
 host-side files downloaded from a moving branch such as `main`.
 
-Antigravity remains experimental until the manual login, filesystem-discovery,
-persistence and recreation checks in #29 are complete. Do not expose ports
-7680, 7681 or 7682 directly to the Internet.
+The Antigravity lifecycle validation in #29 is complete, but Antigravity remains
+experimental until the remaining support/security/documentation gates are
+reconciled. Do not expose ports 7680, 7681 or 7682 directly to the Internet.
 
-## Deployment modes
+## Browser-password contract
 
-Remote Dev supports both terminal-password sources:
+Remote Dev now has one supported browser-password mechanism: a non-empty,
+single-line `WEB_PASSWORD` in each authenticated endpoint's environment.
 
-- **Home mode:** `WEB_PASSWORD` is written directly in the private TrueNAS App
-  YAML. This is the default in `compose/truenas.yml` and requires no persistent
-  secret directory.
-- **Hardened mode:** `WEB_PASSWORD_FILE` points to a role-specific read-only
-  file. This avoids placing the value in the container environment and remains
-  the recommended choice for shared or separately administered systems.
+- **Codex:** configure `WEB_PASSWORD`.
+- **Antigravity:** configure an independent value which the generic Compose
+  maps from `ANTIGRAVITY_WEB_PASSWORD` to that service's `WEB_PASSWORD`.
+- **Optional authenticated launcher:** the generic launcher-auth override maps
+  `LAUNCHER_PASSWORD` to the launcher's `WEB_PASSWORD`.
 
-`WEB_PASSWORD_FILE` takes precedence when both variables are present. A TrueNAS
-administrator can inspect environment-backed values through the App YAML or
-Docker metadata, so home mode is intended for a trusted domestic NAS.
+The old file-backed terminal-password path is retired. Browser passwords are not
+part of the persistent data layout and no browser-password file is mounted into
+`/run`. A TrueNAS administrator can inspect environment-backed values through
+the App YAML or container metadata, so this deployment model assumes a trusted
+administrator and private host configuration.
 
 ## Scope and exclusions
 
@@ -31,7 +33,7 @@ This cycle validates:
 - the navigation-only launcher on port 7680;
 - Codex on independently authenticated port 7681;
 - experimental Antigravity on independently authenticated port 7682;
-- two independent home-mode terminal passwords;
+- two independent terminal passwords;
 - the canonical role-scoped persistent-data layout;
 - install, login, stop/start and container recreation behavior;
 - isolation between launcher, Codex and Antigravity.
@@ -57,7 +59,7 @@ sudo docker exec codex-remote-dev remote-dev-version || true
 sudo docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
 ```
 
-Never print password environment values or credential-file contents.
+Never print password environment values or other credential contents.
 
 ## Verify and pin one complete release unit
 
@@ -69,15 +71,14 @@ validation_image=ghcr.io/experience83/remote-dev:edge-amd64
 expected_revision=""
 ```
 
-For the exact pre-merge #42 gate, first publish the exact current PR head using
-the existing owner-authorized `/publish-candidate <full-head-sha>` workflow;
-do not publish a candidate as part of an ordinary validation run. Then select
+For an exact pre-merge gate, first publish the exact current PR head using the
+existing owner-authorized `/publish-candidate <full-head-sha>` workflow; do not
+publish a candidate as part of an ordinary validation run. Then select
 `ghcr.io/experience83/remote-dev:dev-amd64` instead, and record the published
 full PR head as `expected_revision`. That candidate's embedded revision must
 equal `expected_revision` before proceeding.
 
 ```bash
-# Exact pre-merge #42 candidate only: replace with the published full PR head.
 validation_image=ghcr.io/experience83/remote-dev:dev-amd64
 expected_revision="REPLACE_WITH_PUBLISHED_FULL_PR_HEAD"
 ```
@@ -102,7 +103,7 @@ fi
 printf 'release_revision=%s\n' "$release_revision"
 ```
 
-For the #42 candidate path, compare `release_revision` with the recorded
+For a candidate path, compare `release_revision` with the recorded
 `expected_revision` exactly; do not accept an older `dev-amd64` publication.
 
 Record the immutable repository digest and keep it in the same shell session:
@@ -151,6 +152,7 @@ sudo install -d -m 0755 \
 
 sudo install -d -m 0700 \
   /mnt/Pool1/remote-dev/state/codex/agent \
+  /mnt/Pool1/remote-dev/state/codex/runtime \
   /mnt/Pool1/remote-dev/state/codex/gh \
   /mnt/Pool1/remote-dev/state/codex/git \
   /mnt/Pool1/remote-dev/state/codex/ssh \
@@ -175,6 +177,7 @@ The resulting host tree is:
 └── state/
     ├── codex/
     │   ├── agent/
+    │   ├── runtime/
     │   ├── gh/
     │   ├── git/
     │   └── ssh/
@@ -210,18 +213,18 @@ curl --proto '=https' --tlsv1.2 \
 
 python3 /tmp/remote-dev-preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
-  --include-antigravity \
-  --password-source environment
+  --include-antigravity
 ```
 
 Expected result:
 
 ```text
-Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity; passwords=environment)
+Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
 ```
 
-Environment mode validates only persistent bind sources and symlink ancestry;
-the actual passwords are validated by the runtime when the containers start.
+The preflight validates persistent bind sources and symlink ancestry only. The
+actual browser passwords are validated by each runtime when the containers
+start.
 
 ## Download the matching TrueNAS YAML
 
@@ -251,9 +254,9 @@ Before pasting it into the TrueNAS Custom App editor:
 5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
    password;
 6. keep both values quoted and never commit the personalized YAML to Git;
-7. preserve `ipc: private`, the reviewed `cap_drop: [ALL]` plus role-specific
-   `cap_add` lists; do not add privileged mode, host or joined PID/network/IPC
-   namespaces, host-root mounts or a Docker socket;
+7. preserve `ipc: private`, `cap_drop: [ALL]`, the capability-free launcher and
+   the reviewed agent `cap_add` lists; do not add privileged mode, host or joined
+   PID/network/IPC namespaces, host-root mounts or a Docker socket;
 8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
    validation.
 
@@ -281,8 +284,8 @@ sudo docker exec antigravity-remote-dev remote-dev-doctor
 
 Confirm the embedded revision matches `release_revision`, and that all three
 containers use the same configured `$pinned_image` and image ID. The
-Antigravity diagnostic should report `not installed` without making the
-container unhealthy.
+Antigravity diagnostic should report its current admitted runtime state without
+making the container unhealthy solely because the optional runtime is absent.
 
 Inspect only redacted configuration facts and assert the configured immutable
 reference, not only the local content-addressable image ID:
@@ -304,7 +307,7 @@ for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
     exit 1
   fi
   sudo docker inspect "$container" --format \
-    'configured_image={{.Config.Image}} image_id={{.Image}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
+    'configured_image={{.Config.Image}} image_id={{.Image}} user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
   sudo docker inspect "$container" --format \
     '{{range .Mounts}}{{println .Destination "<-" .Source "rw=" .RW}}{{end}}'
 done
@@ -313,27 +316,25 @@ done
 Do not dump complete container environments. Verify only variable names when
 needed.
 
-## Exact #42 candidate checklist
+## Hardening candidate checklist
 
-Keep issue #42 open until this checklist passes against the exact PR candidate.
 Record sanitized facts only; do not infer success from an older image or a
 different source revision.
 
 - Record the TrueNAS version, test date, exact `expected_revision`,
-  `$pinned_image` immutable repository digest and `dev-amd64` channel selected
-  after publishing that exact head. Confirm the embedded revision equals the
-  published head and launcher, Codex and Antigravity all use the same configured
+  `$pinned_image` immutable repository digest and channel selected after
+  publishing that exact head. Confirm the embedded revision equals the published
+  head and launcher, Codex and Antigravity all use the same configured
   `$pinned_image` and image ID.
 - Save the rendered/serialized App configuration and the inspect fields above.
   Confirm every role has a read-only root filesystem,
   `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
   groups, no privileged or host/joined PID/network namespace, `ipc=private`, and
   no engine socket or broad mount.
-- Confirm launcher has only `DAC_READ_SEARCH,SETGID,SETUID`, PID limit `64`, `/tmp` at
-  `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
-  `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its actual HTTP process runs as
-  UID/GID `65532`, has no supplementary groups, zero effective capabilities and
-  `NoNewPrivs: 1`.
+- Confirm launcher runs directly as UID/GID `65532`, has no `cap_add`, PID limit
+  `64`, `/tmp` at `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
+  `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its HTTP process has no
+  supplementary groups, zero effective capabilities and `NoNewPrivs: 1`.
 - Confirm each agent has exactly
   `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID`, PID limit `1024`, and `/tmp` at
   `rw,noexec,nosuid,nodev,size=512m,mode=1777`. Confirm Codex `/run` is
@@ -342,7 +343,8 @@ different source revision.
 - Verify launcher navigation, its configured authentication mode, origin/CSP,
   GET/HEAD-only behavior and secret-free `/healthz`. Verify both agent terminals
   retain independent authentication, origin checking, client limits and
-  role-specific credential-independent health.
+  role-specific credential-independent health. Confirm each role rejects the
+  other role's synthetic browser credential during a controlled test.
 - Exercise Codex autonomous (`danger-full-access` + `never`) and guarded
   (`danger-full-access` + launch-scoped untrusted trust for the active project)
   workflows. Confirm guarded prompts for commands except explicit exec-policy
@@ -418,20 +420,23 @@ intentionally pending until a human performs this gate before merge.
 - The Codex link opens port 7681 and requires the Codex credential.
 - The experimental Antigravity link opens port 7682 and requires the separate
   Antigravity credential.
+- The Codex credential must not authenticate to Antigravity, and the Antigravity
+  credential must not authenticate to Codex.
 - Credentials never appear in launcher HTML, URLs or browser history.
 
 ## Antigravity lifecycle gate
 
 Starting from the Antigravity menu:
 
-1. confirm `not installed`;
-2. run the explicit installer and review the vendor/non-affiliation notice;
+1. inspect the current runtime/admission state;
+2. if absent, run the explicit installer and review the vendor/non-affiliation
+   notice;
 3. record the installed version without publishing account details;
-4. complete the official individual/free login flow;
+4. complete the official individual/free login flow when needed;
 5. confirm `/root/.gemini/config/projects` is writable through only the narrow
    Antigravity config mount, and record filesystem changes as path names and
    metadata only;
-6. run a disposable repository test;
+6. run a disposable repository test when lifecycle evidence must be refreshed;
 7. stop/start the App;
 8. recreate all three containers with the same dataset;
 9. confirm executable, login/settings behavior and workspace persistence;
@@ -440,30 +445,13 @@ Starting from the Antigravity menu:
 Do not run Codex and Antigravity concurrently against the same writable checkout.
 The default deployment gives them separate workspaces.
 
-## Hardened password-file alternative
+## Retired password-file mode
 
-A deployment that must keep terminal passwords out of container environment
-metadata can use `WEB_PASSWORD_FILE` instead. Create ordinary directories inside
-the same dataset:
-
-```text
-/mnt/Pool1/remote-dev/secrets/codex/web_password.txt
-/mnt/Pool1/remote-dev/secrets/antigravity/web_password.txt
-```
-
-Use one non-empty single-line file per role, mode `0600`, mount each file
-read-only at `/run/secrets/web_password`, remove the corresponding
-`WEB_PASSWORD` variable and run the already downloaded matching preflight:
-
-```bash
-python3 /tmp/remote-dev-preflight-data-layout.py \
-  --root /mnt/Pool1/remote-dev \
-  --include-antigravity \
-  --password-source file
-```
-
-The generic `compose/docker-compose.yml` from the same `$release_revision`
-remains the repository example for file-backed credentials.
+Do not recreate a persistent browser-password directory or mount a browser
+credential file into an agent or launcher container. #69 standardizes the
+supported browser authentication contract on per-service environment values.
+If a future secret-provider integration is desired, it must be designed and
+reviewed as a new mechanism rather than reviving the retired dual-path contract.
 
 ## Rollback
 
@@ -475,25 +463,28 @@ If the new stack fails:
 4. continue using the previously recorded legacy data tree;
 5. leave `/mnt/Pool1/remote-dev` intact for diagnosis.
 
-Do not copy credentials between the old and new trees and do not delete either
-tree during the validation cycle.
+Do not copy credentials between old and new configurations and do not delete the
+persistent tree during the validation cycle.
 
 ## Completion evidence
 
-Post the hardening/isolation candidate results to #42 and keep the related
-Antigravity lifecycle and password-source evidence linked to #29 and #69:
+Keep related Antigravity lifecycle and password evidence linked to the owning
+issues:
 
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
 - rendered and inspected hardening fields from the exact candidate;
 - confirmation that YAML and preflight came from that same revision;
-- password source (`environment` or `file`) without its value;
+- confirmation that Codex and Antigravity used independent environment-backed
+  browser passwords, without recording either value;
 - Antigravity CLI version;
 - browser/access method without account identity;
-- pass/fail for install, login, stop/start and recreation;
+- pass/fail for install, login, stop/start and recreation when exercised;
 - confirmed mount destinations and permission metadata;
-- confirmation that the base TrueNAS launcher has no mounts;
-- confirmation that Codex and Antigravity use independent credentials;
+- confirmation that the launcher has no mounts and runs as UID/GID `65532`
+  without added capabilities;
+- confirmation that Codex and Antigravity credentials are independent and
+  cross-rejected;
 - any safe error messages and follow-up issue links.
 
 Never post passwords, OAuth codes, tokens, cookies, account email, private
