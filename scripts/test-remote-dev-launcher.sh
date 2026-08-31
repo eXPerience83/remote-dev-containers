@@ -4,7 +4,6 @@ set -euo pipefail
 launcher="${REMOTE_DEV_LAUNCHER:-/usr/local/bin/remote-dev-launcher}"
 workdir="$(mktemp -d)"
 log_file="$workdir/launcher.log"
-password_file="$workdir/password"
 starting_uid="$(id -u)"
 launcher_pid=''
 
@@ -36,13 +35,12 @@ trap 'exit 143' TERM
 port="$(free_port)"
 base_url="http://127.0.0.1:${port}"
 secret='synthetic-launcher-secret'
-printf '%s\n' "$secret" > "$password_file"
 
 WEB_BIND=127.0.0.1 \
 WEB_PORT="$port" \
 WEB_BASE_PATH=/launcher \
 WEB_USERNAME=remote-dev \
-WEB_PASSWORD_FILE="$password_file" \
+WEB_PASSWORD="$secret" \
 WEB_CHECK_ORIGIN=1 \
 ALLOW_INSECURE_WEB=0 \
 REMOTE_DEV_LAUNCHER_CODEX_PORT=8765 \
@@ -181,6 +179,28 @@ if grep -Fq 'Open Antigravity' "$workdir/no-auth-page.html"; then
   exit 1
 fi
 stop_launcher
+
+for delimiter in newline carriage-return; do
+  malformed_log="$workdir/malformed-$delimiter.log"
+  malformed_status=0
+  if [[ "$delimiter" == newline ]]; then
+    malformed_password=$'synthetic-first-line\nsynthetic-second-line'
+  else
+    malformed_password=$'synthetic-first-line\rsynthetic-second-line'
+  fi
+  WEB_PASSWORD="$malformed_password" ALLOW_INSECURE_WEB=0 python "$launcher" \
+    >/dev/null 2>"$malformed_log" || malformed_status=$?
+  [[ "$malformed_status" == 2 ]] || {
+    echo "ERROR: malformed launcher password returned $malformed_status instead of 2" >&2
+    cat "$malformed_log" >&2
+    exit 1
+  }
+  grep -Fq 'web password must be a single line without NUL' "$malformed_log"
+  if grep -Fq 'synthetic-first-line' "$malformed_log"; then
+    echo 'ERROR: malformed launcher password was echoed to logs' >&2
+    exit 1
+  fi
+done
 
 invalid_log="$workdir/invalid.log"
 invalid_status=0
