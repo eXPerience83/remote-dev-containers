@@ -140,41 +140,6 @@ def mount_targets(service: dict[str, object]) -> list[str]:
     return targets
 
 
-def service_secret_sources(service: dict[str, object], target: str) -> list[str]:
-    sources: list[str] = []
-    expected_name = target.removeprefix("/run/secrets/")
-    for secret in service.get("secrets", []):
-        if isinstance(secret, str):
-            source = secret
-            secret_target = secret
-        elif isinstance(secret, dict):
-            source_value = secret.get("source")
-            if source_value is None:
-                continue
-            source = str(source_value)
-            secret_target = str(secret.get("target", source))
-        else:
-            continue
-        if secret_target.removeprefix("/run/secrets/") == expected_name:
-            sources.append(source)
-    return sources
-
-
-def credential_sources(
-    config: dict[str, object], service: dict[str, object], target: str
-) -> list[str]:
-    sources = [f"bind:{source}" for source in mount_sources(service, target)]
-    top_level = config.get("secrets")
-    for secret_name in service_secret_sources(service, target):
-        require(isinstance(top_level, dict), "service secret has no top-level definition")
-        definition = top_level.get(secret_name)
-        require(isinstance(definition, dict), f"top-level secret {secret_name} is missing")
-        secret_file = definition.get("file")
-        require(secret_file is not None, f"secret {secret_name} has no file source")
-        sources.append(f"secret:{secret_file}")
-    return sources
-
-
 def validate_mount_safety(service: dict[str, object], context: str) -> None:
     for source in mount_sources(service):
         lowered = source.lower()
@@ -186,6 +151,7 @@ def validate_mount_safety(service: dict[str, object], context: str) -> None:
         require(not any(marker in lowered_target for marker in SOCKET_MARKERS), f"{context} engine socket target {target}")
         require("tmux" not in lowered_target, f"{context} tmux mount {target}")
         require("control" not in lowered_target, f"{context} control mount {target}")
+        require(not target.startswith("/run/secrets"), f"{context} credential-file mount {target}")
 
 
 def rendered_string_list(service: dict[str, object], key: str, context: str) -> list[str]:
@@ -244,17 +210,11 @@ def validate_absent_volumes_from(service: dict[str, object], context: str) -> No
     require("volumes_from" not in service, f"{context} configures volumes_from")
 
 
-def resolve_compose_file_path(path_value: str, base_file: Path) -> Path:
-    path = Path(path_value)
-    if not path.is_absolute():
-        path = base_file.parent / path
-    return path.resolve()
-
-
 def validate(path: Path, config: dict[str, object]) -> None:
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
     require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
+    require("secrets" not in config, f"{path}: browser-password secrets remain")
     launcher = services["launcher"]
     codex = services["codex"]
     antigravity = services["antigravity"]
@@ -287,20 +247,17 @@ def validate(path: Path, config: dict[str, object]) -> None:
     require(str(antigravity_env.get("REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY")) == "1", f"{path}: Antigravity gate")
     require(str(antigravity_env.get("AGY_CLI_DISABLE_AUTO_UPDATE")).lower() == "true", f"{path}: auto update")
 
-    for key in ("WEB_PASSWORD_FILE", "WEB_PASSWORD", "WEB_USERNAME"):
+    retired_password_file_var = "WEB_PASSWORD_" + "FILE"
+    for key in (retired_password_file_var, "WEB_PASSWORD", "WEB_USERNAME"):
         require(key not in launcher_env, f"{path}: launcher unexpectedly contains {key}")
 
     for name, environment in (("Codex", codex_env), ("Antigravity", antigravity_env)):
         require(str(environment.get("ALLOW_INSECURE_WEB")) == "0", f"{path}: {name} authentication")
-        if path == TRUENAS_COMPOSE:
-            require("WEB_PASSWORD_FILE" not in environment, f"{path}: {name} still uses password file")
-            require(
-                environment.get("WEB_PASSWORD") == "",
-                f"{path}: {name} public YAML password must remain empty",
-            )
-        else:
-            require(environment.get("WEB_PASSWORD_FILE") == "/run/secrets/web_password", f"{path}: {name} password target")
-            require("WEB_PASSWORD" not in environment, f"{path}: {name} generic password leaked into environment")
+        require(retired_password_file_var not in environment, f"{path}: {name} retained retired password source")
+        require(
+            environment.get("WEB_PASSWORD") == "",
+            f"{path}: {name} browser password must fail closed when unset",
+        )
 
     require(str(launcher_env.get("ALLOW_INSECURE_WEB")) == "1", f"{path}: launcher auth")
 
@@ -323,7 +280,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
         "/root/.gemini",
         "docker.sock",
         "podman.sock",
-        "/run/secrets/web_password",
+        "/run/secrets",
         "OPENAI_API_KEY",
         "CODEX_HOME",
         "GH_CONFIG_DIR",
@@ -333,15 +290,6 @@ def validate(path: Path, config: dict[str, object]) -> None:
         require(forbidden not in launcher_text, f"{path}: launcher contains {forbidden}")
 
     require(mount_sources(launcher) == [], f"{path}: launcher must remain mount-free")
-    codex_credentials = credential_sources(config, codex, "/run/secrets/web_password")
-    antigravity_credentials = credential_sources(config, antigravity, "/run/secrets/web_password")
-    if path == TRUENAS_COMPOSE:
-        require(codex_credentials == [], f"{path}: Codex retained file credentials")
-        require(antigravity_credentials == [], f"{path}: Antigravity retained file credentials")
-    else:
-        require(len(codex_credentials) == 1, f"{path}: Codex credentials {codex_credentials}")
-        require(len(antigravity_credentials) == 1, f"{path}: Antigravity credentials {antigravity_credentials}")
-        require(codex_credentials != antigravity_credentials, f"{path}: shared terminal credential source")
 
     require(published_targets(launcher) == {7680}, f"{path}: launcher ports")
     require(published_targets(codex) == {7681}, f"{path}: Codex ports")
@@ -419,7 +367,6 @@ def validate_direct_project_override(env_path: Path) -> None:
         "Antigravity project override missing",
     )
 
-    # The TrueNAS reference YAML is edited directly; ambient/.env overrides must not rewrite its literal selector.
     rendered = compose_config(TRUENAS_COMPOSE, env_path, override)
     services = rendered["services"]
     launcher_env = services["launcher"]["environment"]
@@ -443,31 +390,58 @@ def validate_auth_override_separation(env_path: Path) -> None:
     require(str(relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "Codex override missing")
     require(str(relaxed["antigravity"]["environment"]["ALLOW_INSECURE_WEB"]) == "0", "Codex auth leaked")
 
-    default_auth = compose_config(AUTH_COMPOSE_FILES, env_path, {"LAUNCHER_USERNAME": "test-launcher"})
+    default_auth = compose_config(
+        AUTH_COMPOSE_FILES,
+        env_path,
+        {"LAUNCHER_USERNAME": "test-launcher"},
+    )
     launcher = default_auth["services"]["launcher"]
-    sources = credential_sources(default_auth, launcher, "/run/secrets/launcher_password")
-    require(len(sources) == 1 and sources[0].startswith("secret:"), "launcher auth must be file-backed")
-    default_path = resolve_compose_file_path(sources[0].removeprefix("secret:"), GENERIC_COMPOSE)
-    require(default_path == (ROOT / "secrets/launcher_password.txt").resolve(), "launcher secret path")
+    require(launcher["environment"]["WEB_PASSWORD"] == "", "launcher password must fail closed when unset")
+    require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
+    require(mount_sources(launcher) == [], "launcher auth added a mount")
+    require("secrets" not in default_auth, "launcher auth retained Compose secrets")
 
     synthetic = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as secret_file:
-        secret_file.write(f"{synthetic}\n")
-        secret_file.flush()
-        hardened = compose_config(
-            AUTH_COMPOSE_FILES,
-            env_path,
-            {"LAUNCHER_PASSWORD_PATH": secret_file.name, "LAUNCHER_USERNAME": "test-launcher"},
-        )
-    require(synthetic not in json.dumps(hardened, sort_keys=True), "rendered password leak")
+    hardened = compose_config(
+        AUTH_COMPOSE_FILES,
+        env_path,
+        {"LAUNCHER_PASSWORD": synthetic, "LAUNCHER_USERNAME": "test-launcher"},
+    )
     launcher = hardened["services"]["launcher"]
     validate_service_hardening(launcher, "launcher", "launcher auth override")
     validate_private_ipc_namespace(launcher, "launcher auth override")
     validate_private_pid_and_network_namespaces(launcher, "launcher auth override")
     validate_absent_volumes_from(launcher, "launcher auth override")
     require(str(launcher["environment"]["ALLOW_INSECURE_WEB"]) == "0", "launcher auth override")
-    require(launcher["environment"]["WEB_PASSWORD_FILE"] == "/run/secrets/launcher_password", "launcher password target")
+    require(launcher["environment"]["WEB_PASSWORD"] == synthetic, "launcher password mapping")
     require(mount_sources(launcher) == [], "launcher auth added a bind mount")
+    require("secrets" not in hardened, "launcher auth retained Compose secrets")
+
+
+def validate_agent_password_independence(env_path: Path) -> None:
+    codex_password = f"synthetic-codex-{os.urandom(8).hex()}"
+    antigravity_password = f"synthetic-antigravity-{os.urandom(8).hex()}"
+    rendered = compose_config(
+        GENERIC_COMPOSE,
+        env_path,
+        {
+            "WEB_PASSWORD": codex_password,
+            "ANTIGRAVITY_WEB_PASSWORD": antigravity_password,
+        },
+    )
+    services = rendered["services"]
+    require(
+        services["codex"]["environment"]["WEB_PASSWORD"] == codex_password,
+        "Codex password mapping changed",
+    )
+    require(
+        services["antigravity"]["environment"]["WEB_PASSWORD"] == antigravity_password,
+        "Antigravity password mapping changed",
+    )
+    require(codex_password != antigravity_password, "synthetic passwords unexpectedly match")
+    launcher_text = json.dumps(services["launcher"], sort_keys=True)
+    require(codex_password not in launcher_text, "Codex password leaked into launcher")
+    require(antigravity_password not in launcher_text, "Antigravity password leaked into launcher")
 
 
 def validate_truenas_launcher_password_free_source() -> None:
@@ -545,6 +519,7 @@ def main() -> int:
             validate(path, compose_config(path, env_path))
         validate_direct_project_override(env_path)
         validate_auth_override_separation(env_path)
+        validate_agent_password_independence(env_path)
     print("Single-stack image, socket, launcher, credential and project-selector boundaries: OK")
     return 0
 
