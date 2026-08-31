@@ -7,21 +7,21 @@ The accepted architecture is one user-installed Remote Dev stack, one immutable 
 Implemented:
 
 - one canonical Remote Dev image/package;
-- fixed `launcher`, `codex` and `shell` runtime roles;
-- one Compose/TrueNAS stack containing launcher and Codex services;
+- fixed `launcher`, `codex`, `antigravity` and `shell` runtime roles, with Antigravity still optional/experimental;
+- one Compose/TrueNAS stack containing launcher, Codex and optional Antigravity services;
 - one primary launcher URL;
-- one image reference reused by both services;
-- navigation from the stateless launcher to the independently authenticated Codex endpoint;
-- optional file-backed launcher Basic authentication and required Codex terminal authentication;
+- one image reference reused by enabled services;
+- navigation from the stateless launcher to independently authenticated agent endpoints;
+- one configuration-backed `WEB_PASSWORD` runtime contract for browser authentication;
 - one canonical role-neutral persistent-data layout;
 - one bounded role-neutral project resolver/manager below each private agent workspace mount;
 - no agent-state mounts, agent credentials or Docker socket in the launcher.
 
-Still pending:
+Still pending or optional:
 
-- optional Antigravity and future Claude services;
-- the later outer-hardening and cross-service canary phase under #42;
+- final Antigravity support/policy/documentation reconciliation tracked by #31/#53/#69/#92/#96;
 - optional TrueNAS SMB/ACL workspace integration under #71;
+- future stronger private-network/HTTPS/auth-gateway access under #181;
 - any reviewed one-origin reverse-proxy design.
 
 Related work:
@@ -31,6 +31,7 @@ Related work:
 - issue #36 records the TrueNAS outer-isolation and no-Bubblewrap decision;
 - issue #70 owns the canonical data layout;
 - issue #126 defines `/workspace` as a role-private project collection root and the common project-scoped launch contract;
+- issue #69 owns browser-terminal authentication;
 - issue #31 tracks the complete delivery sequence.
 
 ## User-facing contract
@@ -49,28 +50,29 @@ Docker may instantiate several containers from the image, but it stores and reus
 
 ```text
 Remote Dev App / Compose stack
-├── launcher service  (primary port 7680, no password by default)
-└── Codex service     (terminal port 7681, independently authenticated)
+├── launcher service     (primary port 7680, no password by default)
+├── Codex service        (terminal port 7681, independently authenticated)
+└── Antigravity service  (optional port 7682, independently authenticated)
 ```
 
-Both services reference the same `REMOTE_DEV_IMAGE` value. Implemented roles are:
+All enabled services reference the same `REMOTE_DEV_IMAGE` value. Implemented roles are:
 
 ```text
-REMOTE_DEV_ROLE=launcher|codex|shell
+REMOTE_DEV_ROLE=launcher|codex|antigravity|shell
 ```
 
-`antigravity` and `claude` remain reserved and fail without downloading anything.
+`claude` remains reserved and unavailable.
 
 ## One launcher, isolated execution
 
-The launcher provides the normal browser entry point and lists only reviewed services. Selecting Codex navigates to the Codex service's own authenticated endpoint. The launcher does not execute Codex and does not relay terminal HTTP or WebSocket traffic.
+The launcher provides the normal browser entry point and lists only reviewed services. Selecting an agent navigates to that service's own authenticated endpoint. The launcher does not execute the agent and does not relay terminal HTTP or WebSocket traffic.
 
 The launcher:
 
 - is a project-owned Python standard-library HTTP service;
 - drops permanently to UID/GID `65532` before serving;
 - requires no password by default in localhost/LAN/Tailscale examples;
-- supports optional file-backed Basic authentication through `compose/launcher-auth.yml`;
+- supports optional configuration-backed Basic authentication through `compose/launcher-auth.yml`;
 - validates its fixed destination host, scheme, port and path;
 - checks matching origins when an `Origin` header is present;
 - sends a restrictive nonce-based Content Security Policy;
@@ -78,15 +80,15 @@ The launcher:
 - exposes a secret-free health endpoint;
 - receives no agent workspace, state, OAuth token, GitHub configuration, SSH key or Docker/Podman socket.
 
-The base launcher has no mounts. The optional authentication overlay adds only its dedicated read-only launcher password secret; it never receives an agent password or agent state.
+The launcher remains mount-free when optional authentication is enabled. It never receives an agent password or agent state.
 
-The Codex endpoint uses its own password source and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher.
+Each agent endpoint uses its own `WEB_PASSWORD` value and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher. The external Compose variables that populate those per-service values remain distinct so changing one role does not change another.
 
 ## Shared immutable image
 
 The final image contains Ubuntu and Remote Dev scripts, Git/Git LFS/OpenSSH/GitHub CLI, Python, Node.js, npm, uv, mise, ttyd, tmux, tini, the launcher runtime and Codex CLI as the built-in reference agent.
 
-Sharing executable layers does not share mutable state or secrets. Runtime and Compose tests assert that launcher and Codex use the same image reference/ID while retaining separate service boundaries.
+Sharing executable layers does not share mutable state or secrets. Runtime and Compose tests assert that enabled services use the same image reference/ID while retaining separate service boundaries.
 
 ## Service roles
 
@@ -97,6 +99,10 @@ Sharing executable layers does not share mutable state or secrets. Runtime and C
 ### Codex
 
 Codex retains device-code authentication, start/resume actions, persistent tmux sessions, autonomous/guarded approval modes, diagnostics and post-session credential hardening. Start and Resume resolve a concrete project below `/workspace` and pass that directory through the project-owned `run-codex` wrapper, so repository discovery and repository-scoped instructions are not anchored accidentally at the collection root.
+
+### Antigravity
+
+Antigravity is an optional experimental role with its own workspace/state/configuration mounts. Its vendor runtime is installed explicitly into private persisted state and normal startup does not download or update it automatically. Project-scoped Start/Resume and lifecycle evidence are tracked independently from Codex support status.
 
 ### Shell
 
@@ -134,7 +140,7 @@ The interactive selection is transient to the current menu/tmux session. Direct 
 
 Project selection is a working-directory and routing contract, not an intra-service access-control boundary. The entire role-private `/workspace` mount remains visible to processes in that agent container, so selecting one child does not isolate sibling projects. Filesystem isolation is provided by the outer container and its mount set; use separate services or mounts if stronger separation between projects is required.
 
-This contract is shared code only. Codex and any future supported agent continue to receive separate writable workspace mounts. Antigravity reuses this project wiring only as an experimental integration; that reuse does not establish supported deployment status, and real TrueNAS project/session validation remains deferred to #131. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
+This contract is shared code only. Codex and Antigravity continue to receive separate writable workspace mounts. The same logical repository should use separate clones or Git worktrees across agent services rather than one concurrently writable checkout.
 
 ## Canonical persistence boundaries
 
@@ -144,24 +150,23 @@ Generic Compose derives all persistent paths from one variable:
 REMOTE_DEV_DATA_ROOT
 ```
 
-The canonical administrative layout is:
+The canonical Codex administrative layout is:
 
 ```text
 REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
 │       └── <project>/
-├── state/
-│   └── codex/
-│       ├── agent/
-│       ├── runtime/
-│       ├── gh/
-│       ├── git/
-│       └── ssh/
-└── secrets/
+└── state/
     └── codex/
-        └── web_password.txt
+        ├── agent/
+        ├── runtime/
+        ├── gh/
+        ├── git/
+        └── ssh/
 ```
+
+Browser-terminal passwords are deployment configuration rather than persisted data files.
 
 The Codex service receives only these child paths:
 
@@ -173,23 +178,16 @@ The Codex service receives only these child paths:
 | `state/codex/gh` | `/root/.config/gh` |
 | `state/codex/git` | `/root/.config/git` |
 | `state/codex/ssh` | `/root/.ssh` |
-| `secrets/codex/web_password.txt` | `/run/secrets/web_password` |
 
-When the experimental Antigravity service is enabled, it receives a disjoint
-set of role-private children. In particular,
-`state/antigravity/config -> /root/.gemini/config` supplies project state below
-`projects/`, while `state/antigravity/vendor ->
-/root/.gemini/antigravity-cli` remains a separate vendor/settings boundary.
-Neither Codex nor the launcher receives either path, and `/root/.gemini` is
-never mounted wholesale.
+When the experimental Antigravity service is enabled, it receives a disjoint set of role-private children. In particular, `state/antigravity/config -> /root/.gemini/config` supplies project state below `projects/`, while `state/antigravity/vendor -> /root/.gemini/antigravity-cli` remains a separate vendor/settings boundary. Neither Codex nor the launcher receives either path, and `/root/.gemini` is never mounted wholesale.
 
 The base launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-Before deployment, `scripts/preflight-data-layout.py` validates that every canonical directory exists, that none is a symlink, and that the password path is a non-empty regular file with restrictive permissions. This host-side preflight is authoritative. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
+Before deployment, `scripts/preflight-data-layout.py` validates that every canonical persistent directory exists and that none is a symlink. Browser-password validation belongs to endpoint startup, not host-layout preflight. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
 
 There is no data-layout compatibility alias, automatic migration, copying, symlink or deletion. Existing experimental directories must be recreated or moved manually before deploying the new stack.
 
-Optional SMB sharing is not part of this contract. If evaluated later under #71, it should target explicitly selected concrete project directories below the `workspaces` boundary rather than exposing the whole collection root by default; `state` and `secrets` must remain private.
+Optional SMB sharing is not part of this contract. If evaluated later under #71, it should target explicitly selected concrete project directories below the `workspaces` boundary rather than exposing the whole collection root by default; `state` must remain private.
 
 ## Workspace concurrency
 
@@ -197,17 +195,17 @@ The default stack does not mount one writable checkout into two agent services. 
 
 ## Security and trust boundaries
 
-Each outer container is a separate boundary. Anyone with terminal/root access inside an agent service is trusted for the state mounted into that service. The launcher cannot see or authenticate to agent state because neither the state nor the agent password is mounted there.
+Each outer container is a separate boundary. Anyone with terminal/root access inside an agent service is trusted for the state mounted into that service. The launcher cannot see or authenticate to agent state because neither the state nor the agent password is mounted or copied there.
 
 The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
 
-Both deployment definitions enforce the same outer-container hardening: read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded private `/tmp` and `/run` tmpfs filesystems and PID ceilings of 64 for launcher and 1024 per agent. Launcher restores only `DAC_READ_SEARCH` to read a host-owned mode-`0600` file-backed secret and `SETGID`/`SETUID` for its permanent UID/GID 65532 drop; Codex and Antigravity restore only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID` for role-private host-ownership compatibility, persistent-state hardening and bounded UID/GID 65534 candidate execution. The live isolation canary verifies the effective launcher identity/capability drop, exact configured agent capabilities, transient mounts, same image ID and distinct writable sources.
+Both deployment definitions enforce the same outer-container hardening: read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded private `/tmp` and `/run` tmpfs filesystems and PID ceilings of 64 for launcher and 1024 per agent. Launcher restores only `DAC_READ_SEARCH`, `SETGID` and `SETUID` and then drops to UID/GID 65532; Codex and Antigravity restore only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID` for role-private host-ownership compatibility, persistent-state hardening and bounded UID/GID 65534 candidate execution. The live isolation canary verifies the effective launcher identity/capability drop, exact configured agent capabilities, transient mounts, same image ID and distinct writable sources.
 
 Project selection neither broadens nor narrows that container boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment; the rest of that mounted workspace remains accessible inside the service.
 
 ## Versioning and updates
 
-All stack services use the same image reference. The image-bundled Codex release remains the reviewed, tested fallback. Codex may also use a newer official release only after an explicit project-owned admission into its private `state/codex/runtime` mount; that optional runtime never replaces the bundled executable and normal startup performs no update network access. Other built-in components continue to be updated through reviewed image rebuilds, while future vendor-installed agents may keep an independent persisted version only inside their own private service state.
+All stack services use the same image reference. The image-bundled Codex release remains the reviewed, tested fallback. Codex may also use a newer official release only after an explicit project-owned admission into its private `state/codex/runtime` mount; that optional runtime never replaces the bundled executable and normal startup performs no update network access. Other built-in components continue to be updated through reviewed image rebuilds, while vendor-installed agents keep independent persisted state only inside their own private service.
 
 A broken optional agent must not make the launcher or Codex unhealthy. Healthchecks validate role readiness without requiring user login.
 
@@ -222,10 +220,11 @@ Automated tests cover:
 - selected-project Codex start/resume and direct-agent launch behavior;
 - launcher optional authentication, origin policy, CSP and fixed navigation;
 - launcher absence of agent mounts and container-engine sockets;
-- one image reference across launcher and Codex;
-- exact role-scoped Codex mount targets and canonical source suffixes;
-- host-side rejection of missing, symlinked or malformed canonical paths;
-- restrictive file-password permissions;
+- one image reference across enabled services;
+- exact role-scoped mount targets and canonical source suffixes;
+- host-side rejection of missing or symlinked canonical paths;
+- independent configuration-backed browser authentication and fail-closed missing-password behavior;
+- absence of the retired password-file browser-auth contract;
 - absence of legacy data-root names and paths;
 - role-aware health checks;
 - existing Codex start, resume, policy, diagnostics, ttyd and tmux behavior.
@@ -242,4 +241,4 @@ This architecture does not include:
 - shared OAuth/token, web-password, GitHub, Git, SSH or workspace state between agents;
 - dynamic privileged child containers;
 - weakening TrueNAS/Docker security to force an inner sandbox;
-- shipping Antigravity or Claude before dedicated legal, installation and isolation validation.
+- shipping Claude before dedicated legal, installation and isolation validation.
