@@ -6,9 +6,9 @@ Remote Dev is a single-user development appliance, not a multi-tenant service.
 
 Agent containers intentionally run as root. Root is constrained to that container and to the paths mounted into it. Anyone who reaches an agent terminal can operate everything accessible to that service.
 
-The launcher starts with UID 0 and, before binding its HTTP server, clears supplementary groups and drops permanently to UID/GID `65532`. The launcher has no agent-state mounts.
+The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no mounts and no added capabilities after `cap_drop: [ALL]`. It therefore does not need a root startup phase merely to obtain its browser password.
 
-The launcher retains only `DAC_READ_SEARCH`, `SETGID` and `SETUID` at container start. `SETGID` and `SETUID` perform the permanent drop; after that drop, the network-facing process has no supplementary groups and zero effective capabilities. `DAC_READ_SEARCH` is retained as part of the reviewed common launcher capability contract even though browser passwords are now configuration-backed and require no secret-file mount.
+The launcher runtime still defensively drops to UID/GID `65532` if somebody invokes it manually as root outside the reviewed Compose profile, but the supported deployment no longer relies on that transition.
 
 ## Browser authentication contract
 
@@ -55,7 +55,7 @@ Approval prompts are not a sandbox. Autonomous and guarded modes can access ever
 
 ## Enforced container hardening
 
-Both deployment files make the launcher, Codex and Antigravity root filesystems read-only, drop every capability and then restore only the exact role minimum. They retain `no-new-privileges`, do not configure supplementary groups, and set PID ceilings of `64` for the launcher and `1024` for each agent.
+Both deployment files make the launcher, Codex and Antigravity root filesystems read-only and apply `cap_drop: [ALL]`. The launcher restores no capabilities and runs directly as UID/GID `65532`; Codex and Antigravity restore only their exact reviewed agent capability minimum. All roles retain `no-new-privileges`, configure no supplementary groups, and use PID ceilings of `64` for the launcher and `1024` for each agent.
 
 Codex and Antigravity keep the established root-agent model because the authenticated terminal is trusted for that one service and must initialize and harden role-private bind mounts whose host ownership can differ. Their exact capability whitelist is:
 
