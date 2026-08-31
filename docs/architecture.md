@@ -70,7 +70,7 @@ The launcher provides the normal browser entry point and lists only reviewed ser
 The launcher:
 
 - is a project-owned Python standard-library HTTP service;
-- drops permanently to UID/GID `65532` before serving;
+- runs directly as UID/GID `65532` in the reviewed Compose profiles and restores no capabilities after `cap_drop: [ALL]`;
 - requires no password by default in localhost/LAN/Tailscale examples;
 - supports optional configuration-backed Basic authentication through `compose/launcher-auth.yml`;
 - validates its fixed destination host, scheme, port and path;
@@ -199,7 +199,7 @@ Each outer container is a separate boundary. Anyone with terminal/root access in
 
 The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, unconfined security profiles, container-engine sockets or host-root mounts.
 
-Both deployment definitions enforce the same outer-container hardening: read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded private `/tmp` and `/run` tmpfs filesystems and PID ceilings of 64 for launcher and 1024 per agent. Launcher restores only `DAC_READ_SEARCH`, `SETGID` and `SETUID` and then drops to UID/GID 65532; Codex and Antigravity restore only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID` for role-private host-ownership compatibility, persistent-state hardening and bounded UID/GID 65534 candidate execution. The live isolation canary verifies the effective launcher identity/capability drop, exact configured agent capabilities, transient mounts, same image ID and distinct writable sources.
+Both deployment definitions enforce the same outer-container hardening: read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded private `/tmp` and `/run` tmpfs filesystems and PID ceilings of 64 for launcher and 1024 per agent. The launcher runs directly as UID/GID `65532` and restores no capabilities; Codex and Antigravity restore only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID` for role-private host-ownership compatibility, persistent-state hardening and bounded UID/GID 65534 candidate execution. The live isolation canary verifies the effective launcher identity with zero capabilities, exact configured agent capabilities, transient mounts, same image ID and distinct writable sources.
 
 Project selection neither broadens nor narrows that container boundary. The project resolver accepts only validated direct children of the already-mounted role workspace, rejects symlink project entries, and never converts an editable project name into a shell fragment; the rest of that mounted workspace remains accessible inside the service.
 
