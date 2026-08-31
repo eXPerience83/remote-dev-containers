@@ -38,10 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.
 - Stateless `remote-dev-launcher` page with fixed Codex navigation, optional Basic authentication, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
 - Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
-- Separate `compose/launcher-auth.yml` override for optional file-backed launcher Basic authentication without rendering the password into the service environment.
+- Separate `compose/launcher-auth.yml` override for optional environment-backed launcher Basic authentication without adding a persistent credential mount.
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
-- Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces`, per-role `state` and `secrets` boundaries.
-- Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed paths and unsafe password-file permissions.
+- Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces` and per-role `state` boundaries.
+- Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed persistent paths.
 - Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
 - Antigravity conversation entry points using normal Start with in-TUI `/resume` for browsing older conversations and the vendor-supported `--continue` path for the latest conversation.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Standardized browser authentication on one per-service `WEB_PASSWORD` contract, retired the alternative password-file path, removed browser-password files from the persistent data layout/preflight, and kept Codex, Antigravity and optional launcher credentials independently configurable.
 - Moved normal Codex and Antigravity temporary files and uv/npm/pip caches from the bounded `/tmp` tmpfs to a safely prepared hidden tree in each role-private disk-backed workspace, while preserving trusted staging and credential-environment boundaries.
 - Updated the immutable bundled Codex baseline to `0.149.1` and migrated guarded mode from the retired `approval_policy=untrusted` value to launch-scoped untrusted trust for the active project, preserving the outer-container boundary and one-launch mode precedence.
 - Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
@@ -86,23 +87,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed all public runtime publication paths to use the canonical `remote-dev` package only; legacy package tags are no longer created.
 - Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
-- Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available through a separate file-backed generic Compose override without affecting the independently authenticated Codex terminal.
+- Changed the stateless launcher to require no password by default on localhost/LAN/Tailscale deployments; optional Basic authentication remains available through a separate environment-backed generic Compose override without affecting the independently authenticated Codex terminal.
 - Replaced the Codex-specific persistent directory contract with one clean role-neutral administrative root. No data-path alias, migration script, automatic copy, deletion or compatibility symlink is provided.
 - Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
-- Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex workspace, agent state, GitHub state, Git state, SSH state and the optional password file.
+- Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex and Antigravity workspace and role-private state trees from browser authentication configuration.
 - Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
-- Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status; real TrueNAS Antigravity project/session validation remains deferred to #131. Shell mode remains at the collection root.
+- Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status. Shell mode remains at the collection root.
 - Changed successful project Select/Create actions to return directly to the calling Codex/Antigravity menu with the active project ready for Start/Resume/Continue, while Delete and recoverable invalid/failed/cancelled project actions remain in `Projects...`.
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
 ### Security
 
 - Hardened launcher, Codex and experimental Antigravity outer containers with read-only root filesystems, `cap_drop: [ALL]`, exact role capability whitelists, private bounded `/tmp` and `/run` tmpfs mounts, explicit PID ceilings and live same-image isolation/toolchain assertions; `/tmp` remains `noexec`, while executable Codex update and Context7 staging remains bounded under transient `/run`.
+- Reduced the launcher further after retiring file-backed browser secrets: production launcher containers now start directly as UID/GID `65532` with no added capabilities, while remaining mount-free and under `no-new-privileges`.
 - Added a narrow Antigravity-private `state/antigravity/config` bind at `/root/.gemini/config` so the official CLI can persist project configuration below `projects/` without making the read-only container root or all of `/root/.gemini` writable; host preflight, startup hardening and cross-service canaries enforce the separate boundary.
 - Codex runtime update probes now use a fixed transient executable staging root under `/run`, verify its real execution capability before download, and normalize extracted package directories independently of restrictive umasks while ignoring caller-controlled `TMPDIR` and preserving the intentional `noexec` `/tmp` mount, UID/GID `65534` probes, synthetic credential-free state and immutable bundled fallback.
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
-- Optional launcher authentication uses a file-backed Compose secret and is tested not to expose the password value in rendered Compose configuration.
-- The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds only its dedicated file-backed launcher password secret.
+- Optional launcher authentication now uses only launcher-specific environment configuration and remains mount-free; agent passwords never enter the launcher.
+- The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds no mounts.
 - The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
 - The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
 - The supported Compose configuration avoids privileged mode, host networking and the Docker socket.
@@ -122,7 +124,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags; `remote-dev` runtime tags are verified against `REMOTE_DEV_DIGEST`, while `remote-dev-base` promotion metadata is checked separately against `BASE_DIGEST`.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
-- The host preflight rejects missing, symlinked or malformed persistent paths and unsafe file-password permissions before deployment.
+- The host preflight rejects missing, symlinked or malformed persistent paths before deployment.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
 - Project selection is a working-directory contract, not an intra-service filesystem sandbox: the full role-private `/workspace` mount remains accessible to processes in that agent container, including sibling projects.
 - Project names/selectors are constrained to direct non-symlink children of the validated role workspace; create/delete cannot target arbitrary paths, and recursive deletion requires exact project-name confirmation.
