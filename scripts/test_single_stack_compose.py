@@ -23,8 +23,9 @@ ANTIGRAVITY_VENDOR_TARGET = "/root/.gemini/antigravity-cli"
 AGENT_CAPABILITIES = frozenset(
     ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL", "SETGID", "SETUID")
 )
+ROLE_USERS = {"launcher": "65532:65532", "codex": "0:0", "antigravity": "0:0"}
 ROLE_CAPABILITIES = {
-    "launcher": frozenset(("DAC_READ_SEARCH", "SETGID", "SETUID")),
+    "launcher": frozenset(),
     "codex": AGENT_CAPABILITIES,
     "antigravity": AGENT_CAPABILITIES,
 }
@@ -167,13 +168,19 @@ def rendered_string_list(service: dict[str, object], key: str, context: str) -> 
 def validate_service_hardening(
     service: dict[str, object], role: str, context: str
 ) -> None:
-    require(service.get("user") == "0:0", f"{context} must start as root")
+    require(service.get("user") == ROLE_USERS[role], f"{context} runtime user differs from the reviewed role identity")
     require(service.get("read_only") is True, f"{context} root filesystem is writable")
     cap_drop = rendered_string_list(service, "cap_drop", context)
     require(cap_drop == ["ALL"], f"{context} cap_drop must be exactly ALL")
-    cap_add = rendered_string_list(service, "cap_add", context)
+    cap_add_value = service.get("cap_add", [])
+    require(isinstance(cap_add_value, list), f"{context} cap_add must be a list")
     require(
-        len(cap_add) == len(set(cap_add)) and frozenset(cap_add) == ROLE_CAPABILITIES[role],
+        all(isinstance(item, str) for item in cap_add_value),
+        f"{context} cap_add entries must be strings",
+    )
+    require(
+        len(cap_add_value) == len(set(cap_add_value))
+        and frozenset(cap_add_value) == ROLE_CAPABILITIES[role],
         f"{context} cap_add differs from the reviewed role whitelist",
     )
     require(
