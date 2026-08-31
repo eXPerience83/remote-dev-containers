@@ -110,7 +110,7 @@ def validate_directory(path: Path, errors: list[str]) -> None:
 
 
 def validate_password_file(path: Path, errors: list[str]) -> None:
-    """Validate one terminal password exactly as the shell runtime consumes it."""
+    """Validate one source password before deployment rematerializes it."""
     if not path.exists():
         errors.append(f"password file is missing: {path}")
         return
@@ -124,16 +124,15 @@ def validate_password_file(path: Path, errors: list[str]) -> None:
         errors.append(f"password file cannot be read: {path} ({error})")
         return
 
-    if not password_bytes:
+    effective_password = (
+        password_bytes[:-1] if password_bytes.endswith(b"\n") else password_bytes
+    )
+    if not effective_password:
         errors.append(f"password file is empty: {path}")
-    else:
-        effective_password = password_bytes.rstrip(b"\n")
-        if not effective_password:
-            errors.append(f"password is empty after trailing newline removal: {path}")
-        elif b"\x00" in effective_password:
-            errors.append(f"password must not contain NUL bytes: {path}")
-        elif b"\n" in effective_password or b"\r" in effective_password:
-            errors.append(f"password must be a single LF-terminated line: {path}")
+    elif b"\x00" in effective_password:
+        errors.append(f"password must not contain NUL bytes: {path}")
+    elif b"\n" in effective_password or b"\r" in effective_password:
+        errors.append(f"password must contain exactly one line: {path}")
 
     if os.name == "posix":
         mode = stat.S_IMODE(path.stat().st_mode)

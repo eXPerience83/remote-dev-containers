@@ -36,6 +36,7 @@ preflight:
 
 agent-contract-tests:
 	python3 scripts/test-development-scratch.py
+	python3 scripts/test-remote-dev-web-password.py
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY=1 bash scripts/test-role-neutral-runtime.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-remote-dev-menu.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
@@ -50,7 +51,7 @@ agent-contract-tests:
 
 validate: agent-contract-tests ttyd-osc52-check
 	bash -n scripts/*.sh scripts/lib/*.sh scripts/fixtures/*.sh
-	python3 -m py_compile web/ttyd-osc52/generate.py web/ttyd-osc52/validate.py web/ttyd-osc52/test_generate.py scripts/remote-dev-launcher.py scripts/remote-dev-codex-runtime.py scripts/remote-dev-prepare-development-scratch.py scripts/test-development-scratch.py scripts/test-remote-dev-codex-runtime.py scripts/test-codex-runtime-code-mode-probe.py scripts/test-codex-runtime-noexec-staging.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py
+	python3 -m py_compile web/ttyd-osc52/generate.py web/ttyd-osc52/validate.py web/ttyd-osc52/test_generate.py scripts/remote-dev-launcher.py scripts/remote-dev-codex-runtime.py scripts/remote-dev-prepare-development-scratch.py scripts/test-development-scratch.py scripts/test-remote-dev-web-password.py scripts/test-remote-dev-codex-runtime.py scripts/test-codex-runtime-code-mode-probe.py scripts/test-codex-runtime-noexec-staging.py scripts/preflight-data-layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py
 	python3 scripts/test-codex-runtime-code-mode-probe.py
 	REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh bash scripts/test-image-name-compat.sh
 	bash scripts/test-compose-image-compat.sh

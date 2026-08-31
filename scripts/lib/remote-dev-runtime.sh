@@ -9,6 +9,110 @@ remote_dev_runtime_error() {
   printf 'ERROR: %s\n' "$*" >&2
 }
 
+remote_dev_web_auth_source() {
+  if [[ -n "${WEB_PASSWORD_FILE:-}" ]]; then
+    printf 'file\n'
+  elif [[ -n "${WEB_PASSWORD:-}" ]]; then
+    printf 'environment\n'
+  elif [[ "${ALLOW_INSECURE_WEB:-0}" == 1 ]]; then
+    printf 'disabled\n'
+  else
+    printf 'unconfigured\n'
+  fi
+}
+
+remote_dev_web_password_file() {
+  local action="$1"
+  local path="$2"
+
+  case "$action" in
+    check|read) ;;
+    *)
+      remote_dev_runtime_error "unsupported internal web-password action"
+      return 2
+      ;;
+  esac
+
+  python - "$action" "$path" <<'PY'
+from __future__ import annotations
+
+import os
+import stat
+import sys
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+action = sys.argv[1]
+path = Path(sys.argv[2])
+if not path.is_absolute():
+    fail("WEB_PASSWORD_FILE must be an absolute path")
+
+current = Path(path.anchor)
+parts = path.parts[1:]
+for index, part in enumerate(parts):
+    current /= part
+    try:
+        metadata = os.lstat(current)
+    except FileNotFoundError:
+        fail(f"password file is missing: {path}")
+    except OSError:
+        fail(f"password path cannot be inspected: {current}")
+    if stat.S_ISLNK(metadata.st_mode):
+        fail(f"password path component must not be a symlink: {current}")
+    if index < len(parts) - 1 and not stat.S_ISDIR(metadata.st_mode):
+        fail(f"password path component is not a directory: {current}")
+
+flags = (
+    os.O_RDONLY
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
+try:
+    descriptor = os.open(path, flags)
+except FileNotFoundError:
+    fail(f"password file is missing: {path}")
+except PermissionError:
+    fail(f"password file is not readable: {path}")
+except OSError:
+    fail(f"password file cannot be opened safely: {path}")
+
+try:
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISREG(metadata.st_mode):
+        fail(f"password path is not a regular file: {path}")
+    chunks: list[bytes] = []
+    while True:
+        try:
+            chunk = os.read(descriptor, 8192)
+        except OSError:
+            fail(f"password file cannot be read: {path}")
+        if not chunk:
+            break
+        chunks.append(chunk)
+finally:
+    os.close(descriptor)
+
+password = b"".join(chunks)
+if password.endswith(b"\n"):
+    password = password[:-1]
+if not password:
+    fail(f"password file is empty: {path}")
+if b"\x00" in password:
+    fail(f"password must not contain NUL bytes: {path}")
+if b"\n" in password or b"\r" in password:
+    fail(f"password must contain exactly one line: {path}")
+
+if action == "read":
+    sys.stdout.buffer.write(password)
+PY
+}
+
 remote_dev_validate_workspace_root() {
   local workspace="$1"
   local current=""

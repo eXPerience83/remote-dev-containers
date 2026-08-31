@@ -66,24 +66,35 @@ if gh auth status >/dev/null 2>&1; then
 fi
 /usr/local/bin/secure-persistent-state
 
+auth_source="$(remote_dev_web_auth_source)"
 credential=""
 web_username="${WEB_USERNAME:-codex}"
-if [[ -n "${WEB_PASSWORD_FILE:-}" ]]; then
-  if [[ ! -r "$WEB_PASSWORD_FILE" ]]; then
-    echo "ERROR: WEB_PASSWORD_FILE is not readable: $WEB_PASSWORD_FILE" >&2
-    exit 1
-  fi
-  credential="${web_username}:$(<"$WEB_PASSWORD_FILE")"
-elif [[ -n "${WEB_PASSWORD:-}" ]]; then
-  credential="${web_username}:${WEB_PASSWORD}"
-elif [[ "${ALLOW_INSECURE_WEB:-0}" != "1" ]]; then
-  cat >&2 <<'MSG'
+case "$auth_source" in
+  file)
+    if ! web_password="$(remote_dev_web_password_file read "$WEB_PASSWORD_FILE")"; then
+      exit 1
+    fi
+    credential="${web_username}:${web_password}"
+    unset web_password
+    ;;
+  environment)
+    credential="${web_username}:${WEB_PASSWORD}"
+    ;;
+  disabled)
+    ;;
+  unconfigured)
+    cat >&2 <<'MSG'
 ERROR: web authentication is not configured.
 Set WEB_PASSWORD_FILE (recommended) or WEB_PASSWORD.
 Set ALLOW_INSECURE_WEB=1 only on an already protected private endpoint.
 MSG
-  exit 1
-fi
+    exit 1
+    ;;
+  *)
+    echo "ERROR: unsupported internal web authentication source" >&2
+    exit 1
+    ;;
+esac
 
 if [[ "$role" == codex || "$role" == antigravity ]]; then
   remote_dev_prepare_development_environment "$role" "$workspace" || exit $?

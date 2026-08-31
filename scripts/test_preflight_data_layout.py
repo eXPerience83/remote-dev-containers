@@ -132,16 +132,29 @@ def validate_file_mode(root: Path) -> None:
     require("password file is missing" in missing_password.stderr, missing_password.stderr)
 
     codex_password = root / CODEX_PASSWORD_SUFFIX
-    codex_password.write_bytes(b"\n\n")
+    codex_password.write_bytes(b"\n")
     codex_password.chmod(0o600)
     newline_only = run_preflight(root, password_source="file")
     require(newline_only.returncode == 1, "newline-only password must fail")
-    require("empty after trailing newline removal" in newline_only.stderr, newline_only.stderr)
+    require("password file is empty" in newline_only.stderr, newline_only.stderr)
+
+    codex_password.write_bytes(b"first-line\n\n")
+    repeated_trailing_lf = run_preflight(root, password_source="file")
+    require(
+        repeated_trailing_lf.returncode == 1,
+        "more than one trailing LF must not be normalized away",
+    )
+    require("must contain exactly one line" in repeated_trailing_lf.stderr, repeated_trailing_lf.stderr)
 
     codex_password.write_bytes(b"first-line\nsecond-line\n")
     multiline = run_preflight(root, password_source="file")
     require(multiline.returncode == 1, "multiline password must fail")
-    require("must be a single LF-terminated line" in multiline.stderr, multiline.stderr)
+    require("must contain exactly one line" in multiline.stderr, multiline.stderr)
+
+    codex_password.write_bytes(b"first-line\r\n")
+    crlf = run_preflight(root, password_source="file")
+    require(crlf.returncode == 1, "CRLF password must fail")
+    require("must contain exactly one line" in crlf.stderr, crlf.stderr)
 
     codex_password = write_password(root, CODEX_PASSWORD_SUFFIX, "test-codex-password")
     if os.name == "posix":
