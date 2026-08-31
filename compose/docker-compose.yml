@@ -11,7 +11,6 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - DAC_READ_SEARCH
       - SETGID
       - SETUID
     pids_limit: 64
