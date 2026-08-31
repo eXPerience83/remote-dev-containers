@@ -47,7 +47,7 @@
     },
     {
       "id": "codex-cli",
-      "version": "rust-v0.150.1",
+      "version": "rust-v0.151.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -64,16 +64,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.150.1/codex-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "ab308870bc7fc048c23dc49d03f6b8af9ce7fc99b9da882d6688be7a90155c7a",
-          "asset_size": 103098758,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.151.0/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "605b4b183f22c645f5def63a5b7191767407fb66a6feaec4eaf10b5b7e0058f6",
+          "asset_size": 103937941,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.150.1/codex-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "5bb1f75e1a1588845b4a31f2c98fb2b394be5c2a8d90a24a8ab0ebbae1169264",
-          "asset_size": 95376924,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.151.0/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "c1cf2baf375e261c1469381a52dc2c8fd05b6fb45cfff83fed0988fd6c5369b6",
+          "asset_size": 96130483,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -81,7 +81,7 @@
     },
     {
       "id": "codex-code-mode-host",
-      "version": "rust-v0.150.1",
+      "version": "rust-v0.151.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -98,16 +98,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.150.1/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "b47667846125cdf6dbc460c6fdc418afb2ef3926c54f4d999bbfbeb08dee4fc5",
-          "asset_size": 21208013,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.151.0/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "332da68215f070321cb52ebe792ecce8dfd614d02ea5541309d0a5df01e14894",
+          "asset_size": 25682673,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.150.1/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "cc934a8aa36dea77ad3096e025cbe7f2097f0083df902e7f3ed77dbf91fa6f9c",
-          "asset_size": 19857432,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.151.0/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "15515396675737d947dcb370da0a5b258e6aea871446639b065ca004b843a498",
+          "asset_size": 24323445,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.8.14",
+      "version": "2026.8.15",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.14/mise-v2026.8.14-linux-x64",
-          "asset_sha256": "7cd12d6002d5b3c83a89cad79023712faf2a36f9e8b2ee2061dac5135b3de0ed",
-          "asset_size": 119752304,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.15/mise-v2026.8.15-linux-x64",
+          "asset_sha256": "a6dea05e896f1e6090f821588f45397262270e0e0b456252f8d1da28a416f3f2",
+          "asset_size": 117569568,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.14/mise-v2026.8.14-linux-arm64",
-          "asset_sha256": "bc2c447a7e498b0bed0a421cc2101b407fef09a3195670d35a4aa3f43cd868a1",
-          "asset_size": 101628544,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.15/mise-v2026.8.15-linux-arm64",
+          "asset_sha256": "124ea8f7c8cb9a6a3c99c763cbf37ca48c9beaa816735f011d9fd99e6cd463e9",
+          "asset_size": 100994208,
           "archive_member_count": null,
           "legal_members": []
         }
