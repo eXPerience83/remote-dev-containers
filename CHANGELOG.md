@@ -42,7 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 - Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces` and per-role `state` boundaries.
 - Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed persistent paths.
-- Static Compose regressions for exact role-scoped mount targets, mount-free launcher behavior and removal of the earlier experimental data-root names.
+- Static Compose regressions for exact role-scoped mount targets, the launcher's bind/persistent-mount boundary and removal of the earlier experimental data-root names.
 - Antigravity conversation entry points using normal Start with in-TUI `/resume` for browsing older conversations and the vendor-supported `--continue` path for the latest conversation.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
 - Optional Context7 device-code onboarding for Codex that transiently runs an exact published `ctx7` login flow, adopts only the resulting long-lived API key into the existing private Remote Dev state, and retains manual-key and anonymous fallbacks.
@@ -99,11 +99,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - Hardened launcher, Codex and experimental Antigravity outer containers with read-only root filesystems, `cap_drop: [ALL]`, exact role capability whitelists, private bounded `/tmp` and `/run` tmpfs mounts, explicit PID ceilings and live same-image isolation/toolchain assertions; `/tmp` remains `noexec`, while executable Codex update and Context7 staging remains bounded under transient `/run`.
-- Reduced the launcher further after retiring file-backed browser secrets: production launcher containers now start directly as UID/GID `65532` with no added capabilities, while remaining mount-free and under `no-new-privileges`.
+- Reduced the launcher further after retiring file-backed browser secrets: production launcher containers now start directly as UID/GID `65532` with no added capabilities, while remaining free of bind, persistent, and agent-state mounts and under `no-new-privileges`.
 - Added a narrow Antigravity-private `state/antigravity/config` bind at `/root/.gemini/config` so the official CLI can persist project configuration below `projects/` without making the read-only container root or all of `/root/.gemini` writable; host preflight, startup hardening and cross-service canaries enforce the separate boundary.
 - Codex runtime update probes now use a fixed transient executable staging root under `/run`, verify its real execution capability before download, and normalize extracted package directories independently of restrictive umasks while ignoring caller-controlled `TMPDIR` and preserving the intentional `noexec` `/tmp` mount, UID/GID `65534` probes, synthetic credential-free state and immutable bundled fallback.
 - Web authentication remains required by default for Codex and other agent terminals; the stateless non-proxy launcher may be unauthenticated on a trusted local/private network.
-- Optional launcher authentication now uses only launcher-specific environment configuration and remains mount-free; agent passwords never enter the launcher.
+- Optional launcher authentication now uses only launcher-specific environment configuration and adds no bind or persistent mounts; agent passwords never enter the launcher.
 - The base launcher receives no agent workspace, Codex state, GitHub CLI state, Git configuration, SSH state, agent password or Docker socket; the optional launcher-auth overlay adds no mounts.
 - The launcher never embeds or forwards terminal credentials and does not relay terminal HTTP/WebSocket traffic.
 - The launcher validates routing inputs, checks matching origins when supplied, sends a restrictive CSP and rejects state-changing HTTP methods.
