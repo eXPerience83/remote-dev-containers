@@ -200,10 +200,18 @@ def validate_compose_contract() -> None:
 
 
 def validate_initial_modes(root: Path) -> None:
-    """Apply restrictive initial modes only to paths created by bootstrap."""
+    """Apply intentional modes only to paths created by bootstrap."""
     root.mkdir()
     result = run_script(BOOTSTRAP, root, include_antigravity=True)
     require(result.returncode == 0, result.stderr)
+
+    for relative in ("workspaces", "state", "state/codex", "state/antigravity"):
+        actual = (root / relative).stat().st_mode & 0o777
+        require(
+            actual == 0o755,
+            f"unexpected structural parent mode for {relative}: {oct(actual)}",
+        )
+
     for spec in CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS:
         actual = (root / spec.suffix).stat().st_mode & 0o777
         require(
