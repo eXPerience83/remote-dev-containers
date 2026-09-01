@@ -108,6 +108,29 @@ def validate_no_symlink_components(
     return found_symlink
 
 
+def validate_existing_components_are_directories(
+    root: Path, paths: tuple[Path, ...], errors: list[str]
+) -> bool:
+    """Reject existing non-directory components before bootstrap mutates anything."""
+    checked: set[Path] = set()
+    found_invalid = False
+    for path in paths:
+        relative_parts = path.relative_to(root).parts
+        current = root
+        for part in relative_parts:
+            current /= part
+            if current in checked:
+                continue
+            checked.add(current)
+            if current.exists() and not current.is_dir():
+                errors.append(
+                    f"persistent path component is not a directory: {current}"
+                )
+                found_invalid = True
+                break
+    return found_invalid
+
+
 def validate_directory(path: Path, errors: list[str]) -> None:
     """Record an error unless a required host path is a real directory."""
     if not path.exists():
@@ -143,6 +166,8 @@ def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
         raise ValueError(f"configured root must already exist: {root}")
     if not root.is_dir():
         raise ValueError(f"configured root is not a directory: {root}")
+    if validate_existing_components_are_directories(root, directories, errors):
+        raise ValueError("; ".join(errors))
 
     created: list[Path] = []
     for spec in specs:
