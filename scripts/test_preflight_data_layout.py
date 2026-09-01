@@ -119,6 +119,30 @@ def validate_bootstrap(root: Path) -> None:
     )
 
 
+def validate_invalid_existing_component(base: Path) -> None:
+    """Reject malformed existing layout before creating any missing paths."""
+    root = base / "invalid-object-root"
+    (root / "state/codex").mkdir(parents=True)
+    invalid_runtime = root / "state/codex/runtime"
+    invalid_runtime.write_text("not-a-directory", encoding="utf-8")
+
+    result = run_script(BOOTSTRAP, root)
+    require(result.returncode == 1, "existing non-directory component must fail")
+    require("is not a directory" in result.stderr, result.stderr)
+    require(
+        not (root / "workspaces").exists(),
+        "bootstrap mutated layout before rejecting an existing invalid component",
+    )
+    require(
+        not (root / "state/codex/agent").exists(),
+        "bootstrap created earlier role state before rejecting invalid runtime state",
+    )
+    require(
+        invalid_runtime.read_text(encoding="utf-8") == "not-a-directory",
+        "bootstrap modified the invalid existing object",
+    )
+
+
 def validate_symlinks(base: Path) -> None:
     """Reject root, root-ancestry and descendant symlinks without mutation."""
     real_root = base / "real-root"
@@ -225,6 +249,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as temporary_directory:
         base = Path(temporary_directory)
         validate_bootstrap(base / "remote-dev")
+        validate_invalid_existing_component(base)
         validate_symlinks(base)
         validate_initial_modes(base / "mode-root")
     validate_compose_contract()
