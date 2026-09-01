@@ -157,7 +157,7 @@ El paquete opcional se guarda fuera de `CODEX_HOME` en un montaje exclusivo de e
 
 ## Aislamiento en TrueNAS
 
-El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher añade únicamente variables de autenticación propias del launcher y continúa sin montajes.
+El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher no añade montajes bind, persistentes ni de estado de agentes; conserva únicamente los tmpfs privados `/tmp` y `/run` del perfil de hardening.
 
 La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
 
@@ -191,7 +191,7 @@ REMOTE_DEV_DATA_ROOT/
         └── ssh/
 ```
 
-El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
+El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher no tiene montajes bind, persistentes ni de estado de agentes; conserva únicamente sus tmpfs privados `/tmp` y `/run`. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
 `state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios y rechaza enlaces simbólicos; las contraseñas web no forman parte del preflight ni del layout persistente. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
@@ -199,7 +199,7 @@ No existe migración automática ni alias para la estructura experimental anteri
 
 ## Licencias y software opcional
 
-El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv y sus dependencias conservan sus licencias y avisos originales.
+El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node 24, uv y sus dependencias conservan sus licencias y avisos originales.
 
 ```bash
 remote-dev-notices
