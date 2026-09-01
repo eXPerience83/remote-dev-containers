@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -166,7 +165,11 @@ def validate_compose_contract() -> None:
         f"expected={sorted(expected)} actual={sorted(sources)}",
     )
     require("state/codex/runtime" in sources, "Codex runtime bind source disappeared")
-    require("WEB_PASSWORD_FILE" not in text, "TrueNAS YAML reintroduced WEB_PASSWORD_FILE")
+    retired_password_file_var = "WEB_PASSWORD_" + "FILE"
+    require(
+        retired_password_file_var not in text,
+        "TrueNAS YAML reintroduced the retired browser password-file variable",
+    )
     require(
         "/secrets/" not in text,
         "TrueNAS YAML unexpectedly contains a web-password secrets bind",
