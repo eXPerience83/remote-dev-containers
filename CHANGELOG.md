@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 - Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces` and per-role `state` boundaries.
 - Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed persistent paths.
+- Deterministic host-side data-layout bootstrap sharing one canonical path contract with preflight; it requires an existing administrative root, creates only missing role-private descendants, is idempotent, preserves existing paths/content/modes including deliberate TrueNAS child-dataset mountpoints, and creates no browser-password secrets tree.
 - Static Compose regressions for exact role-scoped mount targets, the launcher's bind/persistent-mount boundary and removal of the earlier experimental data-root names.
 - Antigravity conversation entry points using normal Start with in-TUI `/resume` for browsing older conversations and the vendor-supported `--continue` path for the latest conversation.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
@@ -52,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Standardized browser authentication on one per-service `WEB_PASSWORD` contract, retired the alternative password-file path, removed browser-password files from the persistent data layout/preflight, and kept Codex, Antigravity and optional launcher credentials independently configurable.
+- TrueNAS YAML first-install setup now starts from one administrator-created root dataset and uses same-revision bootstrap plus preflight instead of a hand-maintained `mkdir` list; ordinary descendants are the default while deliberate child datasets remain supported and untouched.
 - Moved normal Codex and Antigravity temporary files and uv/npm/pip caches from the bounded `/tmp` tmpfs to a safely prepared hidden tree in each role-private disk-backed workspace, while preserving trusted staging and credential-environment boundaries.
 - Updated the immutable bundled Codex baseline to `0.149.1` and migrated guarded mode from the retired `approval_policy=untrusted` value to launch-scoped untrusted trust for the active project, preserving the outer-container boundary and one-launch mode precedence.
 - Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
@@ -124,7 +126,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Python, Node.js and uv install from committed artifact URLs and SHA-256 values in strict mise locked mode, with GitHub artifact attestations required where supported.
 - Publication workflows scan exact pushed digests before promoting public tags; `remote-dev` runtime tags are verified against `REMOTE_DEV_DIGEST`, while `remote-dev-base` promotion metadata is checked separately against `BASE_DIGEST`.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
-- The host preflight rejects missing, symlinked or malformed persistent paths before deployment.
+- The host bootstrap/preflight contract rejects missing roots, unsafe symlink ancestry and malformed persistent paths before deployment while preserving existing administrator-created paths rather than silently rewriting them.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
 - Project selection is a working-directory contract, not an intra-service filesystem sandbox: the full role-private `/workspace` mount remains accessible to processes in that agent container, including sibling projects.
 - Project names/selectors are constrained to direct non-symlink children of the validated role workspace; create/delete cannot target arbitrary paths, and recursive deletion requires exact project-name confirmation.
