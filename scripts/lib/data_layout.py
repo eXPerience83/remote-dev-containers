@@ -164,11 +164,7 @@ def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
                 # directories or deliberate child-dataset mountpoints, so never
                 # chmod/chown/replace them here.
                 continue
-            mode = (
-                spec.mode
-                if index == len(parts) - 1
-                else (0o755 if parts[0] == "workspaces" else 0o700)
-            )
+            mode = spec.mode if index == len(parts) - 1 else 0o755
             current.mkdir(mode=mode)
             created.append(current)
 
