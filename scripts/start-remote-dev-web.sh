@@ -18,6 +18,13 @@ if [[ "$role" == launcher ]]; then
   exec /usr/local/bin/remote-dev-launcher
 fi
 
+# Agent browser authentication is deployment configuration, but helper tools and
+# terminal child processes do not need the raw environment variable. Capture it
+# into a non-exported shell variable and remove it before invoking any external
+# startup helper. ttyd receives only its required --credential argument.
+web_password="${WEB_PASSWORD:-}"
+unset WEB_PASSWORD
+
 if [[ -z "${TMUX_SESSION:-}" ]]; then
   TMUX_SESSION="$(remote_dev_default_tmux_session "$role")"
   export TMUX_SESSION
@@ -68,7 +75,6 @@ fi
 
 credential=""
 web_username="${WEB_USERNAME:-codex}"
-web_password="${WEB_PASSWORD:-}"
 if [[ -n "$web_password" ]]; then
   if [[ "$web_password" == *$'\r'* || "$web_password" == *$'\n'* ]]; then
     echo "ERROR: web password must be a single line" >&2
@@ -83,6 +89,7 @@ Set ALLOW_INSECURE_WEB=1 only on an already protected private endpoint.
 MSG
   exit 1
 fi
+unset web_password
 
 if [[ "$role" == codex || "$role" == antigravity ]]; then
   remote_dev_prepare_development_environment "$role" "$workspace" || exit $?
