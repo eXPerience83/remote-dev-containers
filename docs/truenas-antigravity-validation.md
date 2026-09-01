@@ -1,8 +1,9 @@
 # TrueNAS experimental deployment and Antigravity validation
 
 This runbook preserves and reuses the completed Antigravity lifecycle evidence from #29 while preparing the focused browser-authentication validation still owned by #69. Historical lifecycle steps remain documented here for reproducibility; they are not evidence that #29 is still open.
-The image, `compose/truenas.yml` and `scripts/preflight-data-layout.py` must all
-come from the same immutable source revision. Never combine a pinned image with
+The image, `compose/truenas.yml`, `scripts/init-data-layout.py`,
+`scripts/preflight-data-layout.py` and `scripts/lib/data_layout.py` must all come
+from the same immutable source revision. Never combine a pinned image with
 host-side files downloaded from a moving branch such as `main`.
 
 The Antigravity lifecycle validation in #29 is complete, but Antigravity remains
@@ -35,6 +36,7 @@ This cycle validates:
 - experimental Antigravity on independently authenticated port 7682;
 - two independent terminal passwords;
 - the canonical role-scoped persistent-data layout;
+- deterministic host-layout bootstrap and preflight;
 - install, login, stop/start and container recreation behavior;
 - isolation between launcher, Codex and Antigravity.
 
@@ -133,41 +135,87 @@ Create one TrueNAS dataset with the **Generic** preset and no SMB share:
 Pool1/remote-dev
 ```
 
-The directories below are ordinary persistent subdirectories inside that one
-ZFS dataset. Recreating the TrueNAS App or its containers does not remove them.
-Additional child datasets are unnecessary unless a future SMB, ACL, quota,
-snapshot or replication policy needs a separate boundary.
+The normal deployment uses that one ZFS dataset and ordinary persistent
+`workspaces/` and `state/` directories below it. Recreating the TrueNAS App or
+its containers does not remove those directories.
 
-## Create the persistent directories
+An administrator may deliberately create one or more required descendants as
+child datasets when a separate snapshot, quota or replication boundary is
+wanted. Remote Dev treats an existing child-dataset mountpoint as an existing
+directory path: bootstrap must not replace it, chmod/chown it or rewrite its
+contents. Extra datasets are therefore optional policy, not a requirement of
+the Remote Dev layout.
 
-Run from the TrueNAS shell after the single dataset exists. These host
-subdirectories are required before saving the Custom App because the canonical
-YAML uses `create_host_path: false`; Compose must not create missing persistent
-paths implicitly.
+The root `/mnt/Pool1/remote-dev` must already exist. Remote Dev never creates a
+mistyped parent or ZFS dataset implicitly.
+
+## Download and run the matching host bootstrap and preflight
+
+Run from the TrueNAS shell after the root dataset exists. The canonical YAML
+uses `create_host_path: false`; missing persistent bind sources must be created
+explicitly before saving the Custom App rather than being created implicitly by
+Compose.
+
+Download the initializer, preflight and their shared path contract from the
+image's embedded source revision, not `main`:
 
 ```bash
-sudo install -d -m 0755 \
-  /mnt/Pool1/remote-dev/workspaces/codex \
-  /mnt/Pool1/remote-dev/workspaces/antigravity
+: "${release_revision:?Run the release verification section first}"
+release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
+layout_release_dir="$(mktemp -d /tmp/remote-dev-layout.XXXXXX)"
+install -d "$layout_release_dir/scripts/lib"
 
-sudo install -d -m 0700 \
-  /mnt/Pool1/remote-dev/state/codex/agent \
-  /mnt/Pool1/remote-dev/state/codex/runtime \
-  /mnt/Pool1/remote-dev/state/codex/gh \
-  /mnt/Pool1/remote-dev/state/codex/git \
-  /mnt/Pool1/remote-dev/state/codex/ssh \
-  /mnt/Pool1/remote-dev/state/antigravity/bin \
-  /mnt/Pool1/remote-dev/state/antigravity/runtime \
-  /mnt/Pool1/remote-dev/state/antigravity/vendor \
-  /mnt/Pool1/remote-dev/state/antigravity/config \
-  /mnt/Pool1/remote-dev/state/antigravity/gh \
-  /mnt/Pool1/remote-dev/state/antigravity/git \
-  /mnt/Pool1/remote-dev/state/antigravity/ssh
+for release_path in \
+  scripts/init-data-layout.py \
+  scripts/preflight-data-layout.py \
+  scripts/lib/data_layout.py
+do
+  curl --proto '=https' --tlsv1.2 \
+    --fail --silent --show-error --location \
+    "${release_base}/${release_path}" \
+    --output "${layout_release_dir}/${release_path}"
+done
+
+sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+
+python3 "$layout_release_dir/scripts/preflight-data-layout.py" \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+```
+
+The initializer creates only missing canonical descendants. It applies initial
+modes only to paths it creates and never deletes, migrates, renames or
+recursively chmods/chowns existing project or state content. Existing required
+paths, including deliberate child-dataset mountpoints, are left unchanged. It
+also refuses symlink roots/intermediate components and never creates a browser
+password `secrets/` tree.
+
+Expected preflight result:
+
+```text
+Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
+```
+
+Run the initializer a second time before the first deployment and confirm it is
+idempotent:
+
+```bash
+sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+```
+
+Expected bootstrap result for an already complete layout includes:
+
+```text
+Remote Dev data-layout bootstrap: no changes required
 ```
 
 Do not create symlinks anywhere inside `/mnt/Pool1/remote-dev`.
 
-The resulting host tree is:
+The resulting host tree for the reference YAML is:
 
 ```text
 /mnt/Pool1/remote-dev/
@@ -191,6 +239,10 @@ The resulting host tree is:
         └── ssh/
 ```
 
+Only `Pool1/remote-dev` needs to appear as a dataset in the normal TrueNAS
+Datasets UI. Ordinary descendants created by bootstrap are directories within
+that dataset and are not expected to appear as separate child datasets.
+
 `state/antigravity/config` is mounted only into the Antigravity service at
 `/root/.gemini/config`. The official CLI uses its `projects/` child for
 project-specific runtime configuration. This mount remains separate from
@@ -198,41 +250,19 @@ project-specific runtime configuration. This mount remains separate from
 Antigravity-private paths are writable, and the container root filesystem
 remains read-only.
 
-## Download and run the matching host preflight
-
-Download the preflight from the image's embedded source revision, not `main`:
-
-```bash
-: "${release_revision:?Run the release verification section first}"
-release_base="https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/${release_revision}"
-
-curl --proto '=https' --tlsv1.2 \
-  --fail --silent --show-error --location \
-  "${release_base}/scripts/preflight-data-layout.py" \
-  --output /tmp/remote-dev-preflight-data-layout.py
-
-python3 /tmp/remote-dev-preflight-data-layout.py \
-  --root /mnt/Pool1/remote-dev \
-  --include-antigravity
-```
-
-Expected result:
-
-```text
-Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
-```
-
-The preflight validates persistent bind sources and symlink ancestry only. The
-actual browser passwords are validated by each runtime when the containers
-start.
+The preflight validates the same canonical persistent bind-source contract used
+by bootstrap and rejects unsafe symlink ancestry. Browser passwords are
+deployment configuration and are validated by each runtime when the containers
+start; no browser-password file or persistent secret directory belongs to this
+layout.
 
 ## Download the matching TrueNAS YAML
 
 `compose/truenas.yml` is the canonical complete TrueNAS Custom App YAML. Do not
 maintain a hand-copied second YAML in this runbook: download that file from the
-same source revision as the image and preflight, then apply only the documented
-site-specific substitutions below. This keeps future mount and hardening
-changes in one source of truth.
+same source revision as the image, bootstrap, preflight and shared path contract,
+then apply only the documented site-specific substitutions below. This keeps
+future mount and hardening changes in one source of truth.
 
 ```bash
 : "${release_revision:?Run the release verification section first}"
@@ -479,7 +509,17 @@ issues:
 - TrueNAS version and test date;
 - exact image digest and embedded revision;
 - rendered and inspected hardening fields from the exact candidate;
-- confirmation that YAML and preflight came from that same revision;
+- confirmation that YAML, bootstrap, preflight and the shared data-layout
+  contract came from that same revision;
+- confirmation that the administrator-created root existed before bootstrap and
+  bootstrap did not create or replace it;
+- confirmation that bootstrap + preflight succeeded from the intended layout,
+  a second bootstrap reported no changes, and existing marker contents remained
+  unchanged;
+- confirmation that required descendants work as ordinary directories and that
+  any deliberately pre-created child-dataset path used in the test remained
+  untouched;
+- confirmation that no browser-password `secrets/` tree was required;
 - confirmation that Codex and Antigravity used independent environment-backed
   browser passwords, without recording either value;
 - Antigravity CLI version;
