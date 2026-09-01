@@ -15,7 +15,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Create missing canonical Remote Dev bind-source directories below "
-            "an existing host root, then validate the completed layout."
+            "an existing host root, then validate the completed layout. Existing "
+            "directories, including deliberate child-dataset mountpoints, are left "
+            "unchanged."
         )
     )
     parser.add_argument(
