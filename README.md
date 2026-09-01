@@ -25,6 +25,7 @@ The current edge stack is the Codex reference implementation, with Antigravity a
 - browser terminal through ttyd;
 - persistent sessions through tmux;
 - one canonical role-neutral persistent-data contract;
+- one configuration-backed `WEB_PASSWORD` browser-authentication contract with independent values per protected endpoint;
 - role-neutral project selection below each private `/workspace` mount so agents launch from a concrete project rather than the collection root;
 - AMD64 first.
 
@@ -47,11 +48,12 @@ The reference YAML declares the role-private Codex and experimental Antigravity 
 ```bash
 python3 scripts/preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
-  --include-antigravity \
-  --password-source environment
+  --include-antigravity
 ```
 
-`--password-source environment` matches the TrueNAS home-mode YAML, where terminal passwords are entered as `WEB_PASSWORD` values rather than file-backed secrets. If you intentionally maintain a local Codex-only YAML without the Antigravity service, omit `--include-antigravity` and create only the Codex paths.
+The preflight validates persistent workspace/state paths only. Browser passwords are deployment configuration and are validated by each endpoint at startup. If you intentionally maintain a local Codex-only YAML without the Antigravity service, omit `--include-antigravity` and create only the Codex paths.
+
+A sufficiently privileged TrueNAS administrator can inspect saved App/container configuration. That administrator is inside Remote Dev's trust boundary; screenshots and YAML exports must therefore be sanitized before sharing.
 
 After TrueNAS reports the Custom App as running, open:
 
@@ -86,7 +88,7 @@ REMOTE_DEV_ROLE=launcher
 # or: shell
 ```
 
-`antigravity` is implemented as an **experimental optional role** and remains behind explicit enablement; its real project/session Start/Resume validation is deferred to issue #131. Its vendor runtime is installed only by explicit user action and normal startup never downloads it implicitly. `claude` remains reserved and unimplemented.
+`antigravity` is implemented as an **experimental optional role**. Its project-scoped Start/Resume, conversation continuity, update/rollback and broader TrueNAS lifecycle validation are complete; the role remains experimental while the remaining browser-authentication, vendor-policy and documentation support gates are reconciled. Its vendor runtime is installed only by explicit user action and normal startup never downloads it implicitly. `claude` remains reserved and unimplemented.
 
 The neutral direct-start selector accepts `menu`, `agent` or `shell` for agent-role services:
 
@@ -131,11 +133,11 @@ The launcher is navigation only and has no authentication by default. It checks 
 
 Selecting Codex navigates the browser to the Codex service. The launcher does **not** proxy or relay ttyd HTTP/WebSocket traffic, does not use the Docker socket and receives no Codex workspace, agent state, GitHub configuration, Git configuration, SSH mounts, optional Codex runtime state or Codex terminal password. When experimental Antigravity is enabled, its terminal remains a separate independently authenticated endpoint with its own role-private workspace and state.
 
-The Codex endpoint authenticates independently with its own password source. Credentials are not embedded in the link, passed through the launcher or shared between services.
+Each protected browser endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose maps the external Codex `WEB_PASSWORD` and the distinct `ANTIGRAVITY_WEB_PASSWORD` to their respective services. Credentials are not embedded in links, passed through the launcher or silently copied between roles.
 
-Launcher Basic authentication remains optional for advanced generic Compose deployments through the separate file-backed `compose/launcher-auth.yml` override. The normal TrueNAS home/LAN example does not require a second password, secret, mount or launcher dataset.
+Launcher Basic authentication remains optional for advanced generic Compose deployments through `compose/launcher-auth.yml`. Set a separate `LAUNCHER_PASSWORD`; the override maps it to the launcher's own `WEB_PASSWORD` without adding a secret file or mount. The normal TrueNAS home/LAN example does not require a second launcher password.
 
-Configured launcher and agent paths are restricted to safe URL-path characters before they are placed into the page. Antigravity remains experimental and its real project/session behavior is tracked in #131; Claude and a one-origin reverse proxy remain outside the current implementation.
+Configured launcher and agent paths are restricted to safe URL-path characters before they are placed into the page. Antigravity remains experimental; Claude and a one-origin reverse proxy remain outside the current implementation.
 
 ### Codex approval modes
 
@@ -179,9 +181,9 @@ Here, `danger-full-access` describes only the Codex inner sandbox. It does not g
 
 Autonomous mode means Codex may read, modify or delete anything mounted into its service and may use credentials available there without asking first. It does not add access beyond the existing container mounts, network and credentials. Guarded mode adds confirmation friction but does not provide filesystem isolation.
 
-The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts as root only to read an optional protected file-backed password, receives only `DAC_READ_SEARCH`, `SETGID` and `SETUID`, then permanently becomes UID/GID `65532` with zero effective capabilities. `DAC_READ_SEARCH` is needed because Compose preserves the host ownership of a mode-`0600` file-backed secret. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
+The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts directly as UID/GID `65532`, remains free of bind, persistent and agent-state mounts, and restores no capabilities after `cap_drop: [ALL]`. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
 
-Each role has private transient `/tmp` and `/run` tmpfs mounts. `/tmp` remains a bounded `noexec,nosuid,nodev` filesystem; Codex `/run` deliberately permits execution for bounded Codex update and Context7 device-login staging. Normal Codex and Antigravity sessions instead use the hidden workspace-backed `/workspace/.remote-dev-tmp` tree for generic temporary files and uv, npm and pip caches. That untrusted development scratch persists with its role-private workspace, is excluded from project discovery and may be removed while the service is stopped for clean recreation. The launcher does not receive it. Generic Compose keeps file-backed secrets below `/run/secrets`, while the TrueNAS reference keeps its environment-backed password mode.
+Each role has private transient `/tmp` and `/run` tmpfs mounts. `/tmp` remains a bounded `noexec,nosuid,nodev` filesystem; Codex `/run` deliberately permits execution for bounded Codex update and Context7 device-login staging. Normal Codex and Antigravity sessions instead use the hidden workspace-backed `/workspace/.remote-dev-tmp` tree for generic temporary files and uv, npm and pip caches. That untrusted development scratch persists with its role-private workspace, is excluded from project discovery and may be removed while the service is stopped for clean recreation. The launcher does not receive it. Browser passwords are supplied through service configuration and add no persistent credential-file mounts.
 
 Do not weaken the host or container with privileged mode, `SYS_ADMIN`, unconfined security profiles or a Docker socket to make a nested sandbox start. Mount only the paths that the selected service must access.
 
@@ -193,30 +195,27 @@ Generic Compose uses one administrative root:
 REMOTE_DEV_DATA_ROOT=../data
 ```
 
-Paths are resolved relative to `compose/docker-compose.yml`. The canonical layout is:
+Paths are resolved relative to `compose/docker-compose.yml`. The canonical Codex layout is:
 
 ```text
 REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
 │       └── <project>/
-├── state/
-│   └── codex/
-│       ├── agent/
-│       ├── runtime/
-│       ├── gh/
-│       ├── git/
-│       └── ssh/
-└── secrets/
+└── state/
     └── codex/
-        └── web_password.txt
+        ├── agent/
+        ├── runtime/
+        ├── gh/
+        ├── git/
+        └── ssh/
 ```
 
-The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. The base launcher has no mounts; the optional launcher-auth overlay adds only its own dedicated read-only password secret. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. Browser passwords are not part of `REMOTE_DEV_DATA_ROOT`. The base launcher and optional authenticated launcher both remain free of bind, persistent and agent-state mounts. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required directory, rejects symlinks, and checks that the password is a non-empty regular file with restrictive permissions; current preflight does not validate the runtime directory owner. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
+`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required persistent directory and rejects symlinks; browser passwords are validated by endpoint startup instead. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
-There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state` or `secrets`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
+There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. If an earlier deployment still contains browser-password files from the retired contract, first configure and validate the replacement `WEB_PASSWORD` values, exercise stop/start or recreation and keep any rollback copy only for the rollback window. After the migration is confirmed, remove those obsolete files manually; Remote Dev never deletes them automatically. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
 ## Licenses and optional vendor software
 
@@ -241,25 +240,22 @@ The target architecture is:
 - one primary launcher URL;
 - one isolated service per enabled coding agent;
 - Codex as the built-in reference service;
-- Antigravity as the first planned optional vendor-installed service;
+- Antigravity as the first optional vendor-installed service, still experimental pending final support reconciliation;
 - Claude Code preserved as a future path only;
 - private workspaces, credentials, histories, GitHub state and SSH keys per agent service.
 
-The current implementation delivers the launcher, Codex and canonical persistence portions of that topology. Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. Optional agent services and the later cross-service hardening/canary phase remain tracked by issues #25 and #31.
-
-The default launcher navigates to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
+Docker reuses the same immutable image layers, and the launcher has no agent-state mounts or agent web credential. The default launcher navigates to each agent's own authenticated endpoint and does not relay terminal traffic. Any future reverse proxy that terminates or relays that traffic is treated as a trusted transport component and requires a separate threat-model review.
 
 ## Build locally
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 mkdir -p \
   data/workspaces/codex/example-project \
-  data/state/codex/{agent,gh,git,ssh} \
-  data/secrets/codex
+  data/state/codex/{agent,gh,git,ssh}
 sudo install -d -o root -g root -m 0700 data/state/codex/runtime
-printf '%s\n' 'replace-with-a-codex-password' > data/secrets/codex/web_password.txt
-chmod 600 data/secrets/codex/web_password.txt
+# Edit .env and set a non-empty WEB_PASSWORD for the Codex endpoint.
 make preflight
 ./scripts/build-local.sh
 ```
@@ -273,7 +269,7 @@ sudo chmod 0700 data/state/codex/runtime
 
 For a custom root, set `REMOTE_DEV_DATA_ROOT=/absolute/host/path` in `.env` and run `make preflight DATA_ROOT=/absolute/host/path` before deployment. You may also create the first project later from the **Projects...** menu instead of creating `example-project` on the host.
 
-Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
+Set `WEB_PASSWORD` to a long Codex-specific password, set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded` in `.env`, set `REMOTE_DEV_IMAGE=remote-dev:local`, and run:
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d
@@ -289,19 +285,23 @@ Open the launcher at published port `7680` and select Codex. The browser then op
 6. use GitHub CLI login;
 7. run diagnostics.
 
-To protect the launcher itself in an advanced generic Compose deployment, create a separate launcher password file and add the reviewed override:
+To protect the launcher itself in an advanced generic Compose deployment, set a distinct launcher password in `.env` and add the reviewed override:
+
+```dotenv
+LAUNCHER_USERNAME=remote-dev
+LAUNCHER_PASSWORD=replace-with-a-distinct-launcher-password
+```
 
 ```bash
-mkdir -p secrets
-printf '%s\n' 'replace-with-a-launcher-password' > secrets/launcher_password.txt
-chmod 600 secrets/launcher_password.txt
 docker compose \
   -f compose/docker-compose.yml \
   -f compose/launcher-auth.yml \
   up -d
 ```
 
-The override mounts that value as a Compose secret at `/run/secrets/launcher_password`; it does not place the password in the rendered service environment and it does not replace or reuse the Codex terminal password.
+The override maps `LAUNCHER_PASSWORD` to the launcher's own `WEB_PASSWORD`. It adds no bind or persistent mounts and does not replace, derive or reuse the Codex terminal password.
+
+To enable the generic Antigravity profile, set a separate `ANTIGRAVITY_WEB_PASSWORD` and enable the role according to the experimental Antigravity instructions. Never reuse the Codex password silently between the two endpoints.
 
 ## Public edge testing
 
@@ -355,8 +355,8 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 
 - Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - The unauthenticated launcher should be bound only to localhost, a trusted LAN address or a Tailscale address.
-- The Codex terminal remains independently authenticated.
-- The launcher never embeds or forwards the terminal password.
+- Codex and Antigravity terminals remain independently authenticated with distinct configured passwords.
+- The launcher never embeds or forwards an agent terminal password.
 - The launcher is navigation only and does not make the Codex terminal a same-origin application.
 - Do not mount agent workspaces, credentials or optional runtime state into the launcher.
 - Selecting a project changes the agent working directory; it does not isolate that project from sibling directories mounted under the same `/workspace`.
@@ -368,6 +368,7 @@ See `docs/releases.md` for release channels, promotion criteria and rollback gui
 - Autonomous mode permits Codex to act on all state mounted into the Codex service without confirmations.
 - Guarded prompts are not a sandbox and do not hide mounted files or credentials from Codex.
 - Anyone with terminal access can read repositories and credentials mounted into that agent service.
+- TrueNAS/Docker administrators can inspect deployment configuration and are inside the host trust boundary.
 - `auth.json`, GitHub tokens and SSH keys are secrets.
 - A newer optional Codex runtime marked review-pending has passed provenance/integrity/compatibility admission but has not yet completed Remote Dev review and real deployment validation for that exact upstream release.
 - Optional vendor agents are not bundled or covered by the project Apache-2.0 license.

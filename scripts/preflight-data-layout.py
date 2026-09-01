@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import stat
 import sys
 from pathlib import Path
 
@@ -27,11 +26,6 @@ ANTIGRAVITY_DIRECTORY_SUFFIXES = (
     "state/antigravity/git",
     "state/antigravity/ssh",
 )
-CODEX_SECRET_DIRECTORY_SUFFIX = "secrets/codex"
-ANTIGRAVITY_SECRET_DIRECTORY_SUFFIX = "secrets/antigravity"
-CODEX_PASSWORD_SUFFIX = "secrets/codex/web_password.txt"
-ANTIGRAVITY_PASSWORD_SUFFIX = "secrets/antigravity/web_password.txt"
-PASSWORD_SOURCES = ("environment", "file")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -52,17 +46,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--include-antigravity",
         action="store_true",
         help="Also require the optional isolated Antigravity service layout",
-    )
-    parser.add_argument(
-        "--password-source",
-        choices=PASSWORD_SOURCES,
-        default="file",
-        help=(
-            "Authentication source used by the deployment: environment checks "
-            "only persistent workspace/state paths; file also requires and "
-            "validates role-specific password files (default: file, matching "
-            "compose/docker-compose.yml)"
-        ),
     )
     return parser.parse_args(argv)
 
@@ -109,82 +92,28 @@ def validate_directory(path: Path, errors: list[str]) -> None:
         errors.append(f"required directory is not a directory: {path}")
 
 
-def validate_password_file(path: Path, errors: list[str]) -> None:
-    """Validate one terminal password exactly as the shell runtime consumes it."""
-    if not path.exists():
-        errors.append(f"password file is missing: {path}")
-        return
-    if not path.is_file():
-        errors.append(f"password path is not a regular file: {path}")
-        return
-
-    try:
-        password_bytes = path.read_bytes()
-    except OSError as error:
-        errors.append(f"password file cannot be read: {path} ({error})")
-        return
-
-    if not password_bytes:
-        errors.append(f"password file is empty: {path}")
-    else:
-        effective_password = password_bytes.rstrip(b"\n")
-        if not effective_password:
-            errors.append(f"password is empty after trailing newline removal: {path}")
-        elif b"\x00" in effective_password:
-            errors.append(f"password must not contain NUL bytes: {path}")
-        elif b"\n" in effective_password or b"\r" in effective_password:
-            errors.append(f"password must be a single LF-terminated line: {path}")
-
-    if os.name == "posix":
-        mode = stat.S_IMODE(path.stat().st_mode)
-        if mode & 0o077:
-            errors.append(
-                f"password file permissions are too broad: {path} "
-                f"(mode {mode:04o}; expected 0600 or stricter)"
-            )
-
-
-def validate_layout(
-    root: Path, *, include_antigravity: bool, password_source: str
-) -> list[str]:
+def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
     """Return every problem found for the enabled service layouts."""
     errors: list[str] = []
     suffixes = list(CODEX_DIRECTORY_SUFFIXES)
-    password_files: list[Path] = []
-
     if include_antigravity:
         suffixes.extend(ANTIGRAVITY_DIRECTORY_SUFFIXES)
 
-    if password_source == "file":
-        suffixes.append(CODEX_SECRET_DIRECTORY_SUFFIX)
-        password_files.append(root / CODEX_PASSWORD_SUFFIX)
-        if include_antigravity:
-            suffixes.append(ANTIGRAVITY_SECRET_DIRECTORY_SUFFIX)
-            password_files.append(root / ANTIGRAVITY_PASSWORD_SUFFIX)
-
     directories = tuple(root / suffix for suffix in suffixes)
-    password_paths = tuple(password_files)
-
-    if validate_no_symlink_components(root, (*directories, *password_paths), errors):
+    if validate_no_symlink_components(root, directories, errors):
         return errors
 
     validate_directory(root, errors)
     for directory in directories:
         validate_directory(directory, errors)
-    for password_file in password_paths:
-        validate_password_file(password_file, errors)
     return errors
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the preflight and print only paths and permission metadata."""
+    """Run the preflight and report only persistent path metadata."""
     args = parse_args(argv)
     root = canonical_path(args.root)
-    errors = validate_layout(
-        root,
-        include_antigravity=args.include_antigravity,
-        password_source=args.password_source,
-    )
+    errors = validate_layout(root, include_antigravity=args.include_antigravity)
     if errors:
         print("Remote Dev data-layout preflight failed:", file=sys.stderr)
         for error in errors:
@@ -197,10 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
-    print(
-        f"Remote Dev data-layout preflight: OK "
-        f"({root}; {roles}; passwords={args.password_source})"
-    )
+    print(f"Remote Dev data-layout preflight: OK ({root}; {roles})")
     return 0
 
 

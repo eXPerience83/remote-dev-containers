@@ -156,14 +156,14 @@ Antes de crear un tag de versión estable:
 5. El portal de TrueNAS abre el launcher en el puerto 7680.
 6. El launcher abre en el endpoint privado de confianza y mantiene el comportamiento de origin/CSP.
 7. Seleccionar Codex navega al endpoint autenticado independiente sin exponer credenciales.
-8. El launcher base no tiene montajes de agentes ni socket Docker/Podman; la autenticación opcional del launcher recibe solo su secreto dedicado de contraseña en solo lectura.
+8. El launcher base no tiene montajes de agentes ni socket Docker/Podman; la autenticación opcional del launcher usa su propia contraseña de configuración y no añade mounts bind ni persistentes.
 9. Ningún servicio utiliza host networking, modo privilegiado ni capacidades añadidas fuera del contrato revisado.
 10. El preflight canónico de rutas del host pasa antes del despliegue y no se crea ningún directorio inesperado.
 11. Workspace, estado de agente, GitHub CLI, configuración Git y SSH persisten tras stop/start y recreación según lo documentado.
 12. El login por device code de Codex persiste tras recreación.
 13. Se han verificado login, clone, push y creación de PR con GitHub CLI.
 14. Se han probado los modos autonomous y guarded de Codex en el host TrueNAS objetivo.
-15. La autenticación opcional `WEB_PASSWORD_FILE` se ha validado bajo #69.
+15. Las credenciales web de Codex se configuran por configuración y se validan contra el endpoint de Codex bajo #69; cuando Antigravity esté habilitado, sus credenciales web se configuran de forma independiente y se validan contra su propio endpoint.
 16. El changelog contiene una sección de release fechada.
 17. Las licencias y avisos de terceros están completos.
 18. El repositorio no contiene credenciales, rutas personales ni detalles de infraestructura privada.

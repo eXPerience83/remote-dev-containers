@@ -6,9 +6,26 @@ Remote Dev is a single-user development appliance, not a multi-tenant service.
 
 Agent containers intentionally run as root. Root is constrained to that container and to the paths mounted into it. Anyone who reaches an agent terminal can operate everything accessible to that service.
 
-The launcher starts with UID 0 only long enough to read an optional configured password. Before binding its HTTP server, it clears supplementary groups and drops permanently to UID/GID `65532`. The launcher has no agent-state mounts.
+The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no bind, persistent or agent-state mounts, and no added capabilities after `cap_drop: [ALL]`. It therefore does not need a root startup phase merely to obtain its browser password.
 
-The launcher starts with only `DAC_READ_SEARCH`, `SETGID` and `SETUID`. `DAC_READ_SEARCH` lets it read a mode-`0600` file-backed password whose host ownership Compose preserves; `SETGID` and `SETUID` perform the permanent drop. After the drop, the network-facing process has no supplementary groups and zero effective capabilities.
+The launcher runtime still defensively drops to UID/GID `65532` if somebody invokes it manually as root outside the reviewed Compose profile, but the supported deployment no longer relies on that transition.
+
+## Browser authentication contract
+
+Browser endpoints use one password-delivery mechanism: `WEB_PASSWORD`.
+
+- Codex receives its own non-empty value.
+- Antigravity receives a distinct non-empty value when enabled.
+- Optional launcher Basic authentication uses a separate launcher value mapped to its own `WEB_PASSWORD`.
+- Agent endpoints fail closed when `WEB_PASSWORD` is empty unless that specific endpoint deliberately sets `ALLOW_INSECURE_WEB=1`. The reviewed Codex and Antigravity Compose defaults keep that override at `0`.
+- The normal navigation-only launcher is the reviewed exception: base Compose profiles explicitly set `ALLOW_INSECURE_WEB=1` only for an already protected private endpoint. The optional launcher-auth override sets it back to `0` and requires its own password.
+- No browser password is persisted below `REMOTE_DEV_DATA_ROOT`, mounted from `/run/secrets`, or selected from multiple runtime sources.
+
+A sufficiently privileged TrueNAS/Docker administrator can inspect deployment configuration and container metadata. Host root/admin is inside the trust boundary; moving an application password to another host file would not create an administrator-secrecy boundary for this product. The supported protection is private network exposure plus role/container/mount isolation.
+
+Passwords must be non-empty single-line values. Runtime validation rejects carriage returns/newlines rather than logging or transforming them. Never print password values, lengths, hashes or credential-derived material in diagnostics, tests or issue evidence.
+
+For agent roles, startup copies the configured password into a non-exported shell variable and removes `WEB_PASSWORD` from the child-process environment before running external startup helpers or executing ttyd. ttyd still receives the credential it requires for Basic authentication; this reduces incidental inheritance by unrelated child tools and terminal sessions, but it does not hide deployment configuration from the trusted host administrator.
 
 ## Launcher boundary
 
@@ -22,13 +39,13 @@ The launcher:
 - serves only fixed reviewed navigation;
 - does not proxy terminal HTTP or WebSocket traffic;
 - requires no password by default on localhost/LAN/Tailscale deployments;
-- supports optional file-backed Basic authentication only through `compose/launcher-auth.yml`;
+- supports optional configuration-backed Basic authentication through `compose/launcher-auth.yml`;
 - validates route inputs, matching origins and URL paths;
 - sends a restrictive Content Security Policy;
 - rejects state-changing HTTP methods;
 - exposes a secret-free health endpoint.
 
-The base launcher has no mounts. The optional authentication overlay adds only its dedicated read-only launcher password secret. The launcher never embeds a password or forwards an Authorization header, and each agent endpoint authenticates independently.
+The launcher remains free of bind, persistent and agent-state mounts with or without optional authentication. It never embeds an agent password or forwards an Authorization header, and each agent endpoint authenticates independently.
 
 ## Outer-container isolation
 
@@ -40,7 +57,7 @@ Approval prompts are not a sandbox. Autonomous and guarded modes can access ever
 
 ## Enforced container hardening
 
-Both deployment files make the launcher, Codex and Antigravity root filesystems read-only, drop every capability and then restore only the exact role minimum. They retain `no-new-privileges`, do not configure supplementary groups, and set PID ceilings of `64` for the launcher and `1024` for each agent.
+Both deployment files make the launcher, Codex and Antigravity root filesystems read-only and apply `cap_drop: [ALL]`. The launcher restores no capabilities and runs directly as UID/GID `65532`; Codex and Antigravity restore only their exact reviewed agent capability minimum. All roles retain `no-new-privileges`, configure no supplementary groups, and use PID ceilings of `64` for the launcher and `1024` for each agent.
 
 Codex and Antigravity keep the established root-agent model because the authenticated terminal is trusted for that one service and must initialize and harden role-private bind mounts whose host ownership can differ. Their exact capability whitelist is:
 
@@ -66,7 +83,7 @@ Normal Codex and Antigravity child sessions receive `/workspace/.remote-dev-tmp/
 
 Trust-sensitive managers retain their own contracts even when invoked with hostile inherited temporary variables: Codex updates and Context7 device login use fixed private roots under `/run`; Antigravity install, admission and publication use canonical private runtime state; Context7 atomic configuration writes stage beside their target; and Antigravity OAuth retains its explicit small `/tmp` files. Remote Dev-owned Codex and GitHub credential-onboarding commands explicitly restore `TMPDIR`, `TMP` and `TEMP` to `/tmp` and remove the three development cache variables. The launcher receives neither a workspace nor development-scratch defaults.
 
-Everything in `/tmp` and `/run`, including tmux sockets and intentionally small internal temporary files, disappears when a container is recreated. Credentials, configuration, workspaces, workspace-backed development scratch and admitted runtimes persist only through the existing role-private binds. Generic Compose file-backed secrets remain read-only below `/run/secrets`; the TrueNAS reference keeps its distinct environment-backed terminal-password mode.
+Everything in `/tmp` and `/run`, including tmux sockets and intentionally small internal temporary files, disappears when a container is recreated. Credentials, configuration, workspaces, workspace-backed development scratch and admitted runtimes persist only through the existing role-private binds. Browser-terminal passwords are deployment configuration and are not part of this persistent-data tree.
 
 ## Canonical persistent-data boundary
 
@@ -75,39 +92,35 @@ All generic Compose persistence is derived from one administrative root, `REMOTE
 The Codex service receives only:
 
 ```text
-workspaces/codex               -> /workspace
-state/codex/agent              -> /root/.codex
-state/codex/runtime            -> /root/.local/share/remote-dev/codex-runtime
-state/codex/gh                 -> /root/.config/gh
-state/codex/git                -> /root/.config/git
-state/codex/ssh                -> /root/.ssh
-secrets/codex/web_password.txt -> /run/secrets/web_password
+workspaces/codex    -> /workspace
+state/codex/agent   -> /root/.codex
+state/codex/runtime -> /root/.local/share/remote-dev/codex-runtime
+state/codex/gh      -> /root/.config/gh
+state/codex/git     -> /root/.config/git
+state/codex/ssh     -> /root/.ssh
 ```
 
-The experimental Antigravity service uses only its own corresponding private
-children. Its project configuration mount is narrowly scoped as
-`state/antigravity/config -> /root/.gemini/config` and remains separate from
-`state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the
-launcher receive neither source or target, and the stack never makes all of
-`/root/.gemini` writable.
+The experimental Antigravity service uses only its own corresponding private children. Its project configuration mount is narrowly scoped as `state/antigravity/config -> /root/.gemini/config` and remains separate from `state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the launcher receive neither source nor target, and the stack never makes all of `/root/.gemini` writable.
 
 The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
-The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths, symlinks, a missing or empty password file, and password permissions broader than `0600` on POSIX hosts before deployment. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
+The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths and symlinks before deployment. It intentionally validates persistent storage layout only; browser-password validity is enforced by the endpoint runtime. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
 
 The optional Codex runtime stays separate from `CODEX_HOME` and is mounted only into the Codex service. After an explicit confirmed action, the updater allows only reviewed HTTPS URL origins, including redirects, and verifies TLS against the system CA bundle; a configured HTTP(S) proxy may act as an intermediary, and `CODEX_CA_CERTIFICATE` may add an operator-supplied CA to that verification. It verifies the release digest, package identity and bounded compatibility probes before publication, and records file identities for later local verification. Missing, damaged or modified runtime state is rejected in favor of the immutable bundled Codex fallback; launcher and Antigravity do not receive this runtime mount.
 
 The project does not automatically copy, migrate, delete or symlink experimental data. Automatic migration would risk credential exposure or ambiguous ownership. Existing experimental state must be moved or recreated manually after backup.
 
-Optional SMB sharing is outside the core security contract and tracked under #71. Only the workspace boundary may be considered for sharing; `state` and `secrets` must never be exposed through SMB.
+Optional SMB sharing is outside the core security contract and tracked under #71. Only the workspace boundary may be considered for sharing; `state` must never be exposed through SMB.
 
 ## Required controls
 
-- Do not expose ports 7680 or 7681 directly to the public Internet.
+- Do not expose ports 7680, 7681 or 7682 directly to the public Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard.
-- Keep every agent terminal independently authenticated with a strong password.
+- Keep `ALLOW_INSECURE_WEB=0` for agent services unless a specific endpoint is deliberately placed behind another reviewed private authentication boundary.
+- Keep every agent terminal independently authenticated with a strong, distinct password.
 - Use a distinct launcher password when the optional authentication overlay is enabled.
-- Keep credentials out of navigation URLs, diagnostics, logs, tests and rendered environment output.
+- Protect a generic Compose `.env` containing browser passwords from other host users, for example with mode `0600` on POSIX systems, and keep it out of version control.
+- Keep credentials out of navigation URLs, diagnostics, logs and tests; remember that host administrators can inspect deployment configuration.
 - Keep agent data and credentials out of the launcher.
 - Do not mount Docker or Podman sockets.
 - Do not use `privileged: true`, host PID or host networking, and do not add capabilities beyond the exact role whitelists above.

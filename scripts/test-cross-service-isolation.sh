@@ -454,11 +454,10 @@ assert_image_id() {
 assert_no_broad_mounts_or_environment() {
   local name="$1"
   local role="$2"
-  local launcher_mode="${3:-authenticated}"
   local inspection
   inspection="$(docker inspect "$name")"
 
-  jq -e --arg test_root "$test_root" --arg role "$role" --arg launcher_mode "$launcher_mode" '
+  jq -e --arg test_root "$test_root" --arg role "$role" '
     .[0] as $container
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
@@ -475,48 +474,33 @@ assert_no_broad_mounts_or_environment() {
        and ($mounts | all((.Destination // "" | ascii_downcase | contains("docker.sock") | not)
                            and (.Destination // "" | ascii_downcase | contains("podman.sock") | not)))
        and ($mounts | all((.Destination | test("(^|/)tmux|control"; "i")) | not))
+       and ($mounts | all((.Destination | startswith("/run/secrets")) | not))
        and ($mounts | all((.Destination != "/tmp") or (.Type == "tmpfs")))
        and (($container.HostConfig.Tmpfs // {}) | keys | sort == ["/run", "/tmp"])
        and (if $role == "launcher" then
-              (($mounts | map(select(.Type == "bind"))) as $binds
-               | if $launcher_mode == "base" then
-                   ($binds | length == 0)
-                 else
-                   (($binds | length == 1)
-                    and ($binds[0].Source == ($test_root + "/launcher/password/web_password"))
-                    and ($binds[0].Destination == "/run/secrets/launcher_password")
-                    and ($binds[0].RW == false))
-                 end)
+              ($mounts | map(select(.Type == "bind")) | length == 0)
             else true
             end))
-  ' <<<"$inspection" >/dev/null || fail "$role fixture has a broad, engine, parent-root, tmux/control, or data-root escape"
+  ' <<<"$inspection" >/dev/null || fail "$role fixture has a broad, engine, parent-root, credential-file, tmux/control, or data-root escape"
 }
 
 assert_mount_contract() {
   local name="$1"
   local role="$2"
-  local launcher_mode="${3:-authenticated}"
   local inspection
   inspection="$(docker inspect "$name")"
 
-  jq -e --arg root "$test_root" --arg role "$role" --arg launcher_mode "$launcher_mode" '
+  jq -e --arg root "$test_root" --arg role "$role" '
     .[0].Mounts as $mounts
     | ($mounts | map(select(.Type == "bind"))) as $binds
     | if $role == "launcher" then
-        if $launcher_mode == "base" then
-          ($binds | length == 0)
-        else
-          (($binds | length == 1)
-           and ($binds[0].Source == ($root + "/launcher/password/web_password"))
-           and ($binds[0].Destination == "/run/secrets/launcher_password")
-           and ($binds[0].RW == false))
-        end
+        ($binds | length == 0)
       else
         (($binds | length > 0)
          and ($binds | all(.Source | startswith($root + "/")))
          and (($binds | map(.Source) | unique | length) == ($binds | length))
          and ($binds | all(.Destination != "/tmp" and .Destination != "/run"))
-         and ($binds | any(.Destination == "/run/secrets/web_password" and .RW == false)))
+         and ($binds | all((.Destination | startswith("/run/secrets")) | not)))
       end
   ' <<<"$inspection" >/dev/null || fail "$role fixture mount contract is not role-private"
 }
@@ -530,7 +514,7 @@ assert_hardening_contract() {
   if ! jq -e --arg role "$role" --arg fixture_network "$network_name" '
     .[0].HostConfig as $host
     | (if $role == "launcher" then
-         ["CAP_DAC_READ_SEARCH", "CAP_SETGID", "CAP_SETUID"]
+         []
        else
          ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_KILL", "CAP_SETGID", "CAP_SETUID"]
        end) as $expected_caps
@@ -624,17 +608,29 @@ assert_runtime_mount_options() {
 }
 
 assert_launcher_runtime_identity() {
-  docker_exec "$launcher_name" sh -c '
+  if ! docker_exec "$launcher_name" sh -c '
     set -eu
     pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
     test -n "$pid"
     status="/proc/$pid/status"
     awk '\''$1 == "Uid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
     awk '\''$1 == "Gid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
-    awk '\''$1 == "Groups:" { exit !(NF == 1) }'\'' "$status"
+    awk '\''$1 == "Groups:" {
+      for (field = 2; field <= NF; field++) {
+        if ($field != 65532) exit 1
+      }
+      exit 0
+    }'\'' "$status"
     grep -Eq '\''^CapEff:[[:space:]]+0+$'\'' "$status"
     grep -Eq '\''^NoNewPrivs:[[:space:]]+1$'\'' "$status"
-  ' >/dev/null 2>&1 || fail "launcher HTTP process did not retain its permanent unprivileged boundary"
+  ' >/dev/null 2>&1; then
+    docker_exec "$launcher_name" sh -c '
+      pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
+      test -n "$pid" || exit 0
+      grep -E "^(Uid|Gid|Groups|CapEff|NoNewPrivs):" "/proc/$pid/status"
+    ' >&2 || true
+    fail "launcher HTTP process did not retain its permanent unprivileged boundary"
+  fi
 }
 
 assert_agent_runtime_identity() {
@@ -1015,6 +1011,8 @@ assert_agent_ttyd_security() {
   local role="$2"
   local username="$3"
   local port="$4"
+  local expected_password="$5"
+  local rejected_password="$6"
   local status=""
 
   docker_exec "$name" remote-dev-healthcheck >/dev/null 2>&1 \
@@ -1023,13 +1021,14 @@ assert_agent_ttyd_security() {
     "http://127.0.0.1:$port/")" \
     || fail "$role unauthenticated ttyd request could not be evaluated"
   [[ "$status" == 401 ]] || fail "$role ttyd accepted an unauthenticated request"
-  status="$(docker_exec "$name" sh -c '
-    password="$(cat -- /run/secrets/web_password)"
-    curl --silent --output /dev/null --write-out "%{http_code}" --user "$1:$password" \
-      "http://127.0.0.1:$2/"
-  ' sh "$username" "$port")" \
+  status="$(docker_exec "$name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    --user "$username:$expected_password" "http://127.0.0.1:$port/")" \
     || fail "$role authenticated ttyd request could not be evaluated"
   [[ "$status" == 200 ]] || fail "$role ttyd rejected its synthetic credential"
+  status="$(docker_exec "$name" curl --silent --output /dev/null --write-out '%{http_code}' \
+    --user "$username:$rejected_password" "http://127.0.0.1:$port/")" \
+    || fail "$role cross-role credential rejection could not be evaluated"
+  [[ "$status" == 401 ]] || fail "$role ttyd accepted the other role's synthetic credential"
   docker_exec "$name" bash -c '
     set -eu
     pid="$(pgrep -xo ttyd)"
@@ -1161,10 +1160,6 @@ assert_hardened_antigravity_host_fixtures() {
   docker_exec "$antigravity_name" chmod -R a+rX "$fixture_root/scripts" >/dev/null 2>&1 \
     || fail "Antigravity copied fixture sources could not be made readable"
 
-  # These host-safe harnesses intentionally shadow curl/readelf with synthetic
-  # binaries. The production root manager correctly ignores such PATH shadows,
-  # so exercise the harnesses as the same fixed unprivileged identity used for
-  # candidate execution while the surrounding container remains hardened.
   run_hardened_antigravity_fixture "Antigravity runtime/admission fixture failed under hardening" \
     "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-runtime.sh"
   run_hardened_antigravity_fixture "Antigravity security fixture failed under hardening" \
@@ -1257,30 +1252,6 @@ measure_canary() {
   [[ "$measurement" =~ ^[0-9]+:[0-9a-f]{64}$ ]] \
     || fail "$category returned an invalid synthetic measurement"
   printf '%s\n' "$measurement"
-}
-
-measure_host_canary() {
-  local category="$1"
-  local path="$2"
-  local size=""
-  local digest=""
-  [[ -f "$path" && ! -L "$path" ]] || fail "$category source is unavailable"
-  size="$(wc -c <"$path" | tr -d '[:space:]')" \
-    || fail "$category source size cannot be measured"
-  digest="$(sha256sum -- "$path" | awk '{print $1}')" \
-    || fail "$category source hash cannot be measured"
-  [[ "$size:$digest" =~ ^[0-9]+:[0-9a-f]{64}$ ]] \
-    || fail "$category source returned an invalid synthetic measurement"
-  printf '%s:%s\n' "$size" "$digest"
-}
-
-assert_terminal_password_canary() {
-  local name="$1"
-  local role="$2"
-  local expected_measurement="$3"
-  local actual_measurement=""
-  actual_measurement="$(measure_canary "$name" "$role terminal password" "/run/secrets/web_password")"
-  assert_equal "$role terminal password canary" "$expected_measurement" "$actual_measurement"
 }
 
 assert_antigravity_missing_runtime_rejection() {
@@ -1434,24 +1405,13 @@ prepare_synthetic_codex_runtime_source
 printf 'capability-probe\n' >"$test_root/codex/workspace/.hardening-capability-probe"
 printf 'capability-probe\n' >"$test_root/antigravity/workspace/.hardening-capability-probe"
 chmod 0711 -- "$test_root/antigravity/workspace"
-install -d -m 0700 -- \
-  "$test_root/launcher/password" \
-  "$test_root/codex/password" \
-  "$test_root/antigravity/password"
 launcher_password="synthetic-launcher-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-launcher_password_source="$test_root/launcher/password/web_password"
-codex_password_marker="$(marker_name codex-password)"
-antigravity_password_marker="$(marker_name antigravity-password)"
-codex_password_source="$test_root/codex/password/$codex_password_marker"
-antigravity_password_source="$test_root/antigravity/password/$antigravity_password_marker"
-printf '%s\n' "$launcher_password" >"$launcher_password_source"
-printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$codex_password_source"
-printf 'synthetic-terminal-password-%s\n' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" >"$antigravity_password_source"
-chmod 0600 -- "$launcher_password_source" "$codex_password_source" "$antigravity_password_source"
-codex_password_measurement="$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
-antigravity_password_measurement="$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
-[[ "$codex_password_measurement" != "$antigravity_password_measurement" ]] \
-  || fail "role terminal password canaries are not distinct"
+codex_password="synthetic-codex-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+antigravity_password="synthetic-antigravity-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$launcher_password" != "$codex_password" \
+   && "$launcher_password" != "$antigravity_password" \
+   && "$codex_password" != "$antigravity_password" ]] \
+  || fail "synthetic browser passwords are not distinct"
 
 prepare_network_name || fail "fixture network name is already owned by another resource"
 if ! network_id="$(docker network create --label "$ownership_label=$run_id" "$network_name")"; then
@@ -1473,8 +1433,7 @@ start_launcher() {
       launcher_auth_args=(
         --env ALLOW_INSECURE_WEB=0
         --env WEB_USERNAME=isolation-launcher
-        --env WEB_PASSWORD_FILE=/run/secrets/launcher_password
-        --mount "type=bind,src=$launcher_password_source,dst=/run/secrets/launcher_password,readonly"
+        --env "WEB_PASSWORD=$launcher_password"
       )
       ;;
     *) fail "internal unknown launcher fixture mode" ;;
@@ -1485,10 +1444,8 @@ start_launcher() {
     --network "$network_name" \
     --ipc private \
     --read-only \
+    --user 65532:65532 \
     --cap-drop ALL \
-    --cap-add DAC_READ_SEARCH \
-    --cap-add SETGID \
-    --cap-add SETUID \
     --pids-limit 64 \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
@@ -1532,7 +1489,7 @@ start_codex() {
     --env GH_CONFIG_DIR=/root/.config/gh \
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
     --env WEB_USERNAME=codex \
-    --env WEB_PASSWORD_FILE=/run/secrets/web_password \
+    --env "WEB_PASSWORD=$codex_password" \
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7681 \
@@ -1542,7 +1499,6 @@ start_codex() {
     --mount "type=bind,src=$test_root/codex/gh,dst=/root/.config/gh" \
     --mount "type=bind,src=$test_root/codex/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/codex/ssh,dst=/root/.ssh" \
-    --mount "type=bind,src=$codex_password_source,dst=/run/secrets/web_password,readonly" \
     "$image_id")"; then
     codex_id="$(capture_owned_container_id "$codex_name" || true)"
     fail "failed to start Codex fixture"
@@ -1577,7 +1533,7 @@ start_antigravity() {
     --env GH_CONFIG_DIR=/root/.config/gh \
     --env GIT_CONFIG_GLOBAL=/root/.config/git/config \
     --env WEB_USERNAME=antigravity \
-    --env WEB_PASSWORD_FILE=/run/secrets/web_password \
+    --env "WEB_PASSWORD=$antigravity_password" \
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7682 \
@@ -1589,7 +1545,6 @@ start_antigravity() {
     --mount "type=bind,src=$test_root/antigravity/gh,dst=/root/.config/gh" \
     --mount "type=bind,src=$test_root/antigravity/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/antigravity/ssh,dst=/root/.ssh" \
-    --mount "type=bind,src=$antigravity_password_source,dst=/run/secrets/web_password,readonly" \
     "$image_id")"; then
     antigravity_id="$(capture_owned_container_id "$antigravity_name" || true)"
     fail "failed to start Antigravity fixture"
@@ -1606,10 +1561,10 @@ for name in "$launcher_name" "$codex_name" "$antigravity_name"; do
   wait_for_health_command "$name"
   assert_image_id "$name"
 done
-assert_no_broad_mounts_or_environment "$launcher_name" launcher base
+assert_no_broad_mounts_or_environment "$launcher_name" launcher
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
-assert_mount_contract "$launcher_name" launcher base
+assert_mount_contract "$launcher_name" launcher
 assert_mount_contract "$codex_name" codex
 assert_mount_contract "$antigravity_name" antigravity
 assert_hardening_contract "$launcher_name" launcher
@@ -1625,14 +1580,12 @@ assert_launcher_has_no_development_scratch
 assert_development_scratch_environment "$codex_name" Codex
 assert_development_scratch_environment "$antigravity_name" Antigravity
 assert_launcher_http_security base
-assert_agent_ttyd_security "$codex_name" Codex codex 7681
-assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682
+assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
+assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682 "$antigravity_password" "$codex_password"
 assert_read_only_rootfs "$launcher_name" launcher
 assert_read_only_rootfs "$codex_name" Codex
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
-assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
-assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
 assert_hardened_codex_policy_and_doctor
 assert_codex_toolchain_workflow
 assert_hardened_codex_runtime_regressions
@@ -1643,8 +1596,8 @@ remove_owned_container "$launcher_name" "$launcher_id" \
 start_launcher authenticated
 wait_for_health_command "$launcher_name"
 assert_image_id "$launcher_name"
-assert_no_broad_mounts_or_environment "$launcher_name" launcher authenticated
-assert_mount_contract "$launcher_name" launcher authenticated
+assert_no_broad_mounts_or_environment "$launcher_name" launcher
+assert_mount_contract "$launcher_name" launcher
 assert_hardening_contract "$launcher_name" launcher
 assert_runtime_mount_options "$launcher_name" launcher
 assert_launcher_runtime_identity
@@ -1675,7 +1628,6 @@ for index in "${!antigravity_targets[@]}"; do
   assert_path_absent "$launcher_name" "$category" "$target/$marker"
 done
 assert_antigravity_project_config_state
-assert_path_absent "$launcher_name" "agent terminal password source" "/run/secrets/web_password"
 assert_role_private_development_scratch
 
 codex_socket="$(start_tmux_fixture "$codex_name" codex)"
@@ -1688,12 +1640,7 @@ assert_dev_shm_private "$antigravity_name" antigravity
 
 assert_antigravity_missing_runtime_rejection
 verify_canaries codex_invariants "$codex_name"
-assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
-assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
-assert_equal "Codex terminal password canary" "$codex_password_measurement" \
-  "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
-assert_equal "Antigravity terminal password canary" "$antigravity_password_measurement" \
-  "$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
+verify_canaries antigravity_invariants "$antigravity_name"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 wait_for_health_command "$antigravity_name"
@@ -1709,16 +1656,11 @@ assert_hardening_contract "$codex_name" codex
 assert_runtime_mount_options "$codex_name" codex
 assert_agent_runtime_identity "$codex_name" Codex
 assert_development_scratch_environment "$codex_name" Codex
+assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
 assert_read_only_rootfs "$codex_name" Codex
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
-assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
-assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
-assert_equal "Codex terminal password canary" "$codex_password_measurement" \
-  "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
 verify_canaries antigravity_invariants "$antigravity_name"
-assert_equal "Antigravity terminal password canary" "$antigravity_password_measurement" \
-  "$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$antigravity_name"
 
@@ -1733,15 +1675,11 @@ assert_hardening_contract "$antigravity_name" antigravity
 assert_runtime_mount_options "$antigravity_name" antigravity
 assert_agent_runtime_identity "$antigravity_name" Antigravity
 assert_development_scratch_environment "$antigravity_name" Antigravity
+assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682 "$antigravity_password" "$codex_password"
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
-assert_terminal_password_canary "$codex_name" Codex "$codex_password_measurement"
-assert_terminal_password_canary "$antigravity_name" Antigravity "$antigravity_password_measurement"
-assert_equal "Codex terminal password canary" "$codex_password_measurement" \
-  "$(measure_host_canary 'Codex terminal password' "$codex_password_source")"
-assert_equal "Antigravity terminal password canary" "$antigravity_password_measurement" \
-  "$(measure_host_canary 'Antigravity terminal password' "$antigravity_password_source")"
+verify_canaries antigravity_invariants "$antigravity_name"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 
@@ -1755,6 +1693,7 @@ remove_owned_container "$codex_name" "$codex_id" \
 start_codex
 wait_for_health_command "$codex_name"
 assert_development_scratch_environment "$codex_name" Codex
+assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
 assert_equal "Antigravity scratch during Codex recreation" "$antigravity_scratch_measurement" \
   "$(measure_canary \
     "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"

@@ -5,15 +5,11 @@ services:
     image: *remote-dev-image
     container_name: remote-dev-launcher
     restart: unless-stopped
-    user: "0:0"
+    user: "65532:65532"
     read_only: true
 
     cap_drop:
       - ALL
-    cap_add:
-      - DAC_READ_SEARCH
-      - SETGID
-      - SETUID
     pids_limit: 64
     ipc: private
 
@@ -87,9 +83,8 @@ services:
       WEB_PORT: "7681"
       WEB_BASE_PATH: /
       WEB_USERNAME: codex
-      # Home-mode convenience. TrueNAS administrators can read this value from
-      # the App YAML or docker inspect. Replace the empty value before saving.
-      # Use the file-backed mode instead for a shared or hardened deployment.
+      # TrueNAS administrators can read this value from the App YAML or
+      # container metadata. Replace the empty value before saving.
       WEB_PASSWORD: ''
       WEB_MAX_CLIENTS: "1"
       WEB_CHECK_ORIGIN: "1"
@@ -115,9 +110,9 @@ services:
       - "192.168.1.10:7681:7681"
 
     # Before saving this YAML, run scripts/preflight-data-layout.py on the
-    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity
-    # --password-source environment. create_host_path is only defense-in-depth
-    # because not every Compose release enforces it reliably.
+    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity.
+    # create_host_path is only defense-in-depth because not every Compose
+    # release enforces it reliably.
     volumes:
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/codex

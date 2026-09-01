@@ -49,11 +49,10 @@ El YAML de referencia declara los árboles privados de workspace/estado de Codex
 ```bash
 python3 scripts/preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
-  --include-antigravity \
-  --password-source environment
+  --include-antigravity
 ```
 
-`--password-source environment` corresponde al modo doméstico del YAML de TrueNAS, donde las contraseñas de terminal se escriben como valores `WEB_PASSWORD` y no como secretos respaldados por archivo. Si mantienes intencionadamente una copia local solo con Codex y sin el servicio Antigravity, omite `--include-antigravity` y crea únicamente las rutas de Codex.
+El preflight valida únicamente los bind persistentes y la ausencia de symlinks inseguros. Las contraseñas de terminal se configuran como valores `WEB_PASSWORD` independientes y son validadas por el runtime al arrancar cada servicio. Si mantienes intencionadamente una copia local solo con Codex y sin el servicio Antigravity, omite `--include-antigravity` y crea únicamente las rutas de Codex.
 
 Cuando TrueNAS muestre la Custom App en ejecución, abre:
 
@@ -88,7 +87,7 @@ REMOTE_DEV_ROLE=launcher
 # o: shell
 ```
 
-`antigravity` está implementado como **rol opcional experimental** y continúa detrás de una habilitación explícita; la validación real de Start/Resume por proyecto y sesión queda aplazada al issue #131. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
+`antigravity` está implementado como **rol opcional experimental**. Su Start/Resume por proyecto, continuidad de conversación, actualización/rollback y validación amplia del ciclo de vida en TrueNAS están completados; el rol sigue siendo experimental mientras se reconcilian los gates restantes de autenticación web, política del proveedor y documentación. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
 
 El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOTE_DEV_START_MODE=menu|agent|shell` y la compatibilidad existente con `START_MODE=menu|codex|shell`.
 
@@ -118,11 +117,11 @@ La página del launcher no requiere autenticación por defecto porque es navegac
 
 Al pulsar **Open Codex**, el navegador navega al endpoint ttyd de Codex. El launcher no transporta el tráfico HTTP/WebSocket del terminal, no recibe el socket Docker y no monta el workspace, el estado de Codex, GitHub, Git, SSH, el runtime opcional de Codex ni la contraseña del terminal. Cuando se habilita Antigravity experimental, su terminal continúa siendo un endpoint independiente con autenticación, workspace y estado propios.
 
-El terminal Codex se autentica de manera independiente mediante su propia fuente de contraseña. La contraseña nunca se incluye en el enlace, no se transmite mediante el launcher y no se comparte entre los servicios.
+El terminal Codex se autentica de manera independiente con `WEB_PASSWORD`. Antigravity recibe su propio valor independiente. Las contraseñas nunca se incluyen en los enlaces, no se transmiten mediante el launcher y no se comparten entre servicios.
 
-La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante el override separado y respaldado por secreto `compose/launcher-auth.yml`. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña, secreto, mount ni dataset del launcher.
+La autenticación Basic del launcher sigue siendo opcional para despliegues avanzados del Compose genérico mediante `compose/launcher-auth.yml`. El override mapea `LAUNCHER_PASSWORD` al `WEB_PASSWORD` privado del proceso launcher sin montar ficheros ni secretos persistentes. El ejemplo doméstico normal de TrueNAS no requiere una segunda contraseña ni dataset del launcher.
 
-Las rutas configuradas del launcher y de los agentes se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity sigue siendo experimental y su comportamiento real de proyectos/sesiones se valida en #131; Claude y un proxy de origen único siguen fuera de la implementación actual.
+Las rutas configuradas del launcher y de los agentes se limitan a caracteres seguros de ruta URL antes de introducirse en la página. Antigravity sigue siendo experimental; Claude y un proxy de origen único siguen fuera de la implementación actual.
 
 ### Modos de aprobación de Codex
 
@@ -158,13 +157,13 @@ El paquete opcional se guarda fuera de `CODEX_HOME` en un montaje exclusivo de e
 
 ## Aislamiento en TrueNAS
 
-El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher añade únicamente su propio secreto de contraseña en modo solo lectura.
+El launcher y Codex son contenedores separados. El launcher base solo recibe su configuración de navegación; no recibe secretos ni montajes de Codex. El override opcional de autenticación del launcher no añade montajes bind, persistentes ni de estado de agentes; conserva únicamente los tmpfs privados `/tmp` y `/run` del perfil de hardening.
 
 La imagen no instala Bubblewrap del sistema. El lanzador de comandos de Codex desactiva expresamente el sandbox interno no compatible mediante `--sandbox danger-full-access`. El límite de seguridad soportado sigue siendo el contenedor exterior de Codex y sus montajes mínimos.
 
-Los contenedores de producción del launcher, Codex y Antigravity usan un sistema de archivos raíz de solo lectura, `no-new-privileges`, `cap_drop: [ALL]`, ningún grupo suplementario, mounts privados por rol y límites PID explícitos (`64` para el launcher y `1024` para cada agente). El launcher arranca como root únicamente para leer una contraseña opcional protegida y respaldada por archivo, recibe solo `DAC_READ_SEARCH`, `SETGID` y `SETUID`, y después baja permanentemente a UID/GID `65532` con cero capacidades efectivas. `DAC_READ_SEARCH` es necesario porque Compose conserva el propietario del host de un secreto basado en archivo con modo `0600`. Los terminales de agente root reciben solo `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` y `SETUID`; estas capacidades mantienen la propiedad y el endurecimiento de los bind mounts privados y la ejecución acotada de candidatos como UID/GID `65534`, no acceso al host.
+Los contenedores de producción usan un sistema de archivos raíz de solo lectura, `no-new-privileges`, `cap_drop: [ALL]`, ningún grupo suplementario, mounts privados por rol y límites PID explícitos (`64` para el launcher y `1024` para cada agente). El launcher arranca directamente como UID/GID `65532` y no recupera ninguna capability. Los terminales de agente root reciben solo `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` y `SETUID`; estas capacidades mantienen la propiedad y el endurecimiento de los bind mounts privados y la ejecución acotada de candidatos como UID/GID `65534`, no acceso al host.
 
-Cada rol tiene tmpfs transitorios y privados para `/tmp` y `/run`. `/tmp` sigue siendo un sistema de archivos acotado con `noexec,nosuid,nodev`; `/run` de Codex permite deliberadamente ejecución para el staging acotado de actualizaciones de Codex y del login de dispositivo de Context7. Las sesiones normales de Codex y Antigravity usan en su lugar el árbol oculto `/workspace/.remote-dev-tmp`, respaldado por el workspace, para los temporales genéricos y las cachés de uv, npm y pip. Este scratch de desarrollo no confiable persiste con el workspace privado de su rol, queda excluido de la detección de proyectos y puede borrarse con el servicio detenido para recrearlo de forma limpia. El launcher no lo recibe. El Compose genérico mantiene secretos respaldados por archivo bajo `/run/secrets`, mientras que la referencia TrueNAS conserva su modo de contraseñas por variables de entorno.
+Cada rol tiene tmpfs transitorios y privados para `/tmp` y `/run`. `/tmp` sigue siendo un sistema de archivos acotado con `noexec,nosuid,nodev`; `/run` de Codex permite deliberadamente ejecución para el staging acotado de actualizaciones de Codex y del login de dispositivo de Context7. Las sesiones normales de Codex y Antigravity usan en su lugar el árbol oculto `/workspace/.remote-dev-tmp`, respaldado por el workspace, para los temporales genéricos y las cachés de uv, npm y pip. Este scratch de desarrollo no confiable persiste con el workspace privado de su rol, queda excluido de la detección de proyectos y puede borrarse con el servicio detenido para recrearlo de forma limpia. El launcher no lo recibe. Las contraseñas web se suministran mediante variables específicas de cada servicio; no forman parte del árbol persistente.
 
 No añadas modo privilegiado, `SYS_ADMIN`, perfiles sin restricciones, el socket Docker ni montajes amplios para intentar habilitar un sandbox anidado.
 
@@ -183,23 +182,20 @@ REMOTE_DEV_DATA_ROOT/
 ├── workspaces/
 │   └── codex/
 │       └── <proyecto>/
-├── state/
-│   └── codex/
-│       ├── agent/
-│       ├── runtime/
-│       ├── gh/
-│       ├── git/
-│       └── ssh/
-└── secrets/
+└── state/
     └── codex/
-        └── web_password.txt
+        ├── agent/
+        ├── runtime/
+        ├── gh/
+        ├── git/
+        └── ssh/
 ```
 
-El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher base no tiene montajes. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
+El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher no tiene montajes bind, persistentes ni de estado de agentes; conserva únicamente sus tmpfs privados `/tmp` y `/run`. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios, rechaza enlaces simbólicos y comprueba que la contraseña sea un archivo normal, no vacío y con permisos restrictivos; el preflight actual no valida el propietario del directorio de runtime. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
+`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios y rechaza enlaces simbólicos; las contraseñas web no forman parte del preflight ni del layout persistente. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
-No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state` ni `secrets`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
+No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. Si una instalación anterior conservaba ficheros de contraseña web, configura y valida primero los nuevos `WEB_PASSWORD`, comprueba stop/start o recreación y conserva cualquier copia necesaria únicamente durante la ventana de rollback. Cuando la migración esté confirmada, elimina manualmente esos ficheros obsoletos; Remote Dev no los borra automáticamente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 
 ## Licencias y software opcional
 
@@ -217,15 +213,25 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 mkdir -p \
   data/workspaces/codex/proyecto-ejemplo \
-  data/state/codex/{agent,gh,git,ssh} \
-  data/secrets/codex
+  data/state/codex/{agent,gh,git,ssh}
 sudo install -d -o root -g root -m 0700 data/state/codex/runtime
-printf '%s\n' 'contraseña-de-codex' > data/secrets/codex/web_password.txt
-chmod 600 data/secrets/codex/web_password.txt
 make preflight
 ./scripts/build-local.sh
+```
+
+Edita `.env` y define como mínimo una contraseña fuerte para Codex:
+
+```dotenv
+WEB_PASSWORD=contraseña-distinta-de-codex
+```
+
+Si habilitas el perfil de Antigravity, utiliza un valor diferente:
+
+```dotenv
+ANTIGRAVITY_WEB_PASSWORD=contraseña-distinta-de-antigravity
 ```
 
 Para corregir un directorio de runtime vacío existente con propietario incorrecto, ejecuta únicamente:
@@ -245,23 +251,25 @@ docker compose -f compose/docker-compose.yml up -d
 
 1. Abre el launcher en el puerto publicado `7680`.
 2. Pulsa Codex.
-3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y la contraseña de `web_password.txt`.
+3. Autentícate en el terminal del puerto `7681` con `WEB_USERNAME` —por defecto `codex`— y el `WEB_PASSWORD` definido en `.env`.
 4. Desde **Projects...** selecciona o crea el proyecto con el que quieres trabajar; el borrado exige escribir su nombre exacto.
 5. Inicia o reanuda Codex dentro de ese proyecto con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional manteniendo el fallback incluido, inicia sesión en Codex/GitHub o ejecuta diagnósticos.
 
-Para proteger también el launcher en un despliegue avanzado del Compose genérico, crea un archivo de contraseña distinto y añade el override revisado:
+Para proteger también el launcher en un despliegue avanzado del Compose genérico, define una contraseña distinta en el mismo `.env` protegido y añade el override revisado:
+
+```dotenv
+LAUNCHER_USERNAME=remote-dev
+LAUNCHER_PASSWORD=contraseña-distinta-del-launcher
+```
 
 ```bash
-mkdir -p secrets
-printf '%s\n' 'contraseña-distinta-del-launcher' > secrets/launcher_password.txt
-chmod 600 secrets/launcher_password.txt
 docker compose \
   -f compose/docker-compose.yml \
   -f compose/launcher-auth.yml \
   up -d
 ```
 
-El override monta el valor como secreto Compose en `/run/secrets/launcher_password`; no incluye la contraseña en el entorno renderizado y no sustituye ni reutiliza la contraseña del terminal Codex.
+El override mapea ese valor al `WEB_PASSWORD` del launcher; no crea ni monta un secreto persistente y no sustituye ni reutiliza la contraseña del terminal Codex.
 
 ## Prueba pública de la imagen edge
 

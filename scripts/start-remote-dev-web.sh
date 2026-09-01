@@ -18,6 +18,13 @@ if [[ "$role" == launcher ]]; then
   exec /usr/local/bin/remote-dev-launcher
 fi
 
+# Agent browser authentication is deployment configuration, but helper tools and
+# terminal child processes do not need the raw environment variable. Capture it
+# into a non-exported shell variable and remove it before invoking any external
+# startup helper. ttyd receives only its required --credential argument.
+web_password="${WEB_PASSWORD:-}"
+unset WEB_PASSWORD
+
 if [[ -z "${TMUX_SESSION:-}" ]]; then
   TMUX_SESSION="$(remote_dev_default_tmux_session "$role")"
   export TMUX_SESSION
@@ -68,22 +75,21 @@ fi
 
 credential=""
 web_username="${WEB_USERNAME:-codex}"
-if [[ -n "${WEB_PASSWORD_FILE:-}" ]]; then
-  if [[ ! -r "$WEB_PASSWORD_FILE" ]]; then
-    echo "ERROR: WEB_PASSWORD_FILE is not readable: $WEB_PASSWORD_FILE" >&2
+if [[ -n "$web_password" ]]; then
+  if [[ "$web_password" == *$'\r'* || "$web_password" == *$'\n'* ]]; then
+    echo "ERROR: web password must be a single line" >&2
     exit 1
   fi
-  credential="${web_username}:$(<"$WEB_PASSWORD_FILE")"
-elif [[ -n "${WEB_PASSWORD:-}" ]]; then
-  credential="${web_username}:${WEB_PASSWORD}"
+  credential="${web_username}:${web_password}"
 elif [[ "${ALLOW_INSECURE_WEB:-0}" != "1" ]]; then
   cat >&2 <<'MSG'
 ERROR: web authentication is not configured.
-Set WEB_PASSWORD_FILE (recommended) or WEB_PASSWORD.
+Set WEB_PASSWORD for this endpoint.
 Set ALLOW_INSECURE_WEB=1 only on an already protected private endpoint.
 MSG
   exit 1
 fi
+unset web_password
 
 if [[ "$role" == codex || "$role" == antigravity ]]; then
   remote_dev_prepare_development_environment "$role" "$workspace" || exit $?

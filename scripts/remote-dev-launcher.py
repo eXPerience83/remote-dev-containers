@@ -104,27 +104,16 @@ def _optional_scheme(name: str, value: str) -> str:
 
 
 def _read_password() -> str | None:
-    password_file = os.environ.get("WEB_PASSWORD_FILE", "")
     password = os.environ.get("WEB_PASSWORD", "")
-
-    if password_file:
-        try:
-            password = Path(password_file).read_text(encoding="utf-8")
-        except OSError as exc:
-            raise ValueError(f"WEB_PASSWORD_FILE is not readable: {password_file}") from exc
-        password = password.rstrip("\r\n")
-
     if password:
-        if "\r" in password or "\n" in password:
-            raise ValueError("web password must be a single line")
+        if "\x00" in password or "\r" in password or "\n" in password:
+            raise ValueError("web password must be a single line without NUL")
         return password
 
     if _env_bool("ALLOW_INSECURE_WEB", False):
         return None
 
-    raise ValueError(
-        "web authentication is not configured; set WEB_PASSWORD_FILE or WEB_PASSWORD"
-    )
+    raise ValueError("web authentication is not configured; set WEB_PASSWORD")
 
 
 def _drop_launcher_privileges() -> None:
