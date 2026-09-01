@@ -59,10 +59,30 @@ def required_directories(
     )
 
 
+def validate_root_ancestry_no_symlinks(root: Path, errors: list[str]) -> bool:
+    """Reject a symlink anywhere in the configured root's existing ancestry."""
+    parts = root.parts
+    if not parts:
+        return False
+
+    current = Path(parts[0])
+    for part in parts[1:]:
+        current /= part
+        if current.is_symlink():
+            errors.append(
+                f"persistent path component must not be a symlink: {current}"
+            )
+            return True
+    return False
+
+
 def validate_no_symlink_components(
     root: Path, paths: tuple[Path, ...], errors: list[str]
 ) -> bool:
-    """Reject symlinks at the root or at any existing component below it."""
+    """Reject symlinks in root ancestry or any existing component below it."""
+    if validate_root_ancestry_no_symlinks(root, errors):
+        return True
+
     checked: set[Path] = set()
     found_symlink = False
     for path in paths:
@@ -115,17 +135,14 @@ def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
     """Create missing canonical descendants without changing existing paths."""
     root = canonical_path(root)
     errors: list[str] = []
-    if root.is_symlink():
-        raise ValueError(f"persistent path component must not be a symlink: {root}")
-    if not root.exists():
-        raise ValueError(f"configured root must already exist: {root}")
-    if not root.is_dir():
-        raise ValueError(f"configured root is not a directory: {root}")
-
     specs = directory_specs(include_antigravity=include_antigravity)
     directories = tuple(root / spec.suffix for spec in specs)
     if validate_no_symlink_components(root, directories, errors):
         raise ValueError("; ".join(errors))
+    if not root.exists():
+        raise ValueError(f"configured root must already exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"configured root is not a directory: {root}")
 
     created: list[Path] = []
     for spec in specs:
