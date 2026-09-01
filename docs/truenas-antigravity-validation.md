@@ -1,6 +1,6 @@
 # TrueNAS experimental deployment and Antigravity validation
 
-This runbook prepares the real validation tracked by issues #28, #29 and #69.
+This runbook preserves and reuses the completed Antigravity lifecycle evidence from #29 while preparing the focused browser-authentication validation still owned by #69. Historical lifecycle steps remain documented here for reproducibility; they are not evidence that #29 is still open.
 The image, `compose/truenas.yml` and `scripts/preflight-data-layout.py` must all
 come from the same immutable source revision. Never combine a pinned image with
 host-side files downloaded from a moving branch such as `main`.
@@ -450,6 +450,11 @@ The default deployment gives them separate workspaces.
 Do not recreate a persistent browser-password directory or mount a browser
 credential file into an agent or launcher container. #69 standardizes the
 supported browser authentication contract on per-service environment values.
+If an existing deployment still has retired browser-password files, configure
+and verify the replacement `WEB_PASSWORD` values first, including stop/start or
+recreation. Keep any legacy copy only for the explicit rollback window, then
+remove the obsolete files manually after the migration is accepted. Remote Dev
+does not delete or migrate those credential files automatically.
 If a future secret-provider integration is desired, it must be designed and
 reviewed as a new mechanism rather than reviving the retired dual-path contract.
 
