@@ -120,7 +120,7 @@ def validate_bootstrap(root: Path) -> None:
 
 
 def validate_symlinks(base: Path) -> None:
-    """Reject root and intermediate symlinks without mutating their targets."""
+    """Reject root, root-ancestry and descendant symlinks without mutation."""
     real_root = base / "real-root"
     real_root.mkdir()
     linked_root = base / "linked-root"
@@ -132,6 +132,29 @@ def validate_symlinks(base: Path) -> None:
         list(real_root.iterdir()) == [],
         "symlink-root target was unexpectedly modified",
     )
+
+    real_parent = base / "real-parent"
+    real_parent.mkdir()
+    ancestry_root = real_parent / "remote-dev"
+    ancestry_root.mkdir()
+    linked_parent = base / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    ancestry_symlink = run_script(BOOTSTRAP, linked_parent / "remote-dev")
+    require(
+        ancestry_symlink.returncode == 1,
+        "symlink in configured root ancestry must fail",
+    )
+    require("must not be a symlink" in ancestry_symlink.stderr, ancestry_symlink.stderr)
+    require(
+        list(ancestry_root.iterdir()) == [],
+        "root-ancestry symlink target was unexpectedly modified",
+    )
+    ancestry_preflight = run_script(PREFLIGHT, linked_parent / "remote-dev")
+    require(
+        ancestry_preflight.returncode == 1,
+        "preflight must also reject symlinked root ancestry",
+    )
+    require("must not be a symlink" in ancestry_preflight.stderr, ancestry_preflight.stderr)
 
     root = base / "intermediate-root"
     root.mkdir()
