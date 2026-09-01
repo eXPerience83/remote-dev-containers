@@ -24,12 +24,20 @@ BOOTSTRAP = SCRIPTS / "init-data-layout.py"
 TRUENAS = ROOT / "compose/truenas.yml"
 
 
-def run_script(script: Path, root: Path, *, include_antigravity: bool = False) -> subprocess.CompletedProcess[str]:
+def run_script(
+    script: Path, root: Path, *, include_antigravity: bool = False
+) -> subprocess.CompletedProcess[str]:
     """Run one host-side layout command against a temporary root."""
     command = [sys.executable, str(script), "--root", str(root)]
     if include_antigravity:
         command.append("--include-antigravity")
-    return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def require(condition: bool, message: str) -> None:
@@ -56,11 +64,38 @@ def validate_bootstrap(root: Path) -> None:
     marker = root / "operator-marker.txt"
     marker.write_text("keep-me", encoding="utf-8")
 
+    # A pre-existing path may be an ordinary directory or a deliberately created
+    # TrueNAS child dataset mountpoint. Bootstrap must accept it as-is rather
+    # than replacing it or normalizing its existing permissions/content.
+    existing_workspace = root / "workspaces/codex"
+    existing_workspace.mkdir(parents=True, mode=0o750)
+    existing_workspace.chmod(0o750)
+    dataset_marker = existing_workspace / "operator-dataset-marker.txt"
+    dataset_marker.write_text("leave-existing-path-alone", encoding="utf-8")
+    original_mode = existing_workspace.stat().st_mode & 0o777
+
     codex = run_script(BOOTSTRAP, root)
     require(codex.returncode == 0, codex.stderr)
-    require(run_script(PREFLIGHT, root).returncode == 0, "Codex preflight must pass after bootstrap")
-    require(marker.read_text(encoding="utf-8") == "keep-me", "bootstrap modified existing root content")
-    require(not (root / "secrets").exists(), "bootstrap unexpectedly created a secrets tree")
+    require(
+        run_script(PREFLIGHT, root).returncode == 0,
+        "Codex preflight must pass after bootstrap",
+    )
+    require(
+        marker.read_text(encoding="utf-8") == "keep-me",
+        "bootstrap modified existing root content",
+    )
+    require(
+        dataset_marker.read_text(encoding="utf-8") == "leave-existing-path-alone",
+        "bootstrap modified an existing persistent path",
+    )
+    require(
+        (existing_workspace.stat().st_mode & 0o777) == original_mode,
+        "bootstrap changed permissions on an existing persistent path",
+    )
+    require(
+        not (root / "secrets").exists(),
+        "bootstrap unexpectedly created a secrets tree",
+    )
 
     second = run_script(BOOTSTRAP, root)
     require(second.returncode == 0, second.stderr)
@@ -70,13 +105,19 @@ def validate_bootstrap(root: Path) -> None:
     require(antigravity.returncode == 0, antigravity.stderr)
     complete = run_script(PREFLIGHT, root, include_antigravity=True)
     require(complete.returncode == 0, complete.stderr)
-    require(not (root / "secrets").exists(), "complete layout unexpectedly created secrets")
+    require(
+        not (root / "secrets").exists(),
+        "complete layout unexpectedly created secrets",
+    )
 
     existing_state = root / "state/codex/agent/existing-state.txt"
     existing_state.write_text("preserve", encoding="utf-8")
     rerun = run_script(BOOTSTRAP, root, include_antigravity=True)
     require(rerun.returncode == 0, rerun.stderr)
-    require(existing_state.read_text(encoding="utf-8") == "preserve", "bootstrap changed existing state contents")
+    require(
+        existing_state.read_text(encoding="utf-8") == "preserve",
+        "bootstrap changed existing state contents",
+    )
 
 
 def validate_symlinks(base: Path) -> None:
@@ -88,7 +129,10 @@ def validate_symlinks(base: Path) -> None:
     root_symlink = run_script(BOOTSTRAP, linked_root)
     require(root_symlink.returncode == 1, "symlink root must fail")
     require("must not be a symlink" in root_symlink.stderr, root_symlink.stderr)
-    require(list(real_root.iterdir()) == [], "symlink-root target was unexpectedly modified")
+    require(
+        list(real_root.iterdir()) == [],
+        "symlink-root target was unexpectedly modified",
+    )
 
     root = base / "intermediate-root"
     root.mkdir()
@@ -98,32 +142,48 @@ def validate_symlinks(base: Path) -> None:
     intermediate = run_script(BOOTSTRAP, root)
     require(intermediate.returncode == 1, "symlinked intermediate path must fail")
     require("must not be a symlink" in intermediate.stderr, intermediate.stderr)
-    require(list(outside.iterdir()) == [], "symlinked external target was unexpectedly modified")
+    require(
+        list(outside.iterdir()) == [],
+        "symlinked external target was unexpectedly modified",
+    )
 
 
 def validate_compose_contract() -> None:
     """Keep the canonical Python contract exactly aligned with TrueNAS bind sources."""
     text = TRUENAS.read_text(encoding="utf-8")
-    prefix = "/mnt/Pool1/remote-dev/"
     sources = {
         match.group(1)
-        for match in re.finditer(r"^\s*source:\s*/mnt/Pool1/remote-dev/([^\s]+)\s*$", text, re.MULTILINE)
+        for match in re.finditer(
+            r"^\s*source:\s*/mnt/Pool1/remote-dev/([^\s]+)\s*$",
+            text,
+            re.MULTILINE,
+        )
     }
     expected = expected_suffixes(include_antigravity=True)
-    require(sources == expected, f"TrueNAS bind sources differ from canonical layout: expected={sorted(expected)} actual={sorted(sources)}")
+    require(
+        sources == expected,
+        "TrueNAS bind sources differ from canonical layout: "
+        f"expected={sorted(expected)} actual={sorted(sources)}",
+    )
     require("state/codex/runtime" in sources, "Codex runtime bind source disappeared")
     require("WEB_PASSWORD_FILE" not in text, "TrueNAS YAML reintroduced WEB_PASSWORD_FILE")
-    require("/secrets/" not in text, "TrueNAS YAML unexpectedly contains a web-password secrets bind")
+    require(
+        "/secrets/" not in text,
+        "TrueNAS YAML unexpectedly contains a web-password secrets bind",
+    )
 
 
 def validate_initial_modes(root: Path) -> None:
-    """Apply restrictive initial modes without recursively changing later contents."""
+    """Apply restrictive initial modes only to paths created by bootstrap."""
     root.mkdir()
     result = run_script(BOOTSTRAP, root, include_antigravity=True)
     require(result.returncode == 0, result.stderr)
     for spec in CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS:
         actual = (root / spec.suffix).stat().st_mode & 0o777
-        require(actual == spec.mode, f"unexpected initial mode for {spec.suffix}: {oct(actual)} != {oct(spec.mode)}")
+        require(
+            actual == spec.mode,
+            f"unexpected initial mode for {spec.suffix}: {oct(actual)} != {oct(spec.mode)}",
+        )
 
 
 def main() -> int:
