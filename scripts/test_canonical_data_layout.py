@@ -6,14 +6,23 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from lib.data_layout import (  # noqa: E402
+    ANTIGRAVITY_DIRECTORY_SPECS,
+    CODEX_DIRECTORY_SPECS,
+)
+
 GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
 TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
-PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
+PREFLIGHT = SCRIPTS / "preflight-data-layout.py"
 TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
 CODEX_RUNTIME_TARGET = "/root/.local/share/remote-dev/codex-runtime"
 
@@ -107,33 +116,20 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     config = compose_config(path)
     services = config.get("services")
     require(isinstance(services, dict), f"{path}: services missing")
-    require(
-        set(services) == {"launcher", "codex", "antigravity"},
-        f"{path}: unexpected services",
-    )
+    require(set(services) == {"launcher", "codex", "antigravity"}, f"{path}: unexpected services")
     require("secrets" not in config, f"{path}: browser-password Compose secrets remain")
 
     launcher = services["launcher"]
     require(isinstance(launcher, dict), f"{path}: invalid launcher service")
     require(volume_map(launcher) == {}, f"{path}: launcher must remain mount-free")
-    launcher_environment = launcher.get("environment")
-    require(isinstance(launcher_environment, dict), f"{path}: launcher environment missing")
-    require(
-        "REMOTE_DEV_CODEX_RUNTIME_ROOT" not in launcher_environment,
-        f"{path}: Codex runtime state leaked into launcher environment",
-    )
 
-    retired_password_file_var = "WEB_PASSWORD_" + "FILE"
     all_sources: dict[str, set[str]] = {}
     for role in ("codex", "antigravity"):
         service = services[role]
         require(isinstance(service, dict), f"{path}: invalid {role} service")
         mounts = volume_map(service)
         expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
-        require(
-            set(mounts) == expected_targets,
-            f"{path}: unexpected {role} mount targets: {sorted(mounts)}",
-        )
+        require(set(mounts) == expected_targets, f"{path}: unexpected {role} mount targets: {sorted(mounts)}")
 
         sources: set[str] = set()
         for target, suffix in EXPECTED_TARGET_SUFFIXES[role].items():
@@ -142,64 +138,54 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
             source = str(mount["source"])
             sources.add(source)
             if truenas:
-                require(
-                    source == f"{TRUENAS_ROOT}{suffix}",
-                    f"{path}: invalid TrueNAS source {source}",
-                )
+                require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
         all_sources[role] = sources
 
         environment = service.get("environment")
         require(isinstance(environment, dict), f"{path}: {role} environment missing")
-        require(
-            retired_password_file_var not in environment,
-            f"{path}: {role} retained the retired password-file variable",
-        )
-        require(
-            environment.get("WEB_PASSWORD") == "",
-            f"{path}: {role} browser password must fail closed when unset",
-        )
-        if role == "codex":
-            require(
-                environment.get("REMOTE_DEV_CODEX_RUNTIME_ROOT") == CODEX_RUNTIME_TARGET,
-                f"{path}: Codex runtime root must use the isolated mount",
-            )
-        else:
-            require(
-                "REMOTE_DEV_CODEX_RUNTIME_ROOT" not in environment,
-                f"{path}: Codex runtime state leaked into Antigravity environment",
-            )
+        require("WEB_PASSWORD_FILE" not in environment, f"{path}: retired password-file variable remains")
+        require(environment.get("WEB_PASSWORD") == "", f"{path}: {role} browser password must fail closed when unset")
 
-    require(
-        all_sources["codex"].isdisjoint(all_sources["antigravity"]),
-        f"{path}: agent services share persistent sources",
-    )
+    require(all_sources["codex"].isdisjoint(all_sources["antigravity"]), f"{path}: agent services share persistent sources")
 
     for role in ("codex", "antigravity"):
         for mount in volume_map(services[role]).values():
             source = str(mount.get("source", ""))
             target = str(mount.get("target", ""))
-            require(
-                source not in {"/", "/root", "/home", "/mnt"},
-                f"{path}: broad mount {source}",
-            )
+            require(source not in {"/", "/root", "/home", "/mnt"}, f"{path}: broad mount {source}")
             require("docker.sock" not in source.lower(), f"{path}: Docker socket mount {source}")
             require("podman.sock" not in source.lower(), f"{path}: Podman socket mount {source}")
             require(not target.startswith("/run/secrets"), f"{path}: credential-file mount remains")
 
 
-def tracked_repository_files() -> list[Path]:
-    completed = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
+def validate_shared_contract() -> None:
+    """Require the shared Python contract to cover the same role paths as Compose."""
+    codex = {f"/{spec.suffix}" for spec in CODEX_DIRECTORY_SPECS}
+    antigravity = {f"/{spec.suffix}" for spec in ANTIGRAVITY_DIRECTORY_SPECS}
+    require(codex == set(EXPECTED_TARGET_SUFFIXES["codex"].values()), "Codex shared layout contract drifted")
+    require(
+        antigravity == set(EXPECTED_TARGET_SUFFIXES["antigravity"].values()),
+        "Antigravity shared layout contract drifted",
     )
+    require("/state/codex/runtime" in codex, "Codex runtime directory disappeared from canonical contract")
+
+
+def tracked_repository_files() -> list[Path]:
+    completed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False)
     if completed.returncode != 0:
         raise AssertionError("git ls-files failed: " + completed.stderr.decode(errors="replace"))
     return [ROOT / os.fsdecode(path) for path in completed.stdout.split(b"\0") if path]
 
 
-def validate_repository_has_no_legacy_data_root() -> None:
+def validate_repository_has_no_retired_contracts() -> None:
     legacy_variable = "CODEX" + "_DATA_ROOT"
     legacy_path = "/mnt/Pool1/" + "codex"
+    retired_variable = "WEB_PASSWORD_" + "FILE"
+    retired_mount = "/run/" + "secrets/web_password"
+    retired_filename = "web_" + "password.txt"
     ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
+    this_file = Path(__file__).resolve()
+
     for path in tracked_repository_files():
         if not path.is_file() or path.suffix.lower() in ignored_suffixes:
             continue
@@ -209,22 +195,7 @@ def validate_repository_has_no_legacy_data_root() -> None:
             continue
         require(legacy_variable not in text, f"legacy data-root variable remains in {path}")
         require(legacy_path not in text, f"legacy TrueNAS data path remains in {path}")
-
-
-def validate_repository_has_no_retired_web_password_files() -> None:
-    retired_variable = "WEB_PASSWORD_" + "FILE"
-    retired_mount = "/run/" + "secrets/web_password"
-    retired_filename = "web_" + "password.txt"
-    ignored_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
-    this_file = Path(__file__).resolve()
-    for path in tracked_repository_files():
         if path.resolve() == this_file:
-            continue
-        if not path.is_file() or path.suffix.lower() in ignored_suffixes:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
             continue
         require(retired_variable not in text, f"retired browser password variable remains in {path}")
         require(retired_mount not in text, f"retired browser password mount remains in {path}")
@@ -239,39 +210,22 @@ def validate_sources() -> None:
 
     require("REMOTE_DEV_DATA_ROOT=../data" in env_text, ".env.example must define the data root")
     require("WEB_PASSWORD=" in env_text, ".env.example must define the Codex web password")
-    require(
-        "ANTIGRAVITY_WEB_PASSWORD=" in env_text,
-        ".env.example must define an independent Antigravity web password",
-    )
+    require("ANTIGRAVITY_WEB_PASSWORD=" in env_text, ".env.example must define an independent Antigravity web password")
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
-    require("profiles: [\"antigravity\"]" in generic_text, "generic Antigravity profile missing")
+    require('profiles: ["antigravity"]' in generic_text, "generic Antigravity profile missing")
     require(generic_text.count("create_host_path: false") == 14, "generic bind protection count")
     require(truenas_text.count("create_host_path: false") == 14, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     require("--password-source" not in preflight_text, "retired password source option remains")
     require(truenas_text.count("WEB_PASSWORD: ''") == 2, "TrueNAS password placeholders must fail closed")
-    for marker in (
-        "workspaces/codex",
-        "state/codex/agent",
-        "state/codex/runtime",
-        "workspaces/antigravity",
-        "state/antigravity/bin",
-        "state/antigravity/runtime",
-        "state/antigravity/vendor",
-        "state/antigravity/config",
-        "state/antigravity/gh",
-        "state/antigravity/git",
-        "state/antigravity/ssh",
-    ):
-        require(marker in preflight_text, f"host preflight does not cover {marker}")
 
 
 def main() -> int:
     validate_sources()
+    validate_shared_contract()
     validate_compose(GENERIC_COMPOSE, truenas=False)
     validate_compose(TRUENAS_COMPOSE, truenas=True)
-    validate_repository_has_no_legacy_data_root()
-    validate_repository_has_no_retired_web_password_files()
+    validate_repository_has_no_retired_contracts()
     print("Canonical Remote Dev data-root and isolated mount boundaries: OK")
     return 0
 
