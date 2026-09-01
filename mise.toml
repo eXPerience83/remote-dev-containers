@@ -6,4 +6,4 @@ lockfile_platforms = ["linux-x64", "linux-arm64"]
 [tools]
 python = "3.14.7"
 node = "24.20.0"
-uv = "0.12.7"
+uv = "0.12.8"
