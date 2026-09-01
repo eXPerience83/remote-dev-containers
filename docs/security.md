@@ -6,7 +6,7 @@ Remote Dev is a single-user development appliance, not a multi-tenant service.
 
 Agent containers intentionally run as root. Root is constrained to that container and to the paths mounted into it. Anyone who reaches an agent terminal can operate everything accessible to that service.
 
-The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no mounts and no added capabilities after `cap_drop: [ALL]`. It therefore does not need a root startup phase merely to obtain its browser password.
+The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no bind, persistent or agent-state mounts, and no added capabilities after `cap_drop: [ALL]`. It therefore does not need a root startup phase merely to obtain its browser password.
 
 The launcher runtime still defensively drops to UID/GID `65532` if somebody invokes it manually as root outside the reviewed Compose profile, but the supported deployment no longer relies on that transition.
 
@@ -45,7 +45,7 @@ The launcher:
 - rejects state-changing HTTP methods;
 - exposes a secret-free health endpoint.
 
-The launcher remains mount-free with or without optional authentication. It never embeds an agent password or forwards an Authorization header, and each agent endpoint authenticates independently.
+The launcher remains free of bind, persistent and agent-state mounts with or without optional authentication. It never embeds an agent password or forwards an Authorization header, and each agent endpoint authenticates independently.
 
 ## Outer-container isolation
 
