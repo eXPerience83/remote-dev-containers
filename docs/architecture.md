@@ -82,7 +82,7 @@ The launcher:
 
 The base launcher deliberately uses `ALLOW_INSECURE_WEB=1` only for this navigation-only private-network profile. The optional launcher-auth override sets it to `0` and requires the launcher's independent password.
 
-The launcher remains mount-free when optional authentication is enabled. It never receives an agent password or agent state.
+The launcher remains free of bind, persistent and agent-state mounts when optional authentication is enabled. It never receives an agent password or agent state.
 
 Each agent endpoint uses its own `WEB_PASSWORD` value and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher. The external Compose variables that populate those per-service values remain distinct so changing one role does not change another. Reviewed agent profiles keep `ALLOW_INSECURE_WEB=0`; an insecure override is an explicit per-endpoint escape only for a separately protected private deployment.
 
@@ -183,7 +183,7 @@ The Codex service receives only these child paths:
 
 When the experimental Antigravity service is enabled, it receives a disjoint set of role-private children. In particular, `state/antigravity/config -> /root/.gemini/config` supplies project state below `projects/`, while `state/antigravity/vendor -> /root/.gemini/antigravity-cli` remains a separate vendor/settings boundary. Neither Codex nor the launcher receives either path, and `/root/.gemini` is never mounted wholesale.
 
-The base launcher remains mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The base launcher remains free of bind, persistent and agent-state mounts. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 Before deployment, `scripts/preflight-data-layout.py` validates that every canonical persistent directory exists and that none is a symlink. Browser-password validation belongs to endpoint startup, not host-layout preflight. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
 
