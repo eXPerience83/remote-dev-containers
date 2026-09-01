@@ -33,25 +33,61 @@ The current edge stack is the Codex reference implementation, with Antigravity a
 
 Use [`compose/truenas.yml`](compose/truenas.yml) as the **canonical TrueNAS Custom App YAML**. Do not maintain a separate copied stack definition from the README.
 
-Current TrueNAS UI documentation exposes Compose YAML installation from **Apps → Discover Apps → ⋮ → Install via YAML**. Give the Custom App a name, paste the contents of `compose/truenas.yml` into **Custom Config**, review the host-specific values below, and save the app.
+Current TrueNAS UI documentation exposes Compose YAML installation from **Apps → Discover Apps → ⋮ → Install via YAML**. Give the Custom App a name, paste the contents of `compose/truenas.yml` into **Custom Config**, review the host-specific values below, and save the app only after the host layout preflight passes.
 
-Before saving, review at least:
+### 1. Create only the root dataset in TrueNAS
+
+Create one administrator-owned dataset such as:
+
+```text
+Pool1/remote-dev
+```
+
+which normally appears on the host as:
+
+```text
+/mnt/Pool1/remote-dev
+```
+
+The root must already exist before Remote Dev bootstrap runs. `scripts/init-data-layout.py` deliberately refuses to create that root, a missing parent or a ZFS dataset implicitly.
+
+The required paths below that root may be **ordinary directories** or deliberately created **child datasets**. The normal simple setup uses one ZFS dataset (`Pool1/remote-dev`) and lets the bootstrap create ordinary `workspaces/` and `state/` descendants. If an administrator creates one of those descendants as a child dataset for a deliberate snapshot/quota/replication boundary, Remote Dev accepts the existing path and does not replace it, chmod it or modify its existing contents.
+
+Do not create symlinks anywhere in the required persistent-path ancestry.
+
+### 2. Use bootstrap and preflight from the same source revision
+
+The selected image, `compose/truenas.yml`, `scripts/init-data-layout.py`, `scripts/preflight-data-layout.py` and `scripts/lib/data_layout.py` must describe the same repository revision. Do not combine an image pinned to one revision with helper scripts copied later from a moving `main` branch.
+
+If you are working from a repository checkout, check out the same revision used by the image and run the scripts from that checkout. For exact candidate/digest validation, the detailed [TrueNAS validation runbook](docs/truenas-antigravity-validation.md) shows how to read the image's embedded source revision and obtain matching host-side files.
+
+For the reference YAML, which declares both Codex and experimental Antigravity, run from the TrueNAS shell after the root dataset exists:
+
+```bash
+sudo python3 scripts/init-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+
+python3 scripts/preflight-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+```
+
+The bootstrap creates only missing canonical descendants and applies initial modes only to paths it creates. It is idempotent and does not delete, migrate, rename, recursively chmod/chown or otherwise rewrite existing project/state contents. Running it again is safe and should report that no changes are required when the layout is already complete.
+
+The preflight then validates the same canonical path contract and rejects missing paths, non-directory objects and symlinks before deployment. Browser passwords are deployment configuration and are validated by each endpoint at startup; bootstrap/preflight create and require **no browser-password `secrets/` tree**.
+
+If you intentionally maintain a local Codex-only YAML without the Antigravity service, omit `--include-antigravity` from both commands. Do not omit the flag while deploying the reference YAML unchanged, because its Antigravity bind sources must already exist too.
+
+### 3. Review the host-specific YAML values
+
+Before saving the Custom App, review at least:
 
 - every example bind IP `192.168.1.10` and replace it with the LAN or Tailscale IP of the TrueNAS host;
 - every `/mnt/Pool1/remote-dev` bind source and replace the dataset root if your pool/path differs;
 - Codex `WEB_PASSWORD` and the independent Antigravity `WEB_PASSWORD` when retaining the experimental Antigravity terminal from the reference YAML;
 - optional timezone, Git identity and Codex approval-mode values if the defaults are not appropriate;
 - `REMOTE_DEV_PROJECT`: leave the literal YAML value empty for normal menu mode. For a fixed direct-agent project, edit the relevant TrueNAS YAML field itself. An ambient `.env` `REMOTE_DEV_PROJECT` does **not** override this literal field in `compose/truenas.yml`.
-
-The reference YAML declares the role-private Codex and experimental Antigravity workspace/state trees. Create the required host directories before deployment and run the repository preflight on the TrueNAS host. For the reference YAML as shipped:
-
-```bash
-python3 scripts/preflight-data-layout.py \
-  --root /mnt/Pool1/remote-dev \
-  --include-antigravity
-```
-
-The preflight validates persistent workspace/state paths only. Browser passwords are deployment configuration and are validated by each endpoint at startup. If you intentionally maintain a local Codex-only YAML without the Antigravity service, omit `--include-antigravity` and create only the Codex paths.
 
 A sufficiently privileged TrueNAS administrator can inspect saved App/container configuration. That administrator is inside Remote Dev's trust boundary; screenshots and YAML exports must therefore be sanitized before sharing.
 
@@ -213,7 +249,9 @@ REMOTE_DEV_DATA_ROOT/
 
 The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. Browser passwords are not part of `REMOTE_DEV_DATA_ROOT`. The base launcher and optional authenticated launcher both remain free of bind, persistent and agent-state mounts. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required persistent directory and rejects symlinks; browser passwords are validated by endpoint startup instead. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
+`scripts/lib/data_layout.py` is the host-side canonical list used by both `scripts/init-data-layout.py` and `scripts/preflight-data-layout.py`. On TrueNAS, only the configured root normally needs to be a ZFS dataset; required descendants may remain ordinary directories or may already be child datasets created deliberately by the administrator. The initializer never creates the root, never replaces existing descendants, and applies initial modes only to paths it creates. The preflight validates the resulting paths regardless of whether a given existing path is backed by the root dataset or a separate child dataset.
+
+`state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side bootstrap followed by preflight. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
 There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. If an earlier deployment still contains browser-password files from the retired contract, first configure and validate the replacement `WEB_PASSWORD` values, exercise stop/start or recreation and keep any rollback copy only for the rollback window. After the migration is confirmed, remove those obsolete files manually; Remote Dev never deletes them automatically. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
