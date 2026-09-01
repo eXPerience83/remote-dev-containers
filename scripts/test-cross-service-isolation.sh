@@ -608,17 +608,29 @@ assert_runtime_mount_options() {
 }
 
 assert_launcher_runtime_identity() {
-  docker_exec "$launcher_name" sh -c '
+  if ! docker_exec "$launcher_name" sh -c '
     set -eu
     pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
     test -n "$pid"
     status="/proc/$pid/status"
     awk '\''$1 == "Uid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
     awk '\''$1 == "Gid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
-    awk '\''$1 == "Groups:" { exit !(NF == 1) }'\'' "$status"
+    awk '\''$1 == "Groups:" {
+      for (index = 2; index <= NF; index++) {
+        if ($index != 65532) exit 1
+      }
+      exit 0
+    }'\'' "$status"
     grep -Eq '\''^CapEff:[[:space:]]+0+$'\'' "$status"
     grep -Eq '\''^NoNewPrivs:[[:space:]]+1$'\'' "$status"
-  ' >/dev/null 2>&1 || fail "launcher HTTP process did not retain its permanent unprivileged boundary"
+  ' >/dev/null 2>&1; then
+    docker_exec "$launcher_name" sh -c '
+      pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
+      test -n "$pid" || exit 0
+      grep -E "^(Uid|Gid|Groups|CapEff|NoNewPrivs):" "/proc/$pid/status"
+    ' >&2 || true
+    fail "launcher HTTP process did not retain its permanent unprivileged boundary"
+  fi
 }
 
 assert_agent_runtime_identity() {
