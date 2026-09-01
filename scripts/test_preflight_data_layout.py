@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -16,6 +17,7 @@ sys.path.insert(0, str(SCRIPTS))
 from lib.data_layout import (  # noqa: E402
     ANTIGRAVITY_DIRECTORY_SPECS,
     CODEX_DIRECTORY_SPECS,
+    initialize_layout,
 )
 
 PREFLIGHT = SCRIPTS / "preflight-data-layout.py"
@@ -224,10 +226,13 @@ def validate_compose_contract() -> None:
 
 
 def validate_initial_modes(root: Path) -> None:
-    """Apply intentional modes only to paths created by bootstrap."""
+    """Apply intentional modes exactly, independent of the caller's umask."""
     root.mkdir()
-    result = run_script(BOOTSTRAP, root, include_antigravity=True)
-    require(result.returncode == 0, result.stderr)
+    previous_umask = os.umask(0o077)
+    try:
+        initialize_layout(root, include_antigravity=True)
+    finally:
+        os.umask(previous_umask)
 
     for relative in ("workspaces", "state", "state/codex", "state/antigravity"):
         actual = (root / relative).stat().st_mode & 0o777

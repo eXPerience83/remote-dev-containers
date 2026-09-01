@@ -24,27 +24,9 @@ TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 PREFLIGHT = SCRIPTS / "preflight-data-layout.py"
 TRUENAS_ROOT = "/mnt/Pool1/remote-dev"
-CODEX_RUNTIME_TARGET = "/root/.local/share/remote-dev/codex-runtime"
-
-EXPECTED_TARGET_SUFFIXES = {
-    "codex": {
-        "/workspace": "/workspaces/codex",
-        "/root/.codex": "/state/codex/agent",
-        CODEX_RUNTIME_TARGET: "/state/codex/runtime",
-        "/root/.config/gh": "/state/codex/gh",
-        "/root/.config/git": "/state/codex/git",
-        "/root/.ssh": "/state/codex/ssh",
-    },
-    "antigravity": {
-        "/workspace": "/workspaces/antigravity",
-        "/root/.local/bin": "/state/antigravity/bin",
-        "/root/.local/share/remote-dev/antigravity": "/state/antigravity/runtime",
-        "/root/.gemini/antigravity-cli": "/state/antigravity/vendor",
-        "/root/.gemini/config": "/state/antigravity/config",
-        "/root/.config/gh": "/state/antigravity/gh",
-        "/root/.config/git": "/state/antigravity/git",
-        "/root/.ssh": "/state/antigravity/ssh",
-    },
+ROLE_SPECS = {
+    "codex": CODEX_DIRECTORY_SPECS,
+    "antigravity": ANTIGRAVITY_DIRECTORY_SPECS,
 }
 
 
@@ -124,21 +106,28 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
     require(volume_map(launcher) == {}, f"{path}: launcher must remain mount-free")
 
     all_sources: dict[str, set[str]] = {}
-    for role in ("codex", "antigravity"):
+    for role, specs in ROLE_SPECS.items():
         service = services[role]
         require(isinstance(service, dict), f"{path}: invalid {role} service")
         mounts = volume_map(service)
-        expected_targets = set(EXPECTED_TARGET_SUFFIXES[role])
-        require(set(mounts) == expected_targets, f"{path}: unexpected {role} mount targets: {sorted(mounts)}")
+        expected_targets = {spec.target for spec in specs}
+        require(
+            set(mounts) == expected_targets,
+            f"{path}: unexpected {role} mount targets: {sorted(mounts)}",
+        )
 
         sources: set[str] = set()
-        for target, suffix in EXPECTED_TARGET_SUFFIXES[role].items():
-            mount = mounts[target]
+        for spec in specs:
+            mount = mounts[spec.target]
+            suffix = f"/{spec.suffix}"
             validate_bind_mount(path, mount, suffix)
             source = str(mount["source"])
             sources.add(source)
             if truenas:
-                require(source == f"{TRUENAS_ROOT}{suffix}", f"{path}: invalid TrueNAS source {source}")
+                require(
+                    source == f"{TRUENAS_ROOT}/{spec.suffix}",
+                    f"{path}: invalid TrueNAS source {source}",
+                )
         all_sources[role] = sources
 
         environment = service.get("environment")
@@ -148,7 +137,7 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
 
     require(all_sources["codex"].isdisjoint(all_sources["antigravity"]), f"{path}: agent services share persistent sources")
 
-    for role in ("codex", "antigravity"):
+    for role in ROLE_SPECS:
         for mount in volume_map(services[role]).values():
             source = str(mount.get("source", ""))
             target = str(mount.get("target", ""))
@@ -159,15 +148,23 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
 
 
 def validate_shared_contract() -> None:
-    """Require the shared Python contract to cover the same role paths as Compose."""
-    codex = {f"/{spec.suffix}" for spec in CODEX_DIRECTORY_SPECS}
-    antigravity = {f"/{spec.suffix}" for spec in ANTIGRAVITY_DIRECTORY_SPECS}
-    require(codex == set(EXPECTED_TARGET_SUFFIXES["codex"].values()), "Codex shared layout contract drifted")
+    """Require a unique, disjoint role layout and retain the Codex runtime path."""
+    suffixes_by_role: dict[str, set[str]] = {}
+    for role, specs in ROLE_SPECS.items():
+        suffixes = {spec.suffix for spec in specs}
+        targets = {spec.target for spec in specs}
+        require(len(suffixes) == len(specs), f"duplicate {role} host-layout suffix")
+        require(len(targets) == len(specs), f"duplicate {role} mount target")
+        suffixes_by_role[role] = suffixes
+
     require(
-        antigravity == set(EXPECTED_TARGET_SUFFIXES["antigravity"].values()),
-        "Antigravity shared layout contract drifted",
+        suffixes_by_role["codex"].isdisjoint(suffixes_by_role["antigravity"]),
+        "role host-layout suffixes must remain disjoint",
     )
-    require("/state/codex/runtime" in codex, "Codex runtime directory disappeared from canonical contract")
+    require(
+        "state/codex/runtime" in suffixes_by_role["codex"],
+        "Codex runtime directory disappeared from canonical contract",
+    )
 
 
 def tracked_repository_files() -> list[Path]:

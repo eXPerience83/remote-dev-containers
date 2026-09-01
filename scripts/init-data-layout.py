@@ -40,19 +40,20 @@ def main(argv: list[str] | None = None) -> int:
     root = canonical_path(args.root)
     try:
         created = initialize_layout(root, include_antigravity=args.include_antigravity)
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         print("Remote Dev data-layout bootstrap failed:", file=sys.stderr)
         print(f"- {exc}", file=sys.stderr)
         print(
             "The configured root must already be the intended administrator-created "
-            "dataset/directory. No root, migration or secret files were created.",
+            "dataset/directory. The root, migrations and secret files are never "
+            "created implicitly.",
             file=sys.stderr,
         )
         return 1
 
     roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
     if created:
-        print(f"Remote Dev data-layout bootstrap: created {len(created)} directorie(s)")
+        print(f"Remote Dev data-layout bootstrap: created {len(created)} directories")
     else:
         print("Remote Dev data-layout bootstrap: no changes required")
     print(f"Remote Dev data-layout bootstrap: OK ({root}; {roles})")

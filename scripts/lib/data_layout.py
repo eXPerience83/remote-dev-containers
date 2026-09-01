@@ -10,30 +10,43 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class DirectorySpec:
-    """One required persistent host directory and its initial mode."""
+    """One required persistent host directory, mount target and initial mode."""
 
     suffix: str
+    target: str
     mode: int
 
 
 CODEX_DIRECTORY_SPECS = (
-    DirectorySpec("workspaces/codex", 0o755),
-    DirectorySpec("state/codex/agent", 0o700),
-    DirectorySpec("state/codex/runtime", 0o700),
-    DirectorySpec("state/codex/gh", 0o700),
-    DirectorySpec("state/codex/git", 0o700),
-    DirectorySpec("state/codex/ssh", 0o700),
+    DirectorySpec("workspaces/codex", "/workspace", 0o755),
+    DirectorySpec("state/codex/agent", "/root/.codex", 0o700),
+    DirectorySpec(
+        "state/codex/runtime",
+        "/root/.local/share/remote-dev/codex-runtime",
+        0o700,
+    ),
+    DirectorySpec("state/codex/gh", "/root/.config/gh", 0o700),
+    DirectorySpec("state/codex/git", "/root/.config/git", 0o700),
+    DirectorySpec("state/codex/ssh", "/root/.ssh", 0o700),
 )
 
 ANTIGRAVITY_DIRECTORY_SPECS = (
-    DirectorySpec("workspaces/antigravity", 0o755),
-    DirectorySpec("state/antigravity/bin", 0o700),
-    DirectorySpec("state/antigravity/runtime", 0o700),
-    DirectorySpec("state/antigravity/vendor", 0o700),
-    DirectorySpec("state/antigravity/config", 0o700),
-    DirectorySpec("state/antigravity/gh", 0o700),
-    DirectorySpec("state/antigravity/git", 0o700),
-    DirectorySpec("state/antigravity/ssh", 0o700),
+    DirectorySpec("workspaces/antigravity", "/workspace", 0o755),
+    DirectorySpec("state/antigravity/bin", "/root/.local/bin", 0o700),
+    DirectorySpec(
+        "state/antigravity/runtime",
+        "/root/.local/share/remote-dev/antigravity",
+        0o700,
+    ),
+    DirectorySpec(
+        "state/antigravity/vendor",
+        "/root/.gemini/antigravity-cli",
+        0o700,
+    ),
+    DirectorySpec("state/antigravity/config", "/root/.gemini/config", 0o700),
+    DirectorySpec("state/antigravity/gh", "/root/.config/gh", 0o700),
+    DirectorySpec("state/antigravity/git", "/root/.config/git", 0o700),
+    DirectorySpec("state/antigravity/ssh", "/root/.ssh", 0o700),
 )
 
 
@@ -191,6 +204,10 @@ def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
                 continue
             mode = spec.mode if index == len(parts) - 1 else 0o755
             current.mkdir(mode=mode)
+            # mkdir is subject to the caller's umask. Bootstrap owns only paths
+            # created in this branch, so normalize those new paths to the exact
+            # documented initial mode without touching any pre-existing path.
+            current.chmod(mode)
             created.append(current)
 
     validation_errors = validate_layout(
