@@ -158,7 +158,7 @@ Antes de crear un tag de versión estable:
 7. Seleccionar Codex navega al endpoint autenticado independiente sin exponer credenciales.
 8. El launcher base no tiene montajes de agentes ni socket Docker/Podman; la autenticación opcional del launcher usa su propia contraseña de configuración y no añade mounts bind ni persistentes.
 9. Ningún servicio utiliza host networking, modo privilegiado ni capacidades añadidas fuera del contrato revisado.
-10. El preflight canónico de rutas del host pasa antes del despliegue y no se crea ningún directorio inesperado.
+10. La raíz administrativa de datos prevista ya existe; el inicializador canónico y el preflight de la misma revisión que la imagen/YAML seleccionados pasan antes del despliegue, una segunda ejecución del inicializador es idempotente y no se genera ninguna raíz ni ruta `secrets/` inesperada para contraseñas web.
 11. Workspace, estado de agente, GitHub CLI, configuración Git y SSH persisten tras stop/start y recreación según lo documentado.
 12. El login por device code de Codex persiste tras recreación.
 13. Se han verificado login, clone, push y creación de PR con GitHub CLI.
