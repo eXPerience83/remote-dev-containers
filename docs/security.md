@@ -17,13 +17,15 @@ Browser endpoints use one password-delivery mechanism: `WEB_PASSWORD`.
 - Codex receives its own non-empty value.
 - Antigravity receives a distinct non-empty value when enabled.
 - Optional launcher Basic authentication uses a separate launcher value mapped to its own `WEB_PASSWORD`.
-- The normal launcher remains unauthenticated only when its deployment explicitly sets `ALLOW_INSECURE_WEB=1` on an already protected private endpoint.
+- Agent endpoints fail closed when `WEB_PASSWORD` is empty unless that specific endpoint deliberately sets `ALLOW_INSECURE_WEB=1`. The reviewed Codex and Antigravity Compose defaults keep that override at `0`.
+- The normal navigation-only launcher is the reviewed exception: base Compose profiles explicitly set `ALLOW_INSECURE_WEB=1` only for an already protected private endpoint. The optional launcher-auth override sets it back to `0` and requires its own password.
 - No browser password is persisted below `REMOTE_DEV_DATA_ROOT`, mounted from `/run/secrets`, or selected from multiple runtime sources.
-- Missing authentication fails closed unless the relevant endpoint deliberately enables its insecure override.
 
 A sufficiently privileged TrueNAS/Docker administrator can inspect deployment configuration and container metadata. Host root/admin is inside the trust boundary; moving an application password to another host file would not create an administrator-secrecy boundary for this product. The supported protection is private network exposure plus role/container/mount isolation.
 
 Passwords must be non-empty single-line values. Runtime validation rejects carriage returns/newlines rather than logging or transforming them. Never print password values, lengths, hashes or credential-derived material in diagnostics, tests or issue evidence.
+
+For agent roles, startup copies the configured password into a non-exported shell variable and removes `WEB_PASSWORD` from the child-process environment before running external startup helpers or executing ttyd. ttyd still receives the credential it requires for Basic authentication; this reduces incidental inheritance by unrelated child tools and terminal sessions, but it does not hide deployment configuration from the trusted host administrator.
 
 ## Launcher boundary
 
@@ -98,7 +100,7 @@ state/codex/git     -> /root/.config/git
 state/codex/ssh     -> /root/.ssh
 ```
 
-The experimental Antigravity service uses only its own corresponding private children. Its project configuration mount is narrowly scoped as `state/antigravity/config -> /root/.gemini/config` and remains separate from `state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the launcher receive neither source or target, and the stack never makes all of `/root/.gemini` writable.
+The experimental Antigravity service uses only its own corresponding private children. Its project configuration mount is narrowly scoped as `state/antigravity/config -> /root/.gemini/config` and remains separate from `state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the launcher receive neither source nor target, and the stack never makes all of `/root/.gemini` writable.
 
 The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
@@ -114,8 +116,10 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 
 - Do not expose ports 7680, 7681 or 7682 directly to the public Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard.
+- Keep `ALLOW_INSECURE_WEB=0` for agent services unless a specific endpoint is deliberately placed behind another reviewed private authentication boundary.
 - Keep every agent terminal independently authenticated with a strong, distinct password.
 - Use a distinct launcher password when the optional authentication overlay is enabled.
+- Protect a generic Compose `.env` containing browser passwords from other host users, for example with mode `0600` on POSIX systems, and keep it out of version control.
 - Keep credentials out of navigation URLs, diagnostics, logs and tests; remember that host administrators can inspect deployment configuration.
 - Keep agent data and credentials out of the launcher.
 - Do not mount Docker or Podman sockets.
