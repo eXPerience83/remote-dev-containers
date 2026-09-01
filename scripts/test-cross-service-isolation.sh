@@ -1397,7 +1397,7 @@ for index in "${!codex_categories[@]}"; do
 done
 for index in "${!antigravity_categories[@]}"; do
   category="${antigravity_categories[$index]}"
-  marker="${antigravity_markers[$index]}"
+  marker="$(marker_name "antigravity-$category")"
   antigravity_markers[index]="$marker"
   make_marker "$test_root/antigravity/$category" "$marker"
 done
