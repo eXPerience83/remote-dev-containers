@@ -181,7 +181,7 @@ Here, `danger-full-access` describes only the Codex inner sandbox. It does not g
 
 Autonomous mode means Codex may read, modify or delete anything mounted into its service and may use credentials available there without asking first. It does not add access beyond the existing container mounts, network and credentials. Guarded mode adds confirmation friction but does not provide filesystem isolation.
 
-The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts directly as UID/GID `65532`, remains mount-free and restores no capabilities after `cap_drop: [ALL]`. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
+The production launcher, Codex and Antigravity containers use a read-only root filesystem, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, role-private mounts and explicit PID limits (`64` for the launcher, `1024` for each agent). The launcher starts directly as UID/GID `65532`, remains free of bind, persistent and agent-state mounts, and restores no capabilities after `cap_drop: [ALL]`. Root agent terminals receive only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `SETGID` and `SETUID`; those capabilities preserve private bind-mount ownership/hardening and bounded UID/GID `65534` candidate execution, not host access.
 
 Each role has private transient `/tmp` and `/run` tmpfs mounts. `/tmp` remains a bounded `noexec,nosuid,nodev` filesystem; Codex `/run` deliberately permits execution for bounded Codex update and Context7 device-login staging. Normal Codex and Antigravity sessions instead use the hidden workspace-backed `/workspace/.remote-dev-tmp` tree for generic temporary files and uv, npm and pip caches. That untrusted development scratch persists with its role-private workspace, is excluded from project discovery and may be removed while the service is stopped for clean recreation. The launcher does not receive it. Browser passwords are supplied through service configuration and add no persistent credential-file mounts.
 
@@ -211,7 +211,7 @@ REMOTE_DEV_DATA_ROOT/
         └── ssh/
 ```
 
-The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. Browser passwords are not part of `REMOTE_DEV_DATA_ROOT`. The base launcher and optional authenticated launcher both remain mount-free. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
+The Codex service mounts only `workspaces/codex` at `/workspace`; the project manager operates only on validated direct children below that mount. `state/codex/runtime` contains the complete Remote Dev-managed optional runtime state, including the `current` active pointer, retained release directories, package files and private integrity manifests such as `remote-dev-runtime.json`; `state/codex/agent` remains `CODEX_HOME` for credentials, configuration and sessions. Browser passwords are not part of `REMOTE_DEV_DATA_ROOT`. The base launcher and optional authenticated launcher both remain free of bind, persistent and agent-state mounts. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
 `state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required persistent directory and rejects symlinks; browser passwords are validated by endpoint startup instead. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
@@ -299,7 +299,7 @@ docker compose \
   up -d
 ```
 
-The override maps `LAUNCHER_PASSWORD` to the launcher's own `WEB_PASSWORD`. It remains mount-free and does not replace, derive or reuse the Codex terminal password.
+The override maps `LAUNCHER_PASSWORD` to the launcher's own `WEB_PASSWORD`. It adds no bind or persistent mounts and does not replace, derive or reuse the Codex terminal password.
 
 To enable the generic Antigravity profile, set a separate `ANTIGRAVITY_WEB_PASSWORD` and enable the role according to the experimental Antigravity instructions. Never reuse the Codex password silently between the two endpoints.
 
