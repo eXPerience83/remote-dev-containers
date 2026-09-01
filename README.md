@@ -215,7 +215,7 @@ The Codex service mounts only `workspaces/codex` at `/workspace`; the project ma
 
 `state/codex/runtime` is a root-owned trust boundary: it must be a real `root:root` directory with mode `0700`. The runtime manager rejects an unexpected owner rather than admitting optional runtime state from an arbitrary host identity. Before deployment, run the host-side preflight. It validates every required persistent directory and rejects symlinks; browser passwords are validated by endpoint startup instead. Persistent bind mounts also request `create_host_path: false` as defense-in-depth, but the project does not rely on every Compose implementation enforcing that option.
 
-There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
+There is no automatic migration or compatibility alias for the earlier experimental data layout. Move or recreate experimental state manually. If an earlier deployment still contains browser-password files from the retired contract, first configure and validate the replacement `WEB_PASSWORD` values, exercise stop/start or recreation and keep any rollback copy only for the rollback window. After the migration is confirmed, remove those obsolete files manually; Remote Dev never deletes them automatically. Optional SMB/ACL workspace sharing is deferred to issue #71 and must never expose `state`; if implemented later, it must target explicitly selected concrete project directories rather than the whole collection root by default.
 
 ## Licenses and optional vendor software
 
@@ -250,6 +250,7 @@ Docker reuses the same immutable image layers, and the launcher has no agent-sta
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 mkdir -p \
   data/workspaces/codex/example-project \
   data/state/codex/{agent,gh,git,ssh}
