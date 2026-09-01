@@ -199,7 +199,7 @@ No existe migración automática ni alias para la estructura experimental anteri
 
 ## Licencias y software opcional
 
-El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node 24, uv y sus dependencias conservan sus licencias y avisos originales.
+El código propio de Remote Dev utiliza Apache-2.0. Ubuntu, Codex CLI, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv y sus dependencias conservan sus licencias y avisos originales.
 
 ```bash
 remote-dev-notices
