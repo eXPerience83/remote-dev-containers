@@ -616,8 +616,8 @@ assert_launcher_runtime_identity() {
     awk '\''$1 == "Uid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
     awk '\''$1 == "Gid:" { exit !($2 == 65532 && $3 == 65532 && $4 == 65532 && $5 == 65532) }'\'' "$status"
     awk '\''$1 == "Groups:" {
-      for (index = 2; index <= NF; index++) {
-        if ($index != 65532) exit 1
+      for (field = 2; field <= NF; field++) {
+        if ($field != 65532) exit 1
       }
       exit 0
     }'\'' "$status"
@@ -1397,7 +1397,7 @@ for index in "${!codex_categories[@]}"; do
 done
 for index in "${!antigravity_categories[@]}"; do
   category="${antigravity_categories[$index]}"
-  marker="$(marker_name "antigravity-$category")"
+  marker="${antigravity_markers[$index]}"
   antigravity_markers[index]="$marker"
   make_marker "$test_root/antigravity/$category" "$marker"
 done
