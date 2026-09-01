@@ -87,7 +87,7 @@ REMOTE_DEV_ROLE=launcher
 # o: shell
 ```
 
-`antigravity` está implementado como **rol opcional experimental** y continúa detrás de una habilitación explícita. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
+`antigravity` está implementado como **rol opcional experimental**. Su Start/Resume por proyecto, continuidad de conversación, actualización/rollback y validación amplia del ciclo de vida en TrueNAS están completados; el rol sigue siendo experimental mientras se reconcilian los gates restantes de autenticación web, política del proveedor y documentación. Su runtime del proveedor solo se instala mediante una acción explícita del usuario y el arranque normal nunca lo descarga implícitamente. `claude` sigue reservado y sin implementar.
 
 El launcher solo admite el modo `menu`. Los servicios de agente mantienen `REMOTE_DEV_START_MODE=menu|agent|shell` y la compatibilidad existente con `START_MODE=menu|codex|shell`.
 
@@ -195,7 +195,7 @@ El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyect
 
 `state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios y rechaza enlaces simbólicos; las contraseñas web no forman parte del preflight ni del layout persistente. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
-No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
+No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. Si una instalación anterior conservaba ficheros de contraseña web, configura y valida primero los nuevos `WEB_PASSWORD`, comprueba stop/start o recreación y conserva cualquier copia necesaria únicamente durante la ventana de rollback. Cuando la migración esté confirmada, elimina manualmente esos ficheros obsoletos; Remote Dev no los borra automáticamente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 
 ## Licencias y software opcional
 
@@ -213,6 +213,7 @@ Antigravity, Claude Code y productos similares no quedan cubiertos por la licenc
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 mkdir -p \
   data/workspaces/codex/proyecto-ejemplo \
   data/state/codex/{agent,gh,git,ssh}
@@ -254,14 +255,18 @@ docker compose -f compose/docker-compose.yml up -d
 4. Desde **Projects...** selecciona o crea el proyecto con el que quieres trabajar; el borrado exige escribir su nombre exacto.
 5. Inicia o reanuda Codex dentro de ese proyecto con el modo configurado, selecciona autonomous o guarded para el próximo inicio, actualiza o elimina explícitamente el runtime oficial opcional manteniendo el fallback incluido, inicia sesión en Codex/GitHub o ejecuta diagnósticos.
 
-Para proteger también el launcher en un despliegue avanzado del Compose genérico, define una contraseña distinta y añade el override revisado:
+Para proteger también el launcher en un despliegue avanzado del Compose genérico, define una contraseña distinta en el mismo `.env` protegido y añade el override revisado:
+
+```dotenv
+LAUNCHER_USERNAME=remote-dev
+LAUNCHER_PASSWORD=contraseña-distinta-del-launcher
+```
 
 ```bash
-LAUNCHER_PASSWORD='contraseña-distinta-del-launcher' \
-  docker compose \
-    -f compose/docker-compose.yml \
-    -f compose/launcher-auth.yml \
-    up -d
+docker compose \
+  -f compose/docker-compose.yml \
+  -f compose/launcher-auth.yml \
+  up -d
 ```
 
 El override mapea ese valor al `WEB_PASSWORD` del launcher; no crea ni monta un secreto persistente y no sustituye ni reutiliza la contraseña del terminal Codex.
