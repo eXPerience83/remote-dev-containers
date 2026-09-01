@@ -49,12 +49,19 @@ def directory_specs(*, include_antigravity: bool) -> tuple[DirectorySpec, ...]:
     return CODEX_DIRECTORY_SPECS
 
 
-def required_directories(root: Path, *, include_antigravity: bool) -> tuple[Path, ...]:
+def required_directories(
+    root: Path, *, include_antigravity: bool
+) -> tuple[Path, ...]:
     """Return every required role-private host directory below root."""
-    return tuple(root / spec.suffix for spec in directory_specs(include_antigravity=include_antigravity))
+    return tuple(
+        root / spec.suffix
+        for spec in directory_specs(include_antigravity=include_antigravity)
+    )
 
 
-def validate_no_symlink_components(root: Path, paths: tuple[Path, ...], errors: list[str]) -> bool:
+def validate_no_symlink_components(
+    root: Path, paths: tuple[Path, ...], errors: list[str]
+) -> bool:
     """Reject symlinks at the root or at any existing component below it."""
     checked: set[Path] = set()
     found_symlink = False
@@ -73,7 +80,9 @@ def validate_no_symlink_components(root: Path, paths: tuple[Path, ...], errors: 
                 continue
             checked.add(current)
             if current.is_symlink():
-                errors.append(f"persistent path component must not be a symlink: {current}")
+                errors.append(
+                    f"persistent path component must not be a symlink: {current}"
+                )
                 found_symlink = True
                 break
     return found_symlink
@@ -90,7 +99,9 @@ def validate_directory(path: Path, errors: list[str]) -> None:
 def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
     """Return every problem found for the enabled service layouts."""
     errors: list[str] = []
-    directories = required_directories(root, include_antigravity=include_antigravity)
+    directories = required_directories(
+        root, include_antigravity=include_antigravity
+    )
     if validate_no_symlink_components(root, directories, errors):
         return errors
 
@@ -101,7 +112,7 @@ def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
 
 
 def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
-    """Create only missing canonical directories below an existing safe root."""
+    """Create missing canonical descendants without changing existing paths."""
     root = canonical_path(root)
     errors: list[str] = []
     if root.is_symlink():
@@ -124,16 +135,29 @@ def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:
         for index, part in enumerate(parts):
             current /= part
             if current.is_symlink():
-                raise ValueError(f"persistent path component must not be a symlink: {current}")
+                raise ValueError(
+                    f"persistent path component must not be a symlink: {current}"
+                )
             if current.exists():
                 if not current.is_dir():
-                    raise ValueError(f"persistent path component is not a directory: {current}")
+                    raise ValueError(
+                        f"persistent path component is not a directory: {current}"
+                    )
+                # Existing paths are operator-owned policy. They may be ordinary
+                # directories or deliberate child-dataset mountpoints, so never
+                # chmod/chown/replace them here.
                 continue
-            mode = spec.mode if index == len(parts) - 1 else (0o755 if parts[0] == "workspaces" else 0o700)
+            mode = (
+                spec.mode
+                if index == len(parts) - 1
+                else (0o755 if parts[0] == "workspaces" else 0o700)
+            )
             current.mkdir(mode=mode)
             created.append(current)
 
-    validation_errors = validate_layout(root, include_antigravity=include_antigravity)
+    validation_errors = validate_layout(
+        root, include_antigravity=include_antigravity
+    )
     if validation_errors:
         raise ValueError("; ".join(validation_errors))
     return created
