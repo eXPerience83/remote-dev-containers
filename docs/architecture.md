@@ -30,6 +30,7 @@ Related work:
 - issue #25 tracks the role-neutral runtime and launcher epic;
 - issue #36 records the TrueNAS outer-isolation and no-Bubblewrap decision;
 - issue #70 owns the canonical data layout;
+- issue #167 owns deterministic bootstrap/preflight for the current TrueNAS YAML host layout;
 - issue #126 defines `/workspace` as a role-private project collection root and the common project-scoped launch contract;
 - issue #69 owns browser-terminal authentication;
 - issue #31 tracks the complete delivery sequence.
@@ -185,7 +186,11 @@ When the experimental Antigravity service is enabled, it receives a disjoint set
 
 The base launcher remains free of bind, persistent and agent-state mounts. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
 
-Before deployment, `scripts/preflight-data-layout.py` validates that every canonical persistent directory exists and that none is a symlink. Browser-password validation belongs to endpoint startup, not host-layout preflight. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
+`scripts/lib/data_layout.py` is the canonical host-side directory contract for bootstrap and validation. `scripts/init-data-layout.py` and `scripts/preflight-data-layout.py` both consume it instead of carrying independent path lists. The initializer requires the configured root to exist already, rejects symlink roots/intermediate components, creates only missing canonical descendants and applies initial modes only to paths it creates. Existing required paths are left untouched, including any descendant deliberately created by a TrueNAS administrator as a child-dataset mountpoint.
+
+For the current TrueNAS YAML, the normal model is one administrator-created root dataset such as `/mnt/Pool1/remote-dev` plus ordinary directories below it. Additional child datasets are optional operator policy for boundaries such as snapshots, quotas or replication; they are not required by Remote Dev. Bootstrap never creates the root dataset, and neither bootstrap nor preflight creates browser-password files or a password `secrets/` tree.
+
+Before deployment, run the initializer and then `scripts/preflight-data-layout.py` from the same source revision as the selected image/YAML. Preflight validates that every canonical persistent directory exists and that none is a symlink. Browser-password validation belongs to endpoint startup, not host-layout preflight. Compose bind mounts additionally request `create_host_path: false` as defense-in-depth, but the design does not rely on every Compose implementation enforcing that option.
 
 There is no data-layout compatibility alias, automatic migration, copying, symlink or deletion. Existing experimental directories must be recreated or moved manually before deploying the new stack.
 
@@ -224,14 +229,17 @@ Automated tests cover:
 - launcher absence of agent mounts and container-engine sockets;
 - one image reference across enabled services;
 - exact role-scoped mount targets and canonical source suffixes;
-- host-side rejection of missing or symlinked canonical paths;
+- deterministic host bootstrap from an existing empty root for Codex-only and Codex+Antigravity layouts;
+- bootstrap idempotency, existing-content/mode preservation and refusal of missing roots or symlink roots/intermediates;
+- exact alignment between the shared host-layout contract and TrueNAS bind sources, including `state/codex/runtime`;
+- host-side preflight rejection of missing or symlinked canonical paths;
 - independent configuration-backed browser authentication, agent fail-closed missing-password behavior unless an endpoint explicitly opts into `ALLOW_INSECURE_WEB=1`, and the navigation-only launcher's reviewed private-network exception;
-- absence of the retired password-file browser-auth contract;
+- absence of the retired password-file browser-auth contract and browser-password secret tree;
 - absence of legacy data-root names and paths;
 - role-aware health checks;
 - existing Codex start, resume, policy, diagnostics, ttyd and tmux behavior.
 
-Manual TrueNAS validation is performed after the related implementation slices are ready and includes the host preflight, persistence, sessions, credentials, project selection/create/delete safety, isolation and recreation. Windows/SMB testing remains separate under #71.
+Manual TrueNAS validation is performed after the related implementation slices are ready and includes same-revision bootstrap/preflight from an administrator-created root dataset, a second idempotent bootstrap run, persistence, sessions, credentials, project selection/create/delete safety, isolation and recreation. Windows/SMB testing remains separate under #71.
 
 ## Non-goals
 
