@@ -104,7 +104,11 @@ The experimental Antigravity service uses only its own corresponding private chi
 
 The base launcher remains free of agent mounts. Future agent services must receive their own separate child paths and credentials.
 
-The authoritative host check is `scripts/preflight-data-layout.py`. It rejects missing paths and symlinks before deployment. It intentionally validates persistent storage layout only; browser-password validity is enforced by the endpoint runtime. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
+`scripts/lib/data_layout.py` is the canonical host-side directory contract. Both `scripts/init-data-layout.py` and `scripts/preflight-data-layout.py` consume that same contract so bootstrap and validation cannot drift through separately maintained path lists. The initializer requires the configured administrative root to exist already, refuses symlink roots or intermediate components, creates only missing canonical descendants and applies initial modes only to paths it creates. It does not replace, chmod/chown or rewrite existing required paths; on TrueNAS those existing paths may be ordinary directories or deliberately created child-dataset mountpoints.
+
+The normal TrueNAS model therefore requires only the administrator-created root such as `/mnt/Pool1/remote-dev` to be a ZFS dataset. Descendants are ordinary directories unless the administrator deliberately chooses additional dataset boundaries. Bootstrap never creates the root dataset, and neither bootstrap nor preflight creates or requires browser-password secret files/directories.
+
+After bootstrap, `scripts/preflight-data-layout.py` is the authoritative host check. It rejects missing paths and symlinks before deployment and intentionally validates persistent storage layout only; browser-password validity is enforced by the endpoint runtime. Compose also requests `create_host_path: false` for every persistent bind, but this is defense-in-depth because some Compose implementations may ignore that option at runtime.
 
 The optional Codex runtime stays separate from `CODEX_HOME` and is mounted only into the Codex service. After an explicit confirmed action, the updater allows only reviewed HTTPS URL origins, including redirects, and verifies TLS against the system CA bundle; a configured HTTP(S) proxy may act as an intermediary, and `CODEX_CA_CERTIFICATE` may add an operator-supplied CA to that verification. It verifies the release digest, package identity and bounded compatibility probes before publication, and records file identities for later local verification. Missing, damaged or modified runtime state is rejected in favor of the immutable bundled Codex fallback; launcher and Antigravity do not receive this runtime mount.
 
@@ -128,7 +132,7 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 - Treat Codex authentication, GitHub credentials and SSH keys as secrets.
 - Keep `no-new-privileges:true` enabled on every service.
 - Keep writable workspaces and credentials private per agent service.
-- Run the canonical host-path preflight before every first deployment or path change.
+- Create the intended administrative root explicitly, then run the matching canonical host-layout initializer and preflight before every first deployment or path change; never rely on Compose to create missing bind sources.
 
 ## Codex approval modes
 
