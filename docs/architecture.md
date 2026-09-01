@@ -80,9 +80,11 @@ The launcher:
 - exposes a secret-free health endpoint;
 - receives no agent workspace, state, OAuth token, GitHub configuration, SSH key or Docker/Podman socket.
 
+The base launcher deliberately uses `ALLOW_INSECURE_WEB=1` only for this navigation-only private-network profile. The optional launcher-auth override sets it to `0` and requires the launcher's independent password.
+
 The launcher remains mount-free when optional authentication is enabled. It never receives an agent password or agent state.
 
-Each agent endpoint uses its own `WEB_PASSWORD` value and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher. The external Compose variables that populate those per-service values remain distinct so changing one role does not change another.
+Each agent endpoint uses its own `WEB_PASSWORD` value and authenticates independently. Credentials are never shared, embedded into the navigation URL or forwarded by the launcher. The external Compose variables that populate those per-service values remain distinct so changing one role does not change another. Reviewed agent profiles keep `ALLOW_INSECURE_WEB=0`; an insecure override is an explicit per-endpoint escape only for a separately protected private deployment.
 
 ## Shared immutable image
 
@@ -223,7 +225,7 @@ Automated tests cover:
 - one image reference across enabled services;
 - exact role-scoped mount targets and canonical source suffixes;
 - host-side rejection of missing or symlinked canonical paths;
-- independent configuration-backed browser authentication and fail-closed missing-password behavior;
+- independent configuration-backed browser authentication, agent fail-closed missing-password behavior unless an endpoint explicitly opts into `ALLOW_INSECURE_WEB=1`, and the navigation-only launcher's reviewed private-network exception;
 - absence of the retired password-file browser-auth contract;
 - absence of legacy data-root names and paths;
 - role-aware health checks;
