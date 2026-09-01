@@ -109,8 +109,10 @@ services:
     ports:
       - "192.168.1.10:7681:7681"
 
-    # Before saving this YAML, run scripts/preflight-data-layout.py on the
-    # TrueNAS host with --root /mnt/Pool1/remote-dev --include-antigravity.
+    # Before saving this YAML, create the intended root dataset explicitly,
+    # then run scripts/init-data-layout.py and scripts/preflight-data-layout.py
+    # from the same source revision with --root /mnt/Pool1/remote-dev
+    # --include-antigravity. Existing child-dataset paths are left untouched.
     # create_host_path is only defense-in-depth because not every Compose
     # release enforces it reliably.
     volumes:
