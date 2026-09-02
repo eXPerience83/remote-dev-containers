@@ -111,8 +111,12 @@ def read_effective_acl(path: Path) -> tuple[dict[str, object] | None, str | None
 
 
 def validate_private_acl(payload: dict[str, object]) -> list[str]:
-    """Return problems with one role-private leaf's effective ACL."""
+    """Return problems with one role-private leaf's ownership and effective ACL."""
     errors: list[str] = []
+    uid = payload.get("uid")
+    if uid != 0:
+        errors.append(f"owner uid is {uid!r}, expected root (0)")
+
     acltype = payload.get("acltype")
     if acltype != "POSIX1E":
         errors.append(f"effective ACL type is {acltype!r}, expected 'POSIX1E'")
@@ -237,7 +241,7 @@ def audit(root: Path, *, include_antigravity: bool) -> tuple[list[str], list[Fin
             for error in path_errors:
                 findings.append(Finding("WARNING", f"{path}: {error}"))
         else:
-            info.append(f"Private state OK: {path} (0700, POSIX1E trivial)")
+            info.append(f"Private state OK: {path} (root-owned, 0700, POSIX1E trivial)")
 
     return info, findings
 
