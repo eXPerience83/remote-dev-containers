@@ -87,7 +87,7 @@ El modelo validado es **copia lateral + cutover verificado + rollback conservado
 
 ### 1. Parar Remote Dev e inventariar el origen
 
-Para la copia/cutover final, para la Custom App de TrueNAS. Inventaría tipos de objeto inesperados y hardlinks. Un árbol Remote Dev normal ya detenido debería contener directorios, archivos normales y symlinks. Si aparecen device nodes, FIFOs o sockets, revísalos antes de continuar.
+Para la copia/cutover final, detén la Custom App de TrueNAS. Haz inventario de tipos de objeto inesperados y hardlinks. Un árbol Remote Dev normal ya detenido debería contener directorios, archivos normales y symlinks. Si aparecen device nodes, FIFOs o sockets, revísalos antes de continuar.
 
 ### 2. Crear protección de rollback
 
