@@ -37,7 +37,7 @@ The authoritative private-leaf list is not duplicated here; it comes from `scrip
 
 TrueNAS **Apps** datasets use an NFSv4 ACL model with `aclmode=passthrough`. Real-system validation showed inherited ACEs remained effective on Remote Dev private leaves even when `ls -l` displayed `0700`.
 
-That means `0700` can be true as a POSIX mode display while additional host identities still have effective access through NFSv4 ACEs. During the #167/#186 validation, the inherited ACL included the TrueNAS Apps identity (UID 568) and built-in groups observed on that system. Those IDs are evidence, not an allow/deny list: other systems or future TrueNAS versions can contain different principals.
+That means `0700` can be true as a POSIX mode display while additional host identities still have effective access through NFSv4 ACEs. TrueNAS 26 documents an additional `MODIFY` entry for the Apps group (GID 568), while inherited ACLs can also include built-in administrator/user or directory-service principals depending on the parent and system. The exact principals observed on one host are evidence, not a universal allow/deny list.
 
 Remote Dev therefore does **not** recommend the Apps preset for its Host Path root merely because Remote Dev itself is deployed as an App.
 
