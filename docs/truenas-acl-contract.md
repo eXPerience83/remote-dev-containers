@@ -24,9 +24,9 @@ aclmode=discard
 
 Remote Dev's canonical layout still uses ordinary directories below that root unless an administrator deliberately creates a required descendant as a child dataset for snapshots, quotas or replication.
 
-Structural and workspace roots use their documented `0755` initial modes. Every canonical private state leaf uses `0700` and, on the reference TrueNAS layout, its effective ACL must be a **trivial POSIX1E ACL** containing only:
+Structural and workspace roots use their documented `0755` initial modes. Every canonical private state leaf is root-owned (UID `0`), uses `0700`, and, on the reference TrueNAS layout, its effective ACL must be a **trivial POSIX1E ACL** containing only:
 
-- owner: `rwx`;
+- owner/root: `rwx`;
 - group: no access;
 - other: no access;
 - no named-user, named-group, mask/default or inherited entries.
@@ -55,6 +55,7 @@ The audit is read-only. It checks:
 
 - that the configured root is an exact ZFS dataset mountpoint;
 - root `acltype` and `aclmode`;
+- root ownership (UID `0`) of every canonical private leaf;
 - canonical private-leaf mode `0700`;
 - `filesystem.getacl` type `POSIX1E`;
 - `trivial=true`;
@@ -66,18 +67,18 @@ A successful reference deployment ends with:
 Remote Dev TrueNAS ACL audit: OK (Generic/POSIX private-state contract)
 ```
 
-NFSv4, non-trivial POSIX ACLs, named/default entries or broader mode bits produce warnings and a non-zero exit status. The tool never changes permissions or ACLs.
+NFSv4, a non-root private owner, non-trivial POSIX ACLs, named/default entries or broader mode bits produce warnings and a non-zero exit status. The tool never changes ownership, permissions or ACLs.
 
 ### What `Run diagnostics` can and cannot see
 
 `remote-dev-doctor` runs **inside** an isolated agent container. It now checks the POSIX mode of each private bind mountpoint and warns if a mounted private state path is broader than `0700`.
 
-It intentionally does not claim to determine the TrueNAS host dataset ACL type. The container does not receive the TrueNAS middleware/API, the host root or a container-engine socket just to inspect ACL policy. An inherited host NFSv4 ACE can therefore require the host-side audit even when the container sees `0700`.
+It intentionally does not claim to determine the TrueNAS host dataset ACL type or authoritative host ownership. The container does not receive the TrueNAS middleware/API, the host root or a container-engine socket just to inspect ACL policy. An inherited host NFSv4 ACE can therefore require the host-side audit even when the container sees `0700`.
 
 This split preserves the isolation model:
 
 - container diagnostics: mounted-path mode regression check;
-- TrueNAS host audit: authoritative ZFS/effective-ACL check.
+- TrueNAS host audit: authoritative ZFS/ownership/effective-ACL check.
 
 ## Existing NFSv4 installations
 
@@ -131,6 +132,8 @@ Apply the documented `0755`/`0700` modes only to the canonical directories from 
 
 Then run the same-revision bootstrap, preflight and ACL audit against the temporary root. Bootstrap should report `no changes required`, preflight should return `OK`, and the ACL audit should return the Generic/POSIX success result.
 
+The validated real migration already had root-owned private leaves, so it required no ownership rewrite. If the audit instead reports a private leaf owned by a non-root UID, stop and review that path before cutover. Do not introduce a recursive `chown` as an automatic remediation.
+
 ### 6. Verify no active users of either dataset
 
 With the App still stopped, query TrueNAS for dataset processes and attachments on both source and destination. Do not rename while a process or attachment is using either dataset.
@@ -163,7 +166,7 @@ If rollback is required, stop Remote Dev before reversing the dataset names. Do 
 ## Deliberate non-goals
 
 - No automatic ACL migration from bootstrap or container startup.
-- No recursive permission normalization of project contents.
+- No recursive permission or ownership normalization of project contents.
 - No claim that container-local mode inspection can prove host NFSv4 privacy.
 - No SMB exposure of `state`.
 - SMB workspace ACL/sharing design remains separate under #71.
