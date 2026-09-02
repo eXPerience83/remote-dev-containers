@@ -37,7 +37,7 @@ La lista autoritativa de hojas privadas no se duplica aquí: procede de `scripts
 
 Los datasets **Apps** de TrueNAS usan ACL NFSv4 con `aclmode=passthrough`. La validación en sistema real mostró que seguían existiendo ACE heredadas efectivas en las hojas privadas de Remote Dev aunque `ls -l` mostrase `0700`.
 
-Por tanto, `0700` puede ser correcto como representación del modo POSIX y, aun así, otras identidades del host pueden conservar acceso efectivo mediante ACE NFSv4. Durante la validación de #167/#186 aparecieron la identidad Apps de TrueNAS (UID 568) y grupos built-in observados en ese sistema. Esos IDs son evidencia, no una lista fija: otros sistemas o futuras versiones de TrueNAS pueden tener principales distintos.
+Por tanto, `0700` puede ser correcto como representación del modo POSIX y, aun así, otras identidades del host pueden conservar acceso efectivo mediante ACE NFSv4. TrueNAS 26 documenta una entrada adicional `MODIFY` para el grupo Apps (GID 568), y las ACL heredadas también pueden incluir principales built-in de administradores/usuarios o de servicios de directorio según el padre y el sistema. Los principales exactos observados en un host son evidencia, no una lista universal de permitidos o bloqueados.
 
 Por eso Remote Dev **no** recomienda el preset Apps para su raíz Host Path simplemente por ejecutarse como una App.
 
