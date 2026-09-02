@@ -20,17 +20,46 @@ check_cmd() {
   fi
 }
 
-is_exact_mountpoint() {
-  local candidate="$1"
-  awk -v candidate="$candidate" '$5 == candidate { found = 1 } END { exit found ? 0 : 1 }' /proc/self/mountinfo
+# Encode a literal path using the escape rules used in /proc/*/mountinfo fields.
+mountinfo_escape_path() {
+  local value="$1"
+  value="${value//\\/\\134}"
+  value="${value//$'\t'/\\011}"
+  value="${value//$'\n'/\\012}"
+  value="${value// /\\040}"
+  printf '%s' "$value"
 }
 
+# Return 0 for an exact mountpoint, 1 when absent, and 2 on inspection failure.
+is_exact_mountpoint() {
+  local candidate="$1"
+  local encoded_candidate=""
+
+  [[ -r /proc/self/mountinfo ]] || return 2
+  encoded_candidate="$(mountinfo_escape_path "$candidate")" || return 2
+  awk -v candidate="$encoded_candidate" \
+    '$5 == candidate { found = 1 } END { exit found ? 0 : 1 }' \
+    /proc/self/mountinfo
+}
+
+# Warn when a private bind mount is broader than the canonical 0700 mode.
 check_private_mount_mode() {
   local path="$1"
   local mode
+  local mount_status=0
 
   [[ -d "$path" ]] || return 0
-  is_exact_mountpoint "$path" || return 0
+  is_exact_mountpoint "$path"
+  mount_status=$?
+  case "$mount_status" in
+    0) ;;
+    1) return 0 ;;
+    *)
+      echo "WARNING: unable to inspect mount identity for private path: $path"
+      status=1
+      return 0
+      ;;
+  esac
 
   mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
   printf 'Private mount %-38s ' "$path"
