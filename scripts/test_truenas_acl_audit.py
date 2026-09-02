@@ -25,12 +25,12 @@ def completed(command: list[str], stdout: str = "", stderr: str = "", code: int 
     return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=stderr)
 
 
-def posix_acl(*, trivial: bool = True) -> dict[str, object]:
+def posix_acl(*, trivial: bool = True, uid: int = 0) -> dict[str, object]:
     return {
         "path": "/synthetic",
         "user": None,
         "group": None,
-        "uid": 0,
+        "uid": uid,
         "gid": 0,
         "acltype": "POSIX1E",
         "acl": [
@@ -102,6 +102,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertEqual(findings, [])
         self.assertIn("Dataset Pool1/remote-dev: acltype=posix aclmode=discard", info)
         self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 5)
+        self.assertTrue(all("root-owned" in line for line in info if line.startswith("Private state OK:")))
 
     def test_antigravity_private_state_uses_shared_contract(self):
         temp, root = self.make_root(include_antigravity=True)
@@ -119,11 +120,14 @@ class TrueNasAclAuditTests(unittest.TestCase):
         temp, root = self.make_root()
         self.addCleanup(temp.cleanup)
         nfsv4 = {
+            "path": "/synthetic",
+            "uid": 0,
+            "gid": 0,
             "acltype": "NFS4",
             "trivial": False,
             "acl": [
                 {
-                    "tag": "USER",
+                    "tag": "GROUP",
                     "perms": {"READ_DATA": True, "WRITE_DATA": True},
                     "default": False,
                     "id": 568,
@@ -175,6 +179,18 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertIn("mode is 0750, expected 0700", messages)
         self.assertIn("effective POSIX ACL is not trivial", messages)
         self.assertIn("unexpected effective ACL entry: 'USER'", messages)
+
+    def test_non_root_private_owner_is_reported(self):
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        with mock.patch.object(
+            MODULE,
+            "run_command",
+            side_effect=self.fake_runner(root, acl_payload=posix_acl(uid=1000)),
+        ):
+            _info, findings = MODULE.audit(root, include_antigravity=False)
+        messages = "\n".join(finding.message for finding in findings)
+        self.assertIn("owner uid is 1000, expected root (0)", messages)
 
 
 if __name__ == "__main__":
