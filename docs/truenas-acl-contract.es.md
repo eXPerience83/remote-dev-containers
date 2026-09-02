@@ -24,9 +24,9 @@ aclmode=discard
 
 El layout canónico de Remote Dev sigue usando directorios normales debajo de esa raíz, salvo que el administrador cree deliberadamente algún descendiente requerido como child dataset para snapshots, cuotas o replicación.
 
-Los padres estructurales y workspaces usan sus modos iniciales documentados `0755`. Cada hoja canónica de estado privado usa `0700` y, en el layout TrueNAS de referencia, su ACL efectiva debe ser una **ACL POSIX1E trivial** que contenga únicamente:
+Los padres estructurales y workspaces usan sus modos iniciales documentados `0755`. Cada hoja canónica de estado privado pertenece a root (UID `0`), usa `0700` y, en el layout TrueNAS de referencia, su ACL efectiva debe ser una **ACL POSIX1E trivial** que contenga únicamente:
 
-- propietario: `rwx`;
+- propietario/root: `rwx`;
 - grupo: sin acceso;
 - otros: sin acceso;
 - sin entradas de usuario/grupo nominales, máscara, default o heredadas.
@@ -55,6 +55,7 @@ El audit es de solo lectura. Comprueba:
 
 - que la raíz configurada sea exactamente el mountpoint de un dataset ZFS;
 - `acltype` y `aclmode` de la raíz;
+- propiedad root (UID `0`) de cada hoja privada canónica;
 - modo `0700` en las hojas privadas canónicas;
 - tipo `POSIX1E` devuelto por `filesystem.getacl`;
 - `trivial=true`;
@@ -66,18 +67,18 @@ Una instalación de referencia correcta termina con:
 Remote Dev TrueNAS ACL audit: OK (Generic/POSIX private-state contract)
 ```
 
-NFSv4, ACL POSIX no triviales, entradas nominales/default o modos más amplios generan warnings y un código de salida distinto de cero. La herramienta nunca modifica permisos ni ACL.
+NFSv4, un propietario privado distinto de root, ACL POSIX no triviales, entradas nominales/default o modos más amplios generan warnings y un código de salida distinto de cero. La herramienta nunca modifica propietario, permisos ni ACL.
 
 ### Qué puede y qué no puede ver `Run diagnostics`
 
 `remote-dev-doctor` se ejecuta **dentro** del contenedor aislado del agente. Ahora comprueba el modo POSIX de cada bind mount privado y avisa si un estado privado montado es más permisivo que `0700`.
 
-No pretende determinar el tipo de ACL del dataset TrueNAS del host. No damos al contenedor acceso a middleware/API de TrueNAS, a la raíz del host ni al socket del motor de contenedores solo para inspeccionar política ACL. Una ACE NFSv4 heredada del host puede requerir por tanto el audit del host aunque el contenedor vea `0700`.
+No pretende determinar el tipo de ACL del dataset TrueNAS ni el ownership autoritativo del host. No damos al contenedor acceso a middleware/API de TrueNAS, a la raíz del host ni al socket del motor de contenedores solo para inspeccionar política ACL. Una ACE NFSv4 heredada del host puede requerir por tanto el audit del host aunque el contenedor vea `0700`.
 
 La separación preserva el modelo de aislamiento:
 
 - diagnostics del contenedor: regresiones de modo en los paths montados;
-- audit en TrueNAS: comprobación autoritativa de ZFS y ACL efectiva.
+- audit en TrueNAS: comprobación autoritativa de ZFS, ownership y ACL efectiva.
 
 ## Instalaciones NFSv4 existentes
 
@@ -131,6 +132,8 @@ Aplica los modos documentados `0755`/`0700` únicamente a los directorios canón
 
 Después ejecuta bootstrap, preflight y el audit ACL de la misma revisión contra la raíz temporal. Bootstrap debe indicar `no changes required`, preflight debe devolver `OK` y el audit debe terminar con el resultado Generic/POSIX correcto.
 
+La migración real validada ya tenía las hojas privadas propiedad de root, por lo que no necesitó reescribir ownership. Si el audit detecta una hoja privada cuyo propietario no sea UID 0, detente y revisa ese path antes del cutover. No introduzcas un `chown` recursivo como remedio automático.
+
 ### 6. Confirmar que ningún proceso usa los datasets
 
 Con la App todavía parada, consulta procesos y attachments de TrueNAS tanto para el origen como para el destino. No renombres mientras alguno esté en uso.
@@ -163,7 +166,7 @@ Si hay que volver atrás, para Remote Dev antes de invertir los nombres de los d
 ## No objetivos deliberados
 
 - Sin migración ACL automática desde bootstrap o arranque del contenedor.
-- Sin normalización recursiva de permisos dentro de proyectos.
+- Sin normalización recursiva de permisos u ownership dentro de proyectos.
 - Sin afirmar que la inspección de modo dentro del contenedor prueba la privacidad NFSv4 del host.
 - Sin compartir `state` por SMB.
 - El diseño de SMB/ACL para workspaces sigue separado en #71.
