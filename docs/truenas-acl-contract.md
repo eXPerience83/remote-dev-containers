@@ -8,6 +8,8 @@ This document defines the supported host ACL contract for issue #186 and the con
 
 Create the Remote Dev root dataset with the TrueNAS **Generic** preset.
 
+This is a deliberate Remote Dev exception to TrueNAS's general guidance to use the **Apps** preset for application data. Remote Dev stores agent credentials and private runtime state in the same Host Path tree, and real-system validation for #186 showed that Apps-preset NFSv4 inheritance can leave additional host principals with effective access even when `ls -l` displays `0700`. The Generic/POSIX choice is therefore part of Remote Dev's private-state security contract, not a claim that the Apps preset is generally wrong for TrueNAS applications.
+
 The reference root is:
 
 ```text
@@ -15,12 +17,14 @@ Pool1/remote-dev
 /mnt/Pool1/remote-dev
 ```
 
-The expected ZFS ACL properties are:
+On the validated TrueNAS 26 host, the reference dataset reports these ZFS properties:
 
 ```text
 acltype=posix
 aclmode=discard
 ```
+
+TrueNAS documentation describes the Generic preset's ACL mode as not applicable in the UI because Generic uses POSIX ACLs; the host-side audit nevertheless records the actual ZFS `aclmode` property and treats `discard` as the validated Remote Dev reference value.
 
 Remote Dev's canonical layout still uses ordinary directories below that root unless an administrator deliberately creates a required descendant as a child dataset for snapshots, quotas or replication.
 
@@ -82,7 +86,7 @@ This split preserves the isolation model:
 
 ## Existing NFSv4 installations
 
-Do not convert a populated root in place and do not run recursive `chmod`, `chown` or ACL rewriting as an implicit migration. Bootstrap and container startup must continue to preserve existing operator-owned paths.
+Do not convert a populated root in place and do not run recursive `chmod`, `chown` or ACL rewriting as an implicit migration. Neither bootstrap nor container startup may silently perform a dataset ACL/ownership migration. Bootstrap preserves existing operator-owned paths; existing runtime-owned private-state permission hardening remains a separate runtime contract and must not be confused with host ACL migration.
 
 The validated migration model is **side-by-side copy + verified cutover + retained rollback**.
 
@@ -114,9 +118,9 @@ sudo rsync -a --numeric-ids --info=progress2,stats2 \
   /mnt/Pool1/remote-dev-posix-migrate/
 ```
 
-Do **not** add `-A` or `-X`: the migration objective is to preserve content, symlinks, ownership IDs, modes and timestamps while not transplanting the old NFSv4 ACL model. If the pre-copy inventory finds hardlinked regular files, review that case and add `-H` deliberately rather than assuming the validated dataset had hardlinks.
+Do **not** add `-A` or `-X` to the validated procedure: the migration objective is to preserve content, symlinks, ownership IDs, modes and timestamps without transplanting the old ACL/security-metadata model. The validated dataset did not rely on arbitrary extended attributes. If a deployment intentionally depends on project or application xattrs, stop and design a targeted preservation/verification plan instead of adding `-X` wholesale. If the pre-copy inventory finds hardlinked regular files, review that case and add `-H` deliberately rather than assuming the validated dataset had hardlinks.
 
-Verify content before changing canonical directory modes:
+Verify file content before changing canonical directory modes:
 
 ```bash
 sudo rsync -a --numeric-ids --checksum --dry-run --itemize-changes \
@@ -124,7 +128,7 @@ sudo rsync -a --numeric-ids --checksum --dry-run --itemize-changes \
   /mnt/Pool1/remote-dev-posix-migrate/
 ```
 
-No output means no rsync-detectable difference under those semantics.
+No output means no rsync-detectable file/content difference under those same copy semantics; it is not a claim that omitted ACLs/xattrs were compared.
 
 ### 5. Normalize only canonical directory roots
 
@@ -159,9 +163,11 @@ Run container diagnostics and repeat the host ACL audit after startup. A process
 
 ### 9. Keep rollback until normal use is proven
 
-Do not immediately delete the old NFSv4 dataset. Keep it offline as a rollback source until normal work, session resume and expected persistent-state behavior have been exercised for an operator-chosen retention period.
+Do not immediately delete the old NFSv4 dataset. Keep it offline as a rollback source until the exact deployed revision has passed host ACL audit, container diagnostics, restart/recreation checks, session/conversation resume and at least one normal operator work cycle without requiring rollback. Retention is an operator decision rather than an automatic timer.
 
 If rollback is required, stop Remote Dev before reversing the dataset names. Do not merge newer POSIX-side writes back into the NFSv4 backup casually; treat that as a separate data reconciliation task.
+
+When those gates are complete, the old NFSv4 dataset may be removed deliberately through supported TrueNAS tooling. Decide separately whether to retain a snapshot or another verified backup according to the operator's normal backup policy; this project never deletes rollback data automatically.
 
 ## Deliberate non-goals
 
