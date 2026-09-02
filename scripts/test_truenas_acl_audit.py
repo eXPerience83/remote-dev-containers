@@ -61,11 +61,13 @@ def posix_acl(*, trivial: bool = True) -> dict[str, object]:
 
 
 class TrueNasAclAuditTests(unittest.TestCase):
-    def make_root(self) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    def make_root(
+        self, *, include_antigravity: bool = False
+    ) -> tuple[tempfile.TemporaryDirectory[str], Path]:
         temp = tempfile.TemporaryDirectory()
         root = Path(temp.name) / "remote-dev"
         root.mkdir(mode=0o755)
-        for spec in MODULE.directory_specs(include_antigravity=False):
+        for spec in MODULE.directory_specs(include_antigravity=include_antigravity):
             path = root / spec.suffix
             path.mkdir(parents=True, exist_ok=True)
             os.chmod(path, spec.mode)
@@ -100,6 +102,18 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertEqual(findings, [])
         self.assertIn("Dataset Pool1/remote-dev: acltype=posix aclmode=discard", info)
         self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 5)
+
+    def test_antigravity_private_state_uses_shared_contract(self):
+        temp, root = self.make_root(include_antigravity=True)
+        self.addCleanup(temp.cleanup)
+        with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
+            info, findings = MODULE.audit(root, include_antigravity=True)
+        self.assertEqual(findings, [])
+        self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 12)
+        self.assertTrue(
+            any("state/antigravity/config" in line for line in info),
+            msg="Antigravity config must be included in the private ACL audit",
+        )
 
     def test_nfsv4_root_and_effective_acl_are_reported(self):
         temp, root = self.make_root()
