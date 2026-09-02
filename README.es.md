@@ -34,9 +34,55 @@ Stack Remote Dev
 
 Utiliza [`compose/truenas.yml`](compose/truenas.yml) como **YAML canónico de Custom App para TrueNAS**. No mantengas una copia independiente del stack dentro del README.
 
-La documentación actual de TrueNAS expone la instalación mediante Compose YAML desde **Apps → Discover Apps → ⋮ → Install via YAML**. Pon un nombre a la Custom App, pega el contenido de `compose/truenas.yml` en **Custom Config**, revisa los valores específicos del host indicados abajo y guarda la app.
+La documentación actual de TrueNAS expone la instalación mediante Compose YAML desde **Apps → Discover Apps → ⋮ → Install via YAML**. Pon un nombre a la Custom App, pega el contenido de `compose/truenas.yml` en **Custom Config**, revisa los valores específicos del host indicados abajo y guarda la app solo después de que el preflight del layout del host sea correcto.
 
-Antes de guardar, revisa como mínimo:
+### 1. Crea únicamente el dataset raíz en TrueNAS
+
+Crea un dataset administrado por el usuario, por ejemplo:
+
+```text
+Pool1/remote-dev
+```
+
+que normalmente aparecerá en el host como:
+
+```text
+/mnt/Pool1/remote-dev
+```
+
+La raíz debe existir antes de ejecutar el bootstrap de Remote Dev. `scripts/init-data-layout.py` se niega expresamente a crear implícitamente esa raíz, un padre inexistente o un dataset ZFS.
+
+Las rutas necesarias por debajo de esa raíz pueden ser **directorios normales** o **datasets hijos** creados deliberadamente. La instalación sencilla recomendada utiliza un único dataset ZFS (`Pool1/remote-dev`) y deja que el bootstrap cree como directorios normales los descendientes de `workspaces/` y `state/`. Si un administrador crea alguno de esos descendientes como dataset hijo para disponer de un límite específico de snapshots, cuotas o replicación, Remote Dev acepta la ruta existente y no la sustituye, no cambia sus permisos y no modifica su contenido existente.
+
+No crees symlinks en ningún componente de las rutas persistentes requeridas.
+
+### 2. Usa bootstrap y preflight de la misma revisión de código fuente
+
+La imagen seleccionada, `compose/truenas.yml`, `scripts/init-data-layout.py`, `scripts/preflight-data-layout.py` y `scripts/lib/data_layout.py` deben corresponder a la misma revisión del repositorio. No combines una imagen fijada a una revisión con scripts descargados después desde una rama móvil como `main`.
+
+Si trabajas desde un checkout del repositorio, usa la misma revisión que contiene la imagen y ejecuta los scripts desde ese checkout. Para una validación exacta de candidato/digest, el [runbook de validación de TrueNAS](docs/truenas-antigravity-validation.md) explica cómo leer la revisión embebida en la imagen y obtener los archivos del host correspondientes.
+
+Para el YAML de referencia, que declara Codex y Antigravity experimental, ejecuta desde la shell de TrueNAS después de crear el dataset raíz:
+
+```bash
+sudo python3 scripts/init-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+
+sudo python3 scripts/preflight-data-layout.py \
+  --root /mnt/Pool1/remote-dev \
+  --include-antigravity
+```
+
+El bootstrap crea únicamente los descendientes canónicos que falten y aplica modos iniciales solo a las rutas que él mismo crea. Es idempotente y no borra, migra, renombra, ni hace `chmod/chown` recursivo, ni reescribe el contenido existente de proyectos o estado. Volver a ejecutarlo es seguro y, cuando el layout ya está completo, debe indicar que no hacen falta cambios.
+
+Después, el preflight valida el mismo contrato canónico y rechaza rutas ausentes, objetos que no sean directorios y symlinks antes del despliegue. Las contraseñas del navegador pertenecen a la configuración del despliegue y cada endpoint las valida al arrancar; bootstrap y preflight **no crean ni requieren un árbol `secrets/` para contraseñas web**.
+
+Si mantienes intencionadamente un YAML local solo con Codex y sin el servicio Antigravity, omite `--include-antigravity` en ambos comandos. No omitas el flag si vas a desplegar sin cambios el YAML de referencia, porque sus bind sources de Antigravity también deben existir previamente.
+
+### 3. Revisa los valores del YAML específicos del host
+
+Antes de guardar la Custom App, revisa como mínimo:
 
 - todas las IP de ejemplo `192.168.1.10` y sustitúyelas por la IP LAN o Tailscale del host TrueNAS;
 - todas las fuentes bind `/mnt/Pool1/remote-dev` y cámbialas si tu pool/dataset utiliza otra ruta;
@@ -44,15 +90,7 @@ Antes de guardar, revisa como mínimo:
 - zona horaria, identidad Git y modo de aprobación de Codex si los valores predeterminados no son adecuados;
 - `REMOTE_DEV_PROJECT`: deja el valor literal del YAML vacío para el modo normal de menú. Para un proyecto fijo en modo directo, edita ese campo del YAML de TrueNAS. Un `REMOTE_DEV_PROJECT` ambiental de `.env` **no** sustituye este campo literal de `compose/truenas.yml`.
 
-El YAML de referencia declara los árboles privados de workspace/estado de Codex y de Antigravity experimental. Crea los directorios necesarios en el host antes de desplegar y ejecuta el preflight del repositorio en TrueNAS. Para el YAML de referencia tal como está publicado:
-
-```bash
-python3 scripts/preflight-data-layout.py \
-  --root /mnt/Pool1/remote-dev \
-  --include-antigravity
-```
-
-El preflight valida únicamente los bind persistentes y la ausencia de symlinks inseguros. Las contraseñas de terminal se configuran como valores `WEB_PASSWORD` independientes y son validadas por el runtime al arrancar cada servicio. Si mantienes intencionadamente una copia local solo con Codex y sin el servicio Antigravity, omite `--include-antigravity` y crea únicamente las rutas de Codex.
+Un administrador de TrueNAS con privilegios suficientes puede inspeccionar la configuración guardada de la App o del contenedor. Ese administrador está dentro del límite de confianza de Remote Dev; por tanto, las capturas y exportaciones de YAML deben sanearse antes de compartirlas.
 
 Cuando TrueNAS muestre la Custom App en ejecución, abre:
 
@@ -193,7 +231,9 @@ REMOTE_DEV_DATA_ROOT/
 
 El servicio Codex monta `workspaces/codex` en `/workspace`; el gestor de proyectos opera únicamente sobre hijos directos validados de ese montaje. `state/codex/runtime` contiene el estado completo del runtime opcional de Codex gestionado por Remote Dev, incluido el puntero activo `current`, los directorios de releases conservados, los archivos del paquete y manifiestos privados de integridad como `remote-dev-runtime.json`; `state/codex/agent` sigue siendo `CODEX_HOME` para credenciales, configuración y sesiones. El launcher no tiene montajes bind, persistentes ni de estado de agentes; conserva únicamente sus tmpfs privados `/tmp` y `/run`. Nunca se montan de forma completa la raíz administrativa, `/root`, `/home`, `/mnt`, la raíz del host ni sockets del motor de contenedores.
 
-`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el preflight del host. Verifica todos los directorios necesarios y rechaza enlaces simbólicos; las contraseñas web no forman parte del preflight ni del layout persistente. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
+`scripts/lib/data_layout.py` contiene la lista canónica del host que comparten `scripts/init-data-layout.py` y `scripts/preflight-data-layout.py`. En TrueNAS, normalmente solo la raíz configurada necesita ser un dataset ZFS; los descendientes requeridos pueden seguir siendo directorios normales o pueden existir ya como datasets hijos creados deliberadamente por el administrador. El inicializador nunca crea la raíz, nunca sustituye los descendientes existentes y solo aplica modos iniciales a las rutas que él crea. El preflight valida las rutas resultantes independientemente de que una ruta existente esté respaldada por el dataset raíz o por un dataset hijo independiente.
+
+`state/codex/runtime` es un límite de confianza propiedad de root: debe ser un directorio real `root:root` con modo `0700`. El gestor de runtime rechaza un propietario inesperado en lugar de admitir estado opcional del runtime desde una identidad arbitraria del host. Antes de desplegar, ejecuta el bootstrap del host seguido del preflight. Los bind mounts también solicitan `create_host_path: false` como defensa adicional, pero el proyecto no presupone que todas las versiones de Compose respeten esa opción.
 
 No existe migración automática ni alias para la estructura experimental anterior. El estado experimental debe moverse o recrearse manualmente. Si una instalación anterior conservaba ficheros de contraseña web, configura y valida primero los nuevos `WEB_PASSWORD`, comprueba stop/start o recreación y conserva cualquier copia necesaria únicamente durante la ventana de rollback. Cuando la migración esté confirmada, elimina manualmente esos ficheros obsoletos; Remote Dev no los borra automáticamente. El uso opcional de SMB/ACL queda aplazado al issue #71 y nunca debe exponer `state`; si se implementa más adelante, debe trabajar con proyectos concretos seleccionados y no exponer por defecto toda la raíz que los agrupa.
 

@@ -1,41 +1,35 @@
 #!/usr/bin/env python3
-"""Exercise the host-side Remote Dev data-layout preflight."""
+"""Exercise the canonical host-side Remote Dev data-layout bootstrap and preflight."""
 
 from __future__ import annotations
 
-import shutil
+import os
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PREFLIGHT = ROOT / "scripts/preflight-data-layout.py"
-CODEX_DIRECTORY_SUFFIXES = (
-    "workspaces/codex",
-    "state/codex/agent",
-    "state/codex/runtime",
-    "state/codex/gh",
-    "state/codex/git",
-    "state/codex/ssh",
-)
-ANTIGRAVITY_DIRECTORY_SUFFIXES = (
-    "workspaces/antigravity",
-    "state/antigravity/bin",
-    "state/antigravity/runtime",
-    "state/antigravity/vendor",
-    "state/antigravity/config",
-    "state/antigravity/gh",
-    "state/antigravity/git",
-    "state/antigravity/ssh",
+SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from lib.data_layout import (  # noqa: E402
+    ANTIGRAVITY_DIRECTORY_SPECS,
+    CODEX_DIRECTORY_SPECS,
+    initialize_layout,
 )
 
+PREFLIGHT = SCRIPTS / "preflight-data-layout.py"
+BOOTSTRAP = SCRIPTS / "init-data-layout.py"
+TRUENAS = ROOT / "compose/truenas.yml"
 
-def run_preflight(
-    root: Path, *, include_antigravity: bool = False
+
+def run_script(
+    script: Path, root: Path, *, include_antigravity: bool = False
 ) -> subprocess.CompletedProcess[str]:
-    """Run the preflight against one temporary host layout."""
-    command = [sys.executable, str(PREFLIGHT), "--root", str(root)]
+    """Run one host-side layout command against a temporary root."""
+    command = [sys.executable, str(script), "--root", str(root)]
     if include_antigravity:
         command.append("--include-antigravity")
     return subprocess.run(
@@ -47,111 +41,225 @@ def run_preflight(
     )
 
 
-def create_directories(root: Path, suffixes: tuple[str, ...]) -> None:
-    """Create one role's canonical directories."""
-    root.mkdir(parents=True, exist_ok=True)
-    for suffix in suffixes:
-        (root / suffix).mkdir(parents=True, exist_ok=True)
-
-
 def require(condition: bool, message: str) -> None:
     """Raise a readable assertion for a failed regression expectation."""
     if not condition:
         raise AssertionError(message)
 
 
-def validate_layouts(root: Path) -> None:
-    """Require only persistent role data paths, never web-password files."""
-    missing = run_preflight(root)
-    require(missing.returncode == 1, "missing root must fail")
-    require("required directory is missing" in missing.stderr, missing.stderr)
+def expected_suffixes(*, include_antigravity: bool) -> set[str]:
+    specs = CODEX_DIRECTORY_SPECS
+    if include_antigravity:
+        specs += ANTIGRAVITY_DIRECTORY_SPECS
+    return {spec.suffix for spec in specs}
 
-    create_directories(root, CODEX_DIRECTORY_SUFFIXES)
-    codex_only = run_preflight(root)
-    require(codex_only.returncode == 0, codex_only.stderr)
-    require("; Codex)" in codex_only.stdout, codex_only.stdout)
-    require(not (root / "secrets").exists(), "preflight unexpectedly requires secrets")
 
-    missing_antigravity = run_preflight(root, include_antigravity=True)
-    require(missing_antigravity.returncode == 1, "enabled Antigravity layout must exist")
-    require("workspaces/antigravity" in missing_antigravity.stderr, missing_antigravity.stderr)
+def validate_bootstrap(root: Path) -> None:
+    """Bootstrap both supported role selections safely and idempotently."""
+    missing_root = run_script(BOOTSTRAP, root)
+    require(missing_root.returncode == 1, "bootstrap must refuse a missing root")
+    require("must already exist" in missing_root.stderr, missing_root.stderr)
+    require(not root.exists(), "bootstrap unexpectedly created the configured root")
 
-    antigravity_config_suffix = "state/antigravity/config"
-    create_directories(
-        root,
-        tuple(
-            suffix
-            for suffix in ANTIGRAVITY_DIRECTORY_SUFFIXES
-            if suffix != antigravity_config_suffix
-        ),
-    )
-    missing_config = run_preflight(root, include_antigravity=True)
-    require(missing_config.returncode == 1, "missing Antigravity config state must fail")
+    root.mkdir()
+    marker = root / "operator-marker.txt"
+    marker.write_text("keep-me", encoding="utf-8")
+
+    # A pre-existing path may be an ordinary directory or a deliberately created
+    # TrueNAS child dataset mountpoint. Bootstrap must accept it as-is rather
+    # than replacing it or normalizing its existing permissions/content.
+    existing_workspace = root / "workspaces/codex"
+    existing_workspace.mkdir(parents=True, mode=0o750)
+    existing_workspace.chmod(0o750)
+    dataset_marker = existing_workspace / "operator-dataset-marker.txt"
+    dataset_marker.write_text("leave-existing-path-alone", encoding="utf-8")
+    original_mode = existing_workspace.stat().st_mode & 0o777
+
+    codex = run_script(BOOTSTRAP, root)
+    require(codex.returncode == 0, codex.stderr)
     require(
-        f"required directory is missing: {root / antigravity_config_suffix}"
-        in missing_config.stderr,
-        missing_config.stderr,
+        run_script(PREFLIGHT, root).returncode == 0,
+        "Codex preflight must pass after bootstrap",
     )
-    (root / antigravity_config_suffix).mkdir()
-    complete = run_preflight(root, include_antigravity=True)
+    require(
+        marker.read_text(encoding="utf-8") == "keep-me",
+        "bootstrap modified existing root content",
+    )
+    require(
+        dataset_marker.read_text(encoding="utf-8") == "leave-existing-path-alone",
+        "bootstrap modified an existing persistent path",
+    )
+    require(
+        (existing_workspace.stat().st_mode & 0o777) == original_mode,
+        "bootstrap changed permissions on an existing persistent path",
+    )
+    require(
+        not (root / "secrets").exists(),
+        "bootstrap unexpectedly created a secrets tree",
+    )
+
+    second = run_script(BOOTSTRAP, root)
+    require(second.returncode == 0, second.stderr)
+    require("no changes required" in second.stdout, second.stdout)
+
+    antigravity = run_script(BOOTSTRAP, root, include_antigravity=True)
+    require(antigravity.returncode == 0, antigravity.stderr)
+    complete = run_script(PREFLIGHT, root, include_antigravity=True)
     require(complete.returncode == 0, complete.stderr)
-    require("; Codex + Antigravity)" in complete.stdout, complete.stdout)
-    require(not (root / "secrets").exists(), "complete layout unexpectedly requires secrets")
-
-
-def validate_symlinks(root: Path, temporary_directory: str) -> None:
-    """Reject symlinks anywhere in the persistent role-data ancestry."""
-    codex_runtime = root / "state/codex/runtime"
-    codex_runtime.rmdir()
-    codex_runtime.symlink_to(root / "state/codex/agent", target_is_directory=True)
-    runtime_symlink = run_preflight(root, include_antigravity=True)
-    require(runtime_symlink.returncode == 1, "symlinked Codex runtime directory must fail")
-    require("must not be a symlink" in runtime_symlink.stderr, runtime_symlink.stderr)
-    codex_runtime.unlink()
-    codex_runtime.mkdir()
-
-    antigravity_vendor = root / "state/antigravity/vendor"
-    antigravity_vendor.rmdir()
-    antigravity_vendor.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
-    final_symlink = run_preflight(root, include_antigravity=True)
-    require(final_symlink.returncode == 1, "symlinked Antigravity directory must fail")
-    require("must not be a symlink" in final_symlink.stderr, final_symlink.stderr)
-    antigravity_vendor.unlink()
-    antigravity_vendor.mkdir()
-
-    antigravity_config = root / "state/antigravity/config"
-    antigravity_config.rmdir()
-    antigravity_config.symlink_to(root / "state/antigravity/runtime", target_is_directory=True)
-    config_symlink = run_preflight(root, include_antigravity=True)
-    require(config_symlink.returncode == 1, "symlinked Antigravity config directory must fail")
-    require("must not be a symlink" in config_symlink.stderr, config_symlink.stderr)
-    antigravity_config.unlink()
-    antigravity_config.mkdir()
-
-    outside_state = Path(temporary_directory) / "outside-state"
-    for child in ("agent", "runtime", "gh", "git", "ssh"):
-        (outside_state / child).mkdir(parents=True, exist_ok=True)
-    state_codex = root / "state/codex"
-    shutil.rmtree(state_codex)
-    state_codex.symlink_to(outside_state, target_is_directory=True)
-    intermediate_symlink = run_preflight(root, include_antigravity=True)
-    require(intermediate_symlink.returncode == 1, "symlinked intermediate directory must fail")
     require(
-        f"must not be a symlink: {state_codex}" in intermediate_symlink.stderr,
-        intermediate_symlink.stderr,
+        not (root / "secrets").exists(),
+        "complete layout unexpectedly created secrets",
     )
+
+    existing_state = root / "state/codex/agent/existing-state.txt"
+    existing_state.write_text("preserve", encoding="utf-8")
+    rerun = run_script(BOOTSTRAP, root, include_antigravity=True)
+    require(rerun.returncode == 0, rerun.stderr)
+    require(
+        existing_state.read_text(encoding="utf-8") == "preserve",
+        "bootstrap changed existing state contents",
+    )
+
+
+def validate_invalid_existing_component(base: Path) -> None:
+    """Reject malformed existing layout before creating any missing paths."""
+    root = base / "invalid-object-root"
+    (root / "state/codex").mkdir(parents=True)
+    invalid_runtime = root / "state/codex/runtime"
+    invalid_runtime.write_text("not-a-directory", encoding="utf-8")
+
+    result = run_script(BOOTSTRAP, root)
+    require(result.returncode == 1, "existing non-directory component must fail")
+    require("is not a directory" in result.stderr, result.stderr)
+    require(
+        not (root / "workspaces").exists(),
+        "bootstrap mutated layout before rejecting an existing invalid component",
+    )
+    require(
+        not (root / "state/codex/agent").exists(),
+        "bootstrap created earlier role state before rejecting invalid runtime state",
+    )
+    require(
+        invalid_runtime.read_text(encoding="utf-8") == "not-a-directory",
+        "bootstrap modified the invalid existing object",
+    )
+
+
+def validate_symlinks(base: Path) -> None:
+    """Reject root, root-ancestry and descendant symlinks without mutation."""
+    real_root = base / "real-root"
+    real_root.mkdir()
+    linked_root = base / "linked-root"
+    linked_root.symlink_to(real_root, target_is_directory=True)
+    root_symlink = run_script(BOOTSTRAP, linked_root)
+    require(root_symlink.returncode == 1, "symlink root must fail")
+    require("must not be a symlink" in root_symlink.stderr, root_symlink.stderr)
+    require(
+        list(real_root.iterdir()) == [],
+        "symlink-root target was unexpectedly modified",
+    )
+
+    real_parent = base / "real-parent"
+    real_parent.mkdir()
+    ancestry_root = real_parent / "remote-dev"
+    ancestry_root.mkdir()
+    linked_parent = base / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    ancestry_symlink = run_script(BOOTSTRAP, linked_parent / "remote-dev")
+    require(
+        ancestry_symlink.returncode == 1,
+        "symlink in configured root ancestry must fail",
+    )
+    require("must not be a symlink" in ancestry_symlink.stderr, ancestry_symlink.stderr)
+    require(
+        list(ancestry_root.iterdir()) == [],
+        "root-ancestry symlink target was unexpectedly modified",
+    )
+    ancestry_preflight = run_script(PREFLIGHT, linked_parent / "remote-dev")
+    require(
+        ancestry_preflight.returncode == 1,
+        "preflight must also reject symlinked root ancestry",
+    )
+    require("must not be a symlink" in ancestry_preflight.stderr, ancestry_preflight.stderr)
+
+    root = base / "intermediate-root"
+    root.mkdir()
+    outside = base / "outside"
+    outside.mkdir()
+    (root / "state").symlink_to(outside, target_is_directory=True)
+    intermediate = run_script(BOOTSTRAP, root)
+    require(intermediate.returncode == 1, "symlinked intermediate path must fail")
+    require("must not be a symlink" in intermediate.stderr, intermediate.stderr)
+    require(
+        list(outside.iterdir()) == [],
+        "symlinked external target was unexpectedly modified",
+    )
+
+
+def validate_compose_contract() -> None:
+    """Keep the canonical Python contract exactly aligned with TrueNAS bind sources."""
+    text = TRUENAS.read_text(encoding="utf-8")
+    sources = {
+        match.group(1)
+        for match in re.finditer(
+            r"^\s*source:\s*/mnt/Pool1/remote-dev/([^\s]+)\s*$",
+            text,
+            re.MULTILINE,
+        )
+    }
+    expected = expected_suffixes(include_antigravity=True)
+    require(
+        sources == expected,
+        "TrueNAS bind sources differ from canonical layout: "
+        f"expected={sorted(expected)} actual={sorted(sources)}",
+    )
+    require("state/codex/runtime" in sources, "Codex runtime bind source disappeared")
+    retired_password_file_var = "WEB_PASSWORD_" + "FILE"
+    require(
+        retired_password_file_var not in text,
+        "TrueNAS YAML reintroduced the retired browser password-file variable",
+    )
+    require(
+        "/secrets/" not in text,
+        "TrueNAS YAML unexpectedly contains a web-password secrets bind",
+    )
+
+
+def validate_initial_modes(root: Path) -> None:
+    """Apply intentional modes exactly, independent of the caller's umask."""
+    root.mkdir()
+    previous_umask = os.umask(0o077)
+    try:
+        initialize_layout(root, include_antigravity=True)
+    finally:
+        os.umask(previous_umask)
+
+    for relative in ("workspaces", "state", "state/codex", "state/antigravity"):
+        actual = (root / relative).stat().st_mode & 0o777
+        require(
+            actual == 0o755,
+            f"unexpected structural parent mode for {relative}: {oct(actual)}",
+        )
+
+    for spec in CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS:
+        actual = (root / spec.suffix).stat().st_mode & 0o777
+        require(
+            actual == spec.mode,
+            f"unexpected initial mode for {spec.suffix}: {oct(actual)} != {oct(spec.mode)}",
+        )
 
 
 def main() -> int:
-    """Validate optional roles and persistent-path symlink ancestry."""
+    """Validate bootstrap/preflight safety and TrueNAS contract alignment."""
     with tempfile.TemporaryDirectory() as temporary_directory:
-        root = Path(temporary_directory) / "remote-dev"
-        create_directories(root, CODEX_DIRECTORY_SUFFIXES + ANTIGRAVITY_DIRECTORY_SUFFIXES)
-        shutil.rmtree(root)
-        validate_layouts(root)
-        validate_symlinks(root, temporary_directory)
+        base = Path(temporary_directory)
+        validate_bootstrap(base / "remote-dev")
+        validate_invalid_existing_component(base)
+        validate_symlinks(base)
+        validate_initial_modes(base / "mode-root")
+    validate_compose_contract()
 
-    print("Host data-layout preflight regressions: OK")
+    print("Host data-layout bootstrap/preflight regressions: OK")
     return 0
 
 
