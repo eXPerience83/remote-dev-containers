@@ -110,7 +110,7 @@ def read_effective_acl(path: Path) -> tuple[dict[str, object] | None, str | None
     return payload, None
 
 
-def validate_private_acl(path: Path, payload: dict[str, object]) -> list[str]:
+def validate_private_acl(payload: dict[str, object]) -> list[str]:
     """Return problems with one role-private leaf's effective ACL."""
     errors: list[str] = []
     acltype = payload.get("acltype")
@@ -232,7 +232,7 @@ def audit(root: Path, *, include_antigravity: bool) -> tuple[list[str], list[Fin
         path_errors: list[str] = []
         if mode != 0o700:
             path_errors.append(f"mode is {mode:04o}, expected 0700")
-        path_errors.extend(validate_private_acl(path, acl_payload))
+        path_errors.extend(validate_private_acl(acl_payload))
         if path_errors:
             for error in path_errors:
                 findings.append(Finding("WARNING", f"{path}: {error}"))
