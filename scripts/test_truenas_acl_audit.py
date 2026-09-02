@@ -22,10 +22,12 @@ SPEC.loader.exec_module(MODULE)
 
 
 def completed(command: list[str], stdout: str = "", stderr: str = "", code: int = 0):
+    """Build one captured subprocess result for a synthetic host command."""
     return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=stderr)
 
 
 def posix_acl(*, trivial: bool = True, uid: int = 0) -> dict[str, object]:
+    """Return a synthetic private POSIX1E ACL payload."""
     return {
         "path": "/synthetic",
         "user": None,
@@ -61,9 +63,12 @@ def posix_acl(*, trivial: bool = True, uid: int = 0) -> dict[str, object]:
 
 
 class TrueNasAclAuditTests(unittest.TestCase):
+    """Exercise the host audit without requiring a TrueNAS CI runner."""
+
     def make_root(
         self, *, include_antigravity: bool = False
     ) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+        """Create a synthetic canonical layout with production initial modes."""
         temp = tempfile.TemporaryDirectory()
         root = Path(temp.name) / "remote-dev"
         root.mkdir(mode=0o755)
@@ -81,9 +86,11 @@ class TrueNasAclAuditTests(unittest.TestCase):
         aclmode: str = "discard",
         acl_payload: dict[str, object] | None = None,
     ):
+        """Return a command runner that emulates ZFS and TrueNAS middleware."""
         payload = acl_payload or posix_acl()
 
         def run(command: list[str]):
+            """Dispatch one synthetic read-only host command."""
             if command[:2] == ["zfs", "list"]:
                 return completed(command, f"Pool1/remote-dev\t{root}\n")
             if command[:2] == ["zfs", "get"]:
@@ -95,6 +102,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         return run
 
     def test_generic_posix_private_state_passes(self):
+        """Accept root-owned trivial POSIX1E private leaves on Generic/POSIX."""
         temp, root = self.make_root()
         self.addCleanup(temp.cleanup)
         with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
@@ -102,9 +110,12 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertEqual(findings, [])
         self.assertIn("Dataset Pool1/remote-dev: acltype=posix aclmode=discard", info)
         self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 5)
-        self.assertTrue(all("root-owned" in line for line in info if line.startswith("Private state OK:")))
+        self.assertTrue(
+            all("root-owned" in line for line in info if line.startswith("Private state OK:"))
+        )
 
     def test_antigravity_private_state_uses_shared_contract(self):
+        """Audit Antigravity leaves from the shared canonical layout contract."""
         temp, root = self.make_root(include_antigravity=True)
         self.addCleanup(temp.cleanup)
         with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
@@ -117,6 +128,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         )
 
     def test_nfsv4_root_and_effective_acl_are_reported(self):
+        """Report the Apps-style NFSv4 root and additional effective group ACE."""
         temp, root = self.make_root()
         self.addCleanup(temp.cleanup)
         nfsv4 = {
@@ -154,6 +166,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertIn("unexpected effective ACL entry", messages)
 
     def test_broad_mode_and_extended_posix_acl_are_reported(self):
+        """Report both broad mode bits and named entries in an extended ACL."""
         temp, root = self.make_root()
         self.addCleanup(temp.cleanup)
         os.chmod(root / "state/codex/agent", 0o750)
@@ -181,6 +194,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertIn("unexpected effective ACL entry: 'USER'", messages)
 
     def test_non_root_private_owner_is_reported(self):
+        """Report a private leaf owned by an untrusted non-root host identity."""
         temp, root = self.make_root()
         self.addCleanup(temp.cleanup)
         with mock.patch.object(
