@@ -69,7 +69,7 @@ sudo python3 scripts/init-data-layout.py \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 
-python3 scripts/preflight-data-layout.py \
+sudo python3 scripts/preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 ```

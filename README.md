@@ -68,7 +68,7 @@ sudo python3 scripts/init-data-layout.py \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 
-python3 scripts/preflight-data-layout.py \
+sudo python3 scripts/preflight-data-layout.py \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 ```
@@ -357,7 +357,7 @@ For the generic or TrueNAS Compose file, set:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-The only published GHCR runtime package is `ghcr.io/experience83/remote-dev`. The legacy `CODEX_IMAGE` variable remains accepted throughout `v0.1.x` as a configuration fallback, but it should point to the canonical `remote-dev` package. The old remote package `ghcr.io/experience83/codex-remote-dev` is retired and may be deleted from GHCR after this change is merged.
+The only published GHCR runtime package is `ghcr.io/experience83/remote-dev`. The legacy `CODEX_IMAGE` variable remains accepted throughout `v0.1.x` as a configuration fallback, but the value should use the canonical `ghcr.io/experience83/remote-dev` package. The old remote package `ghcr.io/experience83/codex-remote-dev` is retired and may be deleted from GHCR after this change is merged.
 
 For a source-commit-addressed deployment, use the `sha-...` tag shown by the edge workflow and package page:
 

@@ -95,7 +95,7 @@ release_revision="$(
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
 case "$release_revision" in
-  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
   *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
 esac
 if test -n "$expected_revision" && test "$release_revision" != "$expected_revision"; then
@@ -180,7 +180,7 @@ sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 
-python3 "$layout_release_dir/scripts/preflight-data-layout.py" \
+sudo python3 "$layout_release_dir/scripts/preflight-data-layout.py" \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 ```
