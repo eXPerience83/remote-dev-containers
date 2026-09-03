@@ -50,12 +50,13 @@ def explicit_paths(snapshot: object) -> list[str]:
 def validate_detection(detection: dict[str, Any]) -> dict[str, Any]:
     if detection.get("schema_version") != 1 or detection.get("kind") != "antigravity-installer-detection":
         raise EvidenceError("Antigravity detection schema is unsupported")
-    if detection.get("changed") is not True:
-        raise EvidenceError("Antigravity detection does not describe a changed installer")
     installer = detection.get("installer")
     if not isinstance(installer, dict):
         raise EvidenceError("Antigravity detection installer metadata is malformed")
     exact_sha(installer.get("sha256"), "detected installer SHA-256")
+    exact_sha(detection.get("reviewed_installer_sha256"), "reviewed installer SHA-256")
+    if not isinstance(detection.get("changed"), bool):
+        raise EvidenceError("Antigravity detection changed flag is malformed")
     hosts = installer.get("referenced_https_hosts")
     if not isinstance(hosts, list) or hosts != sorted(set(hosts)):
         raise EvidenceError("Antigravity detection host metadata is not normalized")
@@ -106,9 +107,32 @@ def build_reviewed(
         if not isinstance(current.get(preserved), dict):
             raise EvidenceError(f"current reviewed evidence is missing preserved {preserved} policy")
 
+    current_installer = current.get("installer")
+    current_binary = current.get("installed_binary")
+    if not isinstance(current_installer, dict) or not isinstance(current_binary, dict):
+        raise EvidenceError("current reviewed evidence is missing installer/binary metadata")
+    current_installer_sha = exact_sha(
+        current_installer.get("sha256"), "current reviewed installer SHA-256"
+    )
+    current_payload_sha = exact_sha(
+        current_binary.get("sha256"), "current reviewed payload SHA-256"
+    )
+
     detected_installer = validate_detection(detection)
+    if detection.get("reviewed_installer_sha256") != current_installer_sha:
+        raise EvidenceError("Antigravity detection was not generated from current reviewed evidence")
     binary = validate_live(live, detected_installer)
     installer = live["installer"]
+    inspected_installer_sha = exact_sha(
+        installer.get("sha256"), "inspected installer SHA-256"
+    )
+    inspected_payload_sha = exact_sha(binary.get("sha256"), "inspected payload SHA-256")
+    if (inspected_installer_sha, inspected_payload_sha) == (
+        current_installer_sha,
+        current_payload_sha,
+    ):
+        raise EvidenceError("full Antigravity inspection does not change the reviewed installer/payload pair")
+
     first_install = live.get("first_install")
     second_install = live.get("second_install")
     if not isinstance(first_install, dict) or not isinstance(second_install, dict):
@@ -149,7 +173,7 @@ def build_reviewed(
         "inspection_date_utc": inspection_date,
         "workflow": current["workflow"],
         "installer": {
-            "official_url": current.get("installer", {}).get(
+            "official_url": current_installer.get(
                 "official_url", "https://antigravity.google/cli/install.sh"
             ),
             "final_url": installer.get("final_url"),
