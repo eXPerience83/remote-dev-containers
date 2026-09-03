@@ -4,9 +4,25 @@ on:
   pull_request:
     paths:
       - ".github/workflows/inspect-antigravity-cli.yml"
+      - ".github/workflows/review-antigravity-candidate.yml"
+      - ".github/workflows/check-upstream.yml"
       - "scripts/inspect-antigravity-cli.py"
+      - "scripts/detect-antigravity-installer.py"
+      - "scripts/discover-antigravity-payload.py"
+      - "scripts/reconcile-antigravity-review-state.py"
+      - "scripts/update-antigravity-review-evidence.py"
+      - "scripts/update-antigravity-review-doc.py"
+      - "scripts/validate-antigravity-review-artifact.py"
       - "scripts/test_inspect_antigravity_cli.py"
+      - "scripts/test_detect_antigravity_installer.py"
+      - "scripts/test_discover_antigravity_payload.py"
+      - "scripts/test_reconcile_antigravity_review_state.py"
+      - "scripts/test_update_antigravity_review_evidence.py"
+      - "scripts/test_update_antigravity_review_doc.py"
+      - "scripts/test_validate_antigravity_review_artifact.py"
+      - "scripts/test_optional_review_workflows.py"
       - "scripts/fixtures/antigravity-install.sh"
+      - "third_party/antigravity-cli-detection.json"
       - "third_party/antigravity-cli-inspection.json"
       - "third_party/antigravity-cli-inspection.md"
       - "third_party/optional-agents.md"
@@ -20,219 +36,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  inspect:
-    name: inspect approved installer and payload
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+  validate:
+    name: validate inspection and review contracts offline
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout
+      - name: Checkout without repository credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Validate inspection implementation
+      - name: Validate Antigravity review implementation without live vendor execution
         run: |
+          set -euo pipefail
           python3 -m py_compile \
             scripts/inspect-antigravity-cli.py \
-            scripts/test_inspect_antigravity_cli.py
+            scripts/detect-antigravity-installer.py \
+            scripts/discover-antigravity-payload.py \
+            scripts/reconcile-antigravity-review-state.py \
+            scripts/update-antigravity-review-evidence.py \
+            scripts/update-antigravity-review-doc.py \
+            scripts/validate-antigravity-review-artifact.py \
+            scripts/test_inspect_antigravity_cli.py \
+            scripts/test_detect_antigravity_installer.py \
+            scripts/test_discover_antigravity_payload.py \
+            scripts/test_reconcile_antigravity_review_state.py \
+            scripts/test_update_antigravity_review_evidence.py \
+            scripts/test_update_antigravity_review_doc.py \
+            scripts/test_validate_antigravity_review_artifact.py \
+            scripts/test_optional_review_workflows.py
+
           python3 scripts/test_inspect_antigravity_cli.py
+          python3 scripts/test_detect_antigravity_installer.py
+          python3 scripts/test_discover_antigravity_payload.py
+          python3 scripts/test_reconcile_antigravity_review_state.py
+          python3 scripts/test_update_antigravity_review_evidence.py
+          python3 scripts/test_update_antigravity_review_doc.py
+          python3 scripts/test_validate_antigravity_review_artifact.py
+          python3 scripts/test_optional_review_workflows.py
 
-      - name: Inspect approved official installer and installed package
-        env:
-          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
-          STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
+          jq -e '.schema_version == 2 and .blocking_findings == []' \
+            third_party/antigravity-cli-inspection.json >/dev/null
+          python3 scripts/validate-antigravity-review-artifact.py \
+            --kind detection \
+            --artifact third_party/antigravity-cli-detection.json
+          python3 scripts/update-antigravity-review-doc.py \
+            --reviewed third_party/antigravity-cli-inspection.json
+
+      - name: Confirm PR validation never executes live Antigravity vendor bytes
         run: |
-          expected_installer_sha256="$(jq -r '.installer.sha256' third_party/antigravity-cli-inspection.json)"
-          expected_binary_sha256="$(jq -r '.installed_binary.sha256' third_party/antigravity-cli-inspection.json)"
-          set +e
-          python3 scripts/inspect-antigravity-cli.py \
-            --output "$REPORT_PATH" \
-            --expected-installer-sha256 "$expected_installer_sha256" \
-            --expected-binary-sha256 "$expected_binary_sha256"
-          status=$?
-          printf '%s\n' "$status" > "$STATUS_PATH"
-          exit 0
-
-      - name: Validate metadata-only report
-        id: metadata
-        if: always()
-        env:
-          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          forbidden_keys = {
-              "binary_bytes",
-              "content_base64",
-              "installer_bytes",
-              "raw_binary",
-              "raw_content",
-              "stderr",
-              "stderr_lines",
-              "stdout",
-              "stdout_lines",
-          }
-          allowed_top_level = {
-              "binary_after_first",
-              "binary_after_second",
-              "binary_stable_across_second_install",
-              "blocking_findings",
-              "environment_controls",
-              "expected_binary_present",
-              "filesystem",
-              "first_install",
-              "home_unchanged_after_help",
-              "inspected_at_utc",
-              "installed_legal_files",
-              "installer",
-              "platform",
-              "profiles",
-              "schema_version",
-              "second_install",
-          }
-          safe_string = re.compile(r"[ -~]{0,500}")
-
-          def validate(value):
-              if isinstance(value, dict):
-                  for key, child in value.items():
-                      assert key not in forbidden_keys, key
-                      validate(child)
-              elif isinstance(value, list):
-                  assert len(value) <= 1000
-                  for child in value:
-                      validate(child)
-              elif isinstance(value, str):
-                  assert safe_string.fullmatch(value), "non-printable or oversized string"
-
-          path = Path(os.environ["REPORT_PATH"])
-          report = json.loads(path.read_text(encoding="utf-8"))
-          assert report["schema_version"] == 2
-          assert set(report) == allowed_top_level
-          validate(report)
-          assert path.stat().st_size < 2 * 1024 * 1024
-          print("Antigravity report passed the metadata-only schema gate")
-          PY
-
-      - name: Upload validated inspection evidence
-        if: always() && steps.metadata.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: antigravity-cli-inspection
-          path: |
-            ${{ runner.temp }}/antigravity-cli-inspection.json
-            ${{ runner.temp }}/antigravity-cli-inspection.status
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload safe status after rejected report
-        if: always() && steps.metadata.outcome != 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: antigravity-cli-inspection-status
-          path: ${{ runner.temp }}/antigravity-cli-inspection.status
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Enforce successful and current inspection
-        if: always() && steps.metadata.outcome == 'success'
-        env:
-          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-inspection.json
-          STATUS_PATH: ${{ runner.temp }}/antigravity-cli-inspection.status
-        run: |
-          test "$(cat "$STATUS_PATH")" = "0"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          live = json.loads(Path(os.environ["REPORT_PATH"]).read_text(encoding="utf-8"))
-          expected = json.loads(
-              Path("third_party/antigravity-cli-inspection.json").read_text(encoding="utf-8")
-          )
-
-          assert live["blocking_findings"] == [], live["blocking_findings"]
-          assert live["expected_binary_present"] is True
-          assert live["environment_controls"]["auto_update_disabled"] is True
-          assert live["home_unchanged_after_help"] is True
-          assert live["profiles"]["unchanged_after_help"] is True
-          assert live["profiles"]["unchanged_after_first"] is True
-          assert live["profiles"]["unchanged_after_second"] is True
-          assert live["binary_stable_across_second_install"] is True
-
-          live_binary = live["binary_after_second"]
-          expected_binary = expected["installed_binary"]
-          live_paths = [
-              entry["path"]
-              for entry in live["filesystem"]["after_second"]
-              if entry.get("path_redacted") is False
-          ]
-
-          comparisons = {
-              "installer URL": (
-                  live["installer"]["final_url"],
-                  expected["installer"]["final_url"],
-              ),
-              "installer content type": (
-                  live["installer"]["content_type"],
-                  expected["installer"]["content_type"],
-              ),
-              "installer size": (
-                  live["installer"]["size"],
-                  expected["installer"]["size"],
-              ),
-              "installer SHA-256": (
-                  live["installer"]["sha256"],
-                  expected["installer"]["sha256"],
-              ),
-              "installer options": (
-                  live["installer"]["supported_options"],
-                  expected["installer"]["advertised_options"],
-              ),
-              "installation strategy": (
-                  live["installer"]["selected_strategy"],
-                  expected["installer"]["selected_strategy"],
-              ),
-              "binary version": (
-                  live_binary["version"]["reported_version"],
-                  expected_binary["version"],
-              ),
-              "binary size": (live_binary["size"], expected_binary["size"]),
-              "binary SHA-256": (
-                  live_binary["sha256"],
-                  expected_binary["sha256"],
-              ),
-              "binary format": (
-                  live_binary["format"],
-                  expected_binary["format"],
-              ),
-              "dynamic libraries": (
-                  live_binary["dynamic_libraries"]["recognized"],
-                  expected_binary["dynamic_dependencies"],
-              ),
-              "created paths": (
-                  live_paths,
-                  expected["filesystem"]["created_relative_paths"],
-              ),
-              "installed legal files": (
-                  live["installed_legal_files"],
-                  expected["filesystem"]["installed_license_or_notice_files"],
-              ),
-          }
-          for label, (actual, recorded) in comparisons.items():
-              assert actual == recorded, f"stale {label}: {actual!r} != {recorded!r}"
-
-          assert live_binary["version"]["exit_code"] == expected_binary["version_check_exit_code"]
-          assert live_binary["help"]["exit_code"] == expected_binary["help_check_exit_code"]
-          assert live_binary["dynamic_libraries"]["unrecognized_count"] == 0
-          assert live["first_install"]["reports_linux_amd64"] is True
-          assert live["first_install"]["reports_checksum_verified"] is True
-          assert live["second_install"]["reports_existing_install"] is True
-          assert live["second_install"]["reports_background_self_update"] is True
-          print("Official Antigravity inspection matches committed evidence")
-          PY
+          set -euo pipefail
+          if grep -qE 'discover-antigravity-payload\.py|inspect-antigravity-cli\.py .*--output' \
+            .github/workflows/inspect-antigravity-cli.yml; then
+            echo "ERROR: PR validation workflow contains a live Antigravity execution path" >&2
+            exit 1
+          fi
+          echo "Antigravity PR validation is offline; live review requires explicit hash admission."
