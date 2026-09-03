@@ -34,6 +34,7 @@ expect_ok stable v0.1.0 "$edge_sha"
 expect_fail dev dev-pr-188-0123456 "$edge_sha"
 expect_fail edge edge-2026.08.27-89abcde "$edge_sha"
 expect_fail edge edge-2026-08-27-0123456 "$edge_sha"
+expect_fail edge edge-2026.02.30-0123456 "$edge_sha"
 expect_fail stable 0.1.0 "$edge_sha"
 expect_fail unknown edge-2026.08.27-0123456 "$other_sha"
 
