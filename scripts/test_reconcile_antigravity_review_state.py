@@ -39,6 +39,8 @@ def reviewed(
         "workflow": {
             "name": "Inspect Antigravity CLI",
             "path": ".github/workflows/inspect-antigravity-cli.yml",
+            "artifact_name": "antigravity-cli-inspection",
+            "retention_days": 14,
         },
         "installer": {
             "official_url": MODULE.OFFICIAL_URL,
@@ -59,17 +61,42 @@ def reviewed(
             "version": version,
             "size": 200000000,
             "sha256": payload_sha,
-            "format": {},
-            "dynamic_dependencies": [],
+            "format": {
+                "elf_64_bit": True,
+                "x86_64": True,
+                "pie": True,
+                "dynamically_linked": True,
+                "stripped": True,
+                "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            },
+            "dynamic_dependencies": [
+                "libc.so.6",
+                "libdl.so.2",
+                "libm.so.6",
+                "libpthread.so.0",
+                "libresolv.so.2",
+                "librt.so.1",
+            ],
             "version_check_exit_code": 0,
             "help_check_exit_code": 0,
         },
-        "filesystem": {},
-        "repeat_install": {},
+        "filesystem": {
+            "created_relative_paths": [".local", ".local/bin", MODULE.EXPECTED_BINARY],
+            "shell_profiles_changed": False,
+            "installed_license_or_notice_files": [],
+        },
+        "repeat_install": {
+            "exit_code": 0,
+            "binary_hash_unchanged": True,
+            "behavior": "Repeated reviewed install kept the admitted executable unchanged.",
+        },
         "official_runtime_controls": {
-            "disable_background_auto_update": "AGY_CLI_DISABLE_AUTO_UPDATE=true"
+            "disable_background_auto_update": "AGY_CLI_DISABLE_AUTO_UPDATE=true",
+            "persistent_settings": "~/.gemini/antigravity-cli/settings.json",
+            "updater_state": "~/.gemini/antigravity-cli/updater/",
         },
         "legal_and_distribution": {
+            "installed_package_contains_separate_license_or_notice_files": False,
             "redistribution_permission_confirmed": False,
             "decision": "Do not redistribute.",
         },
@@ -310,6 +337,42 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         proposal["legal_and_distribution"] = deepcopy(proposal["legal_and_distribution"])
         proposal["legal_and_distribution"]["redistribution_permission_confirmed"] = True
         with self.assertRaisesRegex(MODULE.ReconcileError, "human-owned legal_and_distribution"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_proposal_cannot_omit_installer_metadata(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        proposal["installer"].pop("content_type")
+        with self.assertRaisesRegex(MODULE.ReconcileError, "installer metadata.*unsupported schema"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_proposal_cannot_omit_binary_size(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        proposal["installed_binary"].pop("size")
+        with self.assertRaisesRegex(MODULE.ReconcileError, "binary metadata.*unsupported schema"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_proposal_cannot_omit_binary_format_metadata(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        proposal["installed_binary"]["format"].pop("x86_64")
+        with self.assertRaisesRegex(MODULE.ReconcileError, "format metadata.*unsupported schema"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_proposal_rejects_unreviewed_dynamic_dependency(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        proposal["installed_binary"]["dynamic_dependencies"].append("libevil.so.1")
+        proposal["installed_binary"]["dynamic_dependencies"].sort()
+        with self.assertRaisesRegex(MODULE.ReconcileError, "unreviewed library"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_proposal_requires_successful_repeat_install(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        proposal["repeat_install"]["exit_code"] = 1
+        with self.assertRaisesRegex(MODULE.ReconcileError, "repeat-install evidence"):
             self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
 
     def test_discovery_cannot_change_fixed_origin(self) -> None:
