@@ -108,6 +108,14 @@ class AntigravityPayloadDiscoveryTests(unittest.TestCase):
         for forbidden in ("installation", "bash_syntax", "help", "stdout", "stderr"):
             self.assertNotIn(f'"{forbidden}"', serialized)
 
+    def test_installer_network_policy_allows_only_canonical_url(self) -> None:
+        self.assertTrue(MODULE.installer_url_policy(MODULE.INSPECTOR.OFFICIAL_INSTALLER_URL))
+        self.assertFalse(MODULE.installer_url_policy("https://antigravity.google/docs"))
+        self.assertFalse(MODULE.installer_url_policy("http://antigravity.google/cli/install.sh"))
+        self.assertFalse(
+            MODULE.installer_url_policy("https://antigravity.google/cli/install.sh?x=1")
+        )
+
     def test_discovery_requires_exact_installer_hash(self) -> None:
         with self.assertRaisesRegex(MODULE.DiscoveryError, "explicitly admitted"):
             MODULE.discover(
@@ -140,6 +148,20 @@ class AntigravityPayloadDiscoveryTests(unittest.TestCase):
         self._write_archive(b"", symlink=True)
         self._write_manifest(hashlib.sha512(self.archive.read_bytes()).hexdigest())
         with self.assertRaisesRegex(MODULE.DiscoveryError, "link/device"):
+            self._discover()
+
+    def test_archive_member_limit_is_enforced_incrementally(self) -> None:
+        with tarfile.open(self.archive, "w:gz") as archive:
+            for index in range(MODULE.MAX_ARCHIVE_MEMBERS):
+                directory = tarfile.TarInfo(f"dir-{index}")
+                directory.type = tarfile.DIRTYPE
+                archive.addfile(directory)
+            payload = tarfile.TarInfo("antigravity")
+            payload.size = len(PAYLOAD)
+            payload.mode = 0o755
+            archive.addfile(payload, io.BytesIO(PAYLOAD))
+        self._write_manifest(hashlib.sha512(self.archive.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "member count"):
             self._discover()
 
     def test_fixture_trio_is_required(self) -> None:
