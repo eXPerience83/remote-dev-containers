@@ -90,6 +90,13 @@ class UpstreamChangelogTests(unittest.TestCase):
         self.assertLess(updated.index("2026-09-03"), updated.index("2026-08-27"))
         self.assertIn("- Human-authored entry.", updated)
 
+    def test_repeated_identical_update_is_idempotent(self) -> None:
+        changes = ["uv 0.12.9 → 0.13.0"]
+        once = MODULE.update_changelog(BASE_CHANGELOG, "2026-09-03", changes)
+        twice = MODULE.update_changelog(once, "2026-09-03", changes)
+        self.assertEqual(twice, once)
+        self.assertEqual(twice.count("- 2026-09-03 — uv 0.12.9 → 0.13.0."), 1)
+
     def test_missing_marker_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "ownership marker"):
             MODULE.update_changelog(
