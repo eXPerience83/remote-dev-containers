@@ -83,7 +83,7 @@ def _strict_https_url(url: object, *, host: str, path: str | None = None) -> boo
 
 
 def installer_url_policy(url: str) -> bool:
-    return _strict_https_url(url, host="antigravity.google")
+    return url == INSPECTOR.OFFICIAL_INSTALLER_URL
 
 
 def manifest_url_policy(url: str) -> bool:
@@ -109,7 +109,11 @@ def _fixture_bytes(path: Path, *, max_bytes: int, label: str) -> bytes:
 
 
 def _installer_contract(data: bytes) -> None:
-    missing = [marker.decode("ascii") for marker in _INSTALLER_CONTRACT_MARKERS if marker not in data]
+    missing = [
+        marker.decode("ascii")
+        for marker in _INSTALLER_CONTRACT_MARKERS
+        if marker not in data
+    ]
     if missing:
         raise DiscoveryError(
             "admitted installer no longer exposes the reviewed manifest/checksum contract"
@@ -163,7 +167,9 @@ def _parse_manifest(data: bytes) -> tuple[str, str, str]:
     if not isinstance(version, str) or not _VERSION_RE.fullmatch(version):
         raise DiscoveryError("Antigravity manifest version is not an exact stable version")
     if not isinstance(payload_url, str) or not payload_url_policy(payload_url):
-        raise DiscoveryError("Antigravity manifest payload URL left the reviewed Google archive path")
+        raise DiscoveryError(
+            "Antigravity manifest payload URL left the reviewed Google archive path"
+        )
     if not isinstance(archive_sha512, str) or not _SHA512_RE.fullmatch(archive_sha512):
         raise DiscoveryError("Antigravity manifest SHA-512 is malformed")
     if f"/{version}-" not in urllib.parse.urlsplit(payload_url).path:
@@ -174,26 +180,44 @@ def _parse_manifest(data: bytes) -> tuple[str, str, str]:
 def _hash_payload_from_archive(data: bytes) -> tuple[int, str]:
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
-            members = archive.getmembers()
-            if not members or len(members) > MAX_ARCHIVE_MEMBERS:
-                raise DiscoveryError("Antigravity archive member count is outside the reviewed boundary")
-            payload_members = []
-            for member in members:
-                normalized = member.name[2:] if member.name.startswith("./") else member.name
+            payload_member = None
+            member_count = 0
+            for member in archive:
+                member_count += 1
+                if member_count > MAX_ARCHIVE_MEMBERS:
+                    raise DiscoveryError(
+                        "Antigravity archive member count is outside the reviewed boundary"
+                    )
+                normalized = (
+                    member.name[2:] if member.name.startswith("./") else member.name
+                )
                 if member.issym() or member.islnk() or member.isdev():
-                    raise DiscoveryError("Antigravity archive contains an unsupported link/device member")
+                    raise DiscoveryError(
+                        "Antigravity archive contains an unsupported link/device member"
+                    )
                 if member.isfile():
                     if normalized != EXPECTED_ARCHIVE_MEMBER:
-                        raise DiscoveryError("Antigravity archive contains an unexpected regular file")
-                    payload_members.append(member)
+                        raise DiscoveryError(
+                            "Antigravity archive contains an unexpected regular file"
+                        )
+                    if payload_member is not None:
+                        raise DiscoveryError(
+                            "Antigravity archive contains multiple payload members"
+                        )
+                    if not 0 < member.size <= MAX_PAYLOAD_SIZE:
+                        raise DiscoveryError(
+                            "Antigravity archive payload size is outside the reviewed boundary"
+                        )
+                    payload_member = member
                 elif not member.isdir():
-                    raise DiscoveryError("Antigravity archive contains an unsupported member type")
-            if len(payload_members) != 1:
-                raise DiscoveryError("Antigravity archive does not contain exactly one payload member")
-            member = payload_members[0]
-            if not 0 < member.size <= MAX_PAYLOAD_SIZE:
-                raise DiscoveryError("Antigravity archive payload size is outside the reviewed boundary")
-            stream = archive.extractfile(member)
+                    raise DiscoveryError(
+                        "Antigravity archive contains an unsupported member type"
+                    )
+            if member_count == 0 or payload_member is None:
+                raise DiscoveryError(
+                    "Antigravity archive does not contain exactly one payload member"
+                )
+            stream = archive.extractfile(payload_member)
             if stream is None:
                 raise DiscoveryError("Antigravity archive payload cannot be read")
             digest = hashlib.sha256()
@@ -201,9 +225,11 @@ def _hash_payload_from_archive(data: bytes) -> tuple[int, str]:
             while chunk := stream.read(1024 * 1024):
                 total += len(chunk)
                 if total > MAX_PAYLOAD_SIZE:
-                    raise DiscoveryError("Antigravity archive payload exceeds the reviewed boundary")
+                    raise DiscoveryError(
+                        "Antigravity archive payload exceeds the reviewed boundary"
+                    )
                 digest.update(chunk)
-            if total != member.size:
+            if total != payload_member.size:
                 raise DiscoveryError("Antigravity archive payload size is inconsistent")
             return total, digest.hexdigest()
     except (tarfile.TarError, OSError) as exc:
@@ -218,13 +244,22 @@ def discover(
     archive_fixture: Path | None = None,
 ) -> dict[str, Any]:
     fixtures = (installer_fixture, manifest_fixture, archive_fixture)
-    if any(item is not None for item in fixtures) and not all(item is not None for item in fixtures):
-        raise DiscoveryError("offline discovery fixtures must provide installer, manifest and archive together")
+    if any(item is not None for item in fixtures) and not all(
+        item is not None for item in fixtures
+    ):
+        raise DiscoveryError(
+            "offline discovery fixtures must provide installer, manifest and archive together"
+        )
     fixture_mode = installer_fixture is not None
 
     with tempfile.TemporaryDirectory(prefix="antigravity-payload-discovery-") as temporary:
         root = Path(temporary)
-        installer_data, installer_content_type, installer_final_url, installer_source = _load_installer(
+        (
+            installer_data,
+            installer_content_type,
+            installer_final_url,
+            installer_source,
+        ) = _load_installer(
             expected_installer_sha256=expected_installer_sha256,
             installer_fixture=installer_fixture,
             root=root,
@@ -240,7 +275,11 @@ def discover(
             manifest_source = manifest_final_url
         else:
             try:
-                manifest_data, manifest_content_type, manifest_final_url = NETWORK.download_bytes(
+                (
+                    manifest_data,
+                    manifest_content_type,
+                    manifest_final_url,
+                ) = NETWORK.download_bytes(
                     MANIFEST_URL,
                     root / "manifest.json",
                     max_bytes=MAX_MANIFEST_SIZE,
@@ -265,7 +304,11 @@ def discover(
             archive_source = archive_final_url
         else:
             try:
-                archive_data, archive_content_type, archive_final_url = NETWORK.download_bytes(
+                (
+                    archive_data,
+                    archive_content_type,
+                    archive_final_url,
+                ) = NETWORK.download_bytes(
                     payload_url,
                     root / "payload.tar.gz",
                     max_bytes=MAX_ARCHIVE_SIZE,
@@ -281,7 +324,9 @@ def discover(
 
         archive_sha512 = hashlib.sha512(archive_data).hexdigest()
         if archive_sha512 != expected_archive_sha512:
-            raise DiscoveryError("Antigravity archive SHA-512 differs from the official manifest")
+            raise DiscoveryError(
+                "Antigravity archive SHA-512 differs from the official manifest"
+            )
         payload_size, payload_sha256 = _hash_payload_from_archive(archive_data)
 
         report = {
@@ -353,7 +398,9 @@ def validate_report(
         "blocking_findings",
     }:
         raise DiscoveryError("payload discovery report has unexpected top-level fields")
-    if report.get("schema_version") != 2 or report.get("kind") != "antigravity-payload-discovery":
+    if report.get("schema_version") != 2 or report.get(
+        "kind"
+    ) != "antigravity-payload-discovery":
         raise DiscoveryError("payload discovery report has an unsupported schema")
     if report.get("blocking_findings") != []:
         raise DiscoveryError("payload discovery report contains a blocking finding")
@@ -363,15 +410,33 @@ def validate_report(
     archive = report.get("archive")
     payload = report.get("payload")
     if not isinstance(installer, dict) or set(installer) != {
-        "source", "final_url", "content_type", "size", "sha256", "manifest_url", "archive_member"
+        "source",
+        "final_url",
+        "content_type",
+        "size",
+        "sha256",
+        "manifest_url",
+        "archive_member",
     }:
         raise DiscoveryError("payload discovery installer metadata is malformed")
     if not isinstance(manifest, dict) or set(manifest) != {
-        "source", "final_url", "content_type", "size", "sha256", "version", "payload_url", "payload_sha512"
+        "source",
+        "final_url",
+        "content_type",
+        "size",
+        "sha256",
+        "version",
+        "payload_url",
+        "payload_sha512",
     }:
         raise DiscoveryError("payload discovery manifest metadata is malformed")
     if not isinstance(archive, dict) or set(archive) != {
-        "source", "final_url", "content_type", "size", "sha512", "member"
+        "source",
+        "final_url",
+        "content_type",
+        "size",
+        "sha512",
+        "member",
     }:
         raise DiscoveryError("payload discovery archive metadata is malformed")
     if not isinstance(payload, dict) or set(payload) != {"path", "size", "sha256"}:
@@ -381,10 +446,17 @@ def validate_report(
     if not isinstance(installer_sha, str) or not _SHA256_RE.fullmatch(installer_sha):
         raise DiscoveryError("payload discovery installer SHA-256 is invalid")
     if expected_installer_sha256 is not None and installer_sha != expected_installer_sha256:
-        raise DiscoveryError("payload discovery installer SHA-256 differs from the admitted value")
-    if installer.get("manifest_url") != MANIFEST_URL or installer.get("archive_member") != EXPECTED_ARCHIVE_MEMBER:
+        raise DiscoveryError(
+            "payload discovery installer SHA-256 differs from the admitted value"
+        )
+    if (
+        installer.get("manifest_url") != MANIFEST_URL
+        or installer.get("archive_member") != EXPECTED_ARCHIVE_MEMBER
+    ):
         raise DiscoveryError("payload discovery installer contract metadata changed")
-    if not isinstance(installer.get("size"), int) or not 0 < installer["size"] <= 2 * 1024 * 1024:
+    if not isinstance(installer.get("size"), int) or not 0 < installer[
+        "size"
+    ] <= 2 * 1024 * 1024:
         raise DiscoveryError("payload discovery installer size is invalid")
     if not _valid_content_type(installer.get("content_type")):
         raise DiscoveryError("payload discovery installer content type is invalid")
@@ -396,18 +468,29 @@ def validate_report(
         raise DiscoveryError("payload discovery manifest version is invalid")
     if not isinstance(payload_url, str) or not payload_url_policy(payload_url):
         raise DiscoveryError("payload discovery manifest payload URL is invalid")
-    if not isinstance(payload_sha512, str) or not re.fullmatch(r"[0-9a-f]{128}", payload_sha512):
+    if not isinstance(payload_sha512, str) or not re.fullmatch(
+        r"[0-9a-f]{128}", payload_sha512
+    ):
         raise DiscoveryError("payload discovery manifest SHA-512 is invalid")
-    if not isinstance(manifest.get("sha256"), str) or not _SHA256_RE.fullmatch(manifest["sha256"]):
+    if not isinstance(manifest.get("sha256"), str) or not _SHA256_RE.fullmatch(
+        manifest["sha256"]
+    ):
         raise DiscoveryError("payload discovery manifest SHA-256 is invalid")
-    if not isinstance(manifest.get("size"), int) or not 0 < manifest["size"] <= MAX_MANIFEST_SIZE:
+    if not isinstance(manifest.get("size"), int) or not 0 < manifest[
+        "size"
+    ] <= MAX_MANIFEST_SIZE:
         raise DiscoveryError("payload discovery manifest size is invalid")
     if not _valid_content_type(manifest.get("content_type")):
         raise DiscoveryError("payload discovery manifest content type is invalid")
 
-    if archive.get("sha512") != payload_sha512 or archive.get("member") != EXPECTED_ARCHIVE_MEMBER:
+    if (
+        archive.get("sha512") != payload_sha512
+        or archive.get("member") != EXPECTED_ARCHIVE_MEMBER
+    ):
         raise DiscoveryError("payload discovery archive identity is inconsistent")
-    if not isinstance(archive.get("size"), int) or not 0 < archive["size"] <= MAX_ARCHIVE_SIZE:
+    if not isinstance(archive.get("size"), int) or not 0 < archive[
+        "size"
+    ] <= MAX_ARCHIVE_SIZE:
         raise DiscoveryError("payload discovery archive size is invalid")
     if not _valid_content_type(archive.get("content_type")):
         raise DiscoveryError("payload discovery archive content type is invalid")
@@ -423,17 +506,33 @@ def validate_report(
 
     if allow_fixtures:
         for record in (installer, manifest, archive):
-            if not isinstance(record.get("source"), str) or not record["source"].startswith("fixture:"):
+            if not isinstance(record.get("source"), str) or not record[
+                "source"
+            ].startswith("fixture:"):
                 raise DiscoveryError("offline payload discovery source is not a fixture")
             if record.get("final_url") != record.get("source"):
-                raise DiscoveryError("offline payload discovery fixture URL is inconsistent")
+                raise DiscoveryError(
+                    "offline payload discovery fixture URL is inconsistent"
+                )
     else:
-        if installer.get("source") != INSPECTOR.OFFICIAL_INSTALLER_URL or installer.get("final_url") != INSPECTOR.OFFICIAL_INSTALLER_URL:
-            raise DiscoveryError("payload discovery installer left the fixed official URL")
-        if manifest.get("source") != MANIFEST_URL or manifest.get("final_url") != MANIFEST_URL:
+        if (
+            installer.get("source") != INSPECTOR.OFFICIAL_INSTALLER_URL
+            or installer.get("final_url") != INSPECTOR.OFFICIAL_INSTALLER_URL
+        ):
+            raise DiscoveryError(
+                "payload discovery installer left the fixed official URL"
+            )
+        if (
+            manifest.get("source") != MANIFEST_URL
+            or manifest.get("final_url") != MANIFEST_URL
+        ):
             raise DiscoveryError("payload discovery manifest left the fixed reviewed URL")
-        if archive.get("source") != payload_url or archive.get("final_url") != payload_url:
-            raise DiscoveryError("payload discovery archive left the manifest-selected URL")
+        if archive.get("source") != payload_url or archive.get(
+            "final_url"
+        ) != payload_url:
+            raise DiscoveryError(
+                "payload discovery archive left the manifest-selected URL"
+            )
 
 
 def write_report(
@@ -451,7 +550,9 @@ def write_report(
         archive_fixture=archive_fixture,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return report
 
 
