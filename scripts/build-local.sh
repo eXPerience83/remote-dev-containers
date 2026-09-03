@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 source "$ROOT/versions.env"
 # shellcheck source=scripts/lib/remote-dev-image-names.sh
 source "$ROOT/scripts/lib/remote-dev-image-names.sh"
+# shellcheck source=scripts/lib/remote-dev-image-identity.sh
+source "$ROOT/scripts/lib/remote-dev-image-identity.sh"
 
 bash "$ROOT/scripts/validate-version-pins.sh"
 REMOTE_DEV_IMAGE_NAMES_LIB="$ROOT/scripts/lib/remote-dev-image-names.sh" \
@@ -43,7 +45,7 @@ PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-${BASE_VERSION:-}}"
 if [[ -z "${PROJECT_CHANNEL:-}" ]]; then
   case "$PROJECT_VERSION" in
-    candidate-pr-[1-9][0-9]*) PROJECT_CHANNEL=dev ;;
+    candidate-pr-*) PROJECT_CHANNEL=dev ;;
     *) PROJECT_CHANNEL=local ;;
   esac
 fi
@@ -55,6 +57,7 @@ fi
 require_build_value PROJECT_VERSION "$PROJECT_VERSION"
 require_build_value PROJECT_CHANNEL "$PROJECT_CHANNEL"
 require_build_value SOURCE_REVISION "$SOURCE_REVISION"
+remote_dev_validate_image_identity "$PROJECT_CHANNEL" "$PROJECT_VERSION" "$SOURCE_REVISION"
 
 common_args=(
   --platform "$PLATFORM"
