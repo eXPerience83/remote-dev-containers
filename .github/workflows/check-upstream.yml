@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   antigravity-detect:
-    name: detect Antigravity installer without execution
+    name: detect Antigravity changes without executing unreviewed bytes
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
 
@@ -26,24 +26,50 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Detect fixed official installer metadata only
+      - name: Detect installer and discover payload only behind reviewed installer
         env:
-          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-detection.json
+          REPORT_DIR: ${{ runner.temp }}/antigravity-review-detection
         run: |
           set -euo pipefail
-          reviewed_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
+          install -d -m 0700 "$REPORT_DIR"
+          detection_path="$REPORT_DIR/antigravity-cli-detection.json"
+          discovery_path="$REPORT_DIR/antigravity-cli-payload-discovery.json"
+          reviewed_installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
+          reviewed_payload_sha="$(jq -er '.installed_binary.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
+
           python3 scripts/detect-antigravity-installer.py \
-            --output "$REPORT_PATH" \
-            --reviewed-installer-sha256 "$reviewed_sha"
+            --output "$detection_path" \
+            --reviewed-installer-sha256 "$reviewed_installer_sha"
           python3 scripts/validate-antigravity-review-artifact.py \
             --kind detection \
-            --artifact "$REPORT_PATH"
+            --artifact "$detection_path"
 
-      - name: Upload metadata-only detection evidence
+          live_installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' "$detection_path")"
+          if [[ "$live_installer_sha" == "$reviewed_installer_sha" ]]; then
+            # Only already-reviewed installer bytes may execute automatically. The
+            # resulting agy file is hashed but is never invoked in this stage.
+            python3 scripts/discover-antigravity-payload.py \
+              --output "$discovery_path" \
+              --expected-installer-sha256 "$reviewed_installer_sha"
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind discovery \
+              --artifact "$discovery_path" \
+              --expected-installer-sha256 "$reviewed_installer_sha"
+            live_payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' "$discovery_path")"
+            if [[ "$live_payload_sha" == "$reviewed_payload_sha" ]]; then
+              echo "Antigravity reviewed installer still resolves to the reviewed payload."
+            else
+              echo "Antigravity reviewed installer resolves to a new payload hash; agy was not executed."
+            fi
+          else
+            echo "Antigravity installer hash changed; unreviewed installer bytes were not executed."
+          fi
+
+      - name: Upload normalized metadata-only Antigravity detection
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: antigravity-installer-detection
-          path: ${{ runner.temp }}/antigravity-cli-detection.json
+          path: ${{ runner.temp }}/antigravity-review-detection/
           if-no-files-found: error
           retention-days: 3
 
@@ -71,18 +97,25 @@ jobs:
           name: antigravity-installer-detection
           path: ${{ runner.temp }}/antigravity-detection
 
-      - name: Revalidate detection after crossing into write-capable job
+      - name: Revalidate Antigravity metadata after crossing into write-capable job
         env:
-          REPORT_PATH: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
+          DETECTION_PATH: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
+          DISCOVERY_PATH: ${{ runner.temp }}/antigravity-detection/antigravity-cli-payload-discovery.json
         run: |
           set -euo pipefail
           python3 scripts/validate-antigravity-review-artifact.py \
             --kind detection \
-            --artifact "$REPORT_PATH"
+            --artifact "$DETECTION_PATH"
           baseline_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
-          artifact_baseline="$(jq -er '.reviewed_installer_sha256 | select(test("^[0-9a-f]{64}$"))' "$REPORT_PATH")"
+          artifact_baseline="$(jq -er '.reviewed_installer_sha256 | select(test("^[0-9a-f]{64}$"))' "$DETECTION_PATH")"
           [[ "$artifact_baseline" == "$baseline_sha" ]] \
             || { echo "ERROR: Antigravity detection was not generated from the current reviewed baseline" >&2; exit 1; }
+          if [[ -f "$DISCOVERY_PATH" ]]; then
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind discovery \
+              --artifact "$DISCOVERY_PATH" \
+              --expected-installer-sha256 "$baseline_sha"
+          fi
 
       - name: Require the main branch
         run: |
@@ -95,6 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ANTIGRAVITY_DETECTION: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
+          ANTIGRAVITY_DISCOVERY: ${{ runner.temp }}/antigravity-detection/antigravity-cli-payload-discovery.json
         run: |
           set -euo pipefail
           python3 scripts/test_update_upstream_changelog.py
@@ -271,6 +305,9 @@ jobs:
             --detection-output "$workdir/reconciled-antigravity-detection.json"
             --discovery-output "$workdir/reconciled-antigravity-discovery.json"
           )
+          if [[ -s "$ANTIGRAVITY_DISCOVERY" ]]; then
+            reconcile_args+=(--live-discovery "$ANTIGRAVITY_DISCOVERY")
+          fi
           if [[ -s "$workdir/proposed-antigravity-reviewed.json" ]]; then
             reconcile_args+=(--proposed-reviewed "$workdir/proposed-antigravity-reviewed.json")
           fi
@@ -430,17 +467,19 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and detects the fixed official Antigravity installer in a read-only job without executing changed vendor bytes. The pull request records actual old-to-new component version deltas in the bounded Unreleased changelog section, regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory and refreshes bounded inspection evidence. Antigravity remains outside the image and build-time SBOM."
+          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and reviews Antigravity through a read-only detector. A changed installer is never executed automatically. When the installer hash is still exactly the reviewed hash, only that already-admitted installer may run to discover the resulting agy hash; agy itself is not executed until its exact SHA-256 is explicitly admitted. Antigravity remains outside the image and build-time SBOM."
 
           antigravity_changed="$(jq -r '.changed' third_party/antigravity-cli-detection.json)"
-          if [[ "$antigravity_changed" == "true" ]]; then
-            installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-detection.json)"
-            if [[ -f third_party/antigravity-cli-candidate.json ]]; then
-              payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-candidate.json)"
-              body+=" Antigravity installer SHA-256 ${installer_sha} has completed the first explicit admission/discovery stage; agy SHA-256 ${payload_sha} is waiting for separate human admission before full inspection."
+          installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-detection.json)"
+          if [[ -f third_party/antigravity-cli-candidate.json ]]; then
+            payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-candidate.json)"
+            if [[ "$antigravity_changed" == "true" ]]; then
+              body+=" Antigravity installer SHA-256 ${installer_sha} has completed the first explicit installer-admission/discovery stage; agy SHA-256 ${payload_sha} is waiting for separate human admission before full inspection."
             else
-              body+=" Antigravity installer SHA-256 ${installer_sha} differs from committed reviewed evidence. No changed vendor bytes were executed. Human admission of that exact installer hash is required before the discover-payload stage may run."
+              body+=" The reviewed Antigravity installer SHA-256 ${installer_sha} now resolves to a new agy SHA-256 ${payload_sha}. Only the already-reviewed installer was executed and agy was not executed. Human admission of this exact payload hash is required before the inspect-payload stage may run."
             fi
+          elif [[ "$antigravity_changed" == "true" ]]; then
+            body+=" Antigravity installer SHA-256 ${installer_sha} differs from committed reviewed evidence. No changed vendor bytes were executed. Human admission of that exact installer hash is required before the discover-payload stage may run."
           elif ! git diff --quiet origin/main -- third_party/antigravity-cli-inspection.json; then
             reviewed_version="$(jq -er '.installed_binary.version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+([+-][A-Za-z0-9._-]+)?$"))' third_party/antigravity-cli-inspection.json)"
             body+=" A fully hash-admitted Antigravity inspection is proposed for agy ${reviewed_version}; human compatibility and current terms/privacy review remain required before merge."
