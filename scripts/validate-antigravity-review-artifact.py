@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
 OFFICIAL_HOST = "antigravity.google"
 MAX_BYTES = 2 * 1024 * 1024
+MAX_NESTING_DEPTH = 64
 SAFE_STRING_RE = re.compile(r"[ -~]{0,500}")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_KEYS = {
@@ -83,7 +84,9 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def validate_safe_tree(value: object) -> None:
+def validate_safe_tree(value: object, *, depth: int = 0) -> None:
+    if depth > MAX_NESTING_DEPTH:
+        raise ArtifactError("Antigravity metadata nesting is too deep")
     if isinstance(value, dict):
         if len(value) > 200:
             raise ArtifactError("Antigravity metadata object is too large")
@@ -92,12 +95,12 @@ def validate_safe_tree(value: object) -> None:
                 raise ArtifactError(f"Antigravity metadata contains forbidden key: {key!r}")
             if not SAFE_STRING_RE.fullmatch(key):
                 raise ArtifactError("Antigravity metadata contains an unsafe key")
-            validate_safe_tree(child)
+            validate_safe_tree(child, depth=depth + 1)
     elif isinstance(value, list):
         if len(value) > 1000:
             raise ArtifactError("Antigravity metadata list is too large")
         for child in value:
-            validate_safe_tree(child)
+            validate_safe_tree(child, depth=depth + 1)
     elif isinstance(value, str):
         if not SAFE_STRING_RE.fullmatch(value):
             raise ArtifactError("Antigravity metadata contains non-printable or oversized text")
@@ -224,7 +227,7 @@ def main() -> int:
             expected_installer=expected_installer,
             expected_payload=expected_payload,
         )
-    except (OSError, RuntimeError, ArtifactError) as exc:
+    except (OSError, RuntimeError, ArtifactError, RecursionError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
         return 1
     print(f"Antigravity {args.kind} artifact: metadata-only schema OK")
