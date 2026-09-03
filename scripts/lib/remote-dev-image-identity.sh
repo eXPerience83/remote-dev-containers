@@ -5,6 +5,8 @@ remote_dev_validate_image_identity() {
   local version="$2"
   local source_revision="$3"
   local expected_short=""
+  local edge_date=""
+  local normalized_date=""
 
   case "$channel" in
     local)
@@ -30,6 +32,12 @@ remote_dev_validate_image_identity() {
     edge)
       if [[ ! "$version" =~ ^edge-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7}$ ]]; then
         echo "ERROR: edge image version must use edge-YYYY.MM.DD-<7-char-sha>; got $version" >&2
+        return 1
+      fi
+      edge_date="${version#edge-}"
+      edge_date="${edge_date%-*}"
+      if ! normalized_date="$(date -u -d "${edge_date//./-}" +%Y.%m.%d 2>/dev/null)" || [[ "$normalized_date" != "$edge_date" ]]; then
+        echo "ERROR: edge image version contains an invalid UTC calendar date: $edge_date" >&2
         return 1
       fi
       if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
