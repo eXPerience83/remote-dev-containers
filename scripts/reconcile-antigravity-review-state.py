@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile live Antigravity detection with optional proposed reviewed evidence."""
+"""Reconcile live Antigravity detection with optional proposed review state."""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from typing import Any
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9._-]+)?$")
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
+EXPECTED_BINARY = ".local/bin/agy"
 MAX_JSON_BYTES = 256 * 1024
+MAX_PAYLOAD_BYTES = 512 * 1024 * 1024
 
 
 class ReconcileError(ValueError):
@@ -65,6 +67,9 @@ def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
         raise ReconcileError("live installer host metadata is not normalized")
     if any(not isinstance(host, str) or not host or len(host) > 253 for host in hosts):
         raise ReconcileError("live installer host metadata is invalid")
+    reviewed_sha = sha256(value.get("reviewed_installer_sha256"), "reviewed installer SHA-256")
+    if value.get("changed") is not (installer["sha256"] != reviewed_sha):
+        raise ReconcileError("live detection changed flag is inconsistent")
     return installer
 
 
@@ -96,11 +101,52 @@ def validate_reviewed(value: dict[str, Any], *, baseline: dict[str, Any]) -> str
         raise ReconcileError("proposed reviewed evidence changed the fixed installer origin")
     installer_sha = sha256(installer.get("sha256"), "proposed installer SHA-256")
     sha256(binary.get("sha256"), "proposed binary SHA-256")
-    if binary.get("relative_path") != ".local/bin/agy":
+    if binary.get("relative_path") != EXPECTED_BINARY:
         raise ReconcileError("proposed reviewed evidence changed the expected binary path")
     version = binary.get("version")
     if not isinstance(version, str) or not _VERSION_RE.fullmatch(version):
         raise ReconcileError("proposed reviewed evidence has an invalid binary version")
+    return installer_sha
+
+
+def validate_discovery(value: dict[str, Any]) -> str:
+    expected_top = {
+        "schema_version",
+        "kind",
+        "installer",
+        "installation",
+        "payload",
+        "profiles_unchanged",
+        "blocking_findings",
+    }
+    if set(value) != expected_top:
+        raise ReconcileError("proposed payload discovery has unexpected fields")
+    if value.get("schema_version") != 1 or value.get("kind") != "antigravity-payload-discovery":
+        raise ReconcileError("proposed payload discovery has an unsupported schema")
+    if value.get("blocking_findings") != [] or value.get("profiles_unchanged") is not True:
+        raise ReconcileError("proposed payload discovery contains a blocking finding")
+
+    installer = value.get("installer")
+    installation = value.get("installation")
+    payload = value.get("payload")
+    if not isinstance(installer, dict) or not isinstance(installation, dict) or not isinstance(payload, dict):
+        raise ReconcileError("proposed payload discovery metadata is malformed")
+    installer_sha = sha256(installer.get("sha256"), "discovery installer SHA-256")
+    if installer.get("source") != OFFICIAL_URL or installer.get("final_url") != OFFICIAL_URL:
+        raise ReconcileError("proposed payload discovery changed the fixed installer origin")
+    if installer.get("selected_strategy") not in {
+        "custom-directory",
+        "skip-shell-modification-flags",
+    }:
+        raise ReconcileError("proposed payload discovery used an unsupported installer strategy")
+    if installation.get("exit_code") != 0:
+        raise ReconcileError("proposed payload discovery installer did not succeed")
+    if payload.get("path") != EXPECTED_BINARY:
+        raise ReconcileError("proposed payload discovery changed the expected binary path")
+    sha256(payload.get("sha256"), "discovery payload SHA-256")
+    payload_size = payload.get("size")
+    if not isinstance(payload_size, int) or not 0 < payload_size <= MAX_PAYLOAD_BYTES:
+        raise ReconcileError("proposed payload discovery size is outside the supported boundary")
     return installer_sha
 
 
@@ -109,18 +155,27 @@ def reconcile(
     live_detection: dict[str, Any],
     baseline_reviewed: dict[str, Any],
     proposed_reviewed: dict[str, Any] | None,
-) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    proposed_discovery: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, str]:
     live_installer = validate_detection(live_detection)
     baseline_sha = validate_reviewed(baseline_reviewed, baseline=baseline_reviewed)
     live_sha = live_installer["sha256"]
 
     selected_reviewed = baseline_reviewed
-    preserved = False
+    selected_discovery: dict[str, Any] | None = None
+    disposition = "baseline review + live detection"
+
     if proposed_reviewed is not None:
         proposed_sha = validate_reviewed(proposed_reviewed, baseline=baseline_reviewed)
         if proposed_sha == live_sha and proposed_sha != baseline_sha:
             selected_reviewed = proposed_reviewed
-            preserved = True
+            disposition = "preserved full proposed evidence"
+
+    if selected_reviewed is baseline_reviewed and proposed_discovery is not None:
+        discovery_sha = validate_discovery(proposed_discovery)
+        if discovery_sha == live_sha and discovery_sha != baseline_sha:
+            selected_discovery = proposed_discovery
+            disposition = "preserved payload-discovery candidate"
 
     selected_sha = selected_reviewed["installer"]["sha256"]
     normalized_detection = {
@@ -130,7 +185,7 @@ def reconcile(
         "reviewed_installer_sha256": selected_sha,
         "changed": live_sha != selected_sha,
     }
-    return selected_reviewed, normalized_detection, preserved
+    return selected_reviewed, normalized_detection, selected_discovery, disposition
 
 
 def main() -> int:
@@ -138,34 +193,48 @@ def main() -> int:
     parser.add_argument("--live-detection", type=Path, required=True)
     parser.add_argument("--baseline-reviewed", type=Path, required=True)
     parser.add_argument("--proposed-reviewed", type=Path)
+    parser.add_argument("--proposed-discovery", type=Path)
     parser.add_argument("--reviewed-output", type=Path, required=True)
     parser.add_argument("--detection-output", type=Path, required=True)
+    parser.add_argument("--discovery-output", type=Path)
     args = parser.parse_args()
     try:
-        proposed = (
+        proposed_reviewed = (
             load_json(args.proposed_reviewed)
             if args.proposed_reviewed is not None and args.proposed_reviewed.exists()
             else None
         )
-        reviewed, detection, preserved = reconcile(
+        proposed_discovery = (
+            load_json(args.proposed_discovery)
+            if args.proposed_discovery is not None and args.proposed_discovery.exists()
+            else None
+        )
+        reviewed, detection, discovery, disposition = reconcile(
             live_detection=load_json(args.live_detection),
             baseline_reviewed=load_json(args.baseline_reviewed),
-            proposed_reviewed=proposed,
+            proposed_reviewed=proposed_reviewed,
+            proposed_discovery=proposed_discovery,
         )
+        args.reviewed_output.parent.mkdir(parents=True, exist_ok=True)
+        args.detection_output.parent.mkdir(parents=True, exist_ok=True)
         args.reviewed_output.write_text(
             json.dumps(reviewed, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         args.detection_output.write_text(
             json.dumps(detection, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        if args.discovery_output is not None:
+            if discovery is None:
+                args.discovery_output.unlink(missing_ok=True)
+            else:
+                args.discovery_output.parent.mkdir(parents=True, exist_ok=True)
+                args.discovery_output.write_text(
+                    json.dumps(discovery, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+                )
     except (OSError, ReconcileError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
         return 1
-    print(
-        "Antigravity review state: preserved full proposed evidence"
-        if preserved
-        else "Antigravity review state: baseline review + live detection"
-    )
+    print(f"Antigravity review state: {disposition}")
     return 0
 
 
