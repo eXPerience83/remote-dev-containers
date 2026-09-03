@@ -2,9 +2,25 @@
 
 ## Status
 
-Inspection date: **2026-08-05 UTC**
+<!-- remote-dev-antigravity-current-review:start -->
 
-This report records bounded metadata from the installer and package currently served by Google. It does not contain or redistribute the installer or the Antigravity CLI binary.
+Current committed normalized review evidence:
+
+- inspection date: **2026-08-05 UTC**;
+- official installer: `https://antigravity.google/cli/install.sh`;
+- installer SHA-256: `ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640` (7,354 bytes);
+- selected installer strategy: `custom-directory`;
+- referenced HTTPS hosts: `antigravity-cli-auto-updater-974169037036.us-central1.run.app`;
+- installed payload: `agy` **1.1.10**, SHA-256 `4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71` (193,835,456 bytes);
+- blocking findings: **none**.
+
+This summary is generated only from schema-validated metadata. It never embeds vendor stdout/stderr or proprietary bytes.
+
+<!-- remote-dev-antigravity-current-review:end -->
+
+The detailed sections below preserve the original 2026-08-05 baseline inspection and later runtime-validation notes. The machine-owned summary above is the canonical current committed artifact identity after later automated review PRs.
+
+This report records bounded metadata from the installer and package served by Google during the historical baseline inspection. It does not contain or redistribute the installer or the Antigravity CLI binary.
 
 The reproducible workflow is `.github/workflows/inspect-antigravity-cli.yml`. The normalized machine-readable evidence is `third_party/antigravity-cli-inspection.json`.
 
@@ -36,7 +52,7 @@ The dedicated GitHub Actions job:
 
 The job does not start an authenticated Antigravity session, does not provide a Google account and does not upload the installer or installed executable.
 
-## Exact inspected installer
+## Historical baseline: exact installer inspected on 2026-08-05
 
 | Field | Value |
 |---|---|
@@ -46,18 +62,18 @@ The job does not start an authenticated Antigravity session, does not provide a 
 | SHA-256 | `ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640` |
 | Embedded release service host | `antigravity-cli-auto-updater-974169037036.us-central1.run.app` |
 
-The live installer help currently advertises only:
+The live installer help at that baseline advertised only:
 
 ```text
 -d, --dir <path>    Specify a custom directory to install the binary
 -h, --help          Display this help menu
 ```
 
-Older official documentation described `--skip-aliases` and `--skip-path`, but the inspected installer rejects those options. Remote Dev must therefore query and validate the live installer contract and currently use an explicit private `--dir` target. It must not assume the older flags are present.
+Older official documentation described `--skip-aliases` and `--skip-path`, but the inspected installer rejected those options. Remote Dev must therefore query and validate the live installer contract and currently use an explicit private `--dir` target. It must not assume the older flags are present.
 
-## Installed package
+## Historical baseline: installed package
 
-The installer detected `linux_amd64`, reported that it verified the downloaded package checksum and placed the executable at the requested path.
+The baseline installer detected `linux_amd64`, reported that it verified the downloaded package checksum and placed the executable at the requested path.
 
 | Field | Value |
 |---|---|
@@ -84,7 +100,7 @@ Absence of an installed legal file is **not** evidence of redistribution permiss
 
 ## Update behavior
 
-Running the installer a second time returned success but did not replace the existing executable. Its SHA-256 remained unchanged. The installer stated that:
+Running the baseline installer a second time returned success but did not replace the existing executable. Its SHA-256 remained unchanged. The installer stated that:
 
 - Antigravity CLI automatically self-updates in the background during regular runs;
 - a fresh installation requires deleting the existing binary first.
