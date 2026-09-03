@@ -167,18 +167,37 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ReconcileError, "human-owned legal_and_distribution"):
             self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
 
-    def test_discovery_cannot_change_fixed_origin(self) -> None:
+    def test_discovery_cannot_change_fixed_execution_origin(self) -> None:
         baseline = reviewed(OLD_SHA)
         candidate = discovery(NEW_SHA)
         candidate["installer"]["final_url"] = "https://antigravity.google/docs"
         with self.assertRaisesRegex(MODULE.ReconcileError, "fixed installer origin"):
             self.reconcile(live=detection(NEW_SHA), baseline=baseline, candidate=candidate)
 
-    def test_live_detection_must_remain_on_fixed_origin(self) -> None:
+    def test_detection_can_surface_same_origin_redirect_for_review(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        live = detection(NEW_SHA)
+        live["installer"]["final_url"] = "https://antigravity.google/cli/changed-install.sh"
+        selected, normalized, candidate, _ = self.reconcile(live=live, baseline=baseline)
+        self.assertIs(selected, baseline)
+        self.assertIsNone(candidate)
+        self.assertTrue(normalized["changed"])
+        self.assertEqual(
+            normalized["installer"]["final_url"],
+            "https://antigravity.google/cli/changed-install.sh",
+        )
+
+    def test_detection_rejects_non_https_origin(self) -> None:
         baseline = reviewed(OLD_SHA)
         bad = detection(NEW_SHA)
-        bad["installer"]["final_url"] = "https://antigravity.google/docs"
-        with self.assertRaisesRegex(MODULE.ReconcileError, "fixed official installer URL"):
+        bad["installer"]["final_url"] = "http://antigravity.google/cli/install.sh"
+        with self.assertRaisesRegex(MODULE.ReconcileError, "reviewed official HTTPS origin"):
+            self.reconcile(live=bad, baseline=baseline)
+
+    def test_detection_must_match_current_reviewed_baseline(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        bad = detection(NEW_SHA, reviewed_sha="d" * 64)
+        with self.assertRaisesRegex(MODULE.ReconcileError, "current reviewed baseline"):
             self.reconcile(live=bad, baseline=baseline)
 
 
