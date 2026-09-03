@@ -6,12 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9._-]+)?$")
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
+OFFICIAL_HOST = "antigravity.google"
 EXPECTED_BINARY = ".local/bin/agy"
 MAX_JSON_BYTES = 256 * 1024
 MAX_PAYLOAD_BYTES = 512 * 1024 * 1024
@@ -43,6 +45,24 @@ def sha256(value: object, label: str) -> str:
     return value
 
 
+def safe_official_url(value: object) -> bool:
+    if not isinstance(value, str) or not value or "\\" in value:
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == OFFICIAL_HOST
+        and port in (None, 443)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.fragment == ""
+    )
+
+
 def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
     if set(value) != {
         "schema_version",
@@ -58,8 +78,8 @@ def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(installer, dict):
         raise ReconcileError("live detection installer metadata is malformed")
     sha256(installer.get("sha256"), "live installer SHA-256")
-    if installer.get("source") != OFFICIAL_URL or installer.get("final_url") != OFFICIAL_URL:
-        raise ReconcileError("live detector did not resolve the fixed official installer URL")
+    if installer.get("source") != OFFICIAL_URL or not safe_official_url(installer.get("final_url")):
+        raise ReconcileError("live detector left the reviewed official HTTPS origin")
     if not isinstance(installer.get("size"), int) or not 0 < installer["size"] <= 2 * 1024 * 1024:
         raise ReconcileError("live installer size is outside the supported boundary")
     hosts = installer.get("referenced_https_hosts")
@@ -159,6 +179,11 @@ def reconcile(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, str]:
     live_installer = validate_detection(live_detection)
     baseline_sha = validate_reviewed(baseline_reviewed, baseline=baseline_reviewed)
+    detected_baseline_sha = sha256(
+        live_detection.get("reviewed_installer_sha256"), "detected reviewed installer SHA-256"
+    )
+    if detected_baseline_sha != baseline_sha:
+        raise ReconcileError("live detection was not generated from the current reviewed baseline")
     live_sha = live_installer["sha256"]
 
     selected_reviewed = baseline_reviewed
