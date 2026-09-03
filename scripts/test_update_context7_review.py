@@ -32,6 +32,15 @@ REVIEWED_CONTEXT7_CLI_INTEGRITY = (
 )
 EXPECTED_PACKAGE_LICENSE = "MIT"
 '''
+TEST_FILE = '''def assert_reviewed_version_contract(module) -> None:
+    if module.REVIEWED_CONTEXT7_CLI_VERSION != "0.5.8":
+        raise AssertionError("Context7 reviewed CLI version drifted unexpectedly")
+    if module.reviewed_cli_version() != "0.5.8":
+        raise AssertionError("reviewed Context7 CLI version was not resolved")
+
+# Synthetic fixture versions below are intentionally independent.
+SYNTHETIC_VERSION = "0.5.8"
+'''
 
 
 def metadata(version: str, integrity: str = NEW_INTEGRITY) -> dict[str, object]:
@@ -53,44 +62,67 @@ class Context7UpdateTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.versions = root / "versions.env"
         self.helper = root / "helper.py"
+        self.test_file = root / "test_helper.py"
         self.metadata = root / "metadata.json"
         self.versions.write_text(VERSIONS, encoding="utf-8")
         self.helper.write_text(HELPER, encoding="utf-8")
+        self.test_file.write_text(TEST_FILE, encoding="utf-8")
 
     def write_metadata(self, payload: dict[str, object]) -> None:
         self.metadata.write_text(json.dumps(payload), encoding="utf-8")
 
-    def test_new_version_updates_both_reviewed_pin_sources(self) -> None:
+    def update(self, *, write: bool) -> bool:
+        return MODULE.update(
+            self.metadata,
+            self.versions,
+            self.helper,
+            write=write,
+            test_path=self.test_file,
+        )
+
+    def test_new_version_updates_all_reviewed_pin_sources(self) -> None:
         self.write_metadata(metadata("0.5.9"))
-        changed = MODULE.update(self.metadata, self.versions, self.helper, write=True)
+        changed = self.update(write=True)
         self.assertTrue(changed)
         versions_text = self.versions.read_text(encoding="utf-8")
         helper_text = self.helper.read_text(encoding="utf-8")
+        test_text = self.test_file.read_text(encoding="utf-8")
         self.assertIn("CONTEXT7_CLI_VERSION=0.5.9", versions_text)
         self.assertIn(f"CONTEXT7_CLI_SRI_SHA512={NEW_INTEGRITY}", versions_text)
         self.assertIn('REVIEWED_CONTEXT7_CLI_VERSION = "0.5.9"', helper_text)
         self.assertIn(f'    "{NEW_INTEGRITY}"', helper_text)
+        self.assertIn('module.REVIEWED_CONTEXT7_CLI_VERSION != "0.5.9"', test_text)
+        self.assertIn('module.reviewed_cli_version() != "0.5.9"', test_text)
+        self.assertIn('SYNTHETIC_VERSION = "0.5.8"', test_text)
 
     def test_current_version_is_idempotent(self) -> None:
         self.write_metadata(metadata("0.5.8", OLD_INTEGRITY))
         before_versions = self.versions.read_text(encoding="utf-8")
         before_helper = self.helper.read_text(encoding="utf-8")
-        changed = MODULE.update(self.metadata, self.versions, self.helper, write=True)
+        before_test = self.test_file.read_text(encoding="utf-8")
+        changed = self.update(write=True)
         self.assertFalse(changed)
         self.assertEqual(self.versions.read_text(encoding="utf-8"), before_versions)
         self.assertEqual(self.helper.read_text(encoding="utf-8"), before_helper)
+        self.assertEqual(self.test_file.read_text(encoding="utf-8"), before_test)
+
+    def test_test_pin_drift_fails_even_without_version_change(self) -> None:
+        self.write_metadata(metadata("0.5.8", OLD_INTEGRITY))
+        self.test_file.write_text(TEST_FILE.replace('!= "0.5.8"', '!= "0.5.7"', 1), encoding="utf-8")
+        with self.assertRaisesRegex(MODULE.MetadataError, "tests disagree"):
+            self.update(write=False)
 
     def test_same_version_with_changed_integrity_fails_closed(self) -> None:
         self.write_metadata(metadata("0.5.8", OTHER_INTEGRITY))
         with self.assertRaisesRegex(MODULE.MetadataError, "changed integrity"):
-            MODULE.update(self.metadata, self.versions, self.helper, write=True)
+            self.update(write=True)
 
     def test_license_change_fails_closed(self) -> None:
         payload = metadata("0.5.9")
         payload["license"] = "Apache-2.0"
         self.write_metadata(payload)
         with self.assertRaisesRegex(MODULE.MetadataError, "license changed"):
-            MODULE.update(self.metadata, self.versions, self.helper, write=False)
+            self.update(write=False)
 
     def test_wrong_registry_tarball_fails_closed(self) -> None:
         payload = metadata("0.5.9")
@@ -100,12 +132,17 @@ class Context7UpdateTests(unittest.TestCase):
         }
         self.write_metadata(payload)
         with self.assertRaisesRegex(MODULE.MetadataError, "unexpected tarball"):
-            MODULE.update(self.metadata, self.versions, self.helper, write=False)
+            self.update(write=False)
 
     def test_registry_version_regression_fails_closed(self) -> None:
         self.write_metadata(metadata("0.5.7"))
         with self.assertRaisesRegex(MODULE.MetadataError, "regressed"):
-            MODULE.update(self.metadata, self.versions, self.helper, write=False)
+            self.update(write=False)
+
+    def test_oversized_registry_metadata_fails_closed(self) -> None:
+        self.metadata.write_bytes(b"{" + b" " * MODULE.MAX_METADATA_BYTES + b"}")
+        with self.assertRaisesRegex(MODULE.MetadataError, "size is outside"):
+            self.update(write=False)
 
 
 if __name__ == "__main__":
