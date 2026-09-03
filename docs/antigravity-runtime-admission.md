@@ -4,9 +4,9 @@
 
 Antigravity CLI is an optional Google product. Remote Dev does not bundle, copy or redistribute its installer or executable. Installation and update are explicit user actions performed inside the isolated Antigravity service.
 
-The service must run with `REMOTE_DEV_ROLE=antigravity` and the explicit `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1` opt-in. The Antigravity role remains unavailable while that experimental gate is disabled. Enabling it does not make Antigravity a stable or fully supported Remote Dev component; the current edge integration remains experimental until its documented real-environment gates are complete.
+The service must run with `REMOTE_DEV_ROLE=antigravity` and the explicit `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1` opt-in. The Antigravity role remains unavailable while that experimental gate is disabled. The integration remains deliberately experimental under the current #53/#96 vendor-policy disposition: Remote Dev is a non-affiliated launcher/wrapper around the official `agy` CLI, not an alternate Antigravity client or an OAuth relay into another agent harness.
 
-This document defines the runtime availability and integrity model implemented under issue #96. Scheduled upstream detection and evidence-refresh automation remain separate under issue #83. Broad documentation/status synchronization remains under issue #92.
+This document defines the runtime availability and integrity model implemented under issue #96 and the advisory review automation implemented under issue #83. Broad documentation/status synchronization remains under issue #92.
 
 ## Availability model
 
@@ -52,6 +52,25 @@ The private manifest detects independent executable or manifest modification and
 
 The downloaded installer remains vendor code. Running it as an unprivileged identity with an empty environment and a private staging subtree reduces exposure to mounted credentials, but does not transform it into a sandboxed or independently audited program.
 
-## Review automation
+## Scheduled review automation
 
-Issue #83 may detect installer/package changes and open one human-review pull request containing normalized metadata and refreshed evidence. That automation must not approve, merge, publish or revoke a runtime version automatically. Runtime availability is governed by the compatible explicit-install contract above.
+`.github/workflows/check-upstream.yml` runs the shared upstream review at **05:17 UTC every day** and also supports manual dispatch. Antigravity is detected in a separate `antigravity-detect` job with `contents: read`, no persisted checkout credentials and no repository write capability. That job downloads only bounded metadata from the fixed reviewed Google origin and does **not execute a changed installer**. A safe same-origin redirect can be surfaced as review metadata, but executable review continues to require the exact fixed installer contract until a compatibility change is explicitly reviewed.
+
+The detection artifact contains only a fixed JSON schema: source/final URL, content type, size, SHA-256, referenced HTTPS host names, the committed reviewed installer SHA-256 and a `changed` boolean. Raw installer content, stdout/stderr, OAuth/account data and proprietary binaries are not retained. The artifact is schema-validated before upload and revalidated after entering the separate write-capable PR-maintenance job.
+
+The writer folds Antigravity state into the same `automation/update-upstreams` branch/PR used by the grouped upstream updater. A scheduled rerun starts from current `main` and may preserve only schema-valid Antigravity discovery or fully reviewed evidence that still corresponds to the currently detected installer and preserves the human-owned runtime/legal policy fields. Stale review state is dropped. The automation never auto-merges.
+
+## Two explicit hash admissions
+
+Changed Antigravity vendor bytes may execute only through manual `.github/workflows/review-antigravity-candidate.yml` dispatches from `main`:
+
+1. **`discover-payload`** — a maintainer supplies the exact lowercase SHA-256 reported for the changed official installer. The credential-free read-only job verifies that hash before execution, runs only that admitted installer in an isolated temporary home and records the resulting `agy` path/size/SHA-256. It **does not execute `agy`**.
+2. **`inspect-payload`** — after separately reviewing the discovery metadata, a maintainer supplies both the same installer SHA-256 and the exact discovered `agy` SHA-256. Only then may the existing bounded inspector execute `agy --version`/`--help` and produce proposed reviewed evidence.
+
+The vendor-byte job has only read permission. It cannot write the repository, issues or pull requests. Only schema-validated metadata crosses to a second writer job; the writer validates that artifact again before modifying the automation branch. Installer bytes, `agy` bytes and raw vendor stdout/stderr are never uploaded as review artifacts or committed.
+
+A completed full inspection updates `third_party/antigravity-cli-inspection.json`, the corresponding generated current-review block in `third_party/antigravity-cli-inspection.md`, and resets `third_party/antigravity-cli-detection.json` to the newly reviewed installer identity. Human review of compatibility and the current Google terms/privacy boundary is still required before merge.
+
+## Review automation is not runtime admission
+
+Scheduled detection, a pending automation PR, a failed inspection or absence from committed review evidence never revokes an intact locally admitted runtime. Runtime availability remains governed by the explicit-install/private-manifest/#153 integrity contract above. A specifically unsafe version/hash would require an explicit project revocation decision; it is not inferred merely from `review pending` state.
