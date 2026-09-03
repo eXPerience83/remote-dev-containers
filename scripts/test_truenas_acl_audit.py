@@ -206,6 +206,19 @@ class TrueNasAclAuditTests(unittest.TestCase):
         messages = "\n".join(finding.message for finding in findings)
         self.assertIn("owner uid is 1000, expected root (0)", messages)
 
+    def test_explicit_empty_acl_payload_is_reported_as_malformed(self):
+        """Reject an explicit empty middleware ACL payload instead of defaulting it."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        with mock.patch.object(
+            MODULE,
+            "run_command",
+            side_effect=self.fake_runner(root, acl_payload={}),
+        ):
+            _info, findings = MODULE.audit(root, include_antigravity=False)
+        messages = "\n".join(finding.message for finding in findings)
+        self.assertIn("malformed ACL response", messages)
+
 
 if __name__ == "__main__":
     unittest.main()
