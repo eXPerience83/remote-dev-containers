@@ -2,7 +2,7 @@
 
 Remote Dev guarda los workspaces y el estado/credenciales de los agentes bajo una única raíz Host Path creada por el administrador. En TrueNAS, los bits de modo POSIX por sí solos no describen todo el acceso efectivo cuando el dataset usa ACL NFSv4.
 
-Este documento define el contrato de ACL de host soportado por el issue #186 y la migración conservadora validada sobre un TrueNAS 26 real con datos persistentes.
+Este documento define el contrato ACL de host propuesto por el issue #186 y la migración conservadora ejercitada sobre un TrueNAS 26 real con datos persistentes. La evidencia de migración registrada es del 2026-09-02 y utilizó el canal candidato de Remote Dev `candidate-pr-184` en la revisión fuente `2f355d4e19058f91a9be482d428eb16c097b0886`. La evidencia contemporánea no registró el build exacto de TrueNAS 26 ni el digest inmutable de repositorio de esa imagen candidata, por lo que no debe presentarse como cualificación de una versión estable. El issue #186 sigue abierto; el candidato exacto de PR #188 todavía debe superar el audit de host de la misma revisión, diagnostics de contenedores, restart/recreation y el gate de uso normal antes de mergear o eliminar los datos de rollback.
 
 ## Contrato de referencia para instalaciones nuevas
 
@@ -17,7 +17,7 @@ Pool1/remote-dev
 /mnt/Pool1/remote-dev
 ```
 
-En el host TrueNAS 26 validado, el dataset de referencia informa estas propiedades ZFS:
+En ese host de migración TrueNAS 26 del 2026-09-02, usando la evidencia registrada `candidate-pr-184` / `2f355d4e19058f91a9be482d428eb16c097b0886` indicada arriba, el dataset de referencia informó estas propiedades ZFS:
 
 ```text
 acltype=posix
@@ -163,7 +163,7 @@ Ejecuta diagnostics dentro de los contenedores y repite el audit ACL en el host 
 
 ### 9. Mantener rollback hasta probar uso normal
 
-No borres inmediatamente el dataset NFSv4 antiguo. Déjalo offline como origen de rollback hasta que la revisión exacta desplegada haya superado el audit ACL del host, diagnostics de los contenedores, comprobaciones de restart/recreation, reanudación de sesiones/conversaciones y al menos un ciclo normal de trabajo del operador sin necesitar rollback. La retención es una decisión del operador, no un temporizador automático.
+No borres inmediatamente el dataset NFSv4 antiguo. Déjalo offline como origen de rollback hasta que la revisión exacta desplegada haya superado el audit ACL del host, diagnostics de los contenedores, comprobaciones de restart/recreation, reanudación de sesiones/conversaciones y al menos un ciclo normal de trabajo del operador sin necesitar rollback. Aquí, **offline** significa que Remote Dev está parado antes de cualquier operación de rollback, que el dataset NFSv4 conservado no está configurado como recurso SMB/NFS ni otro share/export, que ningún bind mount de contenedor apunta a su ruta de backup y que TrueNAS no informa procesos ni attachments usando ese dataset. Verifica esas condiciones después del cutover y de nuevo justo antes de un rollback o de borrarlo. Si el dataset conservado sigue montado como mountpoint ZFS local únicamente para acceso administrativo de rollback, trátalo como datos sensibles accesibles solo desde el host y no lo expongas mediante una aplicación ni un recurso de red. La retención es una decisión del operador, no un temporizador automático.
 
 Si hay que volver atrás, para Remote Dev antes de invertir los nombres de los datasets. No mezcles sin revisión las escrituras nuevas del lado POSIX de vuelta al backup NFSv4: eso es una reconciliación de datos independiente.
 
