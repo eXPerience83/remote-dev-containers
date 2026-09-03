@@ -4,11 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import urllib.parse
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parent
+DISCOVERY_PATH = ROOT / "discover-antigravity-payload.py"
+DISCOVERY_SPEC = importlib.util.spec_from_file_location(
+    "antigravity_payload_discovery", DISCOVERY_PATH
+)
+if DISCOVERY_SPEC is None or DISCOVERY_SPEC.loader is None:
+    raise RuntimeError("could not load discover-antigravity-payload.py")
+DISCOVERY = importlib.util.module_from_spec(DISCOVERY_SPEC)
+DISCOVERY_SPEC.loader.exec_module(DISCOVERY)
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9._-]+)?$")
@@ -16,7 +27,6 @@ OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
 OFFICIAL_HOST = "antigravity.google"
 EXPECTED_BINARY = ".local/bin/agy"
 MAX_JSON_BYTES = 256 * 1024
-MAX_PAYLOAD_BYTES = 512 * 1024 * 1024
 
 
 class ReconcileError(ValueError):
@@ -132,44 +142,18 @@ def validate_reviewed(
 
 
 def validate_discovery(value: dict[str, Any]) -> tuple[str, str]:
-    expected_top = {
-        "schema_version",
-        "kind",
-        "installer",
-        "installation",
-        "payload",
-        "profiles_unchanged",
-        "blocking_findings",
-    }
-    if set(value) != expected_top:
-        raise ReconcileError("proposed payload discovery has unexpected fields")
-    if value.get("schema_version") != 1 or value.get("kind") != "antigravity-payload-discovery":
-        raise ReconcileError("proposed payload discovery has an unsupported schema")
-    if value.get("blocking_findings") != [] or value.get("profiles_unchanged") is not True:
-        raise ReconcileError("proposed payload discovery contains a blocking finding")
-
+    try:
+        DISCOVERY.validate_report(value)
+    except (ValueError, RuntimeError) as exc:
+        raise ReconcileError(f"proposed payload discovery is invalid: {exc}") from exc
     installer = value.get("installer")
-    installation = value.get("installation")
     payload = value.get("payload")
-    if not isinstance(installer, dict) or not isinstance(installation, dict) or not isinstance(payload, dict):
+    if not isinstance(installer, dict) or not isinstance(payload, dict):
         raise ReconcileError("proposed payload discovery metadata is malformed")
-    installer_sha = sha256(installer.get("sha256"), "discovery installer SHA-256")
-    if installer.get("source") != OFFICIAL_URL or installer.get("final_url") != OFFICIAL_URL:
-        raise ReconcileError("proposed payload discovery changed the fixed installer origin")
-    if installer.get("selected_strategy") not in {
-        "custom-directory",
-        "skip-shell-modification-flags",
-    }:
-        raise ReconcileError("proposed payload discovery used an unsupported installer strategy")
-    if installation.get("exit_code") != 0:
-        raise ReconcileError("proposed payload discovery installer did not succeed")
-    if payload.get("path") != EXPECTED_BINARY:
-        raise ReconcileError("proposed payload discovery changed the expected binary path")
-    payload_sha = sha256(payload.get("sha256"), "discovery payload SHA-256")
-    payload_size = payload.get("size")
-    if not isinstance(payload_size, int) or not 0 < payload_size <= MAX_PAYLOAD_BYTES:
-        raise ReconcileError("proposed payload discovery size is outside the supported boundary")
-    return installer_sha, payload_sha
+    return (
+        sha256(installer.get("sha256"), "discovery installer SHA-256"),
+        sha256(payload.get("sha256"), "discovery payload SHA-256"),
+    )
 
 
 def reconcile(
@@ -198,7 +182,9 @@ def reconcile(
         if live_discovery_pair[0] != live_installer_sha:
             raise ReconcileError("live payload discovery does not match the detected installer")
         if live_installer_sha != baseline_installer_sha:
-            raise ReconcileError("live payload discovery executed an installer that was not already reviewed")
+            raise ReconcileError(
+                "live payload discovery used an installer that was not already reviewed"
+            )
 
     selected_reviewed = baseline_reviewed
     selected_discovery: dict[str, Any] | None = None
@@ -294,7 +280,7 @@ def main() -> int:
                 args.discovery_output.write_text(
                     json.dumps(discovery, indent=2, sort_keys=True) + "\n", encoding="utf-8"
                 )
-    except (OSError, ReconcileError) as exc:
+    except (OSError, RuntimeError, ReconcileError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
         return 1
     print(f"Antigravity review state: {disposition}")
