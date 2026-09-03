@@ -193,8 +193,21 @@ jobs:
             --kind detection \
             --artifact third_party/antigravity-cli-detection.json \
             --expected-installer-sha256 "$INSTALLER_SHA256"
-          [[ "$(jq -r '.changed' third_party/antigravity-cli-detection.json)" == "true" ]] \
-            || { echo "ERROR: installer is no longer pending review" >&2; exit 1; }
+          detection_changed="$(jq -er '.changed | type == "boolean" and .' third_party/antigravity-cli-detection.json 2>/dev/null || true)"
+          if [[ "$REVIEW_STAGE" == "discover-payload" ]]; then
+            [[ "$detection_changed" == "true" ]] \
+              || { echo "ERROR: discover-payload is only needed after an unreviewed installer hash is detected" >&2; exit 1; }
+          else
+            [[ -f third_party/antigravity-cli-candidate.json ]] \
+              || { echo "ERROR: inspect-payload requires a previously validated payload candidate" >&2; exit 1; }
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind discovery \
+              --artifact third_party/antigravity-cli-candidate.json \
+              --expected-installer-sha256 "$INSTALLER_SHA256"
+            candidate_payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-candidate.json)"
+            [[ "$candidate_payload_sha" == "$PAYLOAD_SHA256" ]] \
+              || { echo "ERROR: payload approval does not match the pending discovered candidate" >&2; exit 1; }
+          fi
 
           if [[ "$REVIEW_STAGE" == "discover-payload" ]]; then
             install -m 0644 "$ARTIFACT_PATH" third_party/antigravity-cli-candidate.json
@@ -203,7 +216,7 @@ jobs:
             [[ "$payload_sha" =~ ^[0-9a-f]{64}$ && "$payload_size" =~ ^[0-9]+$ ]] \
               || { echo "ERROR: validated discovery metadata could not be summarized" >&2; exit 1; }
             title="chore: review upstream updates"
-            body="Antigravity review is waiting for the second explicit admission. The fixed official installer SHA-256 ${INSTALLER_SHA256} was explicitly admitted and executed only in the credential-free bounded discovery job. That stage discovered agy SHA-256 ${payload_sha} (${payload_size} bytes) without executing agy. To continue, manually verify this PR/evidence and dispatch Review Antigravity candidate with stage inspect-payload, installer_sha256=${INSTALLER_SHA256}, payload_sha256=${payload_sha}. No proprietary bytes are stored in this branch or artifacts; only schema-validated metadata is retained. Do not merge until the full inspection and required CI/review gates pass."
+            body="Antigravity review is waiting for the second explicit admission. The changed fixed-origin installer SHA-256 ${INSTALLER_SHA256} was explicitly admitted and executed only in the credential-free bounded discovery job. That stage discovered agy SHA-256 ${payload_sha} (${payload_size} bytes) without executing agy. To continue, manually verify this PR/evidence and dispatch Review Antigravity candidate with stage inspect-payload, installer_sha256=${INSTALLER_SHA256}, payload_sha256=${payload_sha}. No proprietary bytes are stored in this branch or artifacts; only schema-validated metadata is retained. Do not merge until the full inspection and required CI/review gates pass."
             commit_message="chore: record Antigravity payload candidate metadata"
           else
             python3 scripts/update-antigravity-review-evidence.py \
