@@ -31,7 +31,11 @@ def reviewed() -> dict:
             "content_type": "application/x-sh",
             "size": 8123,
             "sha256": INSTALLER_SHA,
-            "advertised_options": {"custom_directory": True},
+            "advertised_options": {
+                "custom_directory": True,
+                "skip_aliases": False,
+                "skip_path": False,
+            },
             "selected_strategy": "custom-directory",
             "referenced_https_hosts": ["antigravity.google"],
         },
@@ -40,13 +44,35 @@ def reviewed() -> dict:
             "version": "1.2.3",
             "size": 200000000,
             "sha256": BINARY_SHA,
-            "format": {},
-            "dynamic_dependencies": [],
+            "format": {
+                "elf_64_bit": True,
+                "x86_64": True,
+                "pie": True,
+                "dynamically_linked": True,
+                "stripped": True,
+                "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            },
+            "dynamic_dependencies": [
+                "libc.so.6",
+                "libdl.so.2",
+                "libm.so.6",
+                "libpthread.so.0",
+                "libresolv.so.2",
+                "librt.so.1",
+            ],
             "version_check_exit_code": 0,
             "help_check_exit_code": 0,
         },
-        "filesystem": {},
-        "repeat_install": {},
+        "filesystem": {
+            "created_relative_paths": [".local", ".local/bin", MODULE.RECONCILE.EXPECTED_BINARY],
+            "shell_profiles_changed": False,
+            "installed_license_or_notice_files": [],
+        },
+        "repeat_install": {
+            "exit_code": 0,
+            "binary_hash_unchanged": True,
+            "behavior": "Repeated reviewed install kept the admitted executable unchanged.",
+        },
         "official_runtime_controls": {"disable_background_auto_update": "AGY_CLI_DISABLE_AUTO_UPDATE=true"},
         "legal_and_distribution": {"redistribution_permission_confirmed": False},
         "blocking_findings": [],
@@ -83,6 +109,12 @@ class AntigravityReviewDocTests(unittest.TestCase):
         value = deepcopy(reviewed())
         value["installer"]["referenced_https_hosts"] = ["bad host"]
         with self.assertRaisesRegex(MODULE.DocumentError, "unsafe installer host metadata"):
+            MODULE.render(value)
+
+    def test_non_string_list_item_is_rejected_as_metadata(self) -> None:
+        value = deepcopy(reviewed())
+        value["installed_binary"]["dynamic_dependencies"] = [{"name": "libc.so.6"}]
+        with self.assertRaisesRegex(MODULE.RECONCILE.ReconcileError, "invalid value"):
             MODULE.render(value)
 
 
