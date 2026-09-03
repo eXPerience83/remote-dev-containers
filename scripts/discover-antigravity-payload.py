@@ -26,6 +26,17 @@ SPEC.loader.exec_module(INSPECTOR)
 
 MAX_PAYLOAD_SIZE = 512 * 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_COMMAND_KEYS = {"exit_code", "stdout_sha256", "stderr_sha256"}
+_OPTION_KEYS = {"custom_directory", "skip_aliases", "skip_path"}
+_INSTALL_RESULT_KEYS = {
+    "exit_code",
+    "stdout_sha256",
+    "stderr_sha256",
+    "reports_linux_amd64",
+    "reports_checksum_verified",
+    "reports_existing_install",
+    "reports_background_self_update",
+}
 
 
 class DiscoveryError(ValueError):
@@ -116,6 +127,17 @@ def discover(
         }
 
 
+def _validate_command_metadata(value: object, label: str) -> None:
+    if not isinstance(value, dict) or set(value) != _COMMAND_KEYS:
+        raise DiscoveryError(f"payload discovery {label} metadata is malformed")
+    if not isinstance(value.get("exit_code"), int):
+        raise DiscoveryError(f"payload discovery {label} exit code is invalid")
+    for key in ("stdout_sha256", "stderr_sha256"):
+        digest = value.get(key)
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            raise DiscoveryError(f"payload discovery {label} output hash is invalid")
+
+
 def validate_report(report: dict[str, Any], *, expected_installer_sha256: str | None = None) -> None:
     if set(report) != {
         "schema_version",
@@ -131,10 +153,27 @@ def validate_report(report: dict[str, Any], *, expected_installer_sha256: str | 
         raise DiscoveryError("payload discovery report has an unsupported schema")
     if report["blocking_findings"] != [] or report["profiles_unchanged"] is not True:
         raise DiscoveryError("payload discovery report contains a blocking finding")
+
     installer = report["installer"]
     payload = report["payload"]
-    if not isinstance(installer, dict) or not isinstance(payload, dict):
-        raise DiscoveryError("payload discovery metadata is malformed")
+    installation = report["installation"]
+    if not isinstance(installer, dict) or set(installer) != {
+        "source",
+        "final_url",
+        "content_type",
+        "size",
+        "sha256",
+        "bash_syntax",
+        "help",
+        "supported_options",
+        "selected_strategy",
+    }:
+        raise DiscoveryError("payload discovery installer metadata is malformed")
+    if not isinstance(payload, dict) or set(payload) != {"path", "size", "sha256"}:
+        raise DiscoveryError("payload discovery payload metadata is malformed")
+    if not isinstance(installation, dict) or set(installation) != _INSTALL_RESULT_KEYS:
+        raise DiscoveryError("payload discovery installation metadata is malformed")
+
     installer_sha = installer.get("sha256")
     payload_sha = payload.get("sha256")
     if not isinstance(installer_sha, str) or not _SHA256_RE.fullmatch(installer_sha):
@@ -148,14 +187,29 @@ def validate_report(report: dict[str, Any], *, expected_installer_sha256: str | 
     payload_size = payload.get("size")
     if not isinstance(payload_size, int) or not 0 < payload_size <= MAX_PAYLOAD_SIZE:
         raise DiscoveryError("payload discovery size is invalid")
-    installation = report["installation"]
-    if not isinstance(installation, dict) or installation.get("exit_code") != 0:
+    if installation.get("exit_code") != 0:
         raise DiscoveryError("payload discovery installer did not succeed")
     if installer.get("selected_strategy") not in {
         "custom-directory",
         "skip-shell-modification-flags",
     }:
         raise DiscoveryError("payload discovery used an unreviewed installer strategy")
+
+    _validate_command_metadata(installer.get("bash_syntax"), "Bash syntax")
+    _validate_command_metadata(installer.get("help"), "installer help")
+    options = installer.get("supported_options")
+    if not isinstance(options, dict) or set(options) != _OPTION_KEYS:
+        raise DiscoveryError("payload discovery installer options are malformed")
+    if any(not isinstance(value, bool) for value in options.values()):
+        raise DiscoveryError("payload discovery installer options are not booleans")
+
+    for key in _INSTALL_RESULT_KEYS - {"exit_code", "stdout_sha256", "stderr_sha256"}:
+        if not isinstance(installation.get(key), bool):
+            raise DiscoveryError("payload discovery installation flags are malformed")
+    for key in ("stdout_sha256", "stderr_sha256"):
+        digest = installation.get(key)
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            raise DiscoveryError("payload discovery installation output hash is invalid")
 
 
 def write_report(
