@@ -51,7 +51,9 @@ def assert_scheduler_contract(text: str) -> None:
     require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned artifact download action")
     require(writer, "Revalidate detection after crossing into write-capable job", "second trust-boundary validation")
     require(writer, "https://registry.npmjs.org/ctx7/latest", "fixed Context7 registry endpoint")
+    require(writer, "--max-filesize 65536", "bounded Context7 metadata transfer")
     require(writer, "scripts/update-context7-review.py", "Context7 reviewed-pin updater")
+    require(writer, "scripts/test-remote-dev-context7-device-login.py", "atomic Context7 reviewed-test maintenance")
     require(writer, 'branch="automation/update-upstreams"', "single automation branch")
     if "gh pr merge" in writer or "--auto" in writer:
         raise AssertionError("upstream writer must never merge its own PR")
