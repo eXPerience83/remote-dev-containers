@@ -66,8 +66,8 @@ def validate_date(value: str) -> None:
         raise ValueError("date must use exact YYYY-MM-DD form")
 
 
-def locate_marker(text: str) -> int:
-    """Return the marker index only when its Unreleased section contract is unambiguous."""
+def locate_managed_section(text: str) -> tuple[int, int]:
+    """Return the Unreleased automated-section bounds only when the contract is unambiguous."""
     if text.count(UNRELEASED_HEADING) != 1:
         raise ValueError("CHANGELOG.md must contain exactly one Unreleased heading")
     unreleased_start = text.index(UNRELEASED_HEADING)
@@ -78,20 +78,29 @@ def locate_marker(text: str) -> int:
         raise ValueError("Unreleased must contain exactly one Automated upstream refreshes section")
     if unreleased.count(MARKER) != 1:
         raise ValueError("Automated upstream refreshes must contain exactly one ownership marker")
-    marker_in_unreleased = unreleased.index(MARKER)
-    section_in_unreleased = unreleased.index(SECTION_HEADING)
-    if marker_in_unreleased < section_in_unreleased:
+
+    section_offset = unreleased.index(SECTION_HEADING)
+    marker_offset = unreleased.index(MARKER)
+    if marker_offset < section_offset:
         raise ValueError("upstream refresh ownership marker must follow its section heading")
-    return unreleased_start + marker_in_unreleased
+
+    section_start = unreleased_start + section_offset
+    next_heading = text.find("\n### ", section_start + len(SECTION_HEADING))
+    section_end = unreleased_end if next_heading == -1 or next_heading >= unreleased_end else next_heading
+    marker_index = unreleased_start + marker_offset
+    return marker_index, section_end
 
 
 def update_changelog(text: str, date: str, changes: list[str]) -> str:
     """Insert one newest-first automation entry while preserving all human-written text."""
     validate_date(date)
-    marker_index = locate_marker(text)
+    marker_index, section_end = locate_managed_section(text)
     if not changes:
         return text
     entry = f"- {date} — {'; '.join(changes)}."
+    managed_section = text[marker_index:section_end]
+    if entry in managed_section.splitlines():
+        return text
     marker_end = marker_index + len(MARKER)
     prefix = text[:marker_end]
     suffix = text[marker_end:].lstrip("\r\n")
