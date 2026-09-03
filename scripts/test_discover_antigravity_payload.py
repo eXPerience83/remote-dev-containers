@@ -7,6 +7,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
@@ -75,6 +76,17 @@ class AntigravityPayloadDiscoveryTests(unittest.TestCase):
                 report,
                 expected_installer_sha256="f" * 64,
             )
+
+    def test_validation_rejects_extra_nested_metadata(self) -> None:
+        expected = MODULE.INSPECTOR.sha256_file(FIXTURE)
+        report = MODULE.discover(
+            expected_installer_sha256=expected,
+            installer_fixture=FIXTURE,
+        )
+        bad = deepcopy(report)
+        bad["installer"]["vendor_note"] = "unexpected"
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "installer metadata is malformed"):
+            MODULE.validate_report(bad, expected_installer_sha256=expected)
 
 
 if __name__ == "__main__":
