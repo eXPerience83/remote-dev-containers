@@ -41,12 +41,14 @@ remote_dev_image="$(
 )"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-${BASE_VERSION:-}}"
+PROJECT_CHANNEL="${PROJECT_CHANNEL:-local}"
 
 if [[ -z "${SOURCE_REVISION:-}" ]]; then
   SOURCE_REVISION="$(bash "$ROOT/scripts/detect-source-revision.sh" "$ROOT")"
 fi
 
 require_build_value PROJECT_VERSION "$PROJECT_VERSION"
+require_build_value PROJECT_CHANNEL "$PROJECT_CHANNEL"
 require_build_value SOURCE_REVISION "$SOURCE_REVISION"
 
 common_args=(
@@ -86,6 +88,7 @@ docker build \
   --build-arg "CODEX_AMD64_SHA256=$CODEX_AMD64_SHA256" \
   --build-arg "CODEX_ARM64_SHA256=$CODEX_ARM64_SHA256" \
   --build-arg "PROJECT_VERSION=$PROJECT_VERSION" \
+  --build-arg "PROJECT_CHANNEL=$PROJECT_CHANNEL" \
   --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
   -t "$remote_dev_image" \
   -f "$ROOT/images/codex/Dockerfile" \
