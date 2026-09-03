@@ -89,7 +89,7 @@ jobs:
       - name: Confirm PR validation never executes live Antigravity vendor bytes
         run: |
           set -euo pipefail
-          if grep -qE 'discover-antigravity-payload\.py|inspect-antigravity-cli\.py .*--output' \
+          if grep -q -- '--expected-installer-sha256' \
             .github/workflows/inspect-antigravity-cli.yml; then
             echo "ERROR: PR validation workflow contains a live Antigravity execution path" >&2
             exit 1
