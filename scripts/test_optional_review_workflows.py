@@ -67,6 +67,16 @@ def assert_scheduler_contract(text: str) -> None:
     require(writer, "--max-filesize 65536", "bounded Context7 metadata transfer")
     require(writer, "scripts/update-context7-review.py", "Context7 reviewed-pin updater")
     require(writer, "scripts/test-remote-dev-context7-device-login.py", "atomic Context7 reviewed-test maintenance")
+    require(
+        writer,
+        'gh_amd64_sha256="$(release_sha256 "$workdir/gh.json" "gh_${latest_gh}_linux_amd64.tar.gz")"',
+        "well-formed GitHub CLI AMD64 digest lookup",
+    )
+    require(
+        writer,
+        'gh_arm64_sha256="$(release_sha256 "$workdir/gh.json" "gh_${latest_gh}_linux_arm64.tar.gz")"',
+        "well-formed GitHub CLI ARM64 digest lookup",
+    )
     require(writer, 'branch="automation/update-upstreams"', "single automation branch")
     if "gh pr merge" in writer or "--auto" in writer:
         raise AssertionError("upstream writer must never merge its own PR")
