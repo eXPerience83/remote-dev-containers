@@ -51,15 +51,18 @@ agent-contract-tests:
 
 validate: agent-contract-tests ttyd-osc52-check
 	bash -n scripts/*.sh scripts/lib/*.sh scripts/fixtures/*.sh
-	python3 -m py_compile web/ttyd-osc52/generate.py web/ttyd-osc52/validate.py web/ttyd-osc52/test_generate.py scripts/remote-dev-launcher.py scripts/remote-dev-codex-runtime.py scripts/remote-dev-prepare-development-scratch.py scripts/test-development-scratch.py scripts/test-remote-dev-codex-runtime.py scripts/test-codex-runtime-code-mode-probe.py scripts/test-codex-runtime-noexec-staging.py scripts/init-data-layout.py scripts/preflight-data-layout.py scripts/truenas-acl-audit.py scripts/test_truenas_acl_audit.py scripts/lib/data_layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py
+	python3 -m py_compile web/ttyd-osc52/generate.py web/ttyd-osc52/validate.py web/ttyd-osc52/test_generate.py scripts/remote-dev-launcher.py scripts/remote-dev-codex-runtime.py scripts/remote-dev-prepare-development-scratch.py scripts/test-development-scratch.py scripts/test-remote-dev-codex-runtime.py scripts/test-codex-runtime-code-mode-probe.py scripts/test-codex-runtime-noexec-staging.py scripts/init-data-layout.py scripts/preflight-data-layout.py scripts/truenas-acl-audit.py scripts/test_truenas_acl_audit.py scripts/lib/data_layout.py scripts/inspect-antigravity-cli.py scripts/remote-dev-context7-device-login.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py scripts/format-edge-build-identity.py scripts/test_edge_build_identity.py scripts/update-upstream-changelog.py scripts/test_update_upstream_changelog.py
 	python3 scripts/test-codex-runtime-code-mode-probe.py
+	python3 scripts/test_edge_build_identity.py
+	python3 scripts/test_update_upstream_changelog.py
+	bash scripts/test-image-identity.sh
 	REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh bash scripts/test-image-name-compat.sh
 	bash scripts/test-compose-image-compat.sh
 	REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py bash scripts/test-remote-dev-launcher.sh
 	python3 scripts/test_single_stack_compose.py
 	python3 scripts/test_canonical_data_layout.py
 	python3 scripts/test_preflight_data_layout.py
-	python3 scripts/test_inspect_antigravity_cli.py
+	python3 scripts/test_inspect_antigravity-cli.py
 	bash scripts/validate-version-pins.sh
 	jq -e . renovate.json >/dev/null
 	python3 scripts/validate-renovate-ownership.py --root .
