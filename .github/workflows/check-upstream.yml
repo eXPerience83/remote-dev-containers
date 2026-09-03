@@ -37,6 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          python3 scripts/test_update_upstream_changelog.py
           source versions.env
 
           curl_args=(
@@ -122,6 +123,7 @@ jobs:
 
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
+          cp versions.env "$workdir/versions-before.env"
           gh api "repos/openai/codex/releases/tags/${latest_codex}" > "$workdir/codex.json"
           gh api "repos/cli/cli/releases/tags/v${latest_gh}" > "$workdir/gh.json"
           gh api "repos/tsl0922/ttyd/releases/tags/${latest_ttyd}" > "$workdir/ttyd.json"
@@ -272,8 +274,13 @@ jobs:
           bash scripts/validate-third-party-inventory.sh
           python3 scripts/sync-standalone-artifact-inspection.py
           python3 scripts/validate-standalone-artifact-inspection.py
+          python3 scripts/update-upstream-changelog.py \
+            --before "$workdir/versions-before.env" \
+            --after versions.env \
+            --date "$(date -u +%F)"
 
           tracked_files=(
+            CHANGELOG.md
             versions.env
             mise.toml
             mise.lock
@@ -285,16 +292,16 @@ jobs:
             third_party/standalone-artifact-inspection.md
           )
           if git diff --quiet -- "${tracked_files[@]}"; then
-            echo "No upstream release, digest, runtime artifact, inventory, notice or standalone-inspection changes."
+            echo "No upstream release, digest, runtime artifact, changelog, inventory, notice or standalone-inspection changes."
             if [[ -n "$existing_pr" ]]; then
               gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts, legal notices and standalone inspection evidence."
+                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts, changelog provenance, legal notices and standalone inspection evidence."
             fi
             exit 0
           fi
 
           git add "${tracked_files[@]}"
-          git commit -m "chore: update upstream versions, notices, digests, and runtime lock"
+          git commit -m "chore: update upstream versions, notices, digests, runtime lock, and changelog"
 
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
              [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
@@ -312,7 +319,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release, digest, runtime-lock and legal-notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The same PR regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory, refreshes repository-preserved notices from exact version tags and updates the bounded standalone-artifact inspection for changed GitHub CLI, Codex CLI, ttyd, mise or uv assets. Any changed legal text or asset-packaging evidence remains visible in the pull-request diff for human review. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image; stable image tags are not changed."
+          body="Automated stable upstream release, digest, runtime-lock, changelog-provenance and legal-notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The pull request records actual old-to-new component version deltas in the bounded Unreleased changelog section, regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory, refreshes repository-preserved notices from exact version tags and updates the bounded standalone-artifact inspection for changed GitHub CLI, Codex CLI, ttyd, mise or uv assets. Any changed legal text or asset-packaging evidence remains visible in the pull-request diff for human review. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image with a dated build identity; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
