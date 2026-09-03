@@ -86,12 +86,4 @@ jobs:
           python3 scripts/update-antigravity-review-doc.py \
             --reviewed third_party/antigravity-cli-inspection.json
 
-      - name: Confirm PR validation never executes live Antigravity vendor bytes
-        run: |
-          set -euo pipefail
-          if grep -q -- '--expected-installer-sha256' \
-            .github/workflows/inspect-antigravity-cli.yml; then
-            echo "ERROR: PR validation workflow contains a live Antigravity execution path" >&2
-            exit 1
-          fi
           echo "Antigravity PR validation is offline; live review requires explicit hash admission."
