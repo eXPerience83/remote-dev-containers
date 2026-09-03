@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for safe preservation of proposed Antigravity review evidence."""
+"""Regression tests for safe preservation of proposed Antigravity review state."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def reviewed(installer_sha: str, version: str = "1.1.10") -> dict:
             "referenced_https_hosts": ["antigravity.google"],
         },
         "installed_binary": {
-            "relative_path": ".local/bin/agy",
+            "relative_path": MODULE.EXPECTED_BINARY,
             "version": version,
             "size": 200000000,
             "sha256": BINARY_SHA,
@@ -71,42 +71,92 @@ def detection(installer_sha: str, reviewed_sha: str = OLD_SHA) -> dict:
     }
 
 
+def discovery(installer_sha: str, payload_sha: str = BINARY_SHA) -> dict:
+    return {
+        "schema_version": 1,
+        "kind": "antigravity-payload-discovery",
+        "installer": {
+            "source": MODULE.OFFICIAL_URL,
+            "final_url": MODULE.OFFICIAL_URL,
+            "content_type": "application/x-sh",
+            "size": 8000,
+            "sha256": installer_sha,
+            "bash_syntax": {"exit_code": 0},
+            "help": {"exit_code": 0},
+            "supported_options": {"custom_directory": True, "skip_aliases": False, "skip_path": False},
+            "selected_strategy": "custom-directory",
+        },
+        "installation": {"exit_code": 0},
+        "payload": {
+            "path": MODULE.EXPECTED_BINARY,
+            "size": 200000000,
+            "sha256": payload_sha,
+        },
+        "profiles_unchanged": True,
+        "blocking_findings": [],
+    }
+
+
 class ReconcileAntigravityReviewStateTests(unittest.TestCase):
+    def reconcile(self, *, live, baseline, proposal=None, candidate=None):
+        return MODULE.reconcile(
+            live_detection=live,
+            baseline_reviewed=baseline,
+            proposed_reviewed=proposal,
+            proposed_discovery=candidate,
+        )
+
     def test_changed_live_installer_keeps_baseline_review_pending(self) -> None:
         baseline = reviewed(OLD_SHA)
-        selected, normalized, preserved = MODULE.reconcile(
-            live_detection=detection(NEW_SHA),
-            baseline_reviewed=baseline,
-            proposed_reviewed=None,
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(NEW_SHA), baseline=baseline
         )
         self.assertIs(selected, baseline)
-        self.assertFalse(preserved)
+        self.assertIsNone(candidate)
+        self.assertEqual(disposition, "baseline review + live detection")
         self.assertTrue(normalized["changed"])
         self.assertEqual(normalized["reviewed_installer_sha256"], OLD_SHA)
 
-    def test_matching_full_proposal_is_preserved_across_scheduler_rerun(self) -> None:
+    def test_matching_discovery_is_preserved_until_full_review(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        candidate_input = discovery(NEW_SHA)
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(NEW_SHA), baseline=baseline, candidate=candidate_input
+        )
+        self.assertIs(selected, baseline)
+        self.assertIs(candidate, candidate_input)
+        self.assertEqual(disposition, "preserved payload-discovery candidate")
+        self.assertTrue(normalized["changed"])
+        self.assertEqual(normalized["reviewed_installer_sha256"], OLD_SHA)
+
+    def test_matching_full_proposal_supersedes_discovery(self) -> None:
         baseline = reviewed(OLD_SHA)
         proposal = reviewed(NEW_SHA, "1.1.22")
-        selected, normalized, preserved = MODULE.reconcile(
-            live_detection=detection(NEW_SHA),
-            baseline_reviewed=baseline,
-            proposed_reviewed=proposal,
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(NEW_SHA),
+            baseline=baseline,
+            proposal=proposal,
+            candidate=discovery(NEW_SHA),
         )
         self.assertIs(selected, proposal)
-        self.assertTrue(preserved)
+        self.assertIsNone(candidate)
+        self.assertEqual(disposition, "preserved full proposed evidence")
         self.assertFalse(normalized["changed"])
         self.assertEqual(normalized["reviewed_installer_sha256"], NEW_SHA)
 
-    def test_stale_proposal_is_not_preserved(self) -> None:
+    def test_stale_proposal_and_discovery_are_not_preserved(self) -> None:
         baseline = reviewed(OLD_SHA)
-        stale = reviewed("d" * 64, "1.1.20")
-        selected, normalized, preserved = MODULE.reconcile(
-            live_detection=detection(NEW_SHA),
-            baseline_reviewed=baseline,
-            proposed_reviewed=stale,
+        stale_review = reviewed("d" * 64, "1.1.20")
+        stale_discovery = discovery("d" * 64)
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(NEW_SHA),
+            baseline=baseline,
+            proposal=stale_review,
+            candidate=stale_discovery,
         )
         self.assertIs(selected, baseline)
-        self.assertFalse(preserved)
+        self.assertIsNone(candidate)
+        self.assertEqual(disposition, "baseline review + live detection")
         self.assertTrue(normalized["changed"])
 
     def test_proposal_cannot_change_human_owned_policy(self) -> None:
@@ -115,22 +165,21 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         proposal["legal_and_distribution"] = deepcopy(proposal["legal_and_distribution"])
         proposal["legal_and_distribution"]["redistribution_permission_confirmed"] = True
         with self.assertRaisesRegex(MODULE.ReconcileError, "human-owned legal_and_distribution"):
-            MODULE.reconcile(
-                live_detection=detection(NEW_SHA),
-                baseline_reviewed=baseline,
-                proposed_reviewed=proposal,
-            )
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
+
+    def test_discovery_cannot_change_fixed_origin(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        candidate = discovery(NEW_SHA)
+        candidate["installer"]["final_url"] = "https://antigravity.google/docs"
+        with self.assertRaisesRegex(MODULE.ReconcileError, "fixed installer origin"):
+            self.reconcile(live=detection(NEW_SHA), baseline=baseline, candidate=candidate)
 
     def test_live_detection_must_remain_on_fixed_origin(self) -> None:
         baseline = reviewed(OLD_SHA)
         bad = detection(NEW_SHA)
         bad["installer"]["final_url"] = "https://antigravity.google/docs"
         with self.assertRaisesRegex(MODULE.ReconcileError, "fixed official installer URL"):
-            MODULE.reconcile(
-                live_detection=bad,
-                baseline_reviewed=baseline,
-                proposed_reviewed=None,
-            )
+            self.reconcile(live=bad, baseline=baseline)
 
 
 if __name__ == "__main__":
