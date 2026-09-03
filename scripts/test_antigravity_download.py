@@ -94,10 +94,10 @@ class AntigravityDownloadTests(unittest.TestCase):
                     policy=lambda url: url == allowed,
                     user_agent="test",
                 )
+            self.assertEqual(destination.read_bytes(), b"payload")
         self.assertEqual(data, b"payload")
         self.assertEqual(content_type, "application/octet-stream")
         self.assertEqual(final_url, allowed)
-        self.assertEqual(destination.read_bytes(), b"payload")
         proxy_handlers = [
             handler for handler in captured_handlers if isinstance(handler, urllib.request.ProxyHandler)
         ]
