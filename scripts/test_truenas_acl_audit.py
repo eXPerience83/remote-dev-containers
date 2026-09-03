@@ -87,7 +87,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         acl_payload: dict[str, object] | None = None,
     ):
         """Return a command runner that emulates ZFS and TrueNAS middleware."""
-        payload = acl_payload or posix_acl()
+        payload = posix_acl() if acl_payload is None else acl_payload
 
         def run(command: list[str]):
             """Dispatch one synthetic read-only host command."""
