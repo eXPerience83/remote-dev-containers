@@ -94,14 +94,8 @@ def update_changelog(text: str, date: str, changes: list[str]) -> str:
     entry = f"- {date} — {'; '.join(changes)}."
     marker_end = marker_index + len(MARKER)
     prefix = text[:marker_end]
-    suffix = text[marker_end:]
-    if suffix.startswith("\r\n"):
-        suffix = suffix[2:]
-    elif suffix.startswith("\n"):
-        suffix = suffix[1:]
-    if suffix.startswith("\n"):
-        suffix = suffix[1:]
-    return f"{prefix}\n\n{entry}\n{suffix}"
+    suffix = text[marker_end:].lstrip("\r\n")
+    return f"{prefix}\n\n{entry}\n\n{suffix}"
 
 
 def main() -> int:
