@@ -1,0 +1,16 @@
+{
+  "changed": false,
+  "installer": {
+    "content_type": "application/x-sh",
+    "final_url": "https://antigravity.google/cli/install.sh",
+    "referenced_https_hosts": [
+      "antigravity-cli-auto-updater-974169037036.us-central1.run.app"
+    ],
+    "sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
+    "size": 7354,
+    "source": "https://antigravity.google/cli/install.sh"
+  },
+  "kind": "antigravity-installer-detection",
+  "reviewed_installer_sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
+  "schema_version": 1
+}

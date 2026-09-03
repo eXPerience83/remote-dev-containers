@@ -4,9 +4,9 @@
 
 Antigravity CLI es un producto opcional de Google. Remote Dev no incluye, copia ni redistribuye su instalador ni su ejecutable. La instalación y la actualización son acciones expresas del usuario dentro del servicio aislado de Antigravity.
 
-El servicio debe ejecutarse con `REMOTE_DEV_ROLE=antigravity` y la activación expresa `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1`. El rol Antigravity permanece no disponible mientras esa puerta experimental esté desactivada. Activarla no convierte Antigravity en un componente estable ni plenamente soportado de Remote Dev; la integración actual en edge continúa siendo experimental hasta completar las validaciones reales documentadas.
+El servicio debe ejecutarse con `REMOTE_DEV_ROLE=antigravity` y la activación expresa `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1`. El rol Antigravity permanece no disponible mientras esa puerta experimental esté desactivada. La integración continúa siendo deliberadamente experimental conforme a la decisión actual de política del proveedor registrada en #53/#96: Remote Dev actúa como launcher/wrapper no afiliado del CLI oficial `agy`, no como cliente alternativo de Antigravity ni como relay de OAuth hacia otro agente.
 
-Este documento define el modelo de disponibilidad e integridad implementado en el issue #96. La detección programada y la renovación de evidencias siguen separadas en el issue #83. La sincronización general del estado de la documentación continúa en el issue #92.
+Este documento define el modelo de disponibilidad e integridad implementado en el issue #96 y la automatización consultiva de revisión implementada en el issue #83. La sincronización general del estado de la documentación continúa en el issue #92.
 
 ## Modelo de disponibilidad
 
@@ -52,6 +52,28 @@ El manifiesto privado detecta modificaciones independientes del ejecutable o del
 
 El instalador descargado continúa siendo código del proveedor. Ejecutarlo con un usuario sin privilegios, un entorno vacío y un staging privado reduce su exposición a credenciales montadas, pero no lo convierte en un programa sandboxeado ni auditado de forma independiente.
 
-## Automatización de la revisión
+## Automatización programada de la revisión
 
-El issue #83 podrá detectar cambios del instalador o paquete y abrir una única PR de revisión humana con metadatos normalizados y evidencia renovada. Esa automatización no debe aprobar, fusionar, publicar ni revocar automáticamente ninguna versión. La disponibilidad se rige por el contrato de instalación expresa y compatible descrito aquí.
+`.github/workflows/check-upstream.yml` ejecuta la revisión compartida de upstream **cada día a las 05:17 UTC** y también permite ejecución manual. El descubrimiento de Antigravity se realiza en un job separado `antigravity-detect` con `contents: read`, sin credenciales persistidas por checkout y sin capacidad de escritura en el repositorio.
+
+Ese job descarga bytes acotados del instalador desde la URL canónica exacta `https://antigravity.google/cli/install.sh`, JSON acotado desde el endpoint fijo revisado del manifest Linux AMD64 y el archivo del payload acotado al que apunta ese manifest. Cada URL inicial, destino de redirección y URL final se comprueba contra una política HTTPS estrecha antes de permitir la petición; además se desactivan los proxies ambientales. El manifest debe conservar exactamente el esquema revisado `version`/`url`/`sha512` y la URL del archivo debe permanecer dentro de la ruta revisada de Google Storage.
+
+Todos esos bytes del proveedor se tratan estrictamente como **datos**. El instalador se comprueba por hash y solo se inspeccionan los marcadores estáticos del contrato revisado; no se ejecuta. El SHA-512 del archivo se valida contra el manifest y después se lee en streaming el único miembro regular `antigravity` del tar para calcular el SHA-256 de `agy`. El archivo no se extrae y ni `install.sh` ni `agy` se ejecutan durante el descubrimiento programado. Enlaces, dispositivos, archivos regulares inesperados, manifests mal formados, redirecciones inseguras y excesos de tamaño provocan fallo cerrado.
+
+Los artefactos subidos contienen únicamente esquemas de metadatos normalizados y fijos para la detección del instalador y el descubrimiento estático del payload: URL de origen/final, tamaños/content types acotados, hashes, identidad del instalador revisado, versión del manifest/integridad del archivo y ruta/tamaño/SHA-256 del payload descubierto. No se conservan contenido crudo del instalador/manifest/archive, stdout/stderr, datos OAuth/de cuenta ni binarios propietarios. Los metadatos se validan contra esquema antes de subirlos y vuelven a validarse al entrar en el job separado con permisos de escritura que mantiene la PR.
+
+El escritor integra el estado de Antigravity en la misma rama/PR `automation/update-upstreams` que utiliza el actualizador agrupado. Una reejecución programada parte de `main` actual y solo puede conservar evidencia de descubrimiento o revisión completa que siga correspondiendo a la pareja instalador/payload detectada y preserve los campos de política legal/runtime propiedad de la revisión humana. El descubrimiento estático reciente sustituye propuestas de candidato/revisión completa obsoletas. La ruta del candidato se añade al índice antes de decidir «no hay cambios», de modo que un archivo nuevo todavía untracked no puede perderse. La automatización nunca hace auto-merge.
+
+## Una única admisión expresa para ejecutar
+
+El descubrimiento programado puede identificar un instalador cambiado y/o un `agy` cambiado sin ejecutar ninguno. El código del proveedor solo puede ejecutarse mediante una ejecución manual de `.github/workflows/review-antigravity-candidate.yml` desde `main`, después de que un mantenedor revise la PR de automatización e introduzca **los dos** SHA-256 exactos en minúsculas: el hash del instalador descubierto estáticamente y el hash de `agy` descubierto estáticamente.
+
+El job de ejecución, sin credenciales y de solo lectura, descarga primero el instalador mediante la misma política estricta de URL/redirecciones/proxies desactivados y lo rechaza salvo que su SHA-256 coincida exactamente con el hash autorizado. Solo después de superar ese prefetch se entrega el archivo local ya verificado al inspector acotado. El inspector vuelve a verificar el hash del instalador, ejecuta el instalador admitido dentro de un HOME temporal aislado, verifica que el `agy` resultante coincide exactamente con el SHA-256 del payload autorizado **antes de invocarlo** y solo entonces ejecuta `agy --version`/`--help` de forma acotada junto con los controles de compatibilidad existentes.
+
+El job que ejecuta bytes del proveedor tiene únicamente `contents: read`; no puede escribir en repositorio, issues ni pull requests. Solo sube metadatos normalizados validados contra esquema. Un job escritor separado descarga esos metadatos, vuelve a validarlos, confirma que los hashes suministrados coinciden con el candidato estático pendiente y solo entonces propone la evidencia revisada actualizada en la rama de automatización. Los bytes del instalador, archives, bytes de `agy` y stdout/stderr crudos del proveedor nunca se suben como artefactos de revisión ni se incluyen en commits.
+
+Una inspección completa correcta actualiza `third_party/antigravity-cli-inspection.json`, el bloque actual generado de `third_party/antigravity-cli-inspection.md`, elimina el candidato estático ya sustituido y reinicia `third_party/antigravity-cli-detection.json` con la identidad del instalador recién revisado. Antes de fusionar sigue siendo necesaria la revisión humana de compatibilidad y del límite vigente de términos/privacidad de Google.
+
+## La automatización de revisión no es la admisión del runtime
+
+La detección programada, una PR pendiente, una inspección fallida o la ausencia de una versión en la evidencia incluida nunca revocan un runtime local íntegro y ya admitido. La disponibilidad continúa gobernada por el contrato de instalación expresa, manifiesto privado e integridad de #153 descrito arriba. Una versión/hash concretamente insegura exigiría una decisión expresa de revocación del proyecto; no se deduce simplemente del estado «revisión pendiente».

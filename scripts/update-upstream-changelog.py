@@ -21,6 +21,7 @@ _COMPONENTS = (
     ("NODE_VERSION", "Node.js", lambda value: value),
     ("NPM_VERSION", "npm", lambda value: value),
     ("UV_VERSION", "uv", lambda value: value),
+    ("CONTEXT7_CLI_VERSION", "Context7 CLI (transient)", lambda value: value),
 )
 _ENV_LINE_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 

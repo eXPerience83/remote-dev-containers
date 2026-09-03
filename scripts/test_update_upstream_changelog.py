@@ -39,6 +39,7 @@ PYTHON_VERSION=3.14.7
 NODE_VERSION=24.20.0
 NPM_VERSION=12.0.2
 UV_VERSION=0.12.9
+CONTEXT7_CLI_VERSION=0.5.8
 CODEX_AMD64_SHA256=oldhash
 """
 
@@ -66,6 +67,21 @@ class UpstreamChangelogTests(unittest.TestCase):
         )
         changes = MODULE.changed_components(before, after)
         self.assertEqual(changes, ["uv 0.12.9 → 0.13.0"])
+
+    def test_transient_context7_change_is_labeled_explicitly(self) -> None:
+        before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))
+        after = MODULE.parse_versions(
+            self._write(
+                "after.env",
+                BASE_VERSIONS.replace(
+                    "CONTEXT7_CLI_VERSION=0.5.8", "CONTEXT7_CLI_VERSION=0.5.9"
+                ),
+            )
+        )
+        self.assertEqual(
+            MODULE.changed_components(before, after),
+            ["Context7 CLI (transient) 0.5.8 → 0.5.9"],
+        )
 
     def test_hash_only_change_does_not_modify_changelog(self) -> None:
         before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))
