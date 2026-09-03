@@ -7,12 +7,14 @@ import argparse
 import importlib.util
 import json
 import re
+import urllib.parse
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
+OFFICIAL_HOST = "antigravity.google"
 MAX_BYTES = 2 * 1024 * 1024
 SAFE_STRING_RE = re.compile(r"[ -~]{0,500}")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -112,11 +114,37 @@ def exact_sha(value: str | None, label: str) -> str | None:
     return normalized
 
 
-def require_official_installer(installer: object) -> dict[str, Any]:
+def safe_official_url(value: object) -> bool:
+    if not isinstance(value, str) or not value or "\\" in value:
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == OFFICIAL_HOST
+        and port in (None, 443)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.fragment == ""
+    )
+
+
+def require_official_installer(
+    installer: object, *, allow_same_origin_redirect: bool = False
+) -> dict[str, Any]:
     if not isinstance(installer, dict):
         raise ArtifactError("Antigravity installer metadata is malformed")
-    if installer.get("source") != OFFICIAL_URL or installer.get("final_url") != OFFICIAL_URL:
-        raise ArtifactError("Antigravity artifact does not use the fixed official installer URL")
+    if installer.get("source") != OFFICIAL_URL:
+        raise ArtifactError("Antigravity artifact source is not the fixed official installer URL")
+    final_url = installer.get("final_url")
+    if allow_same_origin_redirect:
+        if not safe_official_url(final_url):
+            raise ArtifactError("Antigravity detection left the reviewed official HTTPS origin")
+    elif final_url != OFFICIAL_URL:
+        raise ArtifactError("Antigravity executable review does not use the fixed installer URL")
     return installer
 
 
@@ -125,7 +153,9 @@ def validate_detection(report: dict[str, Any], expected_installer: str | None) -
         DETECT.validate_report(report)
     except (ValueError, RuntimeError, argparse.ArgumentTypeError) as exc:
         raise ArtifactError(f"Antigravity detection artifact is invalid: {exc}") from exc
-    installer = require_official_installer(report.get("installer"))
+    installer = require_official_installer(
+        report.get("installer"), allow_same_origin_redirect=True
+    )
     if expected_installer is not None and installer.get("sha256") != expected_installer:
         raise ArtifactError("Antigravity detection installer SHA-256 differs from the expected value")
 
