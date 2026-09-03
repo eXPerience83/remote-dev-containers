@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ INSPECTOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSPECTOR)
 
 MAX_PAYLOAD_SIZE = 512 * 1024 * 1024
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class DiscoveryError(ValueError):
@@ -135,11 +137,11 @@ def validate_report(report: dict[str, Any], *, expected_installer_sha256: str | 
         raise DiscoveryError("payload discovery metadata is malformed")
     installer_sha = installer.get("sha256")
     payload_sha = payload.get("sha256")
-    if not isinstance(installer_sha, str) or not INSPECTOR.parse_sha256(installer_sha):
+    if not isinstance(installer_sha, str) or not _SHA256_RE.fullmatch(installer_sha):
         raise DiscoveryError("payload discovery installer SHA-256 is invalid")
     if expected_installer_sha256 is not None and installer_sha != expected_installer_sha256:
         raise DiscoveryError("payload discovery installer SHA-256 differs from the admitted value")
-    if not isinstance(payload_sha, str) or not INSPECTOR.parse_sha256(payload_sha):
+    if not isinstance(payload_sha, str) or not _SHA256_RE.fullmatch(payload_sha):
         raise DiscoveryError("payload discovery binary SHA-256 is invalid")
     if payload.get("path") != INSPECTOR.EXPECTED_BINARY.as_posix():
         raise DiscoveryError("payload discovery path is unexpected")
@@ -149,6 +151,11 @@ def validate_report(report: dict[str, Any], *, expected_installer_sha256: str | 
     installation = report["installation"]
     if not isinstance(installation, dict) or installation.get("exit_code") != 0:
         raise DiscoveryError("payload discovery installer did not succeed")
+    if installer.get("selected_strategy") not in {
+        "custom-directory",
+        "skip-shell-modification-flags",
+    }:
+        raise DiscoveryError("payload discovery used an unreviewed installer strategy")
 
 
 def write_report(
