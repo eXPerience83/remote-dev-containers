@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Regression tests for payload discovery without Antigravity binary execution."""
+"""Regression tests for static Antigravity payload discovery."""
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import io
 import json
+import tarfile
 import tempfile
 import unittest
 from copy import deepcopy
@@ -13,80 +16,177 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent
 MODULE_PATH = ROOT / "discover-antigravity-payload.py"
-FIXTURE = ROOT / "fixtures/antigravity-install.sh"
 SPEC = importlib.util.spec_from_file_location("discover_antigravity_payload", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("could not load discover-antigravity-payload.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
+PAYLOAD = b"synthetic-antigravity-payload-do-not-execute"
+VERSION = "1.2.3"
+PAYLOAD_URL = (
+    "https://storage.googleapis.com/antigravity-public/antigravity-cli/"
+    f"{VERSION}-123456/linux-x64/cli_linux_x64.tar.gz"
+)
+INSTALLER_BYTES = (
+    b"#!/bin/bash\n"
+    b"# antigravity-cli-auto-updater-974169037036.us-central1.run.app\n"
+    b"# /manifests/\n"
+    b"# sha512\n"
+)
+
 
 class AntigravityPayloadDiscoveryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.installer = root / "install.sh"
+        self.manifest = root / "manifest.json"
+        self.archive = root / "payload.tar.gz"
+        self.installer.write_bytes(INSTALLER_BYTES)
+        self._write_archive(PAYLOAD)
+        self._write_manifest(hashlib.sha512(self.archive.read_bytes()).hexdigest())
+        self.installer_sha = hashlib.sha256(INSTALLER_BYTES).hexdigest()
+
+    def _write_archive(
+        self,
+        payload: bytes,
+        *,
+        member_name: str = "antigravity",
+        symlink: bool = False,
+    ) -> None:
+        with tarfile.open(self.archive, "w:gz") as archive:
+            member = tarfile.TarInfo(member_name)
+            if symlink:
+                member.type = tarfile.SYMTYPE
+                member.linkname = "elsewhere"
+                member.size = 0
+                archive.addfile(member)
+            else:
+                member.size = len(payload)
+                member.mode = 0o755
+                archive.addfile(member, io.BytesIO(payload))
+
+    def _write_manifest(self, archive_sha512: str, *, payload_url: str = PAYLOAD_URL) -> None:
+        self.manifest.write_text(
+            json.dumps(
+                {
+                    "version": VERSION,
+                    "url": payload_url,
+                    "sha512": archive_sha512,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _discover(self) -> dict:
+        return MODULE.discover(
+            expected_installer_sha256=self.installer_sha,
+            installer_fixture=self.installer,
+            manifest_fixture=self.manifest,
+            archive_fixture=self.archive,
+        )
+
+    def test_static_discovery_hashes_payload_without_process_execution(self) -> None:
+        with mock.patch.object(
+            MODULE.INSPECTOR,
+            "run",
+            side_effect=AssertionError("static discovery must not execute any process"),
+        ):
+            report = self._discover()
+        MODULE.validate_report(
+            report,
+            expected_installer_sha256=self.installer_sha,
+            allow_fixtures=True,
+        )
+        self.assertEqual(report["schema_version"], 2)
+        self.assertEqual(report["payload"]["path"], ".local/bin/agy")
+        self.assertEqual(report["payload"]["size"], len(PAYLOAD))
+        self.assertEqual(report["payload"]["sha256"], hashlib.sha256(PAYLOAD).hexdigest())
+        serialized = json.dumps(report, sort_keys=True)
+        for forbidden in ("installation", "bash_syntax", "help", "stdout", "stderr"):
+            self.assertNotIn(f'"{forbidden}"', serialized)
+
     def test_discovery_requires_exact_installer_hash(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "installer SHA-256 differs"):
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "explicitly admitted"):
             MODULE.discover(
                 expected_installer_sha256="0" * 64,
-                installer_fixture=FIXTURE,
+                installer_fixture=self.installer,
+                manifest_fixture=self.manifest,
+                archive_fixture=self.archive,
             )
 
-    def test_discovery_never_directly_executes_the_payload(self) -> None:
-        expected = MODULE.INSPECTOR.sha256_file(FIXTURE)
-        original_run = MODULE.INSPECTOR.run
+    def test_manifest_payload_host_is_fixed(self) -> None:
+        self._write_manifest(
+            hashlib.sha512(self.archive.read_bytes()).hexdigest(),
+            payload_url="https://example.invalid/payload.tar.gz",
+        )
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "payload URL"):
+            self._discover()
 
-        def guarded_run(command, **kwargs):
-            executable = str(command[0]) if command else ""
-            if executable.endswith("/agy") or executable == "agy":
-                raise AssertionError("payload discovery must not execute agy")
-            return original_run(command, **kwargs)
+    def test_archive_sha512_must_match_manifest(self) -> None:
+        self._write_manifest("0" * 128)
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "SHA-512 differs"):
+            self._discover()
 
-        with mock.patch.object(MODULE.INSPECTOR, "run", side_effect=guarded_run):
-            report = MODULE.discover(
-                expected_installer_sha256=expected,
-                installer_fixture=FIXTURE,
+    def test_archive_rejects_unexpected_regular_member(self) -> None:
+        self._write_archive(PAYLOAD, member_name="unexpected")
+        self._write_manifest(hashlib.sha512(self.archive.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "unexpected regular file"):
+            self._discover()
+
+    def test_archive_rejects_symlink_member(self) -> None:
+        self._write_archive(b"", symlink=True)
+        self._write_manifest(hashlib.sha512(self.archive.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "link/device"):
+            self._discover()
+
+    def test_fixture_trio_is_required(self) -> None:
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "fixtures must provide"):
+            MODULE.discover(
+                expected_installer_sha256=self.installer_sha,
+                installer_fixture=self.installer,
+                manifest_fixture=None,
+                archive_fixture=None,
             )
-        MODULE.validate_report(report, expected_installer_sha256=expected)
-        self.assertEqual(report["installer"]["sha256"], expected)
-        self.assertEqual(report["payload"]["path"], ".local/bin/agy")
-        self.assertRegex(report["payload"]["sha256"], r"^[0-9a-f]{64}$")
-        serialized = json.dumps(report, sort_keys=True)
-        self.assertNotIn("UNTRUSTED_VENDOR_OUTPUT_SHOULD_NOT_APPEAR", serialized)
-        self.assertNotIn("download complete", serialized)
-
-    def test_written_report_round_trips_through_schema_validation(self) -> None:
-        expected = MODULE.INSPECTOR.sha256_file(FIXTURE)
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "payload.json"
-            report = MODULE.write_report(
-                output,
-                expected_installer_sha256=expected,
-                installer_fixture=FIXTURE,
-            )
-            persisted = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(persisted, report)
-            MODULE.validate_report(persisted, expected_installer_sha256=expected)
 
     def test_validation_rejects_wrong_admitted_installer(self) -> None:
-        expected = MODULE.INSPECTOR.sha256_file(FIXTURE)
-        report = MODULE.discover(
-            expected_installer_sha256=expected,
-            installer_fixture=FIXTURE,
-        )
+        report = self._discover()
         with self.assertRaisesRegex(MODULE.DiscoveryError, "differs from the admitted"):
             MODULE.validate_report(
                 report,
                 expected_installer_sha256="f" * 64,
+                allow_fixtures=True,
             )
 
     def test_validation_rejects_extra_nested_metadata(self) -> None:
-        expected = MODULE.INSPECTOR.sha256_file(FIXTURE)
-        report = MODULE.discover(
-            expected_installer_sha256=expected,
-            installer_fixture=FIXTURE,
-        )
+        report = self._discover()
         bad = deepcopy(report)
         bad["installer"]["vendor_note"] = "unexpected"
         with self.assertRaisesRegex(MODULE.DiscoveryError, "installer metadata is malformed"):
-            MODULE.validate_report(bad, expected_installer_sha256=expected)
+            MODULE.validate_report(
+                bad,
+                expected_installer_sha256=self.installer_sha,
+                allow_fixtures=True,
+            )
+
+    def test_written_report_round_trips_through_schema_validation(self) -> None:
+        output = Path(self.temp.name) / "report.json"
+        report = MODULE.write_report(
+            output,
+            expected_installer_sha256=self.installer_sha,
+            installer_fixture=self.installer,
+            manifest_fixture=self.manifest,
+            archive_fixture=self.archive,
+        )
+        persisted = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(persisted, report)
+        MODULE.validate_report(
+            persisted,
+            expected_installer_sha256=self.installer_sha,
+            allow_fixtures=True,
+        )
 
 
 if __name__ == "__main__":
