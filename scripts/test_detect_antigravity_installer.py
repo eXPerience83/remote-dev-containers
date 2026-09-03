@@ -40,6 +40,30 @@ class AntigravityDetectionTests(unittest.TestCase):
             report["installer"]["sha256"], MODULE.INSPECTOR.sha256_file(FIXTURE)
         )
 
+    def test_live_detection_routes_through_strict_downloader(self) -> None:
+        data = b"#!/bin/bash\n"
+        reviewed = MODULE.INSPECTOR.sha256_bytes(data)
+
+        def fake_download(url, destination, **kwargs):
+            self.assertEqual(url, MODULE.INSPECTOR.OFFICIAL_INSTALLER_URL)
+            self.assertTrue(kwargs["policy"](url))
+            self.assertFalse(kwargs["policy"]("https://example.invalid/install.sh"))
+            destination.write_bytes(data)
+            return data, "application/x-sh", url
+
+        with mock.patch.object(MODULE.NETWORK, "download_bytes", side_effect=fake_download), mock.patch.object(
+            MODULE.INSPECTOR,
+            "download_installer",
+            side_effect=AssertionError("legacy urllib downloader must not be used"),
+        ):
+            report = MODULE.detect(
+                reviewed_installer_sha256=reviewed,
+                installer_fixture=None,
+            )
+        MODULE.validate_report(report)
+        self.assertFalse(report["changed"])
+        self.assertEqual(report["installer"]["source"], MODULE.INSPECTOR.OFFICIAL_INSTALLER_URL)
+
     def test_matching_hash_is_current_and_deterministic(self) -> None:
         reviewed = MODULE.INSPECTOR.sha256_file(FIXTURE)
         first = MODULE.detect(
