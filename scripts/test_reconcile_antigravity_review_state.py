@@ -152,7 +152,7 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
             proposed_discovery=candidate,
         )
 
-    def test_changed_live_installer_keeps_baseline_review_pending(self) -> None:
+    def test_changed_live_installer_without_discovery_keeps_baseline_pending(self) -> None:
         baseline = reviewed(OLD_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
             live=detection(NEW_SHA), baseline=baseline
@@ -163,7 +163,7 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         self.assertTrue(normalized["changed"])
         self.assertEqual(normalized["reviewed_installer_sha256"], OLD_SHA)
 
-    def test_reviewed_installer_can_detect_new_payload_without_executing_payload(self) -> None:
+    def test_reviewed_installer_can_detect_new_payload_statically(self) -> None:
         baseline = reviewed(OLD_SHA)
         live_candidate = discovery(OLD_SHA, NEW_BINARY_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
@@ -171,11 +171,26 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         )
         self.assertIs(selected, baseline)
         self.assertIs(candidate, live_candidate)
-        self.assertEqual(disposition, "live payload change detected with reviewed installer")
+        self.assertEqual(
+            disposition, "live payload change detected statically with reviewed installer"
+        )
         self.assertFalse(normalized["changed"])
         self.assertEqual(candidate["payload"]["sha256"], NEW_BINARY_SHA)
 
-    def test_reviewed_installer_same_payload_produces_no_candidate_noise(self) -> None:
+    def test_changed_installer_and_payload_can_be_discovered_statically(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        live_candidate = discovery(NEW_SHA, NEW_BINARY_SHA)
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(NEW_SHA), baseline=baseline, live_candidate=live_candidate
+        )
+        self.assertIs(selected, baseline)
+        self.assertIs(candidate, live_candidate)
+        self.assertEqual(disposition, "live installer/payload change detected statically")
+        self.assertTrue(normalized["changed"])
+        self.assertEqual(candidate["installer"]["sha256"], NEW_SHA)
+        self.assertEqual(candidate["payload"]["sha256"], NEW_BINARY_SHA)
+
+    def test_reviewed_pair_produces_no_candidate_noise(self) -> None:
         baseline = reviewed(OLD_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
             live=detection(OLD_SHA),
@@ -187,13 +202,13 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         self.assertEqual(disposition, "baseline review + live detection")
         self.assertFalse(normalized["changed"])
 
-    def test_scheduler_must_not_discover_payload_with_changed_installer(self) -> None:
+    def test_live_discovery_must_match_detected_installer(self) -> None:
         baseline = reviewed(OLD_SHA)
-        with self.assertRaisesRegex(MODULE.ReconcileError, "not already reviewed"):
+        with self.assertRaisesRegex(MODULE.ReconcileError, "does not match"):
             self.reconcile(
                 live=detection(NEW_SHA),
                 baseline=baseline,
-                live_candidate=discovery(NEW_SHA, NEW_BINARY_SHA),
+                live_candidate=discovery(OLD_SHA, NEW_BINARY_SHA),
             )
 
     def test_matching_discovery_is_preserved_until_full_review(self) -> None:
@@ -208,14 +223,16 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         self.assertTrue(normalized["changed"])
         self.assertEqual(normalized["reviewed_installer_sha256"], OLD_SHA)
 
-    def test_matching_full_proposal_supersedes_discovery(self) -> None:
+    def test_matching_full_proposal_supersedes_live_discovery(self) -> None:
         baseline = reviewed(OLD_SHA)
         proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
+        live_candidate = discovery(NEW_SHA, NEW_BINARY_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
             live=detection(NEW_SHA),
             baseline=baseline,
+            live_candidate=live_candidate,
             proposal=proposal,
-            candidate=discovery(NEW_SHA, NEW_BINARY_SHA),
+            candidate=live_candidate,
         )
         self.assertIs(selected, proposal)
         self.assertIsNone(candidate)
@@ -226,11 +243,13 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
     def test_full_proposal_may_refresh_payload_behind_same_installer(self) -> None:
         baseline = reviewed(OLD_SHA)
         proposal = reviewed(OLD_SHA, "1.1.22", NEW_BINARY_SHA)
+        live_candidate = discovery(OLD_SHA, NEW_BINARY_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
             live=detection(OLD_SHA),
             baseline=baseline,
+            live_candidate=live_candidate,
             proposal=proposal,
-            candidate=discovery(OLD_SHA, NEW_BINARY_SHA),
+            candidate=live_candidate,
         )
         self.assertIs(selected, proposal)
         self.assertIsNone(candidate)
@@ -251,7 +270,9 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         )
         self.assertIs(selected, baseline)
         self.assertIs(candidate, live_candidate)
-        self.assertEqual(disposition, "live payload change detected with reviewed installer")
+        self.assertEqual(
+            disposition, "live payload change detected statically with reviewed installer"
+        )
         self.assertEqual(candidate["payload"]["sha256"], newest_payload_sha)
         self.assertFalse(normalized["changed"])
 
@@ -270,7 +291,7 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         self.assertEqual(disposition, "baseline review + live detection")
         self.assertTrue(normalized["changed"])
 
-    def test_live_discovery_supersedes_stale_branch_candidate(self) -> None:
+    def test_live_reviewed_pair_supersedes_stale_branch_candidate(self) -> None:
         baseline = reviewed(OLD_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
             live=detection(OLD_SHA),
