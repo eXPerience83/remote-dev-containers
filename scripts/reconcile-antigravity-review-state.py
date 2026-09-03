@@ -93,7 +93,9 @@ def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
     return installer
 
 
-def validate_reviewed(value: dict[str, Any], *, baseline: dict[str, Any]) -> str:
+def validate_reviewed(
+    value: dict[str, Any], *, baseline: dict[str, Any]
+) -> tuple[str, str]:
     expected_top = {
         "schema_version",
         "inspection_date_utc",
@@ -120,16 +122,16 @@ def validate_reviewed(value: dict[str, Any], *, baseline: dict[str, Any]) -> str
     if installer.get("official_url") != OFFICIAL_URL or installer.get("final_url") != OFFICIAL_URL:
         raise ReconcileError("proposed reviewed evidence changed the fixed installer origin")
     installer_sha = sha256(installer.get("sha256"), "proposed installer SHA-256")
-    sha256(binary.get("sha256"), "proposed binary SHA-256")
+    payload_sha = sha256(binary.get("sha256"), "proposed binary SHA-256")
     if binary.get("relative_path") != EXPECTED_BINARY:
         raise ReconcileError("proposed reviewed evidence changed the expected binary path")
     version = binary.get("version")
     if not isinstance(version, str) or not _VERSION_RE.fullmatch(version):
         raise ReconcileError("proposed reviewed evidence has an invalid binary version")
-    return installer_sha
+    return installer_sha, payload_sha
 
 
-def validate_discovery(value: dict[str, Any]) -> str:
+def validate_discovery(value: dict[str, Any]) -> tuple[str, str]:
     expected_top = {
         "schema_version",
         "kind",
@@ -163,52 +165,73 @@ def validate_discovery(value: dict[str, Any]) -> str:
         raise ReconcileError("proposed payload discovery installer did not succeed")
     if payload.get("path") != EXPECTED_BINARY:
         raise ReconcileError("proposed payload discovery changed the expected binary path")
-    sha256(payload.get("sha256"), "discovery payload SHA-256")
+    payload_sha = sha256(payload.get("sha256"), "discovery payload SHA-256")
     payload_size = payload.get("size")
     if not isinstance(payload_size, int) or not 0 < payload_size <= MAX_PAYLOAD_BYTES:
         raise ReconcileError("proposed payload discovery size is outside the supported boundary")
-    return installer_sha
+    return installer_sha, payload_sha
 
 
 def reconcile(
     *,
     live_detection: dict[str, Any],
     baseline_reviewed: dict[str, Any],
+    live_discovery: dict[str, Any] | None,
     proposed_reviewed: dict[str, Any] | None,
     proposed_discovery: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, str]:
     live_installer = validate_detection(live_detection)
-    baseline_sha = validate_reviewed(baseline_reviewed, baseline=baseline_reviewed)
+    baseline_installer_sha, baseline_payload_sha = validate_reviewed(
+        baseline_reviewed, baseline=baseline_reviewed
+    )
     detected_baseline_sha = sha256(
         live_detection.get("reviewed_installer_sha256"), "detected reviewed installer SHA-256"
     )
-    if detected_baseline_sha != baseline_sha:
+    if detected_baseline_sha != baseline_installer_sha:
         raise ReconcileError("live detection was not generated from the current reviewed baseline")
-    live_sha = live_installer["sha256"]
+    live_installer_sha = live_installer["sha256"]
+    baseline_pair = (baseline_installer_sha, baseline_payload_sha)
 
     selected_reviewed = baseline_reviewed
     selected_discovery: dict[str, Any] | None = None
     disposition = "baseline review + live detection"
 
     if proposed_reviewed is not None:
-        proposed_sha = validate_reviewed(proposed_reviewed, baseline=baseline_reviewed)
-        if proposed_sha == live_sha and proposed_sha != baseline_sha:
+        proposed_pair = validate_reviewed(proposed_reviewed, baseline=baseline_reviewed)
+        if proposed_pair[0] == live_installer_sha and proposed_pair != baseline_pair:
             selected_reviewed = proposed_reviewed
             disposition = "preserved full proposed evidence"
 
-    if selected_reviewed is baseline_reviewed and proposed_discovery is not None:
-        discovery_sha = validate_discovery(proposed_discovery)
-        if discovery_sha == live_sha and discovery_sha != baseline_sha:
+    if selected_reviewed is baseline_reviewed and live_discovery is not None:
+        live_discovery_pair = validate_discovery(live_discovery)
+        if live_discovery_pair[0] != live_installer_sha:
+            raise ReconcileError("live payload discovery does not match the detected installer")
+        if live_installer_sha != baseline_installer_sha:
+            raise ReconcileError("live payload discovery executed an installer that was not already reviewed")
+        if live_discovery_pair[1] != baseline_payload_sha:
+            selected_discovery = live_discovery
+            disposition = "live payload change detected with reviewed installer"
+
+    if (
+        selected_reviewed is baseline_reviewed
+        and live_discovery is None
+        and proposed_discovery is not None
+    ):
+        proposed_discovery_pair = validate_discovery(proposed_discovery)
+        if (
+            proposed_discovery_pair[0] == live_installer_sha
+            and proposed_discovery_pair != baseline_pair
+        ):
             selected_discovery = proposed_discovery
             disposition = "preserved payload-discovery candidate"
 
-    selected_sha = selected_reviewed["installer"]["sha256"]
+    selected_installer_sha = selected_reviewed["installer"]["sha256"]
     normalized_detection = {
         "schema_version": 1,
         "kind": "antigravity-installer-detection",
         "installer": live_installer,
-        "reviewed_installer_sha256": selected_sha,
-        "changed": live_sha != selected_sha,
+        "reviewed_installer_sha256": selected_installer_sha,
+        "changed": live_installer_sha != selected_installer_sha,
     }
     return selected_reviewed, normalized_detection, selected_discovery, disposition
 
@@ -217,6 +240,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live-detection", type=Path, required=True)
     parser.add_argument("--baseline-reviewed", type=Path, required=True)
+    parser.add_argument("--live-discovery", type=Path)
     parser.add_argument("--proposed-reviewed", type=Path)
     parser.add_argument("--proposed-discovery", type=Path)
     parser.add_argument("--reviewed-output", type=Path, required=True)
@@ -224,6 +248,11 @@ def main() -> int:
     parser.add_argument("--discovery-output", type=Path)
     args = parser.parse_args()
     try:
+        live_discovery = (
+            load_json(args.live_discovery)
+            if args.live_discovery is not None and args.live_discovery.exists()
+            else None
+        )
         proposed_reviewed = (
             load_json(args.proposed_reviewed)
             if args.proposed_reviewed is not None and args.proposed_reviewed.exists()
@@ -237,6 +266,7 @@ def main() -> int:
         reviewed, detection, discovery, disposition = reconcile(
             live_detection=load_json(args.live_detection),
             baseline_reviewed=load_json(args.baseline_reviewed),
+            live_discovery=live_discovery,
             proposed_reviewed=proposed_reviewed,
             proposed_discovery=proposed_discovery,
         )
