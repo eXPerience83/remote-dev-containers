@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -62,16 +63,36 @@ class AntigravityDetectionTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.DetectionError, "inconsistent"):
             MODULE.validate_report(report)
 
-    def test_cli_writes_metadata_only_json(self) -> None:
+    def test_write_report_contains_only_normalized_metadata(self) -> None:
         reviewed = "f" * 64
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "candidate.json"
-            status = MODULE.main_for_test(
-                output=output,
-                reviewed_installer_sha256=reviewed,
-                installer_fixture=FIXTURE,
-            ) if hasattr(MODULE, "main_for_test") else None
-            self.assertIsNone(status)
+            with mock.patch.object(
+                MODULE.INSPECTOR,
+                "run",
+                side_effect=AssertionError("detection must not execute vendor bytes"),
+            ):
+                report = MODULE.write_report(
+                    output,
+                    reviewed_installer_sha256=reviewed,
+                    installer_fixture=FIXTURE,
+                )
+            persisted = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(persisted, report)
+            serialized = output.read_text(encoding="utf-8")
+            self.assertNotIn("UNTRUSTED_VENDOR_OUTPUT_SHOULD_NOT_APPEAR", serialized)
+            self.assertNotIn("download complete", serialized)
+
+    def test_host_extraction_is_bounded_and_normalized(self) -> None:
+        data = (
+            b"https://Example.COM/path\n"
+            b"https://example.com/other\n"
+            b"https://sub.example.org:443/path\n"
+        )
+        self.assertEqual(
+            MODULE.referenced_https_hosts(data),
+            ["example.com", "sub.example.org"],
+        )
 
 
 if __name__ == "__main__":
