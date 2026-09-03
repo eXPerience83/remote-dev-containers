@@ -111,6 +111,12 @@ class AntigravityReviewDocTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.DocumentError, "unsafe installer host metadata"):
             MODULE.render(value)
 
+    def test_non_string_list_item_is_rejected_as_metadata(self) -> None:
+        value = deepcopy(reviewed())
+        value["installed_binary"]["dynamic_dependencies"] = [{"name": "libc.so.6"}]
+        with self.assertRaisesRegex(MODULE.RECONCILE.ReconcileError, "invalid value"):
+            MODULE.render(value)
+
 
 if __name__ == "__main__":
     unittest.main()
