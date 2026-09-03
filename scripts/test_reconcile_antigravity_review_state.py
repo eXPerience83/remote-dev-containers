@@ -227,6 +227,26 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         self.assertEqual(disposition, "preserved full proposed evidence")
         self.assertFalse(normalized["changed"])
 
+    def test_fresh_live_payload_invalidates_stale_full_proposal(self) -> None:
+        baseline = reviewed(OLD_SHA)
+        stale_full = reviewed(OLD_SHA, "1.1.21", NEW_BINARY_SHA)
+        newest_payload_sha = "f" * 64
+        live_candidate = discovery(OLD_SHA, newest_payload_sha)
+        selected, normalized, candidate, disposition = self.reconcile(
+            live=detection(OLD_SHA),
+            baseline=baseline,
+            live_candidate=live_candidate,
+            proposal=stale_full,
+            candidate=discovery(OLD_SHA, NEW_BINARY_SHA),
+        )
+        self.assertIs(selected, baseline)
+        self.assertIs(candidate, live_candidate)
+        self.assertEqual(
+            disposition, "live payload change detected with reviewed installer"
+        )
+        self.assertEqual(candidate["payload"]["sha256"], newest_payload_sha)
+        self.assertFalse(normalized["changed"])
+
     def test_stale_proposal_and_discovery_are_not_preserved(self) -> None:
         baseline = reviewed(OLD_SHA)
         stale_review = reviewed("d" * 64, "1.1.20", NEW_BINARY_SHA)
