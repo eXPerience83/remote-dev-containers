@@ -4,12 +4,12 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 
 | Component | Version | Packaging | Legal files inside asset | Repository notices |
 |---|---:|---|---|---|
-| github-cli | `2.98.0` | tar.gz | LICENSE | LICENSE |
-| codex-cli | `rust-v0.152.0` | tar.gz | None | LICENSE, NOTICE |
-| codex-code-mode-host | `rust-v0.152.0` | tar.gz | None | LICENSE, NOTICE |
+| github-cli | `2.99.0` | tar.gz | LICENSE | LICENSE |
+| codex-cli | `rust-v0.152.1` | tar.gz | None | LICENSE, NOTICE |
+| codex-code-mode-host | `rust-v0.152.1` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
-| mise | `2026.8.16` | raw-binary | None | LICENSE |
-| uv | `0.12.8` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
+| mise | `2026.9.0` | raw-binary | None | LICENSE |
+| uv | `0.12.9` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
 
 ## Interpretation
 
