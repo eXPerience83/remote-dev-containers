@@ -191,7 +191,8 @@ jobs:
           gh api "repos/cli/cli/releases/tags/v${latest_gh}" > "$workdir/gh.json"
           gh api "repos/tsl0922/ttyd/releases/tags/${latest_ttyd}" > "$workdir/ttyd.json"
           gh api "repos/jdx/mise/releases/tags/v${latest_mise}" > "$workdir/mise.json"
-          curl "${curl_args[@]}" https://registry.npmjs.org/ctx7/latest \
+          curl "${curl_args[@]}" --max-filesize 65536 \
+            https://registry.npmjs.org/ctx7/latest \
             -o "$workdir/context7.json"
 
           release_sha256() {
@@ -387,6 +388,7 @@ jobs:
             images/base/Dockerfile
             images/codex/Dockerfile
             scripts/remote-dev-context7-device-login.py
+            scripts/test-remote-dev-context7-device-login.py
             third_party/inventory.json
             third_party/components
             third_party/standalone-artifact-inspection.json
