@@ -62,7 +62,7 @@ validate: agent-contract-tests ttyd-osc52-check
 	python3 scripts/test_single_stack_compose.py
 	python3 scripts/test_canonical_data_layout.py
 	python3 scripts/test_preflight_data_layout.py
-	python3 scripts/test_inspect_antigravity-cli.py
+	python3 scripts/test_inspect_antigravity_cli.py
 	bash scripts/validate-version-pins.sh
 	jq -e . renovate.json >/dev/null
 	python3 scripts/validate-renovate-ownership.py --root .
