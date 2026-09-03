@@ -17,16 +17,24 @@ SPEC.loader.exec_module(MODULE)
 
 INSTALLER_SHA = "a" * 64
 BINARY_SHA = "b" * 64
-OLD_SHA = "c" * 64
+OLD_INSTALLER_SHA = "c" * 64
+OLD_BINARY_SHA = "d" * 64
 
 
-def current() -> dict:
+def current(
+    installer_sha: str = OLD_INSTALLER_SHA,
+    payload_sha: str = OLD_BINARY_SHA,
+) -> dict:
     return {
         "schema_version": 2,
         "workflow": {"name": "Inspect Antigravity CLI", "path": "workflow.yml"},
         "installer": {
             "official_url": "https://antigravity.google/cli/install.sh",
-            "sha256": OLD_SHA,
+            "sha256": installer_sha,
+        },
+        "installed_binary": {
+            "relative_path": ".local/bin/agy",
+            "sha256": payload_sha,
         },
         "official_runtime_controls": {
             "disable_background_auto_update": "AGY_CLI_DISABLE_AUTO_UPDATE=true"
@@ -38,7 +46,10 @@ def current() -> dict:
     }
 
 
-def detection() -> dict:
+def detection(
+    installer_sha: str = INSTALLER_SHA,
+    reviewed_sha: str = OLD_INSTALLER_SHA,
+) -> dict:
     return {
         "schema_version": 1,
         "kind": "antigravity-installer-detection",
@@ -47,19 +58,22 @@ def detection() -> dict:
             "final_url": "https://antigravity.google/cli/install.sh",
             "content_type": "application/x-sh",
             "size": 8000,
-            "sha256": INSTALLER_SHA,
+            "sha256": installer_sha,
             "referenced_https_hosts": ["antigravity.google"],
         },
-        "reviewed_installer_sha256": OLD_SHA,
-        "changed": True,
+        "reviewed_installer_sha256": reviewed_sha,
+        "changed": installer_sha != reviewed_sha,
     }
 
 
-def live() -> dict:
+def live(
+    installer_sha: str = INSTALLER_SHA,
+    payload_sha: str = BINARY_SHA,
+) -> dict:
     binary = {
         "path": ".local/bin/agy",
         "size": 200_000_000,
-        "sha256": BINARY_SHA,
+        "sha256": payload_sha,
         "version": {"exit_code": 0, "reported_version": "1.2.3"},
         "help": {"exit_code": 0},
         "format": {
@@ -84,7 +98,7 @@ def live() -> dict:
             "final_url": "https://antigravity.google/cli/install.sh",
             "content_type": "application/x-sh",
             "size": 8000,
-            "sha256": INSTALLER_SHA,
+            "sha256": installer_sha,
             "supported_options": {
                 "custom_directory": True,
                 "skip_aliases": False,
@@ -121,9 +135,33 @@ class AntigravityEvidencePromotionTests(unittest.TestCase):
         self.assertIs(result["official_runtime_controls"], old["official_runtime_controls"])
         self.assertEqual(result["blocking_findings"], [])
 
+    def test_payload_only_change_behind_reviewed_installer_can_be_promoted(self) -> None:
+        old = current(INSTALLER_SHA, OLD_BINARY_SHA)
+        result = MODULE.build_reviewed(
+            live=live(INSTALLER_SHA, BINARY_SHA),
+            detection=detection(INSTALLER_SHA, INSTALLER_SHA),
+            current=old,
+        )
+        self.assertEqual(result["installer"]["sha256"], INSTALLER_SHA)
+        self.assertEqual(result["installed_binary"]["sha256"], BINARY_SHA)
+
+    def test_identical_review_pair_is_not_repromoted(self) -> None:
+        old = current(INSTALLER_SHA, BINARY_SHA)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "does not change"):
+            MODULE.build_reviewed(
+                live=live(INSTALLER_SHA, BINARY_SHA),
+                detection=detection(INSTALLER_SHA, INSTALLER_SHA),
+                current=old,
+            )
+
+    def test_detection_must_be_derived_from_current_reviewed_installer(self) -> None:
+        bad_detection = detection(INSTALLER_SHA, "e" * 64)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "current reviewed evidence"):
+            MODULE.build_reviewed(live=live(), detection=bad_detection, current=current())
+
     def test_detection_and_live_installer_must_match(self) -> None:
         bad_live = live()
-        bad_live["installer"]["sha256"] = "d" * 64
+        bad_live["installer"]["sha256"] = "e" * 64
         with self.assertRaisesRegex(MODULE.EvidenceError, "differs from the detected"):
             MODULE.build_reviewed(live=bad_live, detection=detection(), current=current())
 
