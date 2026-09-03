@@ -4,7 +4,7 @@
   "components": [
     {
       "id": "github-cli",
-      "version": "2.98.0",
+      "version": "2.99.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -16,13 +16,13 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz",
-          "asset_sha256": "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de",
-          "asset_size": 14863663,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.99.0/gh_2.99.0_linux_amd64.tar.gz",
+          "asset_sha256": "ed4960225d2833e04a61590d9fa2b5773d147f3aa375459e5466a40c102f3832",
+          "asset_size": 14930607,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.98.0_linux_amd64/LICENSE",
+              "path": "gh_2.99.0_linux_amd64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -30,13 +30,13 @@
           ]
         },
         "arm64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_arm64.tar.gz",
-          "asset_sha256": "cf689084f3a3618f7eae4a2420d335d74626d65f5e594b9828d125d69f800d86",
-          "asset_size": 13523338,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.99.0/gh_2.99.0_linux_arm64.tar.gz",
+          "asset_sha256": "564eff56a61e8caf193efde16937fba879eb62a3a479c9dd6be2001e7647680b",
+          "asset_size": 13580770,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.98.0_linux_arm64/LICENSE",
+              "path": "gh_2.99.0_linux_arm64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -47,7 +47,7 @@
     },
     {
       "id": "codex-cli",
-      "version": "rust-v0.152.0",
+      "version": "rust-v0.152.1",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -64,16 +64,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "05f942d3d3c5b5acd9edad56ce2797b6fe72dbb1462b24e5c9bf7dcec9a28a11",
-          "asset_size": 97480048,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.1/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "a0ed1b40b1d597b340f09ae00ecebc46670b06cb52aac315b9dc84fed0289fd0",
+          "asset_size": 97417374,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "37da6b486503c8a42cc4604d2a3d80d388df896dd251e9225f4f3d49b08c2e8c",
-          "asset_size": 89895223,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.1/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "b65f964600972a948b898f4782e316a741a1b81c044622aa6bdf37ca4525debc",
+          "asset_size": 89872948,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -81,7 +81,7 @@
     },
     {
       "id": "codex-code-mode-host",
-      "version": "rust-v0.152.0",
+      "version": "rust-v0.152.1",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -98,16 +98,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "449cefe35b9f347e3fdbf121e816339b37825eb0bfee7de8298a0a61b6687cba",
-          "asset_size": 25690186,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.1/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "0f1a544d5c1e89aed769a91d8e63421eb8eef9db554e861ed90704126a4191ed",
+          "asset_size": 25676959,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "134183c7f5bb2245ed4bb15cfcf00d1a64950adbdd089d33c003c8bcf13267e9",
-          "asset_size": 24318399,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.152.1/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "21c4a1afb132a5cf69aa1ac4262d50728ea73894f6fada11364e64c4887343f3",
+          "asset_size": 24318200,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.8.16",
+      "version": "2026.9.0",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.16/mise-v2026.8.16-linux-x64",
-          "asset_sha256": "cff4832ded79af2951e800bddcb5a22acac58630d765a2d062c1180680a0bb35",
-          "asset_size": 117647728,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.0/mise-v2026.9.0-linux-x64",
+          "asset_sha256": "c9b089f2be1db4d4262eacaf367e480e7a328848adcc37d9d1612996902485d0",
+          "asset_size": 117428464,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.8.16/mise-v2026.8.16-linux-arm64",
-          "asset_sha256": "5bbe2e7751f1872fd574ba90cbc1f81db7cfa4f395d77ba52ba70b33ad466d9e",
-          "asset_size": 101231104,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.0/mise-v2026.9.0-linux-arm64",
+          "asset_sha256": "0b5c4586353010378d9caca62c95166588c3dc4e310eb2d276aac1068397faec",
+          "asset_size": 101111552,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.8",
+      "version": "0.12.9",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff",
-          "asset_size": 19428791,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460",
+          "asset_size": 19423276,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00",
-          "asset_size": 18579949,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "c36fe17937ff6bd16dc42fc13854b5465999fcab2efe0af559381e945e3c6001",
+          "asset_size": 18532532,
           "archive_member_count": 3,
           "legal_members": []
         }
