@@ -27,6 +27,7 @@ OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
 OFFICIAL_HOST = "antigravity.google"
 EXPECTED_BINARY = ".local/bin/agy"
 MAX_JSON_BYTES = 256 * 1024
+MAX_PAYLOAD_BYTES = DISCOVERY.MAX_PAYLOAD_SIZE
 
 
 class ReconcileError(ValueError):
