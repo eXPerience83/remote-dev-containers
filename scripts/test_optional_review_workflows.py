@@ -37,10 +37,21 @@ def assert_scheduler_contract(text: str) -> None:
 
     require(detect, "permissions:\n      contents: read", "read-only Antigravity detector")
     require(detect, "persist-credentials: false", "credential-free detector checkout")
-    require(detect, "scripts/detect-antigravity-installer.py", "non-executing detector")
+    require(detect, "scripts/detect-antigravity-installer.py", "non-executing installer detector")
+    require(detect, "scripts/discover-antigravity-payload.py", "reviewed-installer payload discovery")
+    require(
+        detect,
+        'if [[ "$live_installer_sha" == "$reviewed_installer_sha" ]]; then',
+        "exact reviewed-installer execution gate",
+    )
+    require(
+        detect,
+        '--expected-installer-sha256 "$reviewed_installer_sha"',
+        "hash admission before scheduled installer execution",
+    )
     require(detect, "scripts/validate-antigravity-review-artifact.py", "detector artifact validation")
-    if "scripts/discover-antigravity-payload.py" in detect or "scripts/inspect-antigravity-cli.py" in detect:
-        raise AssertionError("scheduled Antigravity detector must not execute admitted installer/payload stages")
+    if "scripts/inspect-antigravity-cli.py" in detect:
+        raise AssertionError("scheduled Antigravity detector must never execute agy/full inspection")
     if "contents: write" in detect or "pull-requests: write" in detect or "actions: write" in detect:
         raise AssertionError("scheduled Antigravity detector unexpectedly gained write permission")
 
@@ -49,7 +60,8 @@ def assert_scheduler_contract(text: str) -> None:
     require(writer, "contents: write", "writer branch-maintenance permission")
     require(writer, "pull-requests: write", "writer PR-maintenance permission")
     require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned artifact download action")
-    require(writer, "Revalidate detection after crossing into write-capable job", "second trust-boundary validation")
+    require(writer, "Revalidate Antigravity metadata after crossing into write-capable job", "second trust-boundary validation")
+    require(writer, '--live-discovery "$ANTIGRAVITY_DISCOVERY"', "fresh payload discovery reconciliation")
     require(writer, "https://registry.npmjs.org/ctx7/latest", "fixed Context7 registry endpoint")
     require(writer, "--max-filesize 65536", "bounded Context7 metadata transfer")
     require(writer, "scripts/update-context7-review.py", "Context7 reviewed-pin updater")
@@ -81,6 +93,8 @@ def assert_antigravity_manual_contract(text: str) -> None:
     require(writer, "pull-requests: write", "writer PR permission")
     require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned metadata download")
     require(writer, "Revalidate artifact after crossing into the write-capable job", "post-download artifact validation")
+    require(writer, "inspect-payload requires a previously validated payload candidate", "mandatory discovery-before-inspection gate")
+    require(writer, "payload approval does not match the pending discovered candidate", "exact payload admission gate")
     require(writer, 'branch="automation/update-upstreams"', "single automation branch")
     if "gh pr merge" in writer or "--auto" in writer:
         raise AssertionError("Antigravity review writer must never merge its own PR")
