@@ -20,6 +20,12 @@ OLD_SHA = "a" * 64
 NEW_SHA = "b" * 64
 BINARY_SHA = "c" * 64
 NEW_BINARY_SHA = "e" * 64
+ARCHIVE_SHA512 = "1" * 128
+MANIFEST_SHA = "2" * 64
+PAYLOAD_URL = (
+    "https://storage.googleapis.com/antigravity-public/antigravity-cli/"
+    "1.2.3-123456/linux-x64/cli_linux_x64.tar.gz"
+)
 
 
 def reviewed(
@@ -90,7 +96,7 @@ def detection(installer_sha: str, reviewed_sha: str = OLD_SHA) -> dict:
 
 def discovery(installer_sha: str, payload_sha: str = BINARY_SHA) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "antigravity-payload-discovery",
         "installer": {
             "source": MODULE.OFFICIAL_URL,
@@ -98,22 +104,32 @@ def discovery(installer_sha: str, payload_sha: str = BINARY_SHA) -> dict:
             "content_type": "application/x-sh",
             "size": 8000,
             "sha256": installer_sha,
-            "bash_syntax": {"exit_code": 0},
-            "help": {"exit_code": 0},
-            "supported_options": {
-                "custom_directory": True,
-                "skip_aliases": False,
-                "skip_path": False,
-            },
-            "selected_strategy": "custom-directory",
+            "manifest_url": MODULE.DISCOVERY.MANIFEST_URL,
+            "archive_member": MODULE.DISCOVERY.EXPECTED_ARCHIVE_MEMBER,
         },
-        "installation": {"exit_code": 0},
+        "manifest": {
+            "source": MODULE.DISCOVERY.MANIFEST_URL,
+            "final_url": MODULE.DISCOVERY.MANIFEST_URL,
+            "content_type": "application/json",
+            "size": 200,
+            "sha256": MANIFEST_SHA,
+            "version": "1.2.3",
+            "payload_url": PAYLOAD_URL,
+            "payload_sha512": ARCHIVE_SHA512,
+        },
+        "archive": {
+            "source": PAYLOAD_URL,
+            "final_url": PAYLOAD_URL,
+            "content_type": "application/gzip",
+            "size": 1000000,
+            "sha512": ARCHIVE_SHA512,
+            "member": MODULE.DISCOVERY.EXPECTED_ARCHIVE_MEMBER,
+        },
         "payload": {
             "path": MODULE.EXPECTED_BINARY,
             "size": 200000000,
             "sha256": payload_sha,
         },
-        "profiles_unchanged": True,
         "blocking_findings": [],
     }
 
@@ -151,15 +167,11 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         baseline = reviewed(OLD_SHA)
         live_candidate = discovery(OLD_SHA, NEW_BINARY_SHA)
         selected, normalized, candidate, disposition = self.reconcile(
-            live=detection(OLD_SHA),
-            baseline=baseline,
-            live_candidate=live_candidate,
+            live=detection(OLD_SHA), baseline=baseline, live_candidate=live_candidate
         )
         self.assertIs(selected, baseline)
         self.assertIs(candidate, live_candidate)
-        self.assertEqual(
-            disposition, "live payload change detected with reviewed installer"
-        )
+        self.assertEqual(disposition, "live payload change detected with reviewed installer")
         self.assertFalse(normalized["changed"])
         self.assertEqual(candidate["payload"]["sha256"], NEW_BINARY_SHA)
 
@@ -177,9 +189,7 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
 
     def test_scheduler_must_not_discover_payload_with_changed_installer(self) -> None:
         baseline = reviewed(OLD_SHA)
-        with self.assertRaisesRegex(
-            MODULE.ReconcileError, "installer that was not already reviewed"
-        ):
+        with self.assertRaisesRegex(MODULE.ReconcileError, "not already reviewed"):
             self.reconcile(
                 live=detection(NEW_SHA),
                 baseline=baseline,
@@ -241,9 +251,7 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
         )
         self.assertIs(selected, baseline)
         self.assertIs(candidate, live_candidate)
-        self.assertEqual(
-            disposition, "live payload change detected with reviewed installer"
-        )
+        self.assertEqual(disposition, "live payload change detected with reviewed installer")
         self.assertEqual(candidate["payload"]["sha256"], newest_payload_sha)
         self.assertFalse(normalized["changed"])
 
@@ -278,20 +286,16 @@ class ReconcileAntigravityReviewStateTests(unittest.TestCase):
     def test_proposal_cannot_change_human_owned_policy(self) -> None:
         baseline = reviewed(OLD_SHA)
         proposal = reviewed(NEW_SHA, "1.1.22", NEW_BINARY_SHA)
-        proposal["legal_and_distribution"] = deepcopy(
-            proposal["legal_and_distribution"]
-        )
+        proposal["legal_and_distribution"] = deepcopy(proposal["legal_and_distribution"])
         proposal["legal_and_distribution"]["redistribution_permission_confirmed"] = True
-        with self.assertRaisesRegex(
-            MODULE.ReconcileError, "human-owned legal_and_distribution"
-        ):
+        with self.assertRaisesRegex(MODULE.ReconcileError, "human-owned legal_and_distribution"):
             self.reconcile(live=detection(NEW_SHA), baseline=baseline, proposal=proposal)
 
     def test_discovery_cannot_change_fixed_origin(self) -> None:
         baseline = reviewed(OLD_SHA)
         candidate = discovery(NEW_SHA, NEW_BINARY_SHA)
         candidate["installer"]["final_url"] = "https://antigravity.google/docs"
-        with self.assertRaisesRegex(MODULE.ReconcileError, "fixed installer origin"):
+        with self.assertRaisesRegex(MODULE.ReconcileError, "fixed official URL"):
             self.reconcile(live=detection(NEW_SHA), baseline=baseline, candidate=candidate)
 
     def test_live_detection_must_remain_on_reviewed_origin(self) -> None:
