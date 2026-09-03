@@ -20,7 +20,7 @@ if SPEC is None or SPEC.loader is None:
 INSPECTOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSPECTOR)
 
-_HOST_RE = re.compile(rb"https://([A-Za-z0-9.-]{1,253})(?=[:/\"'[:space:]]|$)")
+_HOST_RE = re.compile(rb"https://([A-Za-z0-9.-]{1,253})(?=[:/\"'\s]|$)")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -129,6 +129,14 @@ def validate_report(report: dict[str, Any]) -> None:
         "referenced_https_hosts",
     }:
         raise DetectionError("Antigravity detection installer metadata is malformed")
+    for field in ("source", "final_url"):
+        if not isinstance(installer[field], str) or not installer[field] or len(installer[field]) > 500:
+            raise DetectionError(f"detected installer {field} is invalid")
+    content_type = installer["content_type"]
+    if content_type is not None and (
+        not isinstance(content_type, str) or len(content_type) > 200 or any(ord(c) < 0x20 for c in content_type)
+    ):
+        raise DetectionError("detected installer content type is invalid")
     sha256 = installer["sha256"]
     if not isinstance(sha256, str) or not _SHA256_RE.fullmatch(sha256):
         raise DetectionError("detected installer SHA-256 is invalid")
@@ -136,12 +144,28 @@ def validate_report(report: dict[str, Any]) -> None:
     if not isinstance(size, int) or not 0 < size <= 2 * 1024 * 1024:
         raise DetectionError("detected installer size is outside the supported boundary")
     hosts = installer["referenced_https_hosts"]
-    if not isinstance(hosts, list) or hosts != sorted(set(hosts)):
+    if not isinstance(hosts, list) or hosts != sorted(set(hosts)) or len(hosts) > 100:
         raise DetectionError("detected installer host list is not normalized")
     if any(not isinstance(host, str) or not valid_hostname(host) for host in hosts):
         raise DetectionError("detected installer host list contains an invalid hostname")
     if report["changed"] != (sha256 != reviewed):
         raise DetectionError("Antigravity detection changed flag is inconsistent")
+
+
+def write_report(
+    output: Path,
+    *,
+    reviewed_installer_sha256: str,
+    installer_fixture: Path | None,
+) -> dict[str, Any]:
+    report = detect(
+        reviewed_installer_sha256=reviewed_installer_sha256,
+        installer_fixture=installer_fixture,
+    )
+    validate_report(report)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
 
 
 def main() -> int:
@@ -151,14 +175,10 @@ def main() -> int:
     parser.add_argument("--installer-fixture", type=Path)
     args = parser.parse_args()
     try:
-        report = detect(
+        report = write_report(
+            args.output,
             reviewed_installer_sha256=args.reviewed_installer_sha256,
             installer_fixture=args.installer_fixture,
-        )
-        validate_report(report)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
     except (OSError, RuntimeError, DetectionError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
