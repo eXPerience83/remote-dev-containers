@@ -192,29 +192,37 @@ def reconcile(
     live_installer_sha = live_installer["sha256"]
     baseline_pair = (baseline_installer_sha, baseline_payload_sha)
 
+    live_discovery_pair: tuple[str, str] | None = None
+    if live_discovery is not None:
+        live_discovery_pair = validate_discovery(live_discovery)
+        if live_discovery_pair[0] != live_installer_sha:
+            raise ReconcileError("live payload discovery does not match the detected installer")
+        if live_installer_sha != baseline_installer_sha:
+            raise ReconcileError("live payload discovery executed an installer that was not already reviewed")
+
     selected_reviewed = baseline_reviewed
     selected_discovery: dict[str, Any] | None = None
     disposition = "baseline review + live detection"
 
     if proposed_reviewed is not None:
         proposed_pair = validate_reviewed(proposed_reviewed, baseline=baseline_reviewed)
-        if proposed_pair[0] == live_installer_sha and proposed_pair != baseline_pair:
+        proposal_matches_live = (
+            proposed_pair[0] == live_installer_sha
+            and proposed_pair != baseline_pair
+            and (live_discovery_pair is None or proposed_pair == live_discovery_pair)
+        )
+        if proposal_matches_live:
             selected_reviewed = proposed_reviewed
             disposition = "preserved full proposed evidence"
 
-    if selected_reviewed is baseline_reviewed and live_discovery is not None:
-        live_discovery_pair = validate_discovery(live_discovery)
-        if live_discovery_pair[0] != live_installer_sha:
-            raise ReconcileError("live payload discovery does not match the detected installer")
-        if live_installer_sha != baseline_installer_sha:
-            raise ReconcileError("live payload discovery executed an installer that was not already reviewed")
+    if selected_reviewed is baseline_reviewed and live_discovery_pair is not None:
         if live_discovery_pair[1] != baseline_payload_sha:
             selected_discovery = live_discovery
             disposition = "live payload change detected with reviewed installer"
 
     if (
         selected_reviewed is baseline_reviewed
-        and live_discovery is None
+        and live_discovery_pair is None
         and proposed_discovery is not None
     ):
         proposed_discovery_pair = validate_discovery(proposed_discovery)
