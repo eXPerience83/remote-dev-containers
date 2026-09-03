@@ -6,8 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Automated upstream refreshes
+
+<!-- remote-dev-upstream-refreshes -->
+
 ### Added
 
+- Human-readable edge build identities in `edge-YYYY.MM.DD-<7-char-sha>` form, backed by the existing full source revision/digest and an explicit embedded `local|dev|edge|stable` image-channel field.
+- Bounded automated upstream changelog provenance that records only actual tracked component version deltas inside the automation-owned Unreleased section while preserving human-authored changelog text.
 - Bounded, write-only OSC 52 handling for native Codex `/copy`, served through ttyd 1.7.7's supported `--index` path with deterministic upstream-baseline, provenance, notice and SPDX checks.
 - Shared remote-development base built on Ubuntu 26.04 LTS.
 - Browser-accessible Codex CLI environment using ttyd and persistent tmux sessions.
@@ -52,6 +58,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Edge publication now embeds the dated build identity as OCI/runtime version metadata while the mutable `edge` tags remain unchanged; `dev`, stable SemVer tags, `latest = stable`, full source SHA and immutable digest semantics are preserved.
+- Grouped upstream-update PRs now add `CHANGELOG.md` to their deterministic tracked set and record exact old-to-new component version deltas; digest/notice-only refreshes do not create fake version entries.
 - Standardized browser authentication on one per-service `WEB_PASSWORD` contract, retired the alternative password-file path, removed browser-password files from the persistent data layout/preflight, and kept Codex, Antigravity and optional launcher credentials independently configurable.
 - TrueNAS YAML first-install setup now starts from one administrator-created root dataset and uses same-revision bootstrap plus preflight instead of a hand-maintained `mkdir` list; ordinary descendants are the default while deliberate child datasets remain supported and untouched.
 - Moved normal Codex and Antigravity temporary files and uv/npm/pip caches from the bounded `/tmp` tmpfs to a safely prepared hidden tree in each role-private disk-backed workspace, while preserving trusted staging and credential-environment boundaries.

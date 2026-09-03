@@ -48,6 +48,9 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
             bash scripts/test-image-name-compat.sh
+          bash scripts/test-image-identity.sh
+          python3 scripts/test_edge_build_identity.py
+          python3 scripts/test_update_upstream_changelog.py
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
@@ -69,7 +72,12 @@ jobs:
         id: metadata
         run: |
           source versions.env
+          build_date="$(date -u +%F)"
+          project_version="$(python3 scripts/format-edge-build-identity.py \
+            --date "$build_date" \
+            --source-revision "$GITHUB_SHA")"
           echo "namespace=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "project_version=$project_version" >> "$GITHUB_OUTPUT"
           echo "ubuntu_version=$UBUNTU_VERSION" >> "$GITHUB_OUTPUT"
           echo "ubuntu_digest=$UBUNTU_DIGEST" >> "$GITHUB_OUTPUT"
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
@@ -118,7 +126,8 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=edge
+            org.opencontainers.image.version=${{ steps.metadata.outputs.project_version }}
+            io.github.experience83.remote-dev.channel=edge
           provenance: mode=max
           sbom: true
 
@@ -146,12 +155,14 @@ jobs:
             CODEX_RELEASE_TAG=${{ steps.metadata.outputs.codex_tag }}
             CODEX_AMD64_SHA256=${{ steps.metadata.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.metadata.outputs.codex_arm64_sha256 }}
-            PROJECT_VERSION=edge
+            PROJECT_VERSION=${{ steps.metadata.outputs.project_version }}
+            PROJECT_CHANNEL=edge
             SOURCE_REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=edge
+            org.opencontainers.image.version=${{ steps.metadata.outputs.project_version }}
+            io.github.experience83.remote-dev.channel=edge
           provenance: mode=max
           sbom: true
 

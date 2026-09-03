@@ -7,6 +7,8 @@ runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 
 # shellcheck source=/usr/local/lib/remote-dev/format-short-revision.sh
 source "$lib_dir/format-short-revision.sh"
+# shellcheck source=/usr/local/lib/remote-dev/remote-dev-image-identity.sh
+source "$lib_dir/remote-dev-image-identity.sh"
 
 read_metadata() {
   local name="$1"
@@ -39,6 +41,7 @@ validate_value() {
 }
 
 image_version="$(read_metadata image-version)"
+image_channel="$(read_metadata image-channel)"
 source_revision="$(read_metadata source-revision)"
 codex_version="$(/usr/local/bin/codex --version 2>/dev/null || printf 'unavailable')"
 short_revision="$(format_short_revision "$source_revision")"
@@ -47,8 +50,10 @@ validate_metadata() {
   local result=0
 
   validate_value "image version" "$image_version" || result=1
+  validate_value "image channel" "$image_channel" || result=1
   validate_value "source revision" "$source_revision" || result=1
   validate_value "bundled Codex CLI version" "$codex_version" || result=1
+  remote_dev_validate_image_identity "$image_channel" "$image_version" "$source_revision" || result=1
 
   return "$result"
 }
@@ -70,12 +75,14 @@ print_codex_runtime_status() {
 case "${1:-}" in
   "")
     printf 'Image version: %s\n' "$image_version"
+    printf 'Channel: %s\n' "$image_channel"
     printf 'Source revision: %s\n' "$source_revision"
     printf 'Codex CLI: %s\n' "$codex_version"
     print_codex_runtime_status
     ;;
   --menu)
     printf 'Image: %s @ %s\n' "$image_version" "$short_revision"
+    printf 'Channel: %s\n' "$image_channel"
     printf 'Codex: %s\n' "$codex_version"
     ;;
   --check)

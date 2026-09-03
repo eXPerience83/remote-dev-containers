@@ -9,6 +9,7 @@ ARG CODEX_ARM64_SHA256=b65f964600972a948b898f4782e316a741a1b81c044622aa6bdf37ca4
 ARG CODEX_CODE_MODE_HOST_AMD64_SHA256=0f1a544d5c1e89aed769a91d8e63421eb8eef9db554e861ed90704126a4191ed
 ARG CODEX_CODE_MODE_HOST_ARM64_SHA256=21c4a1afb132a5cf69aa1ac4262d50728ea73894f6fada11364e64c4887343f3
 ARG PROJECT_VERSION=0.1.0-dev
+ARG PROJECT_CHANNEL=local
 ARG SOURCE_REVISION=local-untracked
 
 LABEL org.opencontainers.image.title="Remote Dev" \
@@ -17,6 +18,7 @@ LABEL org.opencontainers.image.title="Remote Dev" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.documentation="https://github.com/eXPerience83/remote-dev-containers/blob/${SOURCE_REVISION}/third_party/README.md" \
       org.opencontainers.image.vendor="Community maintained; not affiliated with OpenAI or Google" \
+      io.github.experience83.remote-dev.channel="${PROJECT_CHANNEL}" \
       io.github.experience83.remote-dev.project-license="Apache-2.0" \
       io.github.experience83.remote-dev.license-scope="Remote Dev project code only; bundled and runtime-installed components retain separate upstream terms" \
       io.github.experience83.remote-dev.third-party-notices="/usr/share/doc/remote-dev/third_party"
@@ -104,6 +106,7 @@ COPY scripts/lib/remote-dev-runtime.sh /usr/local/lib/remote-dev/remote-dev-runt
 COPY scripts/lib/antigravity-paths.sh /usr/local/lib/remote-dev/antigravity-paths.sh
 COPY scripts/lib/antigravity-runtime /usr/local/lib/remote-dev/antigravity-runtime
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
+COPY scripts/lib/remote-dev-image-identity.sh /usr/local/lib/remote-dev/remote-dev-image-identity.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
@@ -150,6 +153,7 @@ RUN --network=none \
     && chmod 0644 \
       /usr/local/lib/remote-dev/remote-dev-runtime.sh \
       /usr/local/lib/remote-dev/format-short-revision.sh \
+      /usr/local/lib/remote-dev/remote-dev-image-identity.sh \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
     && chmod 0444 \
       /usr/local/lib/remote-dev/antigravity-paths.sh \
@@ -224,6 +228,7 @@ RUN --network=none \
     && printf '%s\n' \
       "SOURCE_REVISION=${SOURCE_REVISION}" \
       "PROJECT_VERSION=${PROJECT_VERSION}" \
+      "PROJECT_CHANNEL=${PROJECT_CHANNEL}" \
       "TARGETARCH=${TARGETARCH}" \
       "CODEX_RELEASE_TAG=${CODEX_RELEASE_TAG}" \
       "CODEX_AMD64_SHA256=${CODEX_AMD64_SHA256}" \
@@ -233,9 +238,11 @@ RUN --network=none \
       > /usr/share/doc/remote-dev/third_party/CODEX-BUILD.env \
     && remote-dev-notices --check \
     && printf '%s\n' "$PROJECT_VERSION" > /usr/share/remote-dev/image-version \
+    && printf '%s\n' "$PROJECT_CHANNEL" > /usr/share/remote-dev/image-channel \
     && printf '%s\n' "$SOURCE_REVISION" > /usr/share/remote-dev/source-revision \
     && chmod 0444 \
       /usr/share/remote-dev/image-version \
+      /usr/share/remote-dev/image-channel \
       /usr/share/remote-dev/source-revision \
       /usr/share/doc/remote-dev/third_party/CODEX-BUILD.env \
     && mkdir -p \
