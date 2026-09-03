@@ -113,6 +113,9 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
             bash scripts/test-image-name-compat.sh
+          bash scripts/test-image-identity.sh
+          python3 scripts/test_edge_build_identity.py
+          python3 scripts/test_update_upstream_changelog.py
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
@@ -126,6 +129,7 @@ jobs:
         env:
           PLATFORM: linux/amd64
           PROJECT_VERSION: candidate-pr-${{ steps.pr.outputs.pr_number }}
+          PROJECT_CHANNEL: dev
           SOURCE_REVISION: ${{ steps.pr.outputs.head_sha }}
         run: ./scripts/build-local.sh
 
@@ -191,10 +195,12 @@ jobs:
         env:
           EXPECTED_SOURCE: ${{ needs.build.outputs.head_sha }}
           EXPECTED_VERSION: candidate-pr-${{ needs.build.outputs.pr_number }}
+          EXPECTED_CHANNEL: dev
         run: |
           set -euo pipefail
           output="$(docker run --rm --entrypoint /usr/local/bin/remote-dev-version remote-dev:local)"
           grep -Fxq "Image version: $EXPECTED_VERSION" <<<"$output"
+          grep -Fxq "Channel: $EXPECTED_CHANNEL" <<<"$output"
           grep -Fxq "Source revision: $EXPECTED_SOURCE" <<<"$output"
 
       - name: Checkout the trusted base revision for the vulnerability gate
