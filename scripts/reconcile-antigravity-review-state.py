@@ -34,6 +34,7 @@ class ReconcileError(ValueError):
 
 
 def load_json(path: Path) -> dict[str, Any]:
+    """Load one bounded UTF-8 JSON object."""
     try:
         raw = path.read_bytes()
     except OSError as exc:
@@ -50,12 +51,14 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def sha256(value: object, label: str) -> str:
+    """Require a normalized lowercase SHA-256."""
     if not isinstance(value, str) or not _SHA256_RE.fullmatch(value):
         raise ReconcileError(f"{label} is invalid")
     return value
 
 
 def safe_official_url(value: object) -> bool:
+    """Return whether a URL remains on the reviewed official HTTPS origin."""
     if not isinstance(value, str) or not value or "\\" in value:
         return False
     try:
@@ -74,6 +77,7 @@ def safe_official_url(value: object) -> bool:
 
 
 def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate installer detection metadata."""
     if set(value) != {
         "schema_version",
         "kind",
@@ -106,6 +110,7 @@ def validate_detection(value: dict[str, Any]) -> dict[str, Any]:
 def validate_reviewed(
     value: dict[str, Any], *, baseline: dict[str, Any]
 ) -> tuple[str, str]:
+    """Validate full reviewed evidence while preserving human-owned policy fields."""
     expected_top = {
         "schema_version",
         "inspection_date_utc",
@@ -142,6 +147,7 @@ def validate_reviewed(
 
 
 def validate_discovery(value: dict[str, Any]) -> tuple[str, str]:
+    """Validate static discovery and return its installer/payload pair."""
     try:
         DISCOVERY.validate_report(value)
     except (ValueError, RuntimeError) as exc:
@@ -164,6 +170,7 @@ def reconcile(
     proposed_reviewed: dict[str, Any] | None,
     proposed_discovery: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, str]:
+    """Select only evidence matching the current statically discovered hash pair."""
     live_installer = validate_detection(live_detection)
     baseline_installer_sha, baseline_payload_sha = validate_reviewed(
         baseline_reviewed, baseline=baseline_reviewed
@@ -181,10 +188,6 @@ def reconcile(
         live_discovery_pair = validate_discovery(live_discovery)
         if live_discovery_pair[0] != live_installer_sha:
             raise ReconcileError("live payload discovery does not match the detected installer")
-        if live_installer_sha != baseline_installer_sha:
-            raise ReconcileError(
-                "live payload discovery used an installer that was not already reviewed"
-            )
 
     selected_reviewed = baseline_reviewed
     selected_discovery: dict[str, Any] | None = None
@@ -202,9 +205,13 @@ def reconcile(
             disposition = "preserved full proposed evidence"
 
     if selected_reviewed is baseline_reviewed and live_discovery_pair is not None:
-        if live_discovery_pair[1] != baseline_payload_sha:
+        if live_discovery_pair != baseline_pair:
             selected_discovery = live_discovery
-            disposition = "live payload change detected with reviewed installer"
+            disposition = (
+                "live payload change detected statically with reviewed installer"
+                if live_installer_sha == baseline_installer_sha
+                else "live installer/payload change detected statically"
+            )
 
     if (
         selected_reviewed is baseline_reviewed
@@ -231,6 +238,7 @@ def reconcile(
 
 
 def main() -> int:
+    """CLI entry point."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--live-detection", type=Path, required=True)
     parser.add_argument("--baseline-reviewed", type=Path, required=True)
