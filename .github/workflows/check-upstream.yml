@@ -6,24 +6,83 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: check-upstream
   cancel-in-progress: false
 
 jobs:
+  antigravity-detect:
+    name: detect Antigravity installer without execution
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout without repository credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Detect fixed official installer metadata only
+        env:
+          REPORT_PATH: ${{ runner.temp }}/antigravity-cli-detection.json
+        run: |
+          set -euo pipefail
+          reviewed_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
+          python3 scripts/detect-antigravity-installer.py \
+            --output "$REPORT_PATH" \
+            --reviewed-installer-sha256 "$reviewed_sha"
+          python3 scripts/validate-antigravity-review-artifact.py \
+            --kind detection \
+            --artifact "$REPORT_PATH"
+
+      - name: Upload metadata-only detection evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: antigravity-installer-detection
+          path: ${{ runner.temp }}/antigravity-cli-detection.json
+          if-no-files-found: error
+          retention-days: 3
+
   check:
+    name: maintain one human-reviewed upstream PR
+    needs: antigravity-detect
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+
     steps:
-      # This workflow intentionally retains checkout credentials because it maintains
+      # This job intentionally retains checkout credentials because it maintains
       # the dedicated automation branch with the repository-scoped GITHUB_TOKEN.
+      # Antigravity vendor bytes never execute in this write-capable job.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      - name: Download Antigravity detection metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: antigravity-installer-detection
+          path: ${{ runner.temp }}/antigravity-detection
+
+      - name: Revalidate detection after crossing into write-capable job
+        env:
+          REPORT_PATH: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
+        run: |
+          set -euo pipefail
+          python3 scripts/validate-antigravity-review-artifact.py \
+            --kind detection \
+            --artifact "$REPORT_PATH"
+          baseline_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-inspection.json)"
+          artifact_baseline="$(jq -er '.reviewed_installer_sha256 | select(test("^[0-9a-f]{64}$"))' "$REPORT_PATH")"
+          [[ "$artifact_baseline" == "$baseline_sha" ]] \
+            || { echo "ERROR: Antigravity detection was not generated from the current reviewed baseline" >&2; exit 1; }
 
       - name: Require the main branch
         run: |
@@ -32,12 +91,15 @@ jobs:
             exit 1
           fi
 
-      - name: Check stable upstream releases
+      - name: Check stable upstream releases and review metadata
         env:
           GH_TOKEN: ${{ github.token }}
+          ANTIGRAVITY_DETECTION: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
         run: |
           set -euo pipefail
           python3 scripts/test_update_upstream_changelog.py
+          python3 scripts/test_update_context7_review.py
+          python3 scripts/test_reconcile_antigravity_review_state.py
           source versions.env
 
           curl_args=(
@@ -124,10 +186,13 @@ jobs:
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
           cp versions.env "$workdir/versions-before.env"
+          cp third_party/antigravity-cli-inspection.json "$workdir/baseline-antigravity-reviewed.json"
           gh api "repos/openai/codex/releases/tags/${latest_codex}" > "$workdir/codex.json"
           gh api "repos/cli/cli/releases/tags/v${latest_gh}" > "$workdir/gh.json"
           gh api "repos/tsl0922/ttyd/releases/tags/${latest_ttyd}" > "$workdir/ttyd.json"
           gh api "repos/jdx/mise/releases/tags/v${latest_mise}" > "$workdir/mise.json"
+          curl "${curl_args[@]}" https://registry.npmjs.org/ctx7/latest \
+            -o "$workdir/context7.json"
 
           release_sha256() {
             local release_json="$1"
@@ -181,6 +246,10 @@ jobs:
           case "$remote_status" in
             0)
               git fetch origin "refs/heads/$branch:$remote_ref"
+              git show "$remote_ref:third_party/antigravity-cli-inspection.json" \
+                > "$workdir/proposed-antigravity-reviewed.json" 2>/dev/null || true
+              git show "$remote_ref:third_party/antigravity-cli-candidate.json" \
+                > "$workdir/proposed-antigravity-discovery.json" 2>/dev/null || true
               ;;
             2)
               ;;
@@ -193,6 +262,34 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$branch"
+
+          reconcile_args=(
+            --live-detection "$ANTIGRAVITY_DETECTION"
+            --baseline-reviewed "$workdir/baseline-antigravity-reviewed.json"
+            --reviewed-output "$workdir/reconciled-antigravity-reviewed.json"
+            --detection-output "$workdir/reconciled-antigravity-detection.json"
+            --discovery-output "$workdir/reconciled-antigravity-discovery.json"
+          )
+          if [[ -s "$workdir/proposed-antigravity-reviewed.json" ]]; then
+            reconcile_args+=(--proposed-reviewed "$workdir/proposed-antigravity-reviewed.json")
+          fi
+          if [[ -s "$workdir/proposed-antigravity-discovery.json" ]]; then
+            reconcile_args+=(--proposed-discovery "$workdir/proposed-antigravity-discovery.json")
+          fi
+          python3 scripts/reconcile-antigravity-review-state.py "${reconcile_args[@]}"
+          install -m 0644 "$workdir/reconciled-antigravity-reviewed.json" \
+            third_party/antigravity-cli-inspection.json
+          install -m 0644 "$workdir/reconciled-antigravity-detection.json" \
+            third_party/antigravity-cli-detection.json
+          if [[ -f "$workdir/reconciled-antigravity-discovery.json" ]]; then
+            install -m 0644 "$workdir/reconciled-antigravity-discovery.json" \
+              third_party/antigravity-cli-candidate.json
+          else
+            rm -f third_party/antigravity-cli-candidate.json
+          fi
+          python3 scripts/update-antigravity-review-doc.py \
+            --reviewed third_party/antigravity-cli-inspection.json \
+            --write
 
           replace_env() {
             local name="$1"
@@ -260,6 +357,9 @@ jobs:
           replace_mise_tool python "$latest_python"
           replace_mise_tool node "$latest_node"
           replace_mise_tool uv "$latest_uv"
+          python3 scripts/update-context7-review.py \
+            --metadata "$workdir/context7.json" \
+            --write
 
           mise_bin="$workdir/mise"
           curl "${curl_args[@]}" \
@@ -286,22 +386,31 @@ jobs:
             mise.lock
             images/base/Dockerfile
             images/codex/Dockerfile
+            scripts/remote-dev-context7-device-login.py
             third_party/inventory.json
             third_party/components
             third_party/standalone-artifact-inspection.json
             third_party/standalone-artifact-inspection.md
+            third_party/antigravity-cli-detection.json
+            third_party/antigravity-cli-inspection.json
+            third_party/antigravity-cli-inspection.md
           )
-          if git diff --quiet -- "${tracked_files[@]}"; then
-            echo "No upstream release, digest, runtime artifact, changelog, inventory, notice or standalone-inspection changes."
+          if git diff --quiet -- "${tracked_files[@]}" third_party/antigravity-cli-candidate.json; then
+            echo "No upstream release, digest, runtime artifact, review metadata, changelog, inventory, notice or standalone-inspection changes."
             if [[ -n "$existing_pr" ]]; then
               gh pr close "$existing_pr" \
-                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts, changelog provenance, legal notices and standalone inspection evidence."
+                --comment "Closing because main already contains the latest tracked stable releases, digests, locked runtime artifacts, Context7 review pins, Antigravity reviewed metadata, changelog provenance, legal notices and standalone inspection evidence."
             fi
             exit 0
           fi
 
           git add "${tracked_files[@]}"
-          git commit -m "chore: update upstream versions, notices, digests, runtime lock, and changelog"
+          if [[ -f third_party/antigravity-cli-candidate.json ]]; then
+            git add third_party/antigravity-cli-candidate.json
+          else
+            git add -u third_party/antigravity-cli-candidate.json 2>/dev/null || true
+          fi
+          git commit -m "chore: update upstream versions and review evidence"
 
           if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
              [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
@@ -319,15 +428,30 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated stable upstream release, digest, runtime-lock, changelog-provenance and legal-notice update. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12. The pull request records actual old-to-new component version deltas in the bounded Unreleased changelog section, regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory, refreshes repository-preserved notices from exact version tags and updates the bounded standalone-artifact inspection for changed GitHub CLI, Codex CLI, ttyd, mise or uv assets. Any changed legal text or asset-packaging evidence remains visible in the pull-request diff for human review. Merge only after the required AMD64 build, image vulnerability scans, runtime smoke tests and review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image with a dated build identity; stable image tags are not changed."
+          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and detects the fixed official Antigravity installer in a read-only job without executing changed vendor bytes. The pull request records actual old-to-new component version deltas in the bounded Unreleased changelog section, regenerates exact AMD64 and ARM64 runtime artifacts, synchronizes the declarative legal inventory and refreshes bounded inspection evidence. Antigravity remains outside the image and build-time SBOM."
+
+          antigravity_changed="$(jq -r '.changed' third_party/antigravity-cli-detection.json)"
+          if [[ "$antigravity_changed" == "true" ]]; then
+            installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-detection.json)"
+            if [[ -f third_party/antigravity-cli-candidate.json ]]; then
+              payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-candidate.json)"
+              body+=" Antigravity installer SHA-256 ${installer_sha} has completed the first explicit admission/discovery stage; agy SHA-256 ${payload_sha} is waiting for separate human admission before full inspection."
+            else
+              body+=" Antigravity installer SHA-256 ${installer_sha} differs from committed reviewed evidence. No changed vendor bytes were executed. Human admission of that exact installer hash is required before the discover-payload stage may run."
+            fi
+          elif ! git diff --quiet origin/main -- third_party/antigravity-cli-inspection.json; then
+            reviewed_version="$(jq -er '.installed_binary.version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+([+-][A-Za-z0-9._-]+)?$"))' third_party/antigravity-cli-inspection.json)"
+            body+=" A fully hash-admitted Antigravity inspection is proposed for agy ${reviewed_version}; human compatibility and current terms/privacy review remain required before merge."
+          fi
+          body+=" No automation path auto-merges, redistributes Antigravity/Context7 package bytes, or gates an intact admitted runtime. Merge only after required AMD64 build, image vulnerability scans, runtime smoke tests and human review pass. Build AMD64 is dispatched explicitly because pull-request runs created with GITHUB_TOKEN otherwise require manual approval. Merging publishes a new public edge image with a dated build identity; stable image tags are not changed."
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
-              --title "chore: update stable upstream versions and runtime lock" \
+              --title "chore: review upstream updates" \
               --body "$body"
           else
             gh pr create \
-              --title "chore: update stable upstream versions and runtime lock" \
+              --title "chore: review upstream updates" \
               --body "$body" \
               --base main \
               --head "$branch"
