@@ -8,9 +8,10 @@ import importlib.util
 import json
 import re
 import tempfile
-import urllib.parse
 from pathlib import Path
 from typing import Any
+
+import antigravity_download as NETWORK
 
 ROOT = Path(__file__).resolve().parent
 INSPECTOR_PATH = ROOT / "inspect-antigravity-cli.py"
@@ -22,6 +23,7 @@ SPEC.loader.exec_module(INSPECTOR)
 
 _HOST_RE = re.compile(rb"https://([A-Za-z0-9.-]{1,253})(?=[:/\"'\s]|$)")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+MAX_INSTALLER_BYTES = 2 * 1024 * 1024
 
 
 class DetectionError(ValueError):
@@ -29,13 +31,20 @@ class DetectionError(ValueError):
 
 
 def parse_sha256(value: str) -> str:
+    """Normalize one explicit SHA-256 value."""
     normalized = value.lower()
     if not _SHA256_RE.fullmatch(normalized):
         raise argparse.ArgumentTypeError("expected a 64-character SHA-256 value")
     return normalized
 
 
+def installer_url_policy(url: str) -> bool:
+    """Allow only the exact canonical official installer URL."""
+    return url == INSPECTOR.OFFICIAL_INSTALLER_URL
+
+
 def valid_hostname(host: str) -> bool:
+    """Return whether host is a conservative normalized DNS hostname."""
     if len(host) > 253 or host.startswith(".") or host.endswith("."):
         return False
     labels = host.split(".")
@@ -48,6 +57,7 @@ def valid_hostname(host: str) -> bool:
 
 
 def referenced_https_hosts(data: bytes) -> list[str]:
+    """Extract only normalized HTTPS host names from installer text."""
     hosts: set[str] = set()
     for match in _HOST_RE.finditer(data):
         try:
@@ -64,10 +74,22 @@ def detect(
     reviewed_installer_sha256: str,
     installer_fixture: Path | None,
 ) -> dict[str, Any]:
+    """Fetch or load installer bytes and emit metadata without execution."""
     with tempfile.TemporaryDirectory(prefix="antigravity-detection-") as temporary:
         destination = Path(temporary) / "install.sh"
         if installer_fixture is None:
-            data, content_type, final_url = INSPECTOR.download_installer(destination)
+            try:
+                data, content_type, final_url = NETWORK.download_bytes(
+                    INSPECTOR.OFFICIAL_INSTALLER_URL,
+                    destination,
+                    max_bytes=MAX_INSTALLER_BYTES,
+                    policy=installer_url_policy,
+                    user_agent="remote-dev-containers-antigravity-detection",
+                )
+            except NETWORK.DownloadError as exc:
+                raise DetectionError(str(exc)) from exc
+            if final_url != INSPECTOR.OFFICIAL_INSTALLER_URL:
+                raise DetectionError("official installer redirected unexpectedly")
             source = INSPECTOR.OFFICIAL_INSTALLER_URL
         else:
             data, content_type, final_url = INSPECTOR.load_local_installer(
@@ -76,17 +98,6 @@ def detect(
             source = final_url
 
         actual_sha256 = INSPECTOR.sha256_bytes(data)
-        parsed = urllib.parse.urlsplit(final_url) if installer_fixture is None else None
-        if installer_fixture is None:
-            if (
-                parsed is None
-                or parsed.scheme != "https"
-                or parsed.hostname != "antigravity.google"
-                or parsed.port not in (None, 443)
-                or parsed.username is not None
-                or parsed.password is not None
-            ):
-                raise DetectionError("official installer detection left the reviewed HTTPS origin")
         return {
             "schema_version": 1,
             "kind": "antigravity-installer-detection",
@@ -104,6 +115,7 @@ def detect(
 
 
 def validate_report(report: dict[str, Any]) -> None:
+    """Validate the normalized metadata-only detector schema."""
     if set(report) != {
         "schema_version",
         "kind",
@@ -134,14 +146,16 @@ def validate_report(report: dict[str, Any]) -> None:
             raise DetectionError(f"detected installer {field} is invalid")
     content_type = installer["content_type"]
     if content_type is not None and (
-        not isinstance(content_type, str) or len(content_type) > 200 or any(ord(c) < 0x20 for c in content_type)
+        not isinstance(content_type, str)
+        or len(content_type) > 200
+        or any(ord(character) < 0x20 for character in content_type)
     ):
         raise DetectionError("detected installer content type is invalid")
     sha256 = installer["sha256"]
     if not isinstance(sha256, str) or not _SHA256_RE.fullmatch(sha256):
         raise DetectionError("detected installer SHA-256 is invalid")
     size = installer["size"]
-    if not isinstance(size, int) or not 0 < size <= 2 * 1024 * 1024:
+    if not isinstance(size, int) or not 0 < size <= MAX_INSTALLER_BYTES:
         raise DetectionError("detected installer size is outside the supported boundary")
     hosts = installer["referenced_https_hosts"]
     if not isinstance(hosts, list) or hosts != sorted(set(hosts)) or len(hosts) > 100:
@@ -158,6 +172,7 @@ def write_report(
     reviewed_installer_sha256: str,
     installer_fixture: Path | None,
 ) -> dict[str, Any]:
+    """Write validated detector metadata to disk."""
     report = detect(
         reviewed_installer_sha256=reviewed_installer_sha256,
         installer_fixture=installer_fixture,
@@ -169,6 +184,7 @@ def write_report(
 
 
 def main() -> int:
+    """CLI entry point."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reviewed-installer-sha256", type=parse_sha256, required=True)
@@ -183,7 +199,11 @@ def main() -> int:
     except (OSError, RuntimeError, DetectionError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
         return 1
-    print("Antigravity installer detection: changed" if report["changed"] else "Antigravity installer detection: current")
+    print(
+        "Antigravity installer detection: changed"
+        if report["changed"]
+        else "Antigravity installer detection: current"
+    )
     return 0
 
 
