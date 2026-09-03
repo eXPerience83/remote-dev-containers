@@ -148,8 +148,6 @@ def _require_normalized_strings(
     """Require a small sorted unique list of printable strings."""
     if not isinstance(value, list) or len(value) > maximum_items:
         raise ReconcileError(f"{label} is malformed")
-    if value != sorted(set(value)):
-        raise ReconcileError(f"{label} is not normalized")
     if any(
         not isinstance(item, str)
         or not item
@@ -158,6 +156,8 @@ def _require_normalized_strings(
         for item in value
     ):
         raise ReconcileError(f"{label} contains an invalid value")
+    if value != sorted(set(value)):
+        raise ReconcileError(f"{label} is not normalized")
     return value
 
 
