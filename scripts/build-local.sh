@@ -41,7 +41,12 @@ remote_dev_image="$(
 )"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PROJECT_VERSION="${PROJECT_VERSION:-${BASE_VERSION:-}}"
-PROJECT_CHANNEL="${PROJECT_CHANNEL:-local}"
+if [[ -z "${PROJECT_CHANNEL:-}" ]]; then
+  case "$PROJECT_VERSION" in
+    candidate-pr-[1-9][0-9]*) PROJECT_CHANNEL=dev ;;
+    *) PROJECT_CHANNEL=local ;;
+  esac
+fi
 
 if [[ -z "${SOURCE_REVISION:-}" ]]; then
   SOURCE_REVISION="$(bash "$ROOT/scripts/detect-source-revision.sh" "$ROOT")"
