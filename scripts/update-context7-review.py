@@ -13,6 +13,7 @@ from pathlib import Path
 PACKAGE_NAME = "ctx7"
 EXPECTED_LICENSE = "MIT"
 REGISTRY = "https://registry.npmjs.org/"
+MAX_METADATA_BYTES = 64 * 1024
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _ENV_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 _HELPER_VERSION_RE = re.compile(
@@ -20,6 +21,14 @@ _HELPER_VERSION_RE = re.compile(
 )
 _HELPER_INTEGRITY_RE = re.compile(
     r'^REVIEWED_CONTEXT7_CLI_INTEGRITY = \(\n    "(sha512-[A-Za-z0-9+/=]+)"\n\)$',
+    re.MULTILINE,
+)
+_TEST_CONSTANT_ASSERT_RE = re.compile(
+    r'^(\s*if module\.REVIEWED_CONTEXT7_CLI_VERSION != ")([0-9]+\.[0-9]+\.[0-9]+)(":)$',
+    re.MULTILINE,
+)
+_TEST_RESOLVED_ASSERT_RE = re.compile(
+    r'^(\s*if module\.reviewed_cli_version\(\) != ")([0-9]+\.[0-9]+\.[0-9]+)(":)$',
     re.MULTILINE,
 )
 
@@ -56,9 +65,15 @@ def parse_integrity(value: object) -> str:
 
 def parse_metadata(path: Path) -> tuple[str, str]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise MetadataError("Context7 registry metadata is unavailable or invalid JSON") from exc
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise MetadataError("Context7 registry metadata is unavailable") from exc
+    if not raw or len(raw) > MAX_METADATA_BYTES:
+        raise MetadataError("Context7 registry metadata size is outside the supported boundary")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MetadataError("Context7 registry metadata is invalid UTF-8 JSON") from exc
     if not isinstance(payload, dict):
         raise MetadataError("Context7 registry metadata has an unexpected shape")
 
@@ -124,7 +139,26 @@ def replace_helper(text: str, version: str, integrity: str) -> str:
     return text
 
 
-def update(metadata: Path, versions_path: Path, helper_path: Path, *, write: bool) -> bool:
+def replace_reviewed_test_assertions(text: str, current: str, new: str) -> str:
+    constant_matches = list(_TEST_CONSTANT_ASSERT_RE.finditer(text))
+    resolved_matches = list(_TEST_RESOLVED_ASSERT_RE.finditer(text))
+    if len(constant_matches) != 1 or len(resolved_matches) != 1:
+        raise MetadataError("Context7 reviewed-version test assertions are malformed")
+    if constant_matches[0].group(2) != current or resolved_matches[0].group(2) != current:
+        raise MetadataError("Context7 reviewed-version tests disagree with the current reviewed pin")
+    text = _TEST_CONSTANT_ASSERT_RE.sub(rf'\g<1>{new}\g<3>', text, count=1)
+    text = _TEST_RESOLVED_ASSERT_RE.sub(rf'\g<1>{new}\g<3>', text, count=1)
+    return text
+
+
+def update(
+    metadata: Path,
+    versions_path: Path,
+    helper_path: Path,
+    *,
+    write: bool,
+    test_path: Path | None = None,
+) -> bool:
     latest_version, latest_integrity = parse_metadata(metadata)
     values = parse_versions(versions_path)
     current_version = exact_version(values.get("CONTEXT7_CLI_VERSION"))
@@ -137,6 +171,12 @@ def update(metadata: Path, versions_path: Path, helper_path: Path, *, write: boo
         raise MetadataError("Context7 helper reviewed-pin constants are malformed")
     if helper_version.group(1) != current_version or helper_integrity.group(1) != current_integrity:
         raise MetadataError("versions.env and Context7 helper reviewed pins are inconsistent")
+
+    test_text: str | None = None
+    if test_path is not None:
+        test_text = test_path.read_text(encoding="utf-8")
+        # Validate synchronization even when no update is needed.
+        replace_reviewed_test_assertions(test_text, current_version, current_version)
 
     if version_tuple(latest_version) < version_tuple(current_version):
         raise MetadataError(
@@ -159,10 +199,17 @@ def update(metadata: Path, versions_path: Path, helper_path: Path, *, write: boo
         updated_versions, "CONTEXT7_CLI_SRI_SHA512", latest_integrity
     )
     updated_helper = replace_helper(helper_text, latest_version, latest_integrity)
+    updated_test = (
+        replace_reviewed_test_assertions(test_text, current_version, latest_version)
+        if test_text is not None
+        else None
+    )
 
     if write:
         versions_path.write_text(updated_versions, encoding="utf-8")
         helper_path.write_text(updated_helper, encoding="utf-8")
+        if test_path is not None and updated_test is not None:
+            test_path.write_text(updated_test, encoding="utf-8")
     print(f"Context7 CLI update: {current_version} -> {latest_version}")
     return True
 
@@ -174,10 +221,21 @@ def main() -> int:
     parser.add_argument(
         "--helper", type=Path, default=Path("scripts/remote-dev-context7-device-login.py")
     )
+    parser.add_argument(
+        "--test",
+        type=Path,
+        default=Path("scripts/test-remote-dev-context7-device-login.py"),
+    )
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     try:
-        update(args.metadata, args.versions, args.helper, write=args.write)
+        update(
+            args.metadata,
+            args.versions,
+            args.helper,
+            write=args.write,
+            test_path=args.test,
+        )
     except (OSError, MetadataError) as exc:
         print(f"ERROR: {exc}", file=__import__("sys").stderr)
         return 1
