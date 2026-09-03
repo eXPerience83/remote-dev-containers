@@ -46,6 +46,9 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
             bash scripts/test-image-name-compat.sh
+          bash scripts/test-image-identity.sh
+          python3 scripts/test_edge_build_identity.py
+          python3 scripts/test_update_upstream_changelog.py
           bash scripts/validate-version-pins.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
@@ -116,6 +119,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
+            io.github.experience83.remote-dev.channel=stable
           provenance: mode=max
           sbom: true
 
@@ -144,11 +148,13 @@ jobs:
             CODEX_AMD64_SHA256=${{ steps.versions.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.versions.outputs.codex_arm64_sha256 }}
             PROJECT_VERSION=${{ github.ref_name }}
+            PROJECT_CHANNEL=stable
             SOURCE_REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
+            io.github.experience83.remote-dev.channel=stable
           provenance: mode=max
           sbom: true
 
