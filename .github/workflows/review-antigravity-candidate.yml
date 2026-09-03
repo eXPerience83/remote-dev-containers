@@ -1,0 +1,291 @@
+name: Review Antigravity candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Review stage to run
+        required: true
+        type: choice
+        options:
+          - discover-payload
+          - inspect-payload
+      installer_sha256:
+        description: Explicitly admitted SHA-256 of the currently detected official installer
+        required: true
+        type: string
+      payload_sha256:
+        description: Explicitly admitted SHA-256 of agy; required only for inspect-payload
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: execute only explicitly admitted vendor bytes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require trusted main workflow and normalized approvals
+        env:
+          REVIEW_STAGE: ${{ inputs.stage }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 }}
+          PAYLOAD_SHA256: ${{ inputs.payload_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] \
+            || { echo "ERROR: Antigravity candidate review may only run from main" >&2; exit 1; }
+          [[ "$INSTALLER_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+            || { echo "ERROR: installer_sha256 must be a lowercase SHA-256" >&2; exit 1; }
+          case "$REVIEW_STAGE" in
+            discover-payload)
+              [[ -z "$PAYLOAD_SHA256" ]] \
+                || { echo "ERROR: payload_sha256 must be empty during discovery" >&2; exit 1; }
+              ;;
+            inspect-payload)
+              [[ "$PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+                || { echo "ERROR: inspect-payload requires a lowercase payload SHA-256" >&2; exit 1; }
+              ;;
+            *)
+              echo "ERROR: unsupported review stage" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout reviewed automation code without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Execute bounded admitted review stage
+        env:
+          REVIEW_STAGE: ${{ inputs.stage }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 }}
+          PAYLOAD_SHA256: ${{ inputs.payload_sha256 }}
+          ARTIFACT_PATH: ${{ runner.temp }}/antigravity-review.json
+        run: |
+          set -euo pipefail
+          if [[ "$REVIEW_STAGE" == "discover-payload" ]]; then
+            python3 scripts/discover-antigravity-payload.py \
+              --output "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256"
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind discovery \
+              --artifact "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256"
+          else
+            python3 scripts/inspect-antigravity-cli.py \
+              --output "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256" \
+              --expected-binary-sha256 "$PAYLOAD_SHA256"
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind inspection \
+              --artifact "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256" \
+              --expected-payload-sha256 "$PAYLOAD_SHA256"
+          fi
+
+      - name: Upload metadata only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: antigravity-review-metadata
+          path: ${{ runner.temp }}/antigravity-review.json
+          if-no-files-found: error
+          retention-days: 3
+
+  maintain-pr:
+    name: update the human-reviewed automation PR
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout trusted main with branch-maintenance credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Download candidate metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: antigravity-review-metadata
+          path: ${{ runner.temp }}/antigravity-review-artifact
+
+      - name: Revalidate artifact after crossing into the write-capable job
+        env:
+          REVIEW_STAGE: ${{ inputs.stage }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 }}
+          PAYLOAD_SHA256: ${{ inputs.payload_sha256 }}
+          ARTIFACT_PATH: ${{ runner.temp }}/antigravity-review-artifact/antigravity-review.json
+        run: |
+          set -euo pipefail
+          if [[ "$REVIEW_STAGE" == "discover-payload" ]]; then
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind discovery \
+              --artifact "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256"
+          else
+            python3 scripts/validate-antigravity-review-artifact.py \
+              --kind inspection \
+              --artifact "$ARTIFACT_PATH" \
+              --expected-installer-sha256 "$INSTALLER_SHA256" \
+              --expected-payload-sha256 "$PAYLOAD_SHA256"
+          fi
+
+      - name: Update the single automation branch and PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_STAGE: ${{ inputs.stage }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 }}
+          PAYLOAD_SHA256: ${{ inputs.payload_sha256 }}
+          ARTIFACT_PATH: ${{ runner.temp }}/antigravity-review-artifact/antigravity-review.json
+        run: |
+          set -euo pipefail
+          branch="automation/update-upstreams"
+          remote_ref="refs/remotes/origin/$branch"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] \
+            || { echo "ERROR: write-capable Antigravity review may only run from main" >&2; exit 1; }
+          [[ "$INSTALLER_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+            || { echo "ERROR: installer approval is not normalized" >&2; exit 1; }
+          if [[ "$REVIEW_STAGE" == "inspect-payload" ]]; then
+            [[ "$PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+              || { echo "ERROR: payload approval is not normalized" >&2; exit 1; }
+          fi
+
+          git fetch origin main
+          set +e
+          git ls-remote --exit-code --heads origin "$branch" >/dev/null
+          remote_status=$?
+          set -e
+          case "$remote_status" in
+            0)
+              git fetch origin "refs/heads/$branch:$remote_ref"
+              git checkout -B "$branch" "$remote_ref"
+              git merge-base --is-ancestor origin/main HEAD \
+                || { echo "ERROR: automation branch does not contain current main; rerun Check upstream versions first" >&2; exit 1; }
+              ;;
+            2)
+              git checkout -B "$branch" origin/main
+              ;;
+            *)
+              echo "ERROR: could not determine automation branch state" >&2
+              exit "$remote_status"
+              ;;
+          esac
+
+          python3 scripts/validate-antigravity-review-artifact.py \
+            --kind detection \
+            --artifact third_party/antigravity-cli-detection.json \
+            --expected-installer-sha256 "$INSTALLER_SHA256"
+          [[ "$(jq -r '.changed' third_party/antigravity-cli-detection.json)" == "true" ]] \
+            || { echo "ERROR: installer is no longer pending review" >&2; exit 1; }
+
+          if [[ "$REVIEW_STAGE" == "discover-payload" ]]; then
+            install -m 0644 "$ARTIFACT_PATH" third_party/antigravity-cli-candidate.json
+            payload_sha="$(jq -r '.payload.sha256' "$ARTIFACT_PATH")"
+            payload_size="$(jq -r '.payload.size' "$ARTIFACT_PATH")"
+            [[ "$payload_sha" =~ ^[0-9a-f]{64}$ && "$payload_size" =~ ^[0-9]+$ ]] \
+              || { echo "ERROR: validated discovery metadata could not be summarized" >&2; exit 1; }
+            title="chore: review upstream updates"
+            body="Antigravity review is waiting for the second explicit admission. The fixed official installer SHA-256 ${INSTALLER_SHA256} was explicitly admitted and executed only in the credential-free bounded discovery job. That stage discovered agy SHA-256 ${payload_sha} (${payload_size} bytes) without executing agy. To continue, manually verify this PR/evidence and dispatch Review Antigravity candidate with stage inspect-payload, installer_sha256=${INSTALLER_SHA256}, payload_sha256=${payload_sha}. No proprietary bytes are stored in this branch or artifacts; only schema-validated metadata is retained. Do not merge until the full inspection and required CI/review gates pass."
+            commit_message="chore: record Antigravity payload candidate metadata"
+          else
+            python3 scripts/update-antigravity-review-evidence.py \
+              --live "$ARTIFACT_PATH" \
+              --detection third_party/antigravity-cli-detection.json \
+              --current third_party/antigravity-cli-inspection.json \
+              --output "$workdir/reviewed.json"
+            install -m 0644 "$workdir/reviewed.json" third_party/antigravity-cli-inspection.json
+
+            git show origin/main:third_party/antigravity-cli-inspection.json \
+              > "$workdir/baseline-reviewed.json"
+            reconcile_args=(
+              --live-detection third_party/antigravity-cli-detection.json
+              --baseline-reviewed "$workdir/baseline-reviewed.json"
+              --proposed-reviewed third_party/antigravity-cli-inspection.json
+              --reviewed-output "$workdir/reconciled-reviewed.json"
+              --detection-output "$workdir/reconciled-detection.json"
+              --discovery-output third_party/antigravity-cli-candidate.json
+            )
+            if [[ -f third_party/antigravity-cli-candidate.json ]]; then
+              reconcile_args+=(--proposed-discovery third_party/antigravity-cli-candidate.json)
+            fi
+            python3 scripts/reconcile-antigravity-review-state.py "${reconcile_args[@]}"
+            install -m 0644 "$workdir/reconciled-reviewed.json" third_party/antigravity-cli-inspection.json
+            install -m 0644 "$workdir/reconciled-detection.json" third_party/antigravity-cli-detection.json
+            python3 scripts/update-antigravity-review-doc.py \
+              --reviewed third_party/antigravity-cli-inspection.json \
+              --write
+            version="$(jq -r '.installed_binary.version' third_party/antigravity-cli-inspection.json)"
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9._-]+)?$ ]] \
+              || { echo "ERROR: reviewed Antigravity version is not safe for PR summary" >&2; exit 1; }
+            title="chore: review upstream updates"
+            body="Antigravity full candidate inspection is complete for explicitly admitted installer SHA-256 ${INSTALLER_SHA256} and agy SHA-256 ${PAYLOAD_SHA256}. The normalized committed review now records agy ${version}; the candidate-discovery file has been removed because the full review supersedes it. The vendor-byte job had no repository write permission and uploaded no proprietary bytes or raw stdout/stderr. Human review is still required: verify the normalized evidence, compatibility findings, current Google terms/privacy policy and the preserved non-redistribution/non-affiliation policy before merge. Runtime availability remains independent of this review PR."
+            commit_message="chore: refresh Antigravity reviewed evidence"
+          fi
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add third_party/antigravity-cli-detection.json \
+            third_party/antigravity-cli-inspection.json \
+            third_party/antigravity-cli-inspection.md
+          if [[ -f third_party/antigravity-cli-candidate.json ]]; then
+            git add third_party/antigravity-cli-candidate.json
+          else
+            git add -u third_party/antigravity-cli-candidate.json 2>/dev/null || true
+          fi
+
+          if ! git diff --cached --quiet; then
+            git commit -m "$commit_message"
+            git push -u origin "$branch"
+          else
+            echo "Automation branch already contains this Antigravity review stage."
+          fi
+
+          existing_pr="$(gh pr list \
+            --head "$branch" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" --title "$title" --body "$body"
+          else
+            gh pr create --title "$title" --body "$body" --base main --head "$branch"
+          fi
+
+          if [[ "$REVIEW_STAGE" == "inspect-payload" ]]; then
+            branch_head="$(git rev-parse HEAD)"
+            run_json="$(gh run list \
+              --workflow build-amd64.yml \
+              --branch "$branch" \
+              --event workflow_dispatch \
+              --commit "$branch_head" \
+              --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq '.[0] // {}')"
+            run_id="$(jq -r '.databaseId // empty' <<<"$run_json")"
+            run_status="$(jq -r '.status // empty' <<<"$run_json")"
+            run_conclusion="$(jq -r '.conclusion // empty' <<<"$run_json")"
+            if [[ -z "$run_id" || ( "$run_status" == "completed" && "$run_conclusion" != "success" ) ]]; then
+              gh workflow run build-amd64.yml --ref "$branch"
+            else
+              echo "Build AMD64 run $run_id is already $run_status${run_conclusion:+/$run_conclusion} for $branch_head."
+            fi
+          fi
