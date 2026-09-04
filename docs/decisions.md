@@ -36,15 +36,13 @@ This rejects both a single container holding every agent's private state and sev
 
 ## D009 — one isolated service per agent
 
-Accepted. Codex, Antigravity and any future Claude integration run in separate services. Each agent service has its own workspace or worktree, authentication, configuration, history, GitHub CLI state, Git configuration, SSH keys and integration credentials.
+Accepted. Codex, Antigravity and any future Claude integration run in separate services. Each agent service has its own workspace/worktree, authentication, configuration, history, GitHub CLI state, Git configuration, SSH keys and integration credentials.
 
-The parent data directory and broad home or tool directories are never mounted wholesale. Sharing a writable checkout between agents is not the default.
+The parent data directory and broad home/tool directories are never mounted wholesale. Sharing a writable checkout between agents is not the default.
 
 ## D010 — the launcher is not a container control plane
 
-Accepted. The launcher exposes the primary user entry point and routes only to fixed services declared by the stack. It receives neither the Docker socket nor agent credentials and does not create privileged child containers dynamically.
-
-Agent services may remain running but idle so selecting a tool requires no container-management capability.
+Accepted. The launcher exposes the primary user entry point and routes only to fixed services declared by the stack. It receives neither the container-engine socket nor agent credentials and does not create privileged child containers dynamically.
 
 ## D011 — optional proprietary agents use explicit vendor-sourced installation
 
@@ -54,15 +52,15 @@ A missing optional agent is reported as unavailable and is never downloaded sile
 
 ## D012 — outer containers are the supported TrueNAS isolation boundary
 
-Accepted as the baseline. The project does not weaken TrueNAS or Docker with privileged mode, `SYS_ADMIN`, unconfined profiles, host-root mounts or Docker socket access to force a nested sandbox.
+Accepted. The project does not weaken TrueNAS/Docker with privileged mode, `SYS_ADMIN`, unconfined profiles, host-root mounts or a container-engine socket to force a nested sandbox.
 
-An inner Bubblewrap, Landlock, nsjail or similar sandbox is reported as active only after a positive runtime test. The default image currently omits system Bubblewrap and the supported Codex launcher explicitly disables the unsupported nested sandbox. Approval prompts do not replace the outer-container boundary.
+The default image omits system Bubblewrap and the supported Codex launcher explicitly disables the unsupported nested sandbox. Approval prompts do not replace the outer-container boundary.
 
 ## D013 — one configuration-backed browser password contract
 
 Accepted. Protected browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated independently for each service from deployment configuration.
 
-`WEB_PASSWORD_FILE`, browser-password Compose secrets, `/run/secrets/web_password` and password-file persistence are retired. A privileged TrueNAS/Docker administrator can inspect deployment configuration and is inside the product trust boundary; moving the same application password to another host file does not create administrator secrecy.
+The former browser-password file/mount/secret mechanism is retired. A privileged TrueNAS/Docker administrator can inspect deployment configuration and is inside the product trust boundary; moving the same application password to another host file does not create administrator secrecy.
 
 The launcher receives no agent password. Optional launcher Basic authentication, when used, has its own distinct configuration-backed value.
 
