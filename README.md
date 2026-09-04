@@ -1,4 +1,4 @@
-# Remote Dev Containers — starter v0.1
+# Remote Dev Containers — starter v0.1.1-dev
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
@@ -14,8 +14,8 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
-├── codex         7681 — independently authenticated terminal
-└── antigravity   7682 — optional/experimental independently authenticated terminal
+├── codex         7681 — authenticated terminal
+└── antigravity   7682 — optional/experimental authenticated terminal
 ```
 
 Current foundations:
@@ -28,7 +28,7 @@ Current foundations:
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime path with the bundled CLI retained as fallback;
 - GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd and tmux;
 - one canonical role-neutral persistent-data contract;
-- one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract with independent values per protected endpoint;
+- one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract with a separate configuration entry per protected endpoint; values may currently be reused across services;
 - project selection below each private `/workspace` collection root;
 - `dev -> edge -> stable = latest` release semantics, with dated edge build identity separate from channel and immutable provenance.
 
@@ -90,9 +90,11 @@ Before saving the Custom App, review at least:
 
 - every example bind IP and replace it with the LAN/Tailscale/private-mesh IP of the TrueNAS host;
 - every `/mnt/Pool1/remote-dev` bind source if your pool/path differs;
-- Codex `WEB_PASSWORD` and the independent Antigravity `WEB_PASSWORD` when retaining Antigravity;
+- the configured Codex and optional Antigravity `WEB_PASSWORD` values; they are separate configuration entries but may currently contain the same value;
 - timezone, Git identity and Codex approval mode where needed;
 - `REMOTE_DEV_PROJECT`: leave the YAML value empty for normal menu mode or set a validated fixed project for direct-agent use.
+
+Remote Dev currently requires only a non-empty single-line value for a protected endpoint. It does not enforce minimum length, composition or cross-service uniqueness yet; those choices are intentionally deferred to a future browser-access/security decision.
 
 A privileged TrueNAS administrator can inspect saved App/container configuration and is inside Remote Dev's trust boundary. Sanitize screenshots/YAML exports before sharing them.
 
@@ -104,7 +106,7 @@ After the App is running, open:
 http://<TrueNAS-LAN-or-private-mesh-IP>:7680
 ```
 
-Port `7680` is the launcher. Codex authenticates independently on `7681`; Antigravity uses its own independent authentication on `7682`. Do not expose these ports directly to the public Internet.
+Port `7680` is the launcher. Codex authenticates on `7681`; Antigravity authenticates separately on `7682`. Separate endpoints/configuration do not require different password values. Do not expose these ports directly to the public Internet.
 
 Continue with the [practical user guide](docs/user-guide.md).
 
@@ -143,9 +145,9 @@ Project selection chooses a working directory; it is **not** a filesystem-isolat
 
 The launcher is navigation only. It does not proxy ttyd traffic, manage containers or receive agent state.
 
-Each protected agent endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose maps distinct external values to Codex and Antigravity. Credentials are not embedded in links, passed through the launcher or copied between roles.
+Each protected endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose keeps separate operator-facing entries for Codex, Antigravity and optional launcher authentication so they can be changed independently. Remote Dev currently permits those entries to use the same password value and applies no minimum-length or composition rule.
 
-The former file-backed browser-password mechanism is retired. Optional launcher Basic authentication remains available for advanced generic Compose deployments through `compose/launcher-auth.yml`, using a distinct launcher-only configuration value without adding agent secrets.
+The former file-backed browser-password mechanism is retired. Optional launcher Basic authentication remains available for advanced generic Compose deployments through `compose/launcher-auth.yml`; its launcher-only configuration entry adds no agent secrets.
 
 ## Codex approval modes
 
@@ -250,12 +252,12 @@ mkdir -p \
   data/workspaces/codex/example-project \
   data/state/codex/{agent,gh,git,ssh}
 sudo install -d -o root -g root -m 0700 data/state/codex/runtime
-# Edit .env and set a non-empty Codex-specific WEB_PASSWORD.
+# Edit .env and set a non-empty WEB_PASSWORD for Codex.
 make preflight
 ./scripts/build-local.sh
 ```
 
-Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
+The local development baseline is `0.1.1-dev`; edge publications use their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of that local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
 
@@ -290,7 +292,7 @@ See [`docs/releases.md`](docs/releases.md).
 
 - Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN or a private mesh such as Tailscale.
-- Codex and Antigravity terminals remain independently authenticated with distinct configured passwords.
+- Protected endpoints require a configured non-empty single-line password unless explicitly placed behind the reviewed insecure override; the current product does not require long or mutually different password values.
 - Do not mount agent state or a container-engine socket into the launcher.
 - Project selection changes working directory; it does not isolate sibling projects already mounted under the same `/workspace`.
 - Do not share one writable checkout across agent services by default.
