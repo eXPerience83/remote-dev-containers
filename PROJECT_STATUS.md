@@ -19,8 +19,8 @@
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
-├── codex         7681 — independently authenticated terminal
-└── antigravity   7682 — optional/experimental independently authenticated terminal
+├── codex         7681 — authenticated terminal
+└── antigravity   7682 — optional/experimental authenticated terminal
 ```
 
 - `ghcr.io/experience83/remote-dev` is the canonical runtime package and `REMOTE_DEV_IMAGE` is the preferred deployment selector.
@@ -37,10 +37,12 @@ Remote Dev stack
 
 There is one supported browser-terminal password runtime contract: `WEB_PASSWORD`.
 
-- Codex and Antigravity use independent non-empty configured values.
-- The launcher receives no agent password. Optional launcher Basic authentication uses its own configuration-backed password.
+- Codex, Antigravity and optional launcher authentication keep separate configuration entries so each endpoint can be changed independently.
+- A protected endpoint currently requires a non-empty single-line value, but Remote Dev does **not** enforce minimum length, composition or cross-service uniqueness. The operator may intentionally reuse the same value across services.
+- The launcher receives no agent password; optional launcher Basic authentication uses only its own configuration entry.
 - The former browser-password file/mount/secret-tree mechanism is retired and must not be presented as supported.
 - TrueNAS/Docker root/admin can inspect deployment configuration and is inside the trust boundary; the product does not claim secrecy from the host administrator.
+- Stronger password/access policy remains a future browser-security decision rather than an implicit requirement in the current YAML/runtime contract.
 
 Persistent data is rooted at one administrator-selected `REMOTE_DEV_DATA_ROOT` but only narrow role-private descendants are mounted into agent containers. Each `/workspace` is a private project collection root; normal Start/Resume/direct-agent paths resolve a concrete validated `/workspace/<project>`.
 
@@ -67,7 +69,9 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 ## Release and update state
 
-There is **no stable release yet**. Current channel semantics are:
+There is **no stable release yet**. The local development baseline is now `0.1.1-dev`; published edge images continue to use dated `edge-YYYY.MM.DD-<short-sha>` identities rather than that local default.
+
+Current channel semantics are:
 
 - `dev` / `dev-amd64` — explicitly published reviewed-but-unmerged candidate;
 - `edge` / `edge-amd64` — integrated `main`;
@@ -89,7 +93,7 @@ Exact mutable component versions remain authoritative in `versions.env` and runt
 
 The main implementation foundations are already present. Before the first stable publication the repository still needs to satisfy the support level it actually claims, including:
 
-- complete #92 broad documentation synchronization;
+- merge the #92 documentation synchronization and close the stale status gap;
 - reconcile #31 so completed gates are no longer listed as pending and only real release blockers remain;
 - pass the stable-release checklist in `docs/releases.md` on an exact `main` revision/digest;
 - complete any open maintenance/security item that #31 identifies as blocking the claimed stable support level;
