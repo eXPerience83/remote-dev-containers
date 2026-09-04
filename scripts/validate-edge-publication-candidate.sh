@@ -30,7 +30,6 @@ fail() {
 
 for ref in "$base_ref" "$runtime_ref"; do
   docker pull --quiet "$ref" >/dev/null
-
 done
 
 assert_label() {
@@ -45,11 +44,16 @@ assert_label() {
 }
 
 for ref in "$base_ref" "$runtime_ref"; do
+  platform="$(docker image inspect "$ref" --format '{{.Os}}/{{.Architecture}}')" \
+    || fail "could not inspect platform on $ref"
+  [[ "$platform" == linux/amd64 ]] \
+    || fail "$ref platform is '$platform', expected 'linux/amd64'"
   assert_label "$ref" org.opencontainers.image.revision "$expected_revision"
   assert_label "$ref" org.opencontainers.image.version "$expected_version"
   assert_label "$ref" io.github.experience83.remote-dev.channel edge
 done
 
+# No candidate process executes before immutable reference, platform and labels pass.
 # Bundled notices must validate on the exact images that may be promoted.
 docker run --rm --entrypoint remote-dev-notices "$base_ref" --check
 docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
