@@ -53,7 +53,74 @@ for ref in "$base_ref" "$runtime_ref"; do
   assert_label "$ref" io.github.experience83.remote-dev.channel edge
 done
 
+strict_launcher_preflight() (
+  set -euo pipefail
+  local suffix="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}-${RANDOM}"
+  local network="remote-dev-edge-launcher-${suffix}"
+  local container="remote-dev-edge-launcher-${suffix}"
+
+  cleanup() {
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker network rm "$network" >/dev/null 2>&1 || true
+  }
+
+  diagnostics() {
+    echo "Strict launcher candidate diagnostics:" >&2
+    docker container inspect --format \
+      'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' \
+      "$container" >&2 2>/dev/null || true
+    echo "Strict launcher candidate log tail (max 80 lines):" >&2
+    docker logs --tail 80 "$container" >&2 2>/dev/null || true
+  }
+
+  trap cleanup EXIT INT TERM
+  docker network create "$network" >/dev/null
+  docker run -d \
+    --name "$container" \
+    --user 65532:65532 \
+    --security-opt no-new-privileges:true \
+    --cap-drop ALL \
+    --read-only \
+    --pids-limit 64 \
+    --network "$network" \
+    --ipc private \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
+    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=0755 \
+    --env REMOTE_DEV_ROLE=launcher \
+    --env REMOTE_DEV_START_MODE=menu \
+    --env ALLOW_INSECURE_WEB=1 \
+    --env WEB_BIND=0.0.0.0 \
+    --env WEB_PORT=7680 \
+    --env WEB_CHECK_ORIGIN=1 \
+    --env REMOTE_DEV_LAUNCHER_CODEX_HOST=codex \
+    --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \
+    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \
+    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST=antigravity \
+    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=7682 \
+    "$runtime_ref" >/dev/null
+
+  for _ in $(seq 1 30); do
+    if [[ "$(docker container inspect --format '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]]; then
+      diagnostics
+      return 1
+    fi
+    if docker exec "$container" remote-dev-healthcheck >/dev/null 2>&1; then
+      echo "Strict launcher candidate preflight: OK"
+      return 0
+    fi
+    sleep 1
+  done
+
+  diagnostics
+  return 1
+)
+
 # No candidate process executes before immutable reference, platform and labels pass.
+# Reproduce the strict launcher fixture independently so a failure leaves bounded,
+# secret-free state/log evidence before the larger isolation fixture cleans itself up.
+strict_launcher_preflight \
+  || fail "strict launcher candidate preflight failed"
+
 # Bundled notices must validate on the exact images that may be promoted.
 docker run --rm --entrypoint remote-dev-notices "$base_ref" --check
 docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
