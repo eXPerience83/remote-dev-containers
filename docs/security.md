@@ -6,24 +6,24 @@ Remote Dev is a single-user development appliance, not a multi-tenant service.
 
 Agent containers intentionally run as root. Root is constrained to that container and to the paths mounted into it. Anyone who reaches an agent terminal can operate everything accessible to that service.
 
-The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no bind, persistent or agent-state mounts, and no added capabilities after `cap_drop: [ALL]`. It therefore does not need a root startup phase merely to obtain its browser password.
+The launcher is different: production Compose starts it directly as UID/GID `65532`, with no supplementary groups, no bind, persistent or agent-state mounts, and no added capabilities after `cap_drop: [ALL]`. The current supported launcher is navigation-only and has no password requirement.
 
 The launcher runtime still defensively drops to UID/GID `65532` if somebody invokes it manually as root outside the reviewed Compose profile, but the supported deployment no longer relies on that transition.
 
 ## Browser authentication contract
 
-Browser endpoints use one password-delivery mechanism: `WEB_PASSWORD`.
+Protected **agent** browser endpoints use one password-delivery mechanism: `WEB_PASSWORD`.
 
-- Codex receives its own non-empty value.
-- Antigravity receives a distinct non-empty value when enabled.
-- Optional launcher Basic authentication uses a separate launcher value mapped to its own `WEB_PASSWORD`.
+- Codex receives a configured non-empty value.
+- Antigravity receives its own configured non-empty value when enabled. The operator may currently choose the same value as Codex or a different one; Remote Dev does not enforce cross-role uniqueness.
 - Agent endpoints fail closed when `WEB_PASSWORD` is empty unless that specific endpoint deliberately sets `ALLOW_INSECURE_WEB=1`. The reviewed Codex and Antigravity Compose defaults keep that override at `0`.
-- The normal navigation-only launcher is the reviewed exception: base Compose profiles explicitly set `ALLOW_INSECURE_WEB=1` only for an already protected private endpoint. The optional launcher-auth override sets it back to `0` and requires its own password.
+- The current navigation-only launcher is deliberately password-free in the normal supported deployment and receives no agent password.
+- The existing `compose/launcher-auth.yml` override is an advanced non-default mechanism retained in the repository, not a requirement of the current launcher flow. A future secure single-entry/gateway design belongs to #181 and may replace or redesign that boundary.
 - No browser password is persisted below `REMOTE_DEV_DATA_ROOT`, mounted from `/run/secrets`, or selected from multiple runtime sources.
 
 A sufficiently privileged TrueNAS/Docker administrator can inspect deployment configuration and container metadata. Host root/admin is inside the trust boundary; moving an application password to another host file would not create an administrator-secrecy boundary for this product. The supported protection is private network exposure plus role/container/mount isolation.
 
-Passwords must be non-empty single-line values. Runtime validation rejects carriage returns/newlines rather than logging or transforming them. Never print password values, lengths, hashes or credential-derived material in diagnostics, tests or issue evidence.
+Agent passwords must currently be non-empty single-line values. Runtime validation rejects carriage returns/newlines rather than logging or transforming them. **Remote Dev deliberately does not enforce a minimum length, composition rule or cross-service uniqueness at this stage.** Those password/access-policy choices remain a future product/security decision and must not be silently introduced by documentation, Compose defaults or validation code. Never print password values, lengths, hashes or credential-derived material in diagnostics, tests or issue evidence.
 
 For agent roles, startup copies the configured password into a non-exported shell variable and removes `WEB_PASSWORD` from the child-process environment before running external startup helpers or executing ttyd. ttyd still receives the credential it requires for Basic authentication; this reduces incidental inheritance by unrelated child tools and terminal sessions, but it does not hide deployment configuration from the trusted host administrator.
 
@@ -38,14 +38,14 @@ The launcher:
 - performs no container-management operation;
 - serves only fixed reviewed navigation;
 - does not proxy terminal HTTP or WebSocket traffic;
-- requires no password by default on localhost/LAN/Tailscale deployments;
-- supports optional configuration-backed Basic authentication through `compose/launcher-auth.yml`;
+- requires no password in the current supported localhost/LAN/Tailscale/private-mesh deployment model;
+- keeps any stronger single-entry authentication/gateway design outside the current contract under #181;
 - validates route inputs, matching origins and URL paths;
 - sends a restrictive Content Security Policy;
 - rejects state-changing HTTP methods;
 - exposes a secret-free health endpoint.
 
-The launcher remains free of bind, persistent and agent-state mounts with or without optional authentication. It never embeds an agent password or forwards an Authorization header, and each agent endpoint authenticates independently.
+The launcher remains free of bind, persistent and agent-state mounts in the normal supported deployment. It never embeds an agent password or forwards an Authorization header, and each agent endpoint authenticates independently.
 
 ## Outer-container isolation
 
@@ -119,11 +119,12 @@ Optional SMB sharing is outside the core security contract and tracked under #71
 ## Required controls
 
 - Do not expose ports 7680, 7681 or 7682 directly to the public Internet.
-- Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard.
+- Bind the password-free launcher only to localhost, a trusted LAN, Tailscale or WireGuard/private mesh.
+- Do not add a launcher password requirement to the current normal deployment; stronger secure-entry authentication belongs to future #181 work.
 - Keep `ALLOW_INSECURE_WEB=0` for agent services unless a specific endpoint is deliberately placed behind another reviewed private authentication boundary.
-- Keep every agent terminal independently authenticated with a strong, distinct password.
-- Use a distinct launcher password when the optional authentication overlay is enabled.
-- Protect a generic Compose `.env` containing browser passwords from other host users, for example with mode `0600` on POSIX systems, and keep it out of version control.
+- Configure a non-empty single-line password for Codex and for Antigravity when it is enabled. The current product does not require a minimum length, composition rule or a value different from another agent service.
+- Keep separate configuration entries for Codex and Antigravity even if the operator deliberately chooses the same password value; this preserves the option to change one service independently later.
+- Protect a generic Compose `.env` containing agent browser passwords from other host users, for example with mode `0600` on POSIX systems, and keep it out of version control.
 - Keep credentials out of navigation URLs, diagnostics, logs and tests; remember that host administrators can inspect deployment configuration.
 - Keep agent data and credentials out of the launcher.
 - Do not mount Docker or Podman sockets.

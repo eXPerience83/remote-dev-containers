@@ -4,125 +4,150 @@ These instructions apply to the entire repository unless a more specific nested 
 
 ## Sources of truth
 
-Before changing runtime architecture or support claims, read the current GitHub issues rather than relying on stale prose in a prompt:
+Before changing runtime architecture or support claims, read the current code and owning GitHub issues rather than relying on stale prose.
 
-- #31 is the roadmap and dependency tracker.
-- #24 is the completed single-image, single-stack, isolated-service architecture contract.
-- #25 is the role-neutral runtime and launcher epic.
-- #26 and #53 define the third-party notice and recurring legal-review process.
-- #36 records the completed TrueNAS outer-isolation and no-Bubblewrap decision.
-- #42 covers later outer-container hardening and cross-service canaries.
-- #46 covers configurable Codex approval modes.
+Current high-level ownership:
+
+- #31 is the experimental-release/support tracker and should list only genuinely remaining release blockers.
+- #24/#25 are completed single-image, single-stack, isolated-service/role-neutral runtime foundations.
+- #36 records the completed TrueNAS outer-isolation and no-system-Bubblewrap decision.
+- #42 records completed outer-container hardening and cross-service canaries.
+- #53 is the standing third-party/license/vendor-policy review log. Automation provides evidence, never legal approval.
+- #69 is the completed browser-authentication decision: one configuration-backed `WEB_PASSWORD` runtime contract for protected agent endpoints; the former file-backed browser-password path is retired.
+- #70/#167 define the canonical persistent-data layout and deterministic TrueNAS bootstrap/preflight.
+- #186 defines the completed TrueNAS Generic/POSIX private-state ACL audit/migration contract.
 - #92 owns broad English/Spanish documentation and implementation-status synchronization.
-- #96 owns compatible official-source Antigravity runtime admission and its reviewed/review-pending/damaged states.
-- #83 owns scheduled Antigravity detection and human-review PR automation after #96; it must not gate runtime availability.
+- #96 owns the completed Antigravity reviewed/review-pending/damaged runtime-admission model.
+- #83 owns the shipped Antigravity scheduled static discovery plus explicit executable-review automation; it must not gate or revoke an intact admitted runtime merely because review state changes.
 - #103 owns optional explicit Codex runtime updates while preserving the immutable bundled fallback.
+- #120 owns the permanent `dev -> edge -> stable = latest` channel contract.
+- #168 owns dated edge build identity and grouped-upstream changelog provenance.
+- #189 owns the completed Renovate Ubuntu runtime-image changelog provenance boundary.
 
-If an issue and repository code disagree, report the discrepancy before expanding scope.
+If issue prose and repository code disagree, resolve the discrepancy explicitly before broadening scope.
 
 ## Mandatory PR discipline
 
 - Work on a branch and open a pull request. Never push implementation changes directly to `main`.
-- Keep one focused objective per PR. Do not combine runtime migration, launcher routing, legal review, vendor installation, persistence migration, and real-login evidence.
-- Stop and ask before adding a new subsystem or changing the agreed PR boundary.
-- Do not build universal Dockerfile, shell, package-manager, license, or static-analysis parsers. Prefer explicit mappings and bounded validators for known repository inputs.
-- Do not introduce speculative support for optional agents. Missing optional roles must remain unavailable and must never download silently.
-- Do not change unrelated dependency pins, generated legal evidence, image names, Compose layouts, or persistent mounts unless the issue and PR explicitly include them.
-- Preserve compatibility wrappers until their removal point is documented and reviewed.
+- Keep one focused objective per PR.
+- Do not add a new subsystem or broaden a security/distribution boundary without an owning issue and explicit review.
+- Prefer explicit mappings and bounded validators for known repository inputs; do not build speculative universal parsers.
+- Do not introduce speculative support for optional agents. Missing optional runtimes remain unavailable and must never download silently during normal startup.
+- Do not change unrelated dependency pins, generated legal evidence, image names, Compose layouts or persistent mounts unless the PR owns those changes.
+- Preserve documented compatibility aliases until their reviewed removal point.
 
-A PR is ready to merge only when its exact final head has the required `build` check green, review findings have been evaluated, all valid findings are fixed, all review conversations are resolved, and the branch is up to date with `main`. Use squash merge.
+A PR is ready to merge only when its **exact final head** has the required repository CI green, valid review findings are fixed, review conversations are resolved and the branch remains mergeable/up to date according to the repository's current merge policy. Use squash merge.
 
 ## Security invariants
 
-Never weaken these constraints to make a feature easier:
+Never weaken these constraints merely to make a feature easier:
 
 - no privileged containers;
 - no Docker or Podman socket;
 - no `SYS_ADMIN`;
 - no host-root mount;
-- no broad `/root`, `/home`, `/opt`, `/usr/local`, or parent data-root persistence;
-- no shared writable agent credentials, GitHub CLI state, Git configuration, SSH state, caches, histories, or workspaces between role services;
-- no launcher access to agent credentials or workspaces;
-- no `eval`, sourced editable state, or user-controlled shell fragments for role, mode, installer, routing, or command dispatch;
-- no secret values in diagnostics, logs, tests, issues, or PR descriptions.
+- no broad `/root`, `/home`, `/opt`, `/usr/local`, `/mnt` or parent data-root persistence;
+- no shared writable agent credentials, GitHub CLI state, Git configuration, SSH state, histories or workspaces between role services;
+- no launcher access to agent credentials/workspaces/passwords;
+- no `eval`, sourced editable state or user-controlled shell fragments for role/mode/installer/routing/command dispatch;
+- no secret values in diagnostics, logs, tests, issues or PR descriptions.
 
-The supported TrueNAS isolation boundary is the outer container. Approval prompts are never a sandbox or an isolation boundary. Do not claim that Bubblewrap, Landlock, or another inner sandbox is active unless a positive runtime test proves that exact mechanism is operational.
+The supported TrueNAS isolation boundary is the outer role container. Approval prompts are not a sandbox. Do not claim an inner sandbox is active unless a positive runtime test proves that exact mechanism is operational.
+
+Host TrueNAS/Docker root/admin is trusted and can inspect deployment configuration. Remote Dev does not claim administrator secrecy for `WEB_PASSWORD` or other configuration-backed values.
 
 ## Runtime implementation rules
 
-- Use fixed, validated enums for roles and start modes.
-- Build command invocations with Bash arrays and preserve arguments without re-evaluating them.
-- Reject unknown roles and modes with a deterministic non-zero exit status and a clear message.
-- Keep product-specific variables such as `CODEX_HOME` inside the Codex role.
-- Keep one canonical implementation. Compatibility commands must be thin wrappers around the canonical command, not copied implementations.
-- Preserve command exit status and run persistent-state hardening after supported interactive sessions.
-- Preserve mandatory ttyd authentication for agent terminals, origin checking for all web endpoints, tmux reconnect behavior, image identity checks, and existing Codex login/start/resume behavior.
+- Use fixed validated enums for roles/start modes.
+- Build process invocations with argument arrays and preserve literal arguments without shell re-evaluation.
+- Reject unknown roles/modes deterministically with a clear non-zero result.
+- Keep product-specific variables/state inside the owning role.
+- Keep one canonical implementation; compatibility commands are thin wrappers, not copied logic.
+- Preserve command exit status and persistent-state hardening after supported interactive sessions.
+- Preserve ttyd authentication for agent terminals, origin checking, tmux reconnect behavior, image identity checks and supported Codex/Antigravity project-scoped launch behavior.
 
 ### Launcher rules
 
-- `REMOTE_DEV_ROLE=launcher` is navigation only. It must not execute an agent or relay/proxy agent terminal HTTP or WebSocket traffic unless a later PR has an explicit threat-model review.
-- The launcher may link only to fixed, validated services declared by the stack.
-- Keep the unauthenticated private-network default, optional launcher authentication, origin checks, CSP, method restrictions and secret-free health behavior covered by tests.
-- Never embed credentials in launcher URLs, HTML, JavaScript, logs or diagnostics.
-- By default the launcher service receives only its web/routing configuration and no password secret. A deployment may explicitly enable optional launcher authentication, but the launcher must never receive agent workspaces, agent state, GitHub/Git/SSH mounts, agent secrets or the Docker socket.
-- Launcher and agent services must use the same final image reference/digest while retaining separate container roles and state boundaries.
+- `REMOTE_DEV_ROLE=launcher` is navigation only.
+- The current supported launcher is deliberately password-free and intended only for localhost/trusted LAN/private-mesh exposure.
+- It must not execute an agent, proxy/relay terminal HTTP/WebSocket traffic or manage containers without a separately reviewed threat-model change.
+- It may link only to fixed validated services declared by the stack.
+- Keep origin checks, CSP, method restrictions, secret-free health behavior and absence of agent mounts/socket covered by tests.
+- Never embed credentials in launcher URLs/HTML/JavaScript/logs/diagnostics.
+- Do not turn launcher authentication into a current deployment requirement. A future secure single-entry/gateway design belongs to #181.
+- The existing `compose/launcher-auth.yml` override is non-default/advanced compatibility surface; changing its role or promoting it to the main security boundary requires explicit review.
+- Enabled services must use the intended common image reference while retaining disjoint mutable state.
+
+### Browser-authentication rules
+
+- The current password contract applies to protected agent endpoints: Codex and enabled Antigravity use `WEB_PASSWORD`.
+- Keep separate configuration entries for Codex and Antigravity so each service can be changed independently.
+- The current product does **not** impose a minimum length, composition rule or requirement that those configured agent password values differ from one another. The operator may currently reuse a value across agent services.
+- The normal launcher is outside this password contract and must remain password-free unless a future #181 decision explicitly changes the entry architecture.
+- Do not introduce password complexity or cross-service uniqueness enforcement without a future explicit browser-access/security decision and matching tests/documentation.
+- Do not reintroduce the retired file-backed browser-authentication path, browser-password Compose secrets or persistent browser-password files without a new explicit architecture decision.
+- Never log or derive reusable metadata from password contents.
 
 ### Antigravity runtime-admission rules
 
-- Antigravity remains unbundled and must be downloaded only after an explicit user action from the fixed official Google installer endpoint.
-- Normal startup, status and launch paths must never contact the installer endpoint or update the executable.
-- `AGY_CLI_DISABLE_AUTO_UPDATE=true` is mandatory for candidate checks and normal sessions.
-- Committed inspection evidence marks the exact reviewed version; it is not an execution allowlist. Absence from evidence is not revocation.
-- A compatible official-source payload may run with `review pending` status when it was admitted by the hardened flow and still matches its private manifest.
-- Installer and candidate execution must use a credential-free isolated home, bounded output/time and a private staging subtree. When the production container runs as root, drop to a fixed unprivileged identity before executing changed vendor bytes.
-- Validate fixed/final origin, regular-file identity, ownership, size bounds, Bash contract, Linux AMD64 format, semantic version and bounded help before publication.
-- Publish executable and manifest only after all checks pass. Failed or interrupted updates must preserve the previous pair.
-- Launch must verify the local executable against its restrictive private manifest without installer/update network access. Missing, symlinked, malformed or identity-mismatched state is `damaged or locally modified` and must be blocked.
-- Do not describe review-pending status as cryptographic vendor signing, Remote Dev certification, image-SBOM inclusion or Apache-2.0 coverage.
-- A private manifest detects independent modification and accidental corruption; it is not protection from a process already controlling the service user or container root and able to replace both files coherently.
-- Keep #96 runtime admission separate from #83 scheduled review automation and #103 Codex runtime updates with bundled fallback.
+- Antigravity remains unbundled and optional/experimental.
+- Use only the reviewed official Google installer/runtime path; no alternative service client/protocol implementation.
+- Do not reuse/export Google/Antigravity OAuth for Codex, Claude Code, OpenCode, OpenClaw or another third-party agent/service.
+- Normal startup/status/launch must not contact the installer/update endpoint.
+- `AGY_CLI_DISABLE_AUTO_UPDATE=true` remains mandatory for supported sessions.
+- Committed evidence marks reviewed versions but is not an execution allowlist or revocation mechanism.
+- A compatible official-source runtime may remain runnable with `review pending` when it was admitted through the hardened flow and still matches its private manifest.
+- Explicit install/update must validate the fixed network/origin, bounded installer/runtime contract, architecture/version/help identity and preserve the previous working pair on failure/interruption.
+- Informational status stays lightweight/offline; explicit verify/Doctor and the mandatory pre-launch gate own full integrity checks according to the shipped #153/#96 contract.
+- Do not describe review-pending state as Google signing, Remote Dev certification, image-SBOM inclusion or Apache-2.0 coverage.
+- Keep #96 runtime admission separate from #83 review automation and #103 Codex runtime updates.
 
-See `docs/antigravity-runtime-admission.md` and `docs/antigravity-runtime-admission.es.md` for the user-facing contract.
+### Antigravity review-automation rules
 
-## Boundaries for issue #25
+- Scheduled discovery is read-only and must execute **zero vendor code**.
+- It may download only bounded reviewed-origin installer/manifest/archive bytes as data, validate schema/origin/integrity and compute exact installer/payload identities.
+- Changed identities cross the scheduled boundary as metadata only.
+- Executable inspection remains an explicit trusted workflow and must verify the exact pending pair before any vendor execution.
+- Raw proprietary installer/archive/runtime bytes and raw vendor output must not become repository artifacts/evidence unless a separately reviewed policy explicitly allows it.
+- Automation never makes legal/vendor-support decisions and must not auto-merge review changes.
 
-Implement #25 as separate reviewed slices:
+See `docs/antigravity-runtime-admission.md` / `.es.md` and `docs/dependency-automation.md`.
 
-1. role-neutral commands, validated role/start-mode resolution, and Codex compatibility wrappers;
-2. configurable Codex approval modes under #46;
-3. canonical image and variable naming with time-bounded aliases;
-4. launcher and Codex services using the same image digest;
-5. Compose and persistent-state migration;
-6. outer hardening and cross-service canaries under #42.
+### TrueNAS data/ACL rules
 
-The launcher slice uses the accepted navigation/redirect design. Do not silently turn it into a reverse proxy, container-management plane, persistent-state migration or optional-agent implementation.
+- `compose/truenas.yml` remains the canonical supported TrueNAS YAML path.
+- The operator creates the root dataset explicitly; bootstrap never creates a missing root/parent/dataset.
+- `scripts/lib/data_layout.py` is the shared path contract consumed by initializer/preflight.
+- The reference Host Path private-state security model is Generic/POSIX; use `scripts/truenas-acl-audit.py` from the same source revision for authoritative host ACL checks.
+- `remote-dev-doctor` may report container-visible mount modes but must not pretend to infer host TrueNAS ACL type.
+- Do not rely on comments or `${...}` interpolation surviving a TrueNAS Custom App edit/save round-trip.
 
 ## Validation expectations
 
-Run the narrowest relevant tests during development and the repository's complete required CI before merge. Runtime changes must preserve or extend coverage for:
+Run the narrowest relevant tests during development and the repository's complete required CI before merge.
 
-- role and start-mode validation;
-- compatibility-wrapper equivalence;
-- launcher unauthenticated-default behavior, optional authentication, origin policy, CSP and fixed navigation;
-- launcher absence of agent mounts and Docker socket;
-- launcher and Codex same-image reference/ID;
+Runtime/deployment changes should preserve or extend coverage for, where affected:
+
+- role/start-mode validation and wrapper equivalence;
+- password-free launcher origin/CSP/fixed navigation plus absence of agent mounts/socket;
+- intended common image identity across enabled roles;
+- role-private mount sources and canonical host layout;
+- bootstrap/preflight/ACL-audit behavior;
+- Codex/Antigravity `WEB_PASSWORD` authentication, including the absence of any undocumented complexity/uniqueness gate and absence of the retired file-backed path;
 - role-aware health checks;
-- Codex version and fixed launch policy;
-- start, resume, device-code login paths, and direct-session exit status;
-- post-session credential hardening;
-- mandatory ttyd authentication for agent terminals and origin checking;
-- persistent and concurrent tmux attachment;
-- embedded image version and source revision;
-- bundled notices, SBOM generation, Trivy, and the no-fixable-critical gate.
+- Codex project-scoped Start/Resume, approval policy and bundled/optional runtime fallback;
+- Antigravity project-scoped Start/Resume, admission/integrity/review states and no-installer-network launch;
+- Context7 managed credential/device-login boundaries when changed;
+- embedded image version/channel/source revision;
+- bundled notices, SBOM generation, vulnerability scanning and the no-fixable-critical gate.
 
-Antigravity runtime-admission changes must also test reviewed, review-pending and damaged states; no-installer-network launch; installer-origin/contract rejection; manifest and executable tampering; symlink/permission rejection; evidence changes across image replacement; and preservation of the previous installation after failed or interrupted updates.
-
-Use synthetic credentials and state in tests. Never require a real vendor account in CI.
+Use synthetic credentials/state in automated tests. Never require a real vendor account in CI.
 
 ## Documentation and issue hygiene
 
-- Update the owning issue with the exact completed slice and remaining work.
-- Update #31 when a tracked phase or dependency changes state.
-- Keep English and Spanish user documentation aligned when user-visible behavior changes.
+- Update the owning issue with the completed slice and genuinely remaining work.
+- Update #31 when a tracked release dependency changes state.
+- Keep English/Spanish user documentation equivalent in meaning for user-visible behavior.
 - Record compatibility aliases, defaults, migration effects, authentication boundaries and removal points explicitly.
-- Do not mark optional software as bundled, fully supported, certified, or covered by the project Apache-2.0 license before the relevant legal and real-environment gates are complete.
+- Do not mark optional software as bundled, vendor-supported, certified or covered by the project Apache-2.0 license unless that exact claim has completed the corresponding review.
+- Keep `CHANGELOG.md` machine-owned sections bounded; human documentation changes must preserve the grouped-upstream and Renovate markers/state anchors exactly.

@@ -8,92 +8,93 @@ Remote Dev uses one canonical runtime package:
 ghcr.io/experience83/remote-dev
 ```
 
-The human-facing release channels are permanently ordered by release maturity as:
+The permanent maturity order is:
 
 ```text
-dev  ->  edge  ->  stable = latest
+dev -> edge -> stable = latest
 ```
 
-They are deliberately separate. `dev` may contain unmerged pull-request code, `edge` contains only integrated `main` code, and `stable`/`latest` contain only an exact stable semantic-version release.
+These concepts stay separate from human-readable build identity and immutable provenance. Remote Dev has **not published a stable release yet**; current public integrated deployments use `edge`/`edge-amd64`.
+
+The repository's local development baseline is `0.1.1-dev`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer.
 
 ## Identity layers
 
-Remote Dev keeps release maturity, human-readable build identity and immutable provenance separate:
+From strongest reproduction identity to most human-oriented label:
 
-1. **Image digest** — `@sha256:<digest>` is the exact immutable OCI identity and strongest reproduction/rollback reference.
-2. **Source revision** — the full Git commit SHA identifies the source tree; published `main` revisions also retain `sha-<full-sha>` registry tags.
-3. **Build/release identity** — an edge publication uses `edge-YYYY.MM.DD-<7-char-sha>`; a stable release uses exact SemVer `vMAJOR.MINOR.PATCH`; a reviewed PR candidate keeps its `candidate-pr-<PR>` embedded identity and candidate-specific audit tag.
-4. **Channel** — `dev`, `edge` or `stable` is the mutable deployment-maturity pointer. `latest` is only an alias of `stable`.
+1. **OCI digest** — `@sha256:<digest>` is the exact immutable registry object and the strongest rollback/reproduction reference.
+2. **Full source revision** — the complete Git commit SHA identifies the source tree. Published `main` revisions also receive `sha-<full-sha>` tags.
+3. **Build/release identity** — edge uses `edge-YYYY.MM.DD-<7-char-sha>`; stable uses exact `vMAJOR.MINOR.PATCH`; explicitly published PR candidates keep candidate-specific identity.
+4. **Channel** — `dev`, `edge` or `stable` is the mutable maturity pointer. `latest` is always an alias of `stable`.
 
-The date in an edge identity is the UTC publication/build date. It is intentionally paired with the source SHA prefix so two valid edge publications on the same date remain distinguishable. The date string is never treated as stronger evidence than the full source revision or image digest.
+The date in an edge identity is the UTC publication date. It is never treated as stronger evidence than the full source SHA or OCI digest.
 
-Images embed the channel independently from the human-readable version. `remote-dev-version` therefore does not need to infer whether an image is local, dev, edge or stable from a mutable tag or from the version text alone.
+Runtime diagnostics expose the build identity and channel separately, for example:
+
+```text
+Image version: edge-2026.09.04-22a3bda
+Channel: edge
+Source revision: 22a3bda...<full SHA>
+```
 
 ## Canonical tag contract
 
-| Tag | Source | Movement | Intended use |
+| Tag/reference | Source | Movement | Intended use |
 | --- | --- | --- | --- |
-| `dev` / `dev-amd64` | Explicitly owner-authorized reviewed PR candidate | Mutable, only after `/publish-candidate <full-head-sha>` passes its gates | Active pre-merge TrueNAS/development testing |
-| `edge` / `edge-amd64` | Current `main` | Mutable after a successful edge publication | Normal experimental integrated deployment |
-| `stable` / `stable-amd64` | Latest stable `vMAJOR.MINOR.PATCH` release | Mutable only when a newer stable release is published | Stable deployment |
-| `latest` | Same digest as `stable` | Moves only with `stable` | Conventional alias for the newest stable release |
-| `vMAJOR.MINOR.PATCH` | Exact stable release tag | Version-addressed | Reproducible named stable release |
-| `candidate-pr-<PR>-<short-sha>` | One explicitly published PR candidate | Candidate-specific audit tag | Debugging/audit, not a deployment channel |
-| `sha-<full-sha>` | One published `main` revision | Source-addressed edge tag | Source-revision lookup/audit |
-| `@sha256:<digest>` | Exact registry manifest | Immutable reference | Exact validation, reproduction and rollback |
+| `dev` / `dev-amd64` | One explicitly owner-authorized reviewed PR head | Mutable only after the candidate publication gate | Pre-merge TrueNAS/development testing |
+| `edge` / `edge-amd64` | Integrated `main` | Mutable after successful edge publication | Normal experimental deployment |
+| `stable` / `stable-amd64` | Latest explicit stable SemVer release | Mutable only when a newer stable release is published | Stable deployment once available |
+| `latest` | Exact same digest as `stable` | Moves only with `stable` | Conventional stable alias |
+| `vMAJOR.MINOR.PATCH` | Exact stable release tag | Version-addressed | Named stable release |
+| `candidate-pr-<PR>-<short-sha>` | One explicitly published PR candidate | Candidate-specific | Review/audit |
+| `sha-<full-sha>` | One published `main` revision | Source-addressed | Integrated source audit |
+| `@sha256:<digest>` | Exact OCI manifest | Immutable | Exact validation/reproduction/rollback |
 
-`latest` is always an alias of `stable`. It must never point to `edge` or `dev`.
+`latest` must never point to `dev` or `edge`.
 
-Until Remote Dev publishes a supported multi-architecture runtime, the generic channel tags and their `*-amd64` forms resolve to the same AMD64 digest. The architecture-specific `dev-amd64`, `edge-amd64` and `stable-amd64` tags remain the recommended deployment form on the current supported platform so a future multi-architecture transition can be explicit rather than silently changing an installed architecture.
+Until multi-architecture runtime publication is supported, the generic channel tags and `*-amd64` forms resolve to the AMD64 build. The architecture-specific `dev-amd64`, `edge-amd64` and future `stable-amd64` forms remain the recommended deployment selectors so an eventual architecture expansion can be explicit.
 
-## Dev
+## Dev — reviewed pre-merge candidate
 
-`dev` is the mutable pre-merge testing channel. It is intentionally more volatile than `edge` and may contain code that has not merged into `main`.
+A normal PR push or CI run cannot move `dev`.
 
-A normal pull-request push or CI run cannot move `dev`. The only supported publication path is an owner comment on an open PR targeting `main`:
+The supported candidate publication path requires an owner command on an open PR targeting `main`:
 
 ```text
 /publish-candidate <full-40-character-head-sha>
 ```
 
-The candidate workflow verifies that the supplied SHA is still the exact PR head and that the branch belongs to this repository. It then builds/smoke-tests that exact head without package-write permission, exports the resulting images, independently reloads and identity-checks the artifact, applies the fixable-critical vulnerability gate, and only then allows the package-enabled job to publish the candidate.
-
-A successful publication keeps the candidate-specific tag and promotes the exact same verified digest to both:
+The workflow verifies that the supplied SHA is still the exact PR head and belongs to this repository, builds/smoke-tests that exact source, performs independent artifact identity checks and the vulnerability gate, then promotes only the verified digest to:
 
 ```text
 ghcr.io/experience83/remote-dev:dev
 ghcr.io/experience83/remote-dev:dev-amd64
 ```
 
-The embedded candidate version remains `candidate-pr-<PR>` and the embedded channel is `dev`; the full source revision remains separate. The candidate-specific registry tag continues to include the short SHA, so no extra date-based dev tag is needed.
+The candidate-specific audit tag is retained. Mutable `dev` promotion is serialized so two candidates cannot race the channel.
 
-Mutable `dev` promotion is serialized so two candidate publications cannot race the tag update. The immutable digest remains the authoritative evidence for a specific TrueNAS validation.
-
-For a TrueNAS installation used mainly to validate work before merge, set once:
+For temporary TrueNAS candidate testing:
 
 ```dotenv
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:dev-amd64
 ```
 
-After an explicitly authorized candidate is published, recreate/update the stack normally. No per-candidate YAML edit is required. Do not use `dev` where unmerged code is unacceptable.
+After the reviewed change merges, return the deployment to `edge-amd64` unless intentionally remaining on an exact digest.
 
-## Edge
+## Edge — integrated main
 
-`edge` is the public experimental integrated channel for the current `main` branch.
+`edge` is the public experimental integrated channel for `main`.
 
-The **Publish edge AMD64** workflow runs automatically after relevant image, runtime or version changes merge into `main`. It can also be started manually from `main`. Each run derives a human-readable build identity from the UTC publication date and the exact source revision:
+The **Publish edge AMD64** workflow runs after relevant image/runtime/version changes merge into `main` and can also be started explicitly from trusted `main`. It refuses branch sources other than `main`.
+
+A successful edge publication embeds:
 
 ```text
 edge-YYYY.MM.DD-<7-char-sha>
+Channel: edge
 ```
 
-For example, a publication on 2026-08-27 from a revision beginning `d6cf2a3` is embedded as:
-
-```text
-edge-2026.08.27-d6cf2a3
-```
-
-The workflow still builds and scans one final Remote Dev digest and promotes only that exact scanned digest to the canonical edge tags:
+and promotes the exact scanned digest to:
 
 ```text
 ghcr.io/experience83/remote-dev:edge
@@ -101,59 +102,50 @@ ghcr.io/experience83/remote-dev:edge-amd64
 ghcr.io/experience83/remote-dev:sha-<full-main-sha>
 ```
 
-The dated build identity is embedded in OCI/runtime metadata; it is not a Git SemVer tag and is not published as a replacement for the stronger `sha-<full-sha>` or digest contracts. The workflow refuses to publish `edge` from a branch other than `main`.
+The dated string is an embedded build identity, not a SemVer tag and not a replacement for the full source SHA or digest.
 
-Generic and TrueNAS Compose continue to default to:
+The normal current deployment selector is:
 
 ```dotenv
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-That remains the recommended channel for normal experimental deployments that should receive integrated changes without consuming unmerged PR candidates.
+All enabled stack roles use the same intended image reference. The launcher remains password-free navigation-only; mutable Codex/Antigravity runtime state remains role-private and is not implied to be part of the edge image digest.
 
-A normal edge runtime identity report begins like:
+## Automated changelog provenance
 
-```text
-Image version: edge-2026.08.27-d6cf2a3
-Channel: edge
-Source revision: d6cf2a3...<full SHA>
-Codex CLI: codex-cli <bundled-version>
-```
+`CHANGELOG.md` is a stable-release changelog, not one top-level section per CI build. `## [Unreleased]` accumulates reviewed changes until a stable SemVer release is prepared.
 
-The current stack instantiates the same image reference for its enabled roles. The launcher remains navigation-only and receives no agent workspace, state or credentials; Codex and optional agents retain their isolated role-specific mounts and authentication boundaries.
+Two bounded automation owners may update machine-owned subsections under `Unreleased`:
 
-Public container-registry images can be pulled without authentication. Container tags are mutable in GHCR, so record and deploy the published `sha256:...` digest whenever immutable reproduction is required.
+### Grouped upstream refreshes
 
-Stable upstream releases are checked daily. The grouped updater tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within the selected Python 3.14, Node 24 LTS and npm 12 lines. Ubuntu LTS tag and digest updates remain managed separately by Renovate.
+`.github/workflows/check-upstream.yml` owns bundled/runtime/tool pins such as Codex CLI, GitHub CLI, ttyd, mise, uv and selected Python/Node/npm lines.
 
-### Automated upstream changelog provenance
+When actual component versions change, the same review PR updates the bounded `### Automated upstream refreshes` area using repository old/new values. Checksum-only churn does not invent a fake user-facing application-version change. Re-running against the same baseline is deterministic and the automation never auto-merges the PR.
 
-When the grouped upstream updater changes one or more tracked component versions, the same review PR also updates the automation-owned `### Automated upstream refreshes` section under `## [Unreleased]` in `CHANGELOG.md`.
+### Renovate image refreshes
 
-The entry is derived from the actual `versions.env` values before and after the updater runs. It lists only versions that changed, for example:
+Renovate has a separate ownership boundary.
 
-```text
-- 2026-08-27 — Codex CLI 0.149.1 → 0.150.1; GitHub CLI 2.96.0 → 2.98.0; uv 0.12.0 → 0.12.6.
-```
+- Ubuntu LTS tag/digest changes materially affect the produced runtime image and therefore update the bounded `### Renovate image refreshes` area.
+- The hidden Ubuntu state anchor must match the committed Ubuntu version/digest in `versions.env` and `images/base/Dockerfile`.
+- Renovate's replacement derives the user-facing old -> new identity from the actual current/proposed Ubuntu tag and immutable digest and advances the anchor in the same grouped `Ubuntu LTS base` PR.
+- Recreating the same Renovate PR from the same base reproduces the same output; a later merged Ubuntu update appends a new machine-owned delta without overwriting prior entries or human text.
+- GitHub Action SHA-only maintenance and the pinned Dockerfile frontend remain CI/build maintenance and are **not** mislabeled as bundled runtime application upgrades.
+- Renovate remains `automerge: false`.
 
-Checksum-only churn does not invent a user-facing application-version change. The updater owns only the explicitly marked changelog section, fails closed if its expected marker/section is malformed, preserves human-authored content outside that boundary and treats an identical repeated entry idempotently. The automation branch is rebuilt from current `main`, so a later scheduled run regenerates provenance against the current baseline rather than accumulating stale branch history.
-
-This first implementation covers only `.github/workflows/check-upstream.yml`. Renovate has a separate ownership boundary: Ubuntu/base-image updates may affect the runtime image, while immutable GitHub Action pin changes can be CI-only. Follow-up #189 owns Renovate-specific changelog provenance so those classes are not silently or incorrectly presented as grouped runtime component updates.
-
-The default image does not install the system Bubblewrap package. On the supported TrueNAS profile, the Codex command launcher fixes `--sandbox danger-full-access`; the outer Codex container and its narrow mounts are the security boundary. Autonomous and guarded approval modes do not change that boundary.
-
-> [!WARNING]
-> Public availability does not make `edge` stable or production-ready. Breaking changes are possible, and the Remote Dev web endpoints must not be exposed directly to the Internet.
+The repository validator enforces both automation boundaries offline. Human-authored changelog text outside their explicit markers is not an automation target.
 
 ## Stable and latest
 
-Stable publication is triggered only by an exact semantic version tag:
+Stable publication is triggered only by an exact non-prerelease SemVer tag:
 
 ```text
 vMAJOR.MINOR.PATCH
 ```
 
-The tagged commit must belong to `main`. Pre-release tags are intentionally rejected by the stable workflow. Stable images embed the semantic version as their image version and `stable` as a separate channel; calendar edge identities never replace stable SemVer.
+The tagged commit must belong to `main` and pass the stable publication gates. Stable images embed the SemVer identity and a separate `stable` channel.
 
 After the exact stable candidate is built and scanned successfully, the same digest is promoted to:
 
@@ -164,74 +156,69 @@ ghcr.io/experience83/remote-dev:stable-amd64
 ghcr.io/experience83/remote-dev:latest
 ```
 
-`stable` is the semantic deployment channel. `latest` exists only as the conventional registry alias for the same stable digest. Publishing `dev` or `edge` must never move `latest`.
+`latest` is therefore only the conventional alias for the newest stable digest. Publishing `dev` or `edge` never moves it.
 
-Once stable releases exist, the recommended stable AMD64 deployment is:
+Once stable releases exist, the normal stable AMD64 selector becomes:
 
 ```dotenv
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 ```
-
-Both edge and stable publication workflows push candidates by digest, scan those exact digests and only then promote public tags. A fixable `CRITICAL` vulnerability blocks promotion. Critical findings without a known fix remain visible in retained reports.
-
-`CHANGELOG.md` remains a stable-release changelog rather than a CI build log. `## [Unreleased]` accumulates reviewed changes, including automated upstream refresh provenance. When a stable `vMAJOR.MINOR.PATCH` release is prepared, the accumulated content moves into a dated stable section and `Unreleased` is reset. Edge publication dates do not create top-level changelog release sections.
 
 ## Operator channel choices
 
-Use one channel in deployment configuration and change it only when intentionally changing release maturity:
+Use one maturity channel in normal deployment configuration and switch it only intentionally:
 
 ```dotenv
-# Active review / pre-merge testing
+# Reviewed unmerged candidate
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:dev-amd64
 
-# Normal experimental deployment (repository default)
+# Current integrated experimental build
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 
-# Stable deployment, once stable releases exist
+# Stable, once a stable release exists
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 ```
 
-For a one-off exact validation or rollback, temporarily replace the channel with the immutable digest:
+For exact validation or rollback, pin the immutable digest instead:
 
 ```dotenv
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
-## Promotion checklist
+Do not rely on a mutable tag or the human-readable edge date when exact reproduction matters.
 
-Before creating a stable version tag:
+## Stable-release checklist
 
-1. The AMD64 build, runtime smoke tests and fixable-critical vulnerability gate pass on `main`.
-2. Canonical `remote-dev` runtime tags being promoted resolve to the tested `REMOTE_DEV_DIGEST`, and `remote-dev-base` promotion metadata separately matches the tested `BASE_DIGEST`.
-3. The stack has been deployed on TrueNAS from an exact published digest.
-4. Docker reports launcher and enabled agent services using the intended common image digest.
-5. The TrueNAS portal opens the launcher on port 7680.
-6. The launcher opens on the trusted private endpoint and preserves origin/CSP behavior.
-7. Selecting Codex navigates to the independent authenticated endpoint without exposing credentials.
-8. The base launcher has no agent mounts and no Docker/Podman socket; optional launcher authentication uses its own configuration-backed password and adds no bind or persistent mounts.
-9. No service uses host networking, privileged mode or added capabilities beyond the reviewed contract.
-10. The intended administrative data root already exists; the canonical initializer and preflight from the same source revision as the selected image/YAML pass before deployment, a second initializer run is idempotent, and no unexpected root or browser-password secret path is generated.
-11. Workspace, agent state, GitHub CLI state, Git configuration and SSH state persist across stop/start and recreation as documented.
-12. Codex device-code login persists across recreation.
-13. GitHub CLI login, clone, push and pull-request creation have been verified.
-14. Autonomous and guarded Codex behavior has been tested on the target TrueNAS host.
-15. Codex browser credentials are configuration-backed and validated against the Codex endpoint under #69; when Antigravity is enabled, its browser credentials are independently configured and validated against its own endpoint.
-16. The changelog has a dated release section.
-17. Third-party licenses and notices are complete.
-18. The repository contains no credentials, personal paths or private infrastructure details.
+Before creating the first or any later stable version tag, verify on one exact `main` source revision/digest that:
 
-Cross-service hardening/canary work and optional-agent validation remain separate gates before the architecture is described as complete. Optional SMB/ACL workspace testing is tracked separately.
+1. Repository validation and the complete AMD64 build/smoke suite pass.
+2. Base and final Remote Dev images pass the publication vulnerability gate; fixable `CRITICAL` findings block promotion.
+3. Notices and SBOM generation pass and the retained reports match the image being promoted.
+4. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
+5. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
+6. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
+7. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
+8. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
+9. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
+10. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
+11. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
+12. Optional external integrations included in the support claim retain their documented privacy/credential boundaries.
+13. `CHANGELOG.md` has a dated stable section derived from the reviewed `Unreleased` content.
+14. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
+15. #31 has no unresolved issue that contradicts the stable support claim actually being made.
+
+Optional/future #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 work is not automatically a stable blocker unless #31 or the corresponding issue identifies a concrete dependency for the release claim.
 
 ## Rollback
 
-Do not depend exclusively on moving channel tags or the human-readable edge date. Record the tested image digest, full source revision and, where applicable, the candidate or stable version tag.
+Record the tested OCI digest and full source revision before changing maturity channels or deploying a new image.
 
-Set:
+To roll back the image without changing persistent-layout semantics:
 
 ```dotenv
-REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>
+REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<known-good-digest>
 ```
 
-and recreate all stack services. Existing `v0.1.x` deployments may continue setting the image-name alias `CODEX_IMAGE` when `REMOTE_DEV_IMAGE` is unset, but the value should use the canonical `ghcr.io/experience83/remote-dev` package.
+Then recreate all stack services from that exact reference.
 
-The canonical data layout is independent from the image tag. Rollback must not broaden mounts or copy state automatically. Keep a backup or snapshot before manually moving experimental data into new paths.
+Rollback must not broaden mounts or silently copy/migrate state. If a newer release changes an on-disk contract, follow the explicitly documented migration/rollback procedure for that contract rather than assuming an older image can safely reinterpret newer persistent data.
