@@ -44,6 +44,8 @@ Separate authentication configuration does not imply that browser-password value
 
 Accepted. The launcher exposes the primary user entry point and routes only to fixed services declared by the stack. It receives neither the container-engine socket nor agent credentials and does not create privileged child containers dynamically.
 
+The current launcher is deliberately password-free and is not the central authentication boundary. A future secure single-entry/gateway design belongs to #181.
+
 ## D011 — optional proprietary agents use explicit vendor-sourced installation
 
 Accepted. Optional proprietary agents are installed or updated only by an explicit reviewed action from an official vendor-controlled source unless redistribution rights are confirmed and documented.
@@ -56,15 +58,15 @@ Accepted. The project does not weaken TrueNAS/Docker with privileged mode, `SYS_
 
 The default image omits system Bubblewrap and the supported Codex launcher explicitly disables the unsupported nested sandbox. Approval prompts do not replace the outer-container boundary.
 
-## D013 — one configuration-backed browser password contract
+## D013 — one configuration-backed agent browser password contract
 
-Accepted. Protected browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated from a separate deployment configuration entry for each service so roles can be changed independently.
+Accepted. Protected **agent** browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated from a separate deployment configuration entry for each agent service so roles can be changed independently.
 
 The former browser-password file/mount/secret mechanism is retired. A privileged TrueNAS/Docker administrator can inspect deployment configuration and is inside the product trust boundary; moving the same application password to another host file does not create administrator secrecy.
 
-For the current pre-stable contract, a protected endpoint requires only a non-empty single-line password. Remote Dev does **not** enforce a minimum length, character-composition rule or cross-service uniqueness, and an operator may intentionally reuse the same value for Codex, Antigravity and optional launcher authentication. Any stronger password/access rule requires a future explicit browser-security decision rather than being inferred from separate configuration entries.
+For the current pre-stable contract, a protected agent endpoint requires only a non-empty single-line password. Remote Dev does **not** enforce a minimum length, character-composition rule or cross-service uniqueness, and an operator may intentionally reuse the same value for Codex and Antigravity. Any stronger password/access rule requires a future explicit browser-security decision rather than being inferred from separate configuration entries.
 
-The launcher receives no agent password even when optional launcher Basic authentication is enabled.
+The launcher is outside this current password contract: the normal supported launcher remains password-free and receives no agent password. A future #181 decision may redesign the launcher into the secure entry point for agent services.
 
 ## D014 — Antigravity remains an experimental official-CLI integration
 
