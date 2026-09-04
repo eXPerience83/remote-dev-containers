@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - 2026-09-04 — Codex CLI 0.152.1 → 0.153.2; GitHub CLI 2.99.0 → 2.100.0; mise 2026.9.0 → 2026.9.1; Context7 CLI (transient) 0.5.8 → 0.5.9.
 
+### Renovate image refreshes
+
+<!-- remote-dev-renovate-runtime-refreshes:start -->
+<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b -->
+<!-- remote-dev-renovate-runtime-refreshes:end -->
+
 ### Added
 
 - Human-readable edge build identities in `edge-YYYY.MM.DD-<7-char-sha>` form, backed by the existing full source revision/digest and an explicit embedded `local|dev|edge|stable` image-channel field.
