@@ -10,6 +10,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
+- Local development baseline is `0.1.1-dev`; published edge builds retain their dated edge identity and no stable release exists yet.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -33,7 +34,8 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - `compose/truenas.yml` is the supported canonical TrueNAS Custom App path.
 - One administrator-created root dataset plus ordinary role-private descendants is the normal layout.
 - Deterministic bootstrap and preflight consume the same shared data-layout contract.
-- Browser authentication uses independent configuration-backed `WEB_PASSWORD` values; the retired password-file/secrets-tree design is gone.
+- Browser authentication uses separate configuration-backed `WEB_PASSWORD` entries per protected endpoint; current validation requires only a non-empty single-line value and does not enforce minimum length, composition or cross-service uniqueness, so the operator may reuse the same value.
+- The former browser-password file/secret-tree design is gone.
 - The reference Host Path ACL contract is Generic/POSIX, with host-side audit/migration guidance in `docs/truenas-acl-contract.md` and `.es.md`.
 - Real migration/recreation/persistence/session validation for the current layout has completed.
 
@@ -74,7 +76,7 @@ A normal integrated deployment remains on `edge-amd64` until that explicit stabl
 
 These are not shipped by the current core contract unless their own issue says otherwise:
 
-- #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers and passkeys/MFA.
+- #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers, passkeys/MFA and any future password-strength/reuse policy.
 - #170 — deferred native TrueNAS Community App/ixVolumes research; current YAML remains supported.
 - #124 — optional role-scoped key-only inbound SSH/remote-client path.
 - #95 — Context7 for Antigravity.
