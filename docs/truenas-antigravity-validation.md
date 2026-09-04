@@ -1,91 +1,89 @@
 # TrueNAS experimental deployment and Antigravity validation
 
-This runbook preserves and reuses the completed Antigravity lifecycle evidence from #29 while preparing the focused browser-authentication validation still owned by #69. Historical lifecycle steps remain documented here for reproducibility; they are not evidence that #29 is still open.
-The image, `compose/truenas.yml`, `scripts/init-data-layout.py`,
-`scripts/preflight-data-layout.py` and `scripts/lib/data_layout.py` must all come
-from the same immutable source revision. Never combine a pinned image with
-host-side files downloaded from a moving branch such as `main`.
+This runbook describes the **current** TrueNAS Custom App deployment/revalidation path for the experimental Remote Dev stack. It preserves the conclusions of the completed #29/#69/#131/#106/#158/#167/#186 validation work without presenting those closed issues as still-pending gates.
 
-The Antigravity lifecycle validation in #29 is complete, but Antigravity remains
-experimental until the remaining support/security/documentation gates are
-reconciled. Do not expose ports 7680, 7681 or 7682 directly to the Internet.
+Current topology:
 
-## Browser-password contract
-
-Remote Dev now has one supported browser-password mechanism: a non-empty,
-single-line `WEB_PASSWORD` in each authenticated endpoint's environment.
-
-- **Codex:** configure `WEB_PASSWORD`.
-- **Antigravity:** configure an independent value which the generic Compose
-  maps from `ANTIGRAVITY_WEB_PASSWORD` to that service's `WEB_PASSWORD`.
-- **Optional authenticated launcher:** the generic launcher-auth override maps
-  `LAUNCHER_PASSWORD` to the launcher's `WEB_PASSWORD`.
-
-The old file-backed terminal-password path is retired. Browser passwords are not
-part of the persistent data layout and no browser-password file is mounted into
-`/run`. A TrueNAS administrator can inspect environment-backed values through
-the App YAML or container metadata, so this deployment model assumes a trusted
-administrator and private host configuration.
-
-## Scope and exclusions
-
-This cycle validates:
-
-- the navigation-only launcher on port 7680;
-- Codex on independently authenticated port 7681;
-- experimental Antigravity on independently authenticated port 7682;
-- two independent terminal passwords;
-- the canonical role-scoped persistent-data layout;
-- deterministic host-layout bootstrap and preflight;
-- install, login, stop/start and container recreation behavior;
-- isolation between launcher, Codex and Antigravity.
-
-SMB sharing, Windows access and TrueNAS ACL design are intentionally deferred to
-issue #71. Do not create an SMB share for `state`.
-
-## Preserve the current deployment
-
-Before changing the App:
-
-1. save a copy of the current custom-App YAML;
-2. record the current image ID and embedded source revision;
-3. leave the currently deployed legacy data tree untouched;
-4. do not delete the old tree until the new deployment has passed recreation and
-   rollback checks.
-
-Example read-only inventory commands:
-
-```bash
-sudo docker inspect codex-remote-dev --format 'container_image_id={{.Image}} configured_image={{.Config.Image}}'
-sudo docker exec codex-remote-dev remote-dev-version || true
-sudo docker inspect codex-remote-dev --format '{{json .Mounts}}' | jq .
+```text
+Remote Dev stack
+├── launcher      7680 — navigation only
+├── codex         7681 — independently authenticated terminal
+└── antigravity   7682 — optional/experimental independently authenticated terminal
 ```
 
-Never print password environment values or other credential contents.
+Antigravity remains experimental by the recorded #53 support/policy decision, **not** because its lifecycle/browser-auth/admission validation is still pending. Do not expose ports 7680, 7681 or 7682 directly to the public Internet.
 
-## Verify and pin one complete release unit
+The selected image, `compose/truenas.yml` and every host-side helper used for layout/ACL validation must come from the same immutable source revision.
 
-Choose one channel reference for the whole validation. The normal integrated
-path uses `edge-amd64`:
+## Current browser-password contract
+
+Remote Dev has one supported browser-terminal password runtime mechanism:
+
+```text
+WEB_PASSWORD
+```
+
+- **Codex:** configure its own non-empty `WEB_PASSWORD`.
+- **Antigravity:** configure a different value; generic Compose maps `ANTIGRAVITY_WEB_PASSWORD` to that service's `WEB_PASSWORD`.
+- **Optional authenticated launcher:** the generic launcher-auth override maps its distinct `LAUNCHER_PASSWORD` to the launcher's own `WEB_PASSWORD`.
+
+The launcher receives no agent password.
+
+`WEB_PASSWORD_FILE`, `/run/secrets/web_password`, browser-password Compose secrets and the old persistent password-file tree are retired. Browser passwords are deployment configuration, not part of the persistent data layout.
+
+A privileged TrueNAS administrator can inspect App/container configuration and is inside Remote Dev's trust boundary. Never publish real password values, lengths, hashes or credential-derived metadata in validation evidence.
+
+## What this runbook validates
+
+When a change affects deployment/runtime behavior, this runbook can revalidate:
+
+- launcher navigation on port 7680;
+- Codex on independently authenticated port 7681;
+- optional experimental Antigravity on independently authenticated port 7682;
+- independent browser credentials and cross-rejection;
+- intended common image identity across enabled roles;
+- canonical role-private persistent paths;
+- deterministic host bootstrap/preflight;
+- the TrueNAS Generic/POSIX private-state ACL contract;
+- read-only-root/capability/tmpfs/PID/shm hardening;
+- project-scoped Start/Resume and persistent session/state behavior;
+- stop/start and container recreation;
+- isolation among launcher, Codex and Antigravity;
+- Antigravity explicit vendor-runtime/admission/integrity behavior when the relevant change requires it.
+
+SMB sharing remains separate under #71 and must never expose `state`. Stronger browser/remote access remains separate under #181.
+
+## Preserve the existing deployment first
+
+Before changing a real App:
+
+1. save a sanitized copy of the current Custom App YAML;
+2. record the current configured image reference, image ID and embedded source revision;
+3. record the known-good immutable repository digest used for rollback;
+4. keep the currently populated persistent tree intact;
+5. do not delete or migrate state merely to exercise an empty-root bootstrap test.
+
+If an empty-root acceptance test is needed, create a disposable administrator-owned **Generic/POSIX** dataset instead of emptying a production root.
+
+Never dump complete container environments or credential files.
+
+## Select and pin one complete release unit
+
+Normal integrated validation uses:
 
 ```bash
 validation_image=ghcr.io/experience83/remote-dev:edge-amd64
 expected_revision=""
 ```
 
-For an exact pre-merge gate, first publish the exact current PR head using the
-existing owner-authorized `/publish-candidate <full-head-sha>` workflow; do not
-publish a candidate as part of an ordinary validation run. Then select
-`ghcr.io/experience83/remote-dev:dev-amd64` instead, and record the published
-full PR head as `expected_revision`. That candidate's embedded revision must
-equal `expected_revision` before proceeding.
+For an exact pre-merge gate, first publish the exact reviewed PR head through the owner-authorized candidate workflow, then use:
 
 ```bash
 validation_image=ghcr.io/experience83/remote-dev:dev-amd64
 expected_revision="REPLACE_WITH_PUBLISHED_FULL_PR_HEAD"
 ```
 
-Pull the selected reference and read its embedded immutable source revision:
+Pull the selected reference and read the embedded source revision:
 
 ```bash
 sudo docker pull "$validation_image"
@@ -95,7 +93,7 @@ release_revision="$(
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 )"
 case "$release_revision" in
-  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
   *) echo "Invalid embedded source revision: $release_revision" >&2; exit 1 ;;
 esac
 if test -n "$expected_revision" && test "$release_revision" != "$expected_revision"; then
@@ -105,10 +103,7 @@ fi
 printf 'release_revision=%s\n' "$release_revision"
 ```
 
-For a candidate path, compare `release_revision` with the recorded
-`expected_revision` exactly; do not accept an older `dev-amd64` publication.
-
-Record the immutable repository digest and keep it in the same shell session:
+Record the immutable repository digest:
 
 ```bash
 pinned_image="$(
@@ -123,41 +118,46 @@ esac
 printf 'pinned_image=%s\n' "$pinned_image"
 ```
 
-Use `$pinned_image` in the TrueNAS validation YAML. Download all host-side files
-from `$release_revision`; the selected channel image, immutable digest and host
-files must be updated together as one release unit.
+Use `$pinned_image` in the validation YAML and obtain host-side files from `$release_revision`. Treat image, YAML and helpers as one release unit.
 
-## Dataset boundary
+For normal edge builds, runtime diagnostics separate build identity from channel, for example:
 
-Create one TrueNAS dataset with the **Generic** preset and no SMB share:
+```text
+Image version: edge-YYYY.MM.DD-<7-char-sha>
+Channel: edge
+Source revision: <full source SHA>
+```
+
+The OCI digest and full source SHA remain stronger evidence than the dated label.
+
+## Dataset and ACL boundary
+
+Create/use one administrator-owned root dataset with the **Generic** preset / POSIX ACL model, for example:
 
 ```text
 Pool1/remote-dev
 ```
 
-The normal deployment uses that one ZFS dataset and ordinary persistent
-`workspaces/` and `state/` directories below it. Recreating the TrueNAS App or
-its containers does not remove those directories.
+normally mounted at:
 
-An administrator may deliberately create one or more required descendants as
-child datasets when a separate snapshot, quota or replication boundary is
-wanted. Remote Dev treats an existing child-dataset mountpoint as an existing
-directory path: bootstrap must not replace it, chmod/chown it or rewrite its
-contents. Extra datasets are therefore optional policy, not a requirement of
-the Remote Dev layout.
+```text
+/mnt/Pool1/remote-dev
+```
 
-The root `/mnt/Pool1/remote-dev` must already exist. Remote Dev never creates a
-mistyped parent or ZFS dataset implicitly.
+The normal deployment uses that one ZFS dataset plus ordinary `workspaces/` and `state/` descendants. An administrator may deliberately make a required descendant a child dataset for snapshots/quotas/replication; Remote Dev treats the existing mountpoint as an existing directory and bootstrap must not replace/chmod/chown its content.
 
-## Download and run the matching host bootstrap and preflight
+The root must already exist. Remote Dev never creates a missing parent or ZFS dataset implicitly.
 
-Run from the TrueNAS shell after the root dataset exists. The canonical YAML
-uses `create_host_path: false`; missing persistent bind sources must be created
-explicitly before saving the Custom App rather than being created implicitly by
-Compose.
+The reference ACL contract is documented in:
 
-Download the initializer, preflight and their shared path contract from the
-image's embedded source revision, not `main`:
+- `docs/truenas-acl-contract.md`
+- `docs/truenas-acl-contract.es.md`
+
+Real #186 validation showed that Apps-preset NFSv4 inheritance is not equivalent to the private-state Generic/POSIX contract even when simple mode bits display `0700`. Do not treat mode bits alone as proof of the host ACL policy.
+
+## Download matching bootstrap, preflight and ACL audit
+
+From the TrueNAS shell:
 
 ```bash
 : "${release_revision:?Run the release verification section first}"
@@ -168,6 +168,7 @@ install -d "$layout_release_dir/scripts/lib"
 for release_path in \
   scripts/init-data-layout.py \
   scripts/preflight-data-layout.py \
+  scripts/truenas-acl-audit.py \
   scripts/lib/data_layout.py
 do
   curl --proto '=https' --tlsv1.2 \
@@ -175,7 +176,11 @@ do
     "${release_base}/${release_path}" \
     --output "${layout_release_dir}/${release_path}"
 done
+```
 
+For the reference YAML:
+
+```bash
 sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
@@ -183,39 +188,28 @@ sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
 sudo python3 "$layout_release_dir/scripts/preflight-data-layout.py" \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
-```
 
-The initializer creates only missing canonical descendants. It applies initial
-modes only to paths it creates and never deletes, migrates, renames or
-recursively chmods/chowns existing project or state content. Existing required
-paths, including deliberate child-dataset mountpoints, are left unchanged. It
-also refuses symlink roots/intermediate components and never creates a browser
-password `secrets/` tree.
-
-Expected preflight result:
-
-```text
-Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
-```
-
-Run the initializer a second time before the first deployment and confirm it is
-idempotent:
-
-```bash
-sudo python3 "$layout_release_dir/scripts/init-data-layout.py" \
+sudo python3 "$layout_release_dir/scripts/truenas-acl-audit.py" \
   --root /mnt/Pool1/remote-dev \
   --include-antigravity
 ```
 
-Expected bootstrap result for an already complete layout includes:
+Expected successful summaries include:
+
+```text
+Remote Dev data-layout preflight: OK (/mnt/Pool1/remote-dev; Codex + Antigravity)
+Remote Dev TrueNAS ACL audit: OK (Generic/POSIX private-state contract)
+```
+
+Run the initializer a second time and expect:
 
 ```text
 Remote Dev data-layout bootstrap: no changes required
 ```
 
-Do not create symlinks anywhere inside `/mnt/Pool1/remote-dev`.
+Bootstrap creates only missing canonical descendants, applies initial modes only to paths it creates, rejects symlink ancestry and never deletes/migrates/recursively chmods/chowns existing project/state contents. It creates no browser-password secret tree.
 
-The resulting host tree for the reference YAML is:
+A normal reference tree is:
 
 ```text
 /mnt/Pool1/remote-dev/
@@ -239,30 +233,11 @@ The resulting host tree for the reference YAML is:
         └── ssh/
 ```
 
-Only `Pool1/remote-dev` needs to appear as a dataset in the normal TrueNAS
-Datasets UI. Ordinary descendants created by bootstrap are directories within
-that dataset and are not expected to appear as separate child datasets.
-
-`state/antigravity/config` is mounted only into the Antigravity service at
-`/root/.gemini/config`. The official CLI uses its `projects/` child for
-project-specific runtime configuration. This mount remains separate from
-`state/antigravity/vendor -> /root/.gemini/antigravity-cli`; only these narrow
-Antigravity-private paths are writable, and the container root filesystem
-remains read-only.
-
-The preflight validates the same canonical persistent bind-source contract used
-by bootstrap and rejects unsafe symlink ancestry. Browser passwords are
-deployment configuration and are validated by each runtime when the containers
-start; no browser-password file or persistent secret directory belongs to this
-layout.
+Only the root dataset needs to appear in the normal TrueNAS Datasets UI. Ordinary descendants created by bootstrap are directories inside it.
 
 ## Download the matching TrueNAS YAML
 
-`compose/truenas.yml` is the canonical complete TrueNAS Custom App YAML. Do not
-maintain a hand-copied second YAML in this runbook: download that file from the
-same source revision as the image, bootstrap, preflight and shared path contract,
-then apply only the documented site-specific substitutions below. This keeps
-future mount and hardening changes in one source of truth.
+Do not maintain a second hand-copied stack definition in this runbook:
 
 ```bash
 : "${release_revision:?Run the release verification section first}"
@@ -274,67 +249,62 @@ curl --proto '=https' --tlsv1.2 \
   --output /tmp/remote-dev-truenas.yml
 ```
 
-Before pasting it into the TrueNAS Custom App editor:
+Before saving the Custom App:
 
-1. replace the image anchor with `$pinned_image` recorded above;
-2. replace all three example `192.168.1.10` bindings with the trusted LAN or
-   Tailscale address already used by the deployment;
-3. leave the launcher unauthenticated for the current trusted-network model;
-4. replace the empty Codex `WEB_PASSWORD` value with a strong password;
-5. replace the empty Antigravity `WEB_PASSWORD` value with a different strong
-   password;
-6. keep both values quoted and never commit the personalized YAML to Git;
-7. preserve `ipc: private`, `cap_drop: [ALL]`, the capability-free launcher and
-   the reviewed agent `cap_add` lists; do not add privileged mode, host or joined
-   PID/network/IPC namespaces, host-root mounts or a Docker socket;
-8. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only for this controlled
-   validation.
+1. set the image reference to `$pinned_image` for exact validation;
+2. replace every example bind IP with the trusted LAN/private-mesh address used by the host;
+3. replace the root path if `/mnt/Pool1/remote-dev` is not correct for this host;
+4. configure a strong Codex `WEB_PASSWORD`;
+5. configure a **different** Antigravity `WEB_PASSWORD` when the role is retained;
+6. keep personalized values out of Git and screenshots/evidence;
+7. preserve `ipc: private`, `cap_drop: [ALL]`, the capability-free launcher and the exact reviewed agent `cap_add` lists;
+8. do not add privileged mode, host/joined PID/network/IPC namespaces, broad host mounts or a Docker/Podman socket;
+9. keep `REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY="1"` only when intentionally enabling the experimental role.
 
-The resulting stack must contain exactly:
+TrueNAS can rewrite formatting/comments/interpolation during Custom App save/edit. Validation must inspect the effective saved/rendered configuration; never assume comments or `${...}` expressions survived serialization.
+
+The reference stack contains:
 
 ```text
-remote-dev-launcher      port 7680, no mounts
+remote-dev-launcher      port 7680, no persistent/agent mounts
 codex-remote-dev         port 7681, Codex-only persistent mounts
 antigravity-remote-dev   port 7682, Antigravity-only persistent mounts
 ```
 
 ## First deployment checks
 
-After stopping the old App and saving the replacement YAML, verify that the
-shell still contains the exact immutable reference used in the YAML:
+After saving the App, keep the exact immutable reference in the shell:
 
 ```bash
 : "${pinned_image:?Run the release verification section first}"
 
 sudo docker ps --filter name=remote-dev --filter name=codex-remote-dev --filter name=antigravity-remote-dev
 sudo docker exec codex-remote-dev remote-dev-version
+sudo docker exec codex-remote-dev remote-dev-doctor
 sudo docker exec antigravity-remote-dev remote-dev-version
 sudo docker exec antigravity-remote-dev remote-dev-doctor
 ```
 
-Confirm the embedded revision matches `release_revision`, and that all three
-containers use the same configured `$pinned_image` and image ID. The
-Antigravity diagnostic should report its current admitted runtime state without
-making the container unhealthy solely because the optional runtime is absent.
+Confirm the embedded revision equals `release_revision` and all enabled containers use the intended common configured `$pinned_image`/image ID.
 
-Inspect only redacted configuration facts and assert the configured immutable
-reference, not only the local content-addressable image ID:
+Inspect only sanitized hardening/mount facts:
 
 ```bash
 expected_image_id=""
 for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
-  echo "== $container =="
   configured_image="$(sudo docker inspect "$container" --format '{{.Config.Image}}')"
   image_id="$(sudo docker inspect "$container" --format '{{.Image}}')"
-  if [[ "$configured_image" != "$pinned_image" ]]; then
-    echo "ERROR: $container configured image does not match the selected pinned image" >&2
+  test "$configured_image" = "$pinned_image" || {
+    echo "ERROR: $container configured image differs from pinned image" >&2
     exit 1
-  fi
+  }
   if test -z "$expected_image_id"; then
     expected_image_id="$image_id"
-  elif [[ "$image_id" != "$expected_image_id" ]]; then
-    echo "ERROR: $container image ID differs from the first role image ID" >&2
-    exit 1
+  else
+    test "$image_id" = "$expected_image_id" || {
+      echo "ERROR: role image IDs differ" >&2
+      exit 1
+    }
   fi
   sudo docker inspect "$container" --format \
     'configured_image={{.Config.Image}} image_id={{.Image}} user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}} ipc={{.HostConfig.IpcMode}} pids={{.HostConfig.PidsLimit}} cap_drop={{json .HostConfig.CapDrop}} cap_add={{json .HostConfig.CapAdd}} groups={{json .HostConfig.GroupAdd}} tmpfs={{json .HostConfig.Tmpfs}} security={{json .HostConfig.SecurityOpt}}'
@@ -343,194 +313,136 @@ for container in remote-dev-launcher codex-remote-dev antigravity-remote-dev; do
 done
 ```
 
-Do not dump complete container environments. Verify only variable names when
-needed.
+Do **not** dump complete environments.
 
-## Hardening candidate checklist
+## Hardening checklist
 
-Record sanitized facts only; do not infer success from an older image or a
-different source revision.
+For a change that can affect container security, confirm on the exact candidate:
 
-- Record the TrueNAS version, test date, exact `expected_revision`,
-  `$pinned_image` immutable repository digest and channel selected after
-  publishing that exact head. Confirm the embedded revision equals the published
-  head and launcher, Codex and Antigravity all use the same configured
-  `$pinned_image` and image ID.
-- Save the rendered/serialized App configuration and the inspect fields above.
-  Confirm every role has a read-only root filesystem,
-  `no-new-privileges:true`, `cap_drop=[ALL]`, no configured supplementary
-  groups, no privileged or host/joined PID/network namespace, `ipc=private`, and
-  no engine socket or broad mount.
-- Confirm launcher runs directly as UID/GID `65532`, has no `cap_add`, PID limit
-  `64`, `/tmp` at `rw,noexec,nosuid,nodev,size=64m,mode=1777` and `/run` at
-  `rw,noexec,nosuid,nodev,size=16m,mode=755`. Confirm its HTTP process has no
-  supplementary groups, zero effective capabilities and `NoNewPrivs: 1`.
-- Confirm each agent has exactly
-  `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID`, PID limit `1024`, and `/tmp` at
-  `rw,noexec,nosuid,nodev,size=512m,mode=1777`. Confirm Codex `/run` is
-  `rw,exec,nosuid,nodev,size=1536m,mode=755` and Antigravity `/run` is
-  `rw,noexec,nosuid,nodev,size=64m,mode=755`.
-- Verify launcher navigation, its configured authentication mode, origin/CSP,
-  GET/HEAD-only behavior and secret-free `/healthz`. Verify both agent terminals
-  retain independent authentication, origin checking, client limits and
-  role-specific credential-independent health. Confirm each role rejects the
-  other role's synthetic browser credential during a controlled test.
-- Exercise Codex autonomous (`danger-full-access` + `never`) and guarded
-  (`danger-full-access` + launch-scoped untrusted trust for the active project)
-  workflows. Confirm guarded prompts for commands except explicit exec-policy
-  allows and is not merely trusted-project `on-request`. Record successful Start,
-  Resume, Shell, login and doctor behavior, and confirm diagnostics still name
-  the outer container as the boundary. Where Context7 is already configured,
-  confirm that existing managed path remains functional without recording its
-  key or account data.
-- Record Antigravity's installed/review state, explicit launch, OAuth
-  persistence, native in-TUI `/resume` conversation picker and `--continue`
-  behavior. Confirm that `/root/.gemini/config/projects` can be created and
-  remains separate from `/root/.gemini/antigravity-cli` while the root
-  filesystem stays read-only. Antigravity remains experimental; a real account
-  result must not be replaced with a synthetic claim.
-- Place existence-only synthetic canaries in every role-private mount category.
-  Stop/start and recreate launcher, Codex and Antigravity separately; after each
-  recreation, repeat the mount/security inspection and confirm other-role
-  canaries, health and private state are unchanged.
-- Record no password, token, OAuth URL/code, account name, credential content or
-  private repository name in the evidence.
+- launcher: UID/GID `65532`, read-only root, no restored capabilities, no supplementary groups, no persistent/agent mounts, PID limit `64`, reviewed private tmpfs values;
+- Codex/Antigravity: read-only root, `no-new-privileges`, `cap_drop=[ALL]`, no supplementary groups, PID limit `1024` and only the exact reviewed `CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETUID` additions;
+- all roles: `ipc=private`, no privileged mode, no host/joined PID/network namespace, no engine socket and no broad host mount;
+- launcher navigation/origin/CSP/health remains secret-free;
+- agent terminals retain origin checking, client limits and independent authentication;
+- role-private writable mount sources remain disjoint;
+- diagnostics continue to identify the outer container as the isolation boundary.
 
-## Issue #158 development-scratch candidate gate
-
-This is a manual gate for one exact candidate image digest and embedded source
-revision. Do not record it as passed until every check below has been observed on
-the real TrueNAS deployment. Use only sanitized paths and filesystem facts; do
-not dump a complete process environment.
-
-1. Record the candidate digest and `remote-dev-version` revision. Confirm the
-   launcher, Codex and Antigravity containers use that same image ID.
-2. In each agent container, inspect `findmnt -T /tmp` and `df -h /tmp`. Confirm
-   `/tmp` is still the private 512 MiB tmpfs mounted
-   `rw,noexec,nosuid,nodev`. Confirm the launcher retains its existing smaller
-   private tmpfs and has no `/workspace` mount.
-3. Start a normal Codex session and a normal Antigravity session. Read only
-   `TMPDIR`, `TMP`, `TEMP`, `UV_CACHE_DIR`, `NPM_CONFIG_CACHE` and
-   `PIP_CACHE_DIR` from the session process. Confirm they resolve respectively
-   to `tmp`, `uv-cache`, `npm-cache` and `pip-cache` below
-   `/workspace/.remote-dev-tmp`.
-4. For both agents, compare `stat -c '%d' /workspace
-   /workspace/.remote-dev-tmp/tmp /tmp`. The workspace and scratch device IDs
-   must match, while the `/tmp` device ID must differ. Confirm the five fixed
-   scratch directories have the service UID/GID and mode `0700`.
-5. Put distinct existence-only markers in the Codex and Antigravity scratch
-   roots. Confirm neither marker is visible from the other role and neither is
-   visible from the launcher. This must agree with the distinct host workspace
-   sources reported by container inspection.
-6. Run a representative uv resolution/install workload in the Codex session
-   that previously pressured the 512 MiB tmpfs. Sample `du` for the fixed
-   scratch tree and `df` for both its backing filesystem and `/tmp` before and
-   after. Confirm temporary/cache growth occurs on workspace-backed storage and
-   `/tmp` remains available for its intended small runtime uses. Do not add a
-   synthetic oversized fixture to CI.
-7. Re-run the fixed-path sensitive-operation checks: Codex updater staging must
-   remain below `/run/remote-dev-codex-update`; Context7 device login must retain
-   its private `/run` roots; Antigravity install/admission/publication must use
-   canonical private runtime state; Context7 atomic writes must remain adjacent
-   to their target; and Antigravity OAuth must retain its explicit small `/tmp`
-   files. Do not include credentials or vendor login output in evidence.
-8. Stop one agent service, delete only its `.remote-dev-tmp` host-workspace
-   child, and restart it. Confirm the five fixed directories are safely
-   recreated and the other role's marker remains unchanged. Restore or remove
-   test markers after recording the result.
-
-Expected result: large normal development temporary/cache activity is
-disk-backed and role-private, while `/tmp`, launcher isolation and every reviewed
-trusted-staging boundary remain unchanged. Candidate-specific evidence is
-intentionally pending until a human performs this gate before merge.
+See `docs/security.md` for the authoritative exact tmpfs/capability contract instead of duplicating every parameter here.
 
 ## Browser checks
 
-- Port 7680 opens the launcher without a password on the trusted network.
+- Port 7680 opens the navigation-only launcher on the trusted private network.
 - The Codex link opens port 7681 and requires the Codex credential.
-- The experimental Antigravity link opens port 7682 and requires the separate
-  Antigravity credential.
-- The Codex credential must not authenticate to Antigravity, and the Antigravity
-  credential must not authenticate to Codex.
-- Credentials never appear in launcher HTML, URLs or browser history.
+- The experimental Antigravity link opens port 7682 and requires its separate credential.
+- The Codex credential must not authenticate to Antigravity and vice versa.
+- Credentials must not appear in launcher HTML, URLs, history, logs or evidence.
 
-## Antigravity lifecycle gate
+The focused #69 authentication/cross-role/recreation gate is already complete. Re-run it only when a new change can affect that contract.
 
-Starting from the Antigravity menu:
+## Codex checks
 
-1. inspect the current runtime/admission state;
-2. if absent, run the explicit installer and review the vendor/non-affiliation
-   notice;
-3. record the installed version without publishing account details;
-4. complete the official individual/free login flow when needed;
-5. confirm `/root/.gemini/config/projects` is writable through only the narrow
-   Antigravity config mount, and record filesystem changes as path names and
-   metadata only;
-6. run a disposable repository test when lifecycle evidence must be refreshed;
-7. stop/start the App;
-8. recreate all three containers with the same dataset;
-9. confirm executable, login/settings behavior and workspace persistence;
-10. verify Codex and launcher remain isolated and functional.
+When affected by the candidate, exercise:
 
-Do not run Codex and Antigravity concurrently against the same writable checkout.
-The default deployment gives them separate workspaces.
+- project selection/create/delete safety;
+- Start and Resume from a concrete `/workspace/<project>`;
+- autonomous and guarded modes through the project-owned launcher;
+- device-code login/session persistence if authentication/state handling changed;
+- optional Codex runtime trust/fallback behavior if the updater changed;
+- Context7 managed status/test/device-login only when the integration boundary changed.
 
-## Retired password-file mode
+Do not publish account identities, API keys, device codes or private repository names.
 
-Do not recreate a persistent browser-password directory or mount a browser
-credential file into an agent or launcher container. #69 standardizes the
-supported browser authentication contract on per-service environment values.
-If an existing deployment still has retired browser-password files, configure
-and verify the replacement `WEB_PASSWORD` values first, including stop/start or
-recreation. Keep any legacy copy only for the explicit rollback window, then
-remove the obsolete files manually after the migration is accepted. Remote Dev
-does not delete or migrate those credential files automatically.
-If a future secret-provider integration is desired, it must be designed and
-reviewed as a new mechanism rather than reviving the retired dual-path contract.
+## Antigravity checks
+
+Antigravity is already implemented and its #29/#106/#131 lifecycle evidence is complete. Re-run the relevant subset only when a new candidate touches that behavior.
+
+Useful current checks:
+
+1. inspect `remote-dev-antigravity status` and/or `remote-dev-doctor`;
+2. if the runtime is absent and installation is part of the test, use the explicit installer and review the vendor/non-affiliation notice;
+3. record version/trust state without publishing account details;
+4. use official login only when the scenario requires it;
+5. verify project-scoped Start and vendor-native conversation Resume/continue behavior when those paths changed;
+6. verify `/root/.gemini/config` and vendor runtime/settings remain narrow Antigravity-private mounts;
+7. stop/start or recreate the App if persistence is part of the change;
+8. confirm Codex and launcher remain isolated and functional.
+
+Supported sessions keep vendor automatic update disabled. Do not run Codex and Antigravity concurrently against the same writable checkout; the default deployment gives them separate workspaces.
+
+The #96 admission model and #53 policy disposition are already complete. Antigravity remains experimental by deliberate support decision, not because additional generic TrueNAS lifecycle testing is pending.
+
+## Development-scratch revalidation
+
+The #158 disk-backed `.remote-dev-tmp` gate is completed evidence. Do not list it as pending.
+
+If a later change touches scratch/tmp/cache routing, revalidate only the affected facts:
+
+- `/tmp` stays the role-private bounded hardened tmpfs;
+- normal agent `TMPDIR`/uv/npm/pip caches point into that role's `/workspace/.remote-dev-tmp` fixed children;
+- scratch remains on the role-private workspace filesystem, not the `/tmp` tmpfs;
+- Codex/Antigravity scratch is not shared and launcher has no workspace/scratch mount;
+- trusted staging remains on its dedicated paths (`/run` or canonical private runtime state), never on untrusted development scratch;
+- deleting one stopped role's scratch recreates only that role's fixed directories without changing another role.
+
+## Stop/start and recreation
+
+For a candidate that changes persistence/deployment behavior:
+
+1. place existence-only synthetic markers in relevant role-private state categories;
+2. stop/start the App;
+3. confirm expected state remains;
+4. recreate services with the same dataset/image reference;
+5. rerun `remote-dev-version`, Doctor and the host ACL audit;
+6. confirm launcher remains mount-free and agent mount sources remain disjoint;
+7. resume a Codex session and, when Antigravity is enabled/affected, its selected project/conversation;
+8. remove synthetic markers after recording sanitized pass/fail evidence.
+
+Do not use real credential contents as markers.
+
+## Retired password-file deployments
+
+Do not recreate a persistent browser-password directory or mount a browser credential file into an agent/launcher container.
+
+If an older installation still contains retired password files:
+
+1. configure and verify the replacement per-service `WEB_PASSWORD` values;
+2. exercise stop/start or recreation;
+3. retain any legacy copy only for an explicit rollback window;
+4. remove obsolete files manually once migration is accepted.
+
+Remote Dev does not automatically delete/migrate old credential files. A future secret-provider integration would require a new reviewed architecture rather than reviving the retired dual-path contract.
 
 ## Rollback
 
-If the new stack fails:
+Keep the known-good immutable image reference and any data-layout/ACL migration backup until the new deployment passes its required gates.
 
-1. stop the new App;
-2. restore the saved old YAML;
-3. restore the previously recorded image reference if needed;
-4. continue using the previously recorded legacy data tree;
-5. leave `/mnt/Pool1/remote-dev` intact for diagnosis.
+For an image-only rollback where the persistent contract is compatible:
 
-Do not copy credentials between old and new configurations and do not delete the
-persistent tree during the validation cycle.
+1. stop the current App;
+2. restore the saved known-good YAML/image digest;
+3. recreate services;
+4. rerun matching diagnostics and host ACL audit before declaring recovery complete.
+
+For a dataset ACL migration rollback, follow `docs/truenas-acl-contract.md`; restoring an NFSv4 backup dataset does **not** make it compliant merely because the dataset rename succeeds.
+
+Never copy credentials casually between old/new trees and never delete the production persistent tree as part of routine validation.
 
 ## Completion evidence
 
-Keep related Antigravity lifecycle and password evidence linked to the owning
-issues:
+Record sanitized evidence only:
 
 - TrueNAS version and test date;
-- exact image digest and embedded revision;
-- rendered and inspected hardening fields from the exact candidate;
-- confirmation that YAML, bootstrap, preflight and the shared data-layout
-  contract came from that same revision;
-- confirmation that the administrator-created root existed before bootstrap and
-  bootstrap did not create or replace it;
-- confirmation that bootstrap + preflight succeeded from the intended layout,
-  a second bootstrap reported no changes, and existing marker contents remained
-  unchanged;
-- confirmation that required descendants work as ordinary directories and that
-  any deliberately pre-created child-dataset path used in the test remained
-  untouched;
-- confirmation that no browser-password `secrets/` tree was required;
-- confirmation that Codex and Antigravity used independent environment-backed
-  browser passwords, without recording either value;
-- Antigravity CLI version;
-- browser/access method without account identity;
-- pass/fail for install, login, stop/start and recreation when exercised;
-- confirmed mount destinations and permission metadata;
-- confirmation that the launcher has no mounts and runs as UID/GID `65532`
-  without added capabilities;
-- confirmation that Codex and Antigravity credentials are independent and
-  cross-rejected;
-- any safe error messages and follow-up issue links.
+- exact image digest, channel/build identity and full embedded source revision;
+- confirmation that image, YAML and host-side helper files came from the same revision;
+- bootstrap/preflight/ACL-audit results when storage is in scope;
+- confirmation that the root dataset existed before bootstrap;
+- confirmation that bootstrap was idempotent and existing contents remained unchanged;
+- common configured image identity plus disjoint role-private mount sources;
+- relevant hardening inspect fields;
+- confirmation that launcher has no agent mounts/password/socket;
+- independent Codex/Antigravity authentication and cross-rejection when tested;
+- Antigravity version/trust state when relevant, without account data;
+- pass/fail for the specific Start/Resume/login/update/recreation behavior affected by the candidate;
+- safe error messages and focused follow-up issue links if something fails.
 
-Never post passwords, OAuth codes, tokens, cookies, account email, private
-repository names or raw credential listings.
+Never post passwords, OAuth codes/URLs, tokens, cookies, API keys, account email, private repository names, conversation content or raw credential listings.
