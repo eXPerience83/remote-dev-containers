@@ -54,6 +54,8 @@ def assert_scheduler_contract(text: str) -> None:
         raise AssertionError("scheduled Antigravity discovery must never execute installer/payload inspection")
     if "contents: write" in detect or "pull-requests: write" in detect or "actions: write" in detect:
         raise AssertionError("scheduled Antigravity detector unexpectedly gained write permission")
+    if "review-antigravity-candidate.yml" in text:
+        raise AssertionError("scheduled upstream workflow must never dispatch the human Antigravity execution workflow")
 
     require(writer, "needs: antigravity-detect", "writer dependency on read-only detector")
     require(writer, "actions: write", "writer action-dispatch permission")
@@ -83,19 +85,30 @@ def assert_scheduler_contract(text: str) -> None:
 
 
 def assert_antigravity_manual_contract(text: str) -> None:
-    """Lock the one human-approved vendor execution stage."""
+    """Lock one human click that admits only the current validated pending candidate."""
     require(text, "group: check-upstream", "shared concurrency group")
-    require(text, "installer_sha256:", "explicit installer admission input")
-    require(text, "payload_sha256:", "explicit payload admission input")
+    header = text.split("permissions:\n", 1)[0]
+    require(header, "workflow_dispatch:", "manual human execution boundary")
+    if "inputs:" in header:
+        raise AssertionError("manual Antigravity admission must not require copy/pasted hash inputs")
     if "discover-payload" in text or "inspect-payload" in text:
         raise AssertionError("manual workflow must not retain redundant multi-stage review choices")
 
     candidate = job_block(text, "candidate", "maintain-pr")
     writer = job_block(text, "maintain-pr")
     require(candidate, "permissions:\n      contents: read", "read-only vendor-execution job")
+    require(candidate, "fetch-depth: 0", "history needed for pending-branch ancestry gate")
     require(candidate, "persist-credentials: false", "credential-free vendor-execution checkout")
+    require(candidate, 'branch="automation/update-upstreams"', "pending automation branch source")
+    require(candidate, 'git fetch --no-tags origin "refs/heads/$branch:$candidate_ref"', "data-only pending branch fetch")
+    require(candidate, 'git merge-base --is-ancestor "$GITHUB_SHA" "$candidate_ref"', "pending branch contains dispatched main")
+    require(candidate, 'git show "$candidate_ref:third_party/antigravity-cli-detection.json"', "pending detection read as data")
+    require(candidate, 'git show "$candidate_ref:third_party/antigravity-cli-candidate.json"', "pending candidate read as data")
+    require(candidate, "pending detection was not generated from this main revision's reviewed baseline", "reviewed-baseline binding")
+    require(candidate, "scripts/validate-antigravity-review-artifact.py", "pending metadata validation")
+    require(candidate, 'echo "installer_sha256=$installer_sha" >> "$GITHUB_OUTPUT"', "validated installer job output")
+    require(candidate, 'echo "payload_sha256=$payload_sha" >> "$GITHUB_OUTPUT"', "validated payload job output")
     require(candidate, "scripts/run-antigravity-inspection.py", "strict prefetch/hash inspection gate")
-    require(candidate, "scripts/validate-antigravity-review-artifact.py", "pre-upload artifact validation")
     if "scripts/inspect-antigravity-cli.py" in candidate:
         raise AssertionError("workflow must not invoke the legacy live downloader directly")
     if "contents: write" in candidate or "pull-requests: write" in candidate or "actions: write" in candidate:
@@ -106,8 +119,10 @@ def assert_antigravity_manual_contract(text: str) -> None:
     require(writer, "pull-requests: write", "writer PR permission")
     require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned metadata download")
     require(writer, "Revalidate artifact after crossing into the write-capable job", "post-download artifact validation")
-    require(writer, "inspection requires a previously validated static candidate", "mandatory static candidate gate")
-    require(writer, "payload approval does not match the pending statically discovered candidate", "exact payload admission gate")
+    require(writer, '${{ needs.candidate.outputs.installer_sha256 }}', "validated installer output crosses to writer")
+    require(writer, '${{ needs.candidate.outputs.payload_sha256 }}', "validated payload output crosses to writer")
+    require(writer, "inspection requires the same previously validated static candidate", "mandatory static candidate gate")
+    require(writer, "admitted payload does not match the pending statically discovered candidate", "exact payload admission gate")
     require(writer, 'branch="automation/update-upstreams"', "single automation branch")
     if "gh pr merge" in writer or "--auto" in writer:
         raise AssertionError("Antigravity review writer must never merge its own PR")
