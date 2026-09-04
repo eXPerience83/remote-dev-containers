@@ -114,8 +114,12 @@ def main() -> None:
         "--pids-limit 64",
         "--ipc private",
         "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
-        "--tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=0755",
+        "--tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755",
         "--env REMOTE_DEV_ROLE=launcher",
+        "--env REMOTE_DEV_START_MODE=menu",
+        "--env WEB_CHECK_ORIGIN=1",
+        "--env WEB_PORT=7680",
+        "--env ALLOW_INSECURE_WEB=1",
     ):
         require_text(helper, required, "strict launcher hardening fixture")
     require_text(helper, "docker logs --tail 80", "bounded launcher log diagnostics")
