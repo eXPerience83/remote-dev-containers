@@ -33,7 +33,7 @@
       "matchStrings": [
         "<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=(?<currentValue>\\d+\\.\\d+) UBUNTU_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64}) -->"
       ],
-      "autoReplaceStringTemplate": "- Ubuntu LTS base {{{currentValue}}}@{{{currentDigest}}} → {{{newValue}}}@{{{newDigest}}}.\\n<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION={{{newValue}}} UBUNTU_DIGEST={{{newDigest}}} -->",
+      "autoReplaceStringTemplate": "- Ubuntu LTS base {{{currentValue}}}@{{{currentDigest}}} → {{{newValue}}}@{{{newDigest}}}.\n<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION={{{newValue}}} UBUNTU_DIGEST={{{newDigest}}} -->",
       "datasourceTemplate": "docker",
       "depNameTemplate": "ubuntu",
       "versioningTemplate": "ubuntu"
