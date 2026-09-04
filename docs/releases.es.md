@@ -48,7 +48,7 @@ Source revision: 22a3bda...<SHA completo>
 | `sha-<full-sha>` | Una revisión publicada de `main` | Direccionado por fuente | Auditoría de una revisión integrada |
 | `@sha256:<digest>` | Manifest OCI exacto | Inmutable | Validación/reproducción/rollback exactos |
 
-`latest` nunca debe apuntar a `dev` ni a `edge`.
+`latest` es siempre un alias de `stable`; nunca debe apuntar a `dev` ni a `edge`.
 
 Mientras no exista publicación runtime multi-arquitectura, los tags genéricos de canal y sus variantes `*-amd64` resuelven al build AMD64. Se mantienen recomendados `dev-amd64`, `edge-amd64` y el futuro `stable-amd64` para que una ampliación de arquitecturas sea explícita.
 
