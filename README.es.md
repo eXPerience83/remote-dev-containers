@@ -13,7 +13,7 @@ Mantener herramientas de desarrollo, repositorios y agentes de programación en 
 
 ```text
 Stack Remote Dev
-├── launcher      7680 — solo navegación
+├── launcher      7680 — navegación sin contraseña
 ├── codex         7681 — terminal autenticado
 └── antigravity   7682 — terminal opcional/experimental autenticado
 ```
@@ -28,7 +28,7 @@ Bases actuales:
 - Codex CLI desde un artefacto oficial fijado, más una ruta opcional explícita de runtime oficial conservando el CLI incluido como fallback;
 - GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd y tmux;
 - un único contrato canónico y neutral de persistencia;
-- un único contrato runtime de autenticación web basado en `WEB_PASSWORD`, con una entrada de configuración separada por endpoint protegido; actualmente los valores pueden reutilizarse entre servicios;
+- un único contrato runtime de autenticación web basado en `WEB_PASSWORD` para los endpoints de agente protegidos, con entradas separadas para Codex/Antigravity; actualmente los valores pueden reutilizarse entre agentes;
 - selección de proyecto debajo de cada `/workspace` privado;
 - semántica de releases `dev -> edge -> stable = latest`, manteniendo la identidad fechada de edge separada del canal y de la procedencia inmutable.
 
@@ -80,7 +80,7 @@ sudo python3 scripts/truenas-acl-audit.py \
 
 El inicializador crea únicamente los descendientes canónicos que falten y es idempotente. No borra, migra, renombra ni reescribe de forma recursiva contenido existente de proyectos/estado. El preflight valida el mismo contrato de rutas y el audit ACL es de solo lectura.
 
-Las contraseñas web pertenecen a la configuración del despliegue. El antiguo diseño de autenticación web mediante ficheros/árbol de secrets está retirado y no forma parte de bootstrap/preflight.
+Las contraseñas web pertenecen a la configuración del despliegue y las validan los endpoints de agente al arrancar. El antiguo diseño de autenticación web mediante ficheros/árbol de secrets está retirado y no forma parte de bootstrap/preflight.
 
 Si mantienes intencionadamente un YAML local solo con Codex, omite `--include-antigravity` de forma coherente. Para validación exacta consulta el [runbook TrueNAS](docs/truenas-antigravity-validation.md) y el [contrato ACL](docs/truenas-acl-contract.es.md).
 
@@ -94,7 +94,7 @@ Antes de guardar la Custom App, revisa como mínimo:
 - zona horaria, identidad Git y modo de aprobación de Codex;
 - `REMOTE_DEV_PROJECT`: vacío para menú normal o un proyecto validado para modo directo.
 
-Remote Dev exige actualmente únicamente un valor no vacío de una sola línea para un endpoint protegido. No impone longitud mínima, composición ni unicidad entre servicios; esas reglas quedan deliberadamente aplazadas a una futura decisión sobre acceso/autenticación web.
+Remote Dev exige actualmente únicamente un valor no vacío de una sola línea para un endpoint de agente protegido. No impone longitud mínima, composición ni unicidad entre agentes; esas reglas quedan deliberadamente aplazadas a una futura decisión sobre acceso/autenticación web.
 
 Un administrador privilegiado de TrueNAS puede inspeccionar la configuración guardada y está dentro del límite de confianza. Sanea capturas/exportaciones antes de compartirlas.
 
@@ -106,7 +106,7 @@ Cuando la App esté en ejecución, abre:
 http://<IP-LAN-o-malla-privada-de-TrueNAS>:7680
 ```
 
-Codex se autentica en `7681`; Antigravity lo hace en su endpoint `7682`. Que sean endpoints/configuraciones separadas no obliga a usar contraseñas distintas. No expongas estos puertos directamente a Internet.
+El puerto `7680` es el launcher y permanece deliberadamente sin contraseña en el modelo privado actual. Codex se autentica en `7681`; Antigravity lo hace en su endpoint `7682`. Que sean endpoints/configuraciones de agente separadas no obliga a usar contraseñas distintas. No expongas estos puertos directamente a Internet.
 
 Continúa con la [guía práctica](docs/user-guide.es.md).
 
@@ -139,11 +139,15 @@ Seleccionar proyecto elige directorio de trabajo; **no** crea aislamiento de sis
 
 ## Launcher y autenticación web
 
-El launcher solo navega. No actúa como proxy ttyd, no gestiona contenedores y no recibe estado de agentes.
+El launcher es una interfaz pequeña y solo de navegación. No actúa como proxy ttyd, no gestiona contenedores y no recibe estado ni credenciales de agentes.
 
-Cada endpoint protegido utiliza un único `WEB_PASSWORD` basado en configuración. Compose mantiene entradas de configuración separadas para Codex, Antigravity y la autenticación opcional del launcher para que puedan cambiarse de forma independiente. Remote Dev permite actualmente reutilizar el mismo valor entre esas entradas y no aplica reglas de longitud mínima o composición.
+**El launcher soportado actualmente no requiere contraseña.** Debe vincularse solo a localhost, una LAN de confianza o una malla privada como Tailscale. Todavía no es la puerta de entrada de autenticación segura central del stack.
 
-El mecanismo antiguo de contraseña web basada en fichero está retirado. La autenticación Basic opcional del launcher sigue disponible mediante `compose/launcher-auth.yml` con una entrada propia y sin añadir secretos de agentes.
+Codex y Antigravity habilitado son los endpoints protegidos. Cada uno utiliza un `WEB_PASSWORD` basado en configuración. Compose mantiene entradas separadas para esos servicios de agente para que puedan cambiarse de forma independiente. Remote Dev permite actualmente reutilizar el mismo valor entre ellos y no aplica reglas de longitud mínima o composición.
+
+El mecanismo antiguo de contraseña web basada en fichero está retirado. Una futura entrada única segura, gateway central, identidad/passkeys/MFA o un diseño en el que el launcher se convierta en el límite de autenticación confiable pertenece al trabajo futuro de #181.
+
+Existe `compose/launcher-auth.yml` como override avanzado y no predeterminado, pero no forma parte del flujo normal actual ni es necesario para usar Remote Dev.
 
 ## Modos de aprobación de Codex
 
@@ -284,7 +288,8 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 
 - No publiques 7680, 7681 ni 7682 directamente a Internet.
 - Vincula el launcher sin contraseña solo a localhost, LAN de confianza o malla privada.
-- Los endpoints protegidos requieren una contraseña configurada no vacía de una sola línea salvo que se use explícitamente el override inseguro revisado; el producto actual no exige contraseñas largas ni mutuamente distintas.
+- Codex y Antigravity habilitado requieren contraseñas configuradas no vacías de una sola línea salvo que se aplique explícitamente un override inseguro revisado; el producto actual no exige contraseñas largas ni mutuamente distintas.
+- El launcher todavía no es el gateway de autenticación segura; ese diseño futuro pertenece a #181.
 - No montes estado de agentes ni socket del motor de contenedores en el launcher.
 - Seleccionar proyecto no aísla hermanos ya montados bajo el mismo `/workspace`.
 - No compartas un checkout escribible entre agentes por defecto.
