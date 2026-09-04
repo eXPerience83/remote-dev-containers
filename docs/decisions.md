@@ -56,4 +56,37 @@ A missing optional agent is reported as unavailable and is never downloaded sile
 
 Accepted as the baseline. The project does not weaken TrueNAS or Docker with privileged mode, `SYS_ADMIN`, unconfined profiles, host-root mounts or Docker socket access to force a nested sandbox.
 
-An inner Bubblewrap, Landlock, nsjail or similar sandbox is reported as active only after a positive runtime test. The package-level Bubblewrap decision and the exact user-facing diagnostics are tracked by issue #36.
+An inner Bubblewrap, Landlock, nsjail or similar sandbox is reported as active only after a positive runtime test. The default image currently omits system Bubblewrap and the supported Codex launcher explicitly disables the unsupported nested sandbox. Approval prompts do not replace the outer-container boundary.
+
+## D013 — one configuration-backed browser password contract
+
+Accepted. Protected browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated independently for each service from deployment configuration.
+
+`WEB_PASSWORD_FILE`, browser-password Compose secrets, `/run/secrets/web_password` and password-file persistence are retired. A privileged TrueNAS/Docker administrator can inspect deployment configuration and is inside the product trust boundary; moving the same application password to another host file does not create administrator secrecy.
+
+The launcher receives no agent password. Optional launcher Basic authentication, when used, has its own distinct configuration-backed value.
+
+## D014 — Antigravity remains an experimental official-CLI integration
+
+Accepted after the #96 technical admission work and the dated human #53 policy/terms reconciliation.
+
+Remote Dev may expose Antigravity as an optional **experimental** integration because it launches Google's official `agy` CLI inside the isolated Antigravity role rather than implementing an alternative Antigravity service protocol/client or reusing Google/Antigravity OAuth for another coding agent or service.
+
+The support boundary is deliberately conservative:
+
+- use only the reviewed official Google installer/runtime path;
+- keep install/update explicit and user initiated;
+- keep vendor automatic update disabled for supported sessions;
+- do not redistribute Google proprietary installer/CLI bytes in the repository or image;
+- keep credentials/runtime/state private to the Antigravity role;
+- preserve the review-pending admission/integrity safeguards;
+- retain non-affiliation and applicable vendor terms/privacy wording;
+- never describe the project decision or review evidence as Google approval, certification, signing or endorsement.
+
+A material change to vendor terms, FAQ, privacy/auth model, installer origin/behavior or official CLI guidance triggers a new out-of-cycle review under #53.
+
+## D015 — release maturity and build identity are separate
+
+Accepted. Human-facing channels are permanently ordered `dev -> edge -> stable = latest`.
+
+An edge build may have a dated identity such as `edge-YYYY.MM.DD-<short-sha>`, but the separate channel remains `edge`; the full source SHA and OCI digest are stronger provenance. Stable publication continues to use exact SemVer and `latest` is only an alias of the same stable digest, never of `dev` or `edge`.
