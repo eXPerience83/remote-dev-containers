@@ -79,8 +79,9 @@ Host TrueNAS/Docker root/admin is trusted and can inspect deployment configurati
 ### Browser-authentication rules
 
 - Protected endpoints use `WEB_PASSWORD` only.
-- Codex and Antigravity values are independent.
-- Optional launcher authentication uses a distinct launcher value.
+- Keep separate configuration entries for Codex, Antigravity and optional launcher authentication so each service can be changed independently.
+- The current product does **not** impose a minimum length, composition rule or requirement that those configured password values differ from one another. The operator may currently reuse a value across services.
+- Do not introduce password complexity or cross-service uniqueness enforcement without a future explicit browser-access/security decision and matching tests/documentation.
 - Do not reintroduce the retired file-backed browser-authentication path, browser-password Compose secrets or persistent browser-password files without a new explicit architecture decision.
 - Never log or derive reusable metadata from password contents.
 
@@ -129,7 +130,7 @@ Runtime/deployment changes should preserve or extend coverage for, where affecte
 - intended common image identity across enabled roles;
 - role-private mount sources and canonical host layout;
 - bootstrap/preflight/ACL-audit behavior;
-- independent `WEB_PASSWORD` agent authentication and absence of the retired file-backed path;
+- per-service `WEB_PASSWORD` authentication, including the absence of any undocumented complexity/uniqueness gate and absence of the retired file-backed path;
 - role-aware health checks;
 - Codex project-scoped Start/Resume, approval policy and bundled/optional runtime fallback;
 - Antigravity project-scoped Start/Resume, admission/integrity/review states and no-installer-network launch;
