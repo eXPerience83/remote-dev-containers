@@ -18,14 +18,14 @@
 
 ```text
 Remote Dev stack
-├── launcher      7680 — navigation only
+├── launcher      7680 — password-free navigation only
 ├── codex         7681 — authenticated terminal
 └── antigravity   7682 — optional/experimental authenticated terminal
 ```
 
 - `ghcr.io/experience83/remote-dev` is the canonical runtime package and `REMOTE_DEV_IMAGE` is the preferred deployment selector.
 - Launcher, Codex and enabled Antigravity services use the same intended image reference while keeping separate container, mount and credential boundaries.
-- The launcher has no agent workspace/state/password, no Docker/Podman socket and no host-control credential. It navigates to agent endpoints rather than proxying terminal traffic.
+- The launcher has no agent workspace/state/password, no Docker/Podman socket and no host-control credential. It navigates to agent endpoints rather than proxying terminal traffic and is deliberately password-free in the current supported private-network model.
 - Codex is the bundled reference agent. The immutable image copy remains the fallback even when an explicitly admitted newer official Codex runtime exists in Codex-private state.
 - Antigravity is implemented as an **optional experimental integration**. Google's `agy` runtime is not bundled or redistributed; installation/update is explicit, uses the reviewed official-source path, persists only in Antigravity-private state and keeps vendor automatic update disabled for supported sessions.
 - The #29/#106/#131 Antigravity lifecycle, conversation continuity, project-scoped Start/Resume, update/rollback and isolation evidence is complete.
@@ -35,14 +35,14 @@ Remote Dev stack
 
 ## Browser authentication and persistence
 
-There is one supported browser-terminal password runtime contract: `WEB_PASSWORD`.
+The current browser-password contract applies to protected **agent** endpoints through `WEB_PASSWORD`.
 
-- Codex, Antigravity and optional launcher authentication keep separate configuration entries so each endpoint can be changed independently.
-- A protected endpoint currently requires a non-empty single-line value, but Remote Dev does **not** enforce minimum length, composition or cross-service uniqueness. The operator may intentionally reuse the same value across services.
-- The launcher receives no agent password; optional launcher Basic authentication uses only its own configuration entry.
+- Codex and Antigravity keep separate configuration entries so each endpoint can be changed independently.
+- A protected agent endpoint currently requires a non-empty single-line value, but Remote Dev does **not** enforce minimum length, composition or cross-service uniqueness. The operator may intentionally reuse the same value across agents.
+- The launcher is outside this password contract in the current supported design: it remains a password-free navigation surface on localhost/trusted LAN/private mesh.
+- Stronger launcher/gateway authentication and a future single secure entry point remain explicit #181 work rather than a current requirement.
 - The former browser-password file/mount/secret-tree mechanism is retired and must not be presented as supported.
 - TrueNAS/Docker root/admin can inspect deployment configuration and is inside the trust boundary; the product does not claim secrecy from the host administrator.
-- Stronger password/access policy remains a future browser-security decision rather than an implicit requirement in the current YAML/runtime contract.
 
 Persistent data is rooted at one administrator-selected `REMOTE_DEV_DATA_ROOT` but only narrow role-private descendants are mounted into agent containers. Each `/workspace` is a private project collection root; normal Start/Resume/direct-agent paths resolve a concrete validated `/workspace/<project>`.
 
