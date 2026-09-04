@@ -11,8 +11,6 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 
 ## Current implementation
 
-The current stack uses one canonical Remote Dev image for isolated fixed-role services:
-
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
@@ -23,16 +21,16 @@ Remote Dev stack
 Current foundations:
 
 - one `ghcr.io/experience83/remote-dev` image reference reused by launcher, Codex and enabled Antigravity services;
-- one stateless/navigation-only launcher with no agent workspace, state, password or Docker/Podman socket;
-- one isolated Codex reference service with private role-scoped mounts;
-- one optional isolated Antigravity service with private state and a vendor runtime installed only by explicit user action;
+- a stateless/navigation-only launcher with no agent workspace, state, password or Docker/Podman socket;
+- an isolated Codex reference service with private role-scoped mounts;
+- an optional isolated Antigravity service with private state and a vendor runtime installed only by explicit user action;
 - Ubuntu 26.04 LTS, AMD64 first;
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime path with the bundled CLI retained as fallback;
 - GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd and tmux;
 - one canonical role-neutral persistent-data contract;
 - one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract with independent values per protected endpoint;
-- project selection below each private `/workspace` collection root so agents launch from a concrete project rather than treating `/workspace` itself as a repository;
-- `dev -> edge -> stable = latest` release semantics, with dated edge build identity kept separate from channel and immutable provenance.
+- project selection below each private `/workspace` collection root;
+- `dev -> edge -> stable = latest` release semantics, with dated edge build identity separate from channel and immutable provenance.
 
 ## Install on TrueNAS SCALE
 
@@ -62,7 +60,7 @@ The root must already exist. `scripts/init-data-layout.py` deliberately refuses 
 
 ### 2. Use bootstrap, preflight and ACL audit from the same revision
 
-The selected image, `compose/truenas.yml` and the host-side helper scripts must describe the same repository revision. Do not combine an image pinned to one revision with helper scripts copied later from a moving `main` branch.
+The selected image, `compose/truenas.yml` and the host-side helper scripts must describe the same repository revision.
 
 For the reference YAML, which declares Codex plus optional/experimental Antigravity, run after the root dataset exists:
 
@@ -80,27 +78,25 @@ sudo python3 scripts/truenas-acl-audit.py \
   --include-antigravity
 ```
 
-The initializer creates only missing canonical descendants, applies initial modes only to paths it creates and is idempotent. It does not delete, migrate, rename or recursively chmod/chown existing project/state contents. Existing required paths, including deliberate child-dataset mountpoints, are preserved.
+The initializer creates only missing canonical descendants and is idempotent. It does not delete, migrate, rename or recursively rewrite existing project/state contents. Preflight validates the same path contract. The ACL audit is read-only and checks the reference Generic/POSIX private-state policy.
 
-Preflight validates the same canonical path contract. The ACL audit is read-only and checks the reference Generic/POSIX private-state policy. Browser passwords are deployment configuration and are validated by their endpoints at startup; none of these host-layout helpers creates or requires a browser-password `secrets/` tree.
+Browser passwords are deployment configuration and are validated by their endpoints at startup. The retired browser-password file/secret-tree design is not part of bootstrap or preflight.
 
-If you intentionally maintain a local Codex-only YAML without Antigravity, omit `--include-antigravity` consistently. Do not omit it while deploying the reference YAML unchanged because its Antigravity bind sources must already exist.
+If you intentionally maintain a local Codex-only YAML without Antigravity, omit `--include-antigravity` consistently. For exact candidate/digest validation, see the [TrueNAS validation runbook](docs/truenas-antigravity-validation.md) and [TrueNAS ACL contract](docs/truenas-acl-contract.md).
 
-For exact candidate/digest validation and migration evidence, see the [TrueNAS validation runbook](docs/truenas-antigravity-validation.md) and [TrueNAS ACL contract](docs/truenas-acl-contract.md).
-
-### 3. Review the host-specific YAML values
+### 3. Review host-specific YAML values
 
 Before saving the Custom App, review at least:
 
-- every example bind IP and replace it with the LAN or Tailscale/private-mesh IP of the TrueNAS host;
+- every example bind IP and replace it with the LAN/Tailscale/private-mesh IP of the TrueNAS host;
 - every `/mnt/Pool1/remote-dev` bind source if your pool/path differs;
-- Codex `WEB_PASSWORD` and the independent Antigravity `WEB_PASSWORD` when retaining the Antigravity service;
+- Codex `WEB_PASSWORD` and the independent Antigravity `WEB_PASSWORD` when retaining Antigravity;
 - timezone, Git identity and Codex approval mode where needed;
-- `REMOTE_DEV_PROJECT`: leave the literal YAML value empty for normal menu mode, or set a validated fixed project for direct-agent use.
+- `REMOTE_DEV_PROJECT`: leave the YAML value empty for normal menu mode or set a validated fixed project for direct-agent use.
 
-A privileged TrueNAS administrator can inspect saved App/container configuration. That administrator is inside Remote Dev's trust boundary; sanitize screenshots and YAML exports before sharing them.
+A privileged TrueNAS administrator can inspect saved App/container configuration and is inside Remote Dev's trust boundary. Sanitize screenshots/YAML exports before sharing them.
 
-TrueNAS Custom App serialization may rewrite formatting, discard comments and not preserve Compose interpolation exactly as a source file would. Operational guidance therefore depends on the actual saved/rendered values, not on comments or `${...}` expressions surviving a UI edit round-trip. Verify the effective image reference/channel after saving.
+TrueNAS Custom App serialization may rewrite formatting, discard comments and not preserve Compose interpolation exactly. Verify the effective image reference/channel after saving.
 
 After the App is running, open:
 
@@ -108,21 +104,13 @@ After the App is running, open:
 http://<TrueNAS-LAN-or-private-mesh-IP>:7680
 ```
 
-Port `7680` is the launcher. Codex authenticates independently on `7681`; Antigravity uses its own independent authentication on `7682`. Do not expose any of these ports directly to the public Internet.
+Port `7680` is the launcher. Codex authenticates independently on `7681`; Antigravity uses its own independent authentication on `7682`. Do not expose these ports directly to the public Internet.
 
-Continue with the [practical user guide](docs/user-guide.md) for projects, sessions/Resume, tmux/browser controls, persistence and project-local tooling.
+Continue with the [practical user guide](docs/user-guide.md).
 
 ## Roles and entrypoints
 
-Canonical runtime entrypoints include:
-
-- `start-remote-dev-web`;
-- `remote-dev-launcher`;
-- `remote-dev-menu`;
-- `remote-dev-doctor`;
-- `remote-dev-healthcheck`.
-
-`start-codex-web`, `codex-menu` and `codex-doctor` remain compatibility wrappers that select Codex and call the canonical runtime.
+Canonical runtime entrypoints include `start-remote-dev-web`, `remote-dev-launcher`, `remote-dev-menu`, `remote-dev-doctor` and `remote-dev-healthcheck`. Codex-specific entrypoints remain compatibility wrappers.
 
 Implemented roles are:
 
@@ -135,13 +123,13 @@ REMOTE_DEV_ROLE=launcher
 
 `claude` remains reserved and unimplemented.
 
-Agent-role services accept `REMOTE_DEV_START_MODE=menu|agent|shell`; the launcher accepts only `menu`. Unknown roles/modes are rejected rather than evaluated as editable shell fragments.
+Agent-role services accept `REMOTE_DEV_START_MODE=menu|agent|shell`; the launcher accepts only `menu`.
 
 ## Project-scoped workspaces
 
-`/workspace` is the private **project collection root** for the current agent role. Normal agent sessions run from one validated direct child such as `/workspace/pollenlevels`; `/workspace` itself is not treated as an implicit repository.
+`/workspace` is the private **project collection root** for an agent role. Normal sessions run from one validated direct child such as `/workspace/pollenlevels`; `/workspace` itself is not treated as an implicit repository.
 
-The **Projects...** menu can select, create or exact-name-confirm-delete validated direct child project directories. Discovery is deliberately non-recursive. Symlink projects, traversal and arbitrary absolute selectors are rejected.
+The **Projects...** menu can select, create or exact-name-confirm-delete validated direct child project directories. Symlink projects, traversal and arbitrary absolute selectors are rejected.
 
 For direct agent mode, set a project when more than one exists:
 
@@ -149,23 +137,17 @@ For direct agent mode, set a project when more than one exists:
 REMOTE_DEV_PROJECT=pollenlevels
 ```
 
-Without an explicit selector, direct agent mode auto-resolves exactly one valid project and otherwise fails clearly.
-
-Project selection chooses a working directory; it is **not** a filesystem-isolation boundary from sibling projects already mounted into the same role container. Codex and Antigravity receive separate writable workspace mounts, so the same logical repository should use separate clones/worktrees across roles rather than one concurrently writable checkout.
+Project selection chooses a working directory; it is **not** a filesystem-isolation boundary from sibling projects already mounted in the same role container. Codex and Antigravity receive separate writable workspace mounts, so use separate clones/worktrees across roles.
 
 ## Launcher and browser authentication
 
-The launcher is navigation only. It does not proxy ttyd traffic, manage containers or receive agent state. It checks same-origin requests when an `Origin` header is present and applies a restrictive Content Security Policy.
+The launcher is navigation only. It does not proxy ttyd traffic, manage containers or receive agent state.
 
-Each protected agent endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose maps the external Codex `WEB_PASSWORD` and distinct `ANTIGRAVITY_WEB_PASSWORD` to their respective services. Credentials are not embedded in links, passed through the launcher or copied between roles.
+Each protected agent endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose maps distinct external values to Codex and Antigravity. Credentials are not embedded in links, passed through the launcher or copied between roles.
 
-`WEB_PASSWORD_FILE`, `/run/secrets/web_password`, browser-password Compose secrets and the old password-file persistence tree are retired.
-
-Optional launcher Basic authentication remains available for advanced generic Compose deployments through `compose/launcher-auth.yml`. It uses a distinct `LAUNCHER_PASSWORD` mapped to the launcher's own `WEB_PASSWORD` and adds no bind/persistent secret mount.
+The former file-backed browser-password mechanism is retired. Optional launcher Basic authentication remains available for advanced generic Compose deployments through `compose/launcher-auth.yml`, using a distinct launcher-only configuration value without adding agent secrets.
 
 ## Codex approval modes
-
-Supported project-owned launch modes are:
 
 ```dotenv
 REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
@@ -175,25 +157,13 @@ REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous
 - `autonomous` maps to `--ask-for-approval never`.
 - `guarded` marks only the active project untrusted for that launch so Codex prompts unless an explicit exec-policy rule allows the command.
 
-Start and Resume pass the selected project as Codex's working directory. The menu can keep the deployment mode or choose an autonomous/guarded override for the next launch only; that one-launch choice does not rewrite permanent configuration.
-
-Equivalent commands include:
-
-```bash
-run-codex --cd /workspace/pollenlevels --approval-mode autonomous
-run-codex --cd /workspace/pollenlevels --approval-mode guarded resume
-run-codex --print-policy
-```
-
-The upstream `/permissions` command changes the active Codex process's permission profile; it does not replace Remote Dev's deployment/next-launch resolver.
+Start/Resume use the selected project as Codex's working directory. A one-launch mode override does not rewrite permanent configuration.
 
 ## Explicit Codex runtime updates
 
-The image-tested `/usr/local/bin/codex` remains immutable. From the menu or `remote-dev-codex-runtime`, an administrator may explicitly install/update/remove a newer compatible official Codex release.
+The image-tested `/usr/local/bin/codex` remains immutable. An administrator can explicitly install/update/remove a newer compatible official Codex release through `remote-dev-codex-runtime` while keeping the bundled CLI as fallback.
 
-A newer admitted runtime can be shown as **official source; Remote Dev review pending**: the bounded origin/integrity/package/compatibility admission passed, but that exact upstream release has not yet completed the image's review/deployment evidence. Damaged or locally modified optional state is rejected and an equal/older optional runtime never shadows the bundled CLI.
-
-Optional runtime state lives in the Codex-only `state/codex/runtime` mount, separate from `CODEX_HOME`, and never replaces the bundled fallback. See [`docs/codex-runtime-updates.md`](docs/codex-runtime-updates.md).
+A newer admitted runtime can be shown as **official source; Remote Dev review pending**. Optional runtime state lives in Codex-private persistence and never replaces the immutable fallback. See [`docs/codex-runtime-updates.md`](docs/codex-runtime-updates.md).
 
 ## Antigravity — optional and experimental
 
@@ -208,36 +178,30 @@ Remote Dev's accepted support interpretation is narrow:
 - keep vendor automatic update disabled in supported sessions;
 - do not redistribute Google installer/CLI proprietary bytes in the image/repository;
 - do not implement an alternative Antigravity service client;
-- do not reuse/export Google/Antigravity OAuth credentials for Codex, Claude Code, OpenCode, OpenClaw or another third-party service;
+- do not reuse/export Google/Antigravity OAuth credentials for another coding agent/service;
 - keep role-private credentials/state plus admission/integrity safeguards;
 - keep non-affiliation/vendor terms/privacy wording;
 - do not describe Remote Dev review evidence as Google signing, certification or endorsement.
 
 The project records this as a human risk/support interpretation, not vendor legal approval.
 
-Scheduled #83 review automation is shipped. Its daily discovery path validates/downloads bounded installer/manifest/archive bytes as **data**, computes the installer and `agy` payload hashes and executes no vendor code. If the pair changes, only metadata is proposed. Executable inspection requires the explicit trusted review workflow, which resolves and verifies the exact pending pair before execution.
+Scheduled #83 review automation is shipped. Daily discovery validates/downloads bounded installer/manifest/archive bytes as **data**, computes installer/payload identities and executes no vendor code. Changed candidates cross that boundary as metadata; executable inspection requires the explicit trusted review workflow.
 
 See [`docs/antigravity-runtime-admission.md`](docs/antigravity-runtime-admission.md) and [`third_party/optional-agents.md`](third_party/optional-agents.md).
 
 ## Context7 for Codex
 
-Context7 hosted MCP support and optional device-code onboarding are shipped for Codex.
+Context7 hosted MCP support and optional device-code onboarding are shipped for Codex. Remote Dev does not retain a Context7 runtime/package in the image; explicit device login uses reviewed transient tooling and cleans it afterward.
 
-Remote Dev does not retain a Context7 runtime/package in the image. Explicit device login may download/run the reviewed transient `ctx7` CLI in isolated disposable state, adopt only the validated resulting API key into Codex-private managed configuration and clean the transient vendor package/login/cache state afterward.
-
-Context7 is an external service operated by Upstash. See [`docs/context7-codex.md`](docs/context7-codex.md) and [`docs/context7-codex.es.md`](docs/context7-codex.es.md) for privacy, terms, data-flow and credential boundaries.
+Context7 is an external service operated by Upstash. See [`docs/context7-codex.md`](docs/context7-codex.md) and [`docs/context7-codex.es.md`](docs/context7-codex.es.md).
 
 ## Isolation on TrueNAS
 
 The default image does not install system Bubblewrap. Supported Codex launches explicitly disable the unsupported nested sandbox; the outer Docker container and narrow mounts are the supported isolation boundary.
 
-Autonomous mode may act on everything mounted into the Codex service without confirmations. Guarded mode adds confirmation friction but is not a filesystem sandbox.
+Production launcher, Codex and Antigravity containers use read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, private role mounts and bounded PID/tmpfs/shm controls. The launcher runs as UID/GID `65532` with no restored capabilities. Agent containers restore only the exact reviewed minimum where required.
 
-Production launcher, Codex and Antigravity containers use read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, no supplementary groups, private role mounts and bounded PID/tmpfs/shm controls. The launcher runs as UID/GID `65532` with no restored capabilities. Agent containers restore only the exact reviewed minimum needed for private-state ownership/hardening and bounded unprivileged admission work.
-
-Do not add privileged mode, `SYS_ADMIN`, unconfined profiles, host networking/PID or a Docker/Podman socket to force an inner sandbox.
-
-See [`docs/security.md`](docs/security.md) for the exact capability/tmpfs/mount model.
+Do not add privileged mode, `SYS_ADMIN`, host namespaces or a Docker/Podman socket to force an inner sandbox. See [`docs/security.md`](docs/security.md).
 
 ## Canonical persistent-data layout
 
@@ -263,17 +227,11 @@ REMOTE_DEV_DATA_ROOT/
         └── ssh/
 ```
 
-Antigravity uses disjoint corresponding private children. The parent data root, `/root`, `/home`, `/mnt`, host root and container-engine sockets are never mounted wholesale.
-
-Browser passwords are deployment configuration, not part of `REMOTE_DEV_DATA_ROOT`.
-
-`scripts/lib/data_layout.py` is the canonical host-side path contract consumed by both initializer and preflight. There is no automatic migration/copy/delete of experimental state. Use the documented migration path for any contract that changes on disk.
+Antigravity uses disjoint corresponding private children. Browser passwords are deployment configuration, not persistent data files.
 
 ## Licenses and optional vendor software
 
 Remote Dev project code is Apache-2.0. Bundled upstream software retains its own licenses/notices.
-
-Inspect the inventory/notices with:
 
 ```bash
 remote-dev-notices
@@ -281,7 +239,7 @@ remote-dev-notices --list
 remote-dev-notices --check
 ```
 
-Google Antigravity, Claude Code and other proprietary vendor products are not covered by this repository's Apache-2.0 license. Antigravity's current integration downloads its runtime only after explicit user action directly through the reviewed vendor-source path and does not redistribute those bytes. Future optional proprietary integrations must follow the same explicit-source, terms/privacy, credential-isolation and non-affiliation policy in [`third_party/optional-agents.md`](third_party/optional-agents.md).
+Google Antigravity, Claude Code and other proprietary vendor products are not covered by this repository's Apache-2.0 license. Antigravity runtime bytes are obtained only after explicit user action from the reviewed vendor source and are not redistributed by Remote Dev.
 
 ## Build locally
 
@@ -297,33 +255,9 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-Set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, set `REMOTE_DEV_IMAGE=remote-dev:local`, then start:
-
-```bash
-docker compose -f compose/docker-compose.yml up -d
-```
-
-Open port `7680`, select Codex and authenticate to its separate `7681` endpoint.
-
-To protect the launcher too, set distinct launcher credentials and add the reviewed override:
-
-```dotenv
-LAUNCHER_USERNAME=remote-dev
-LAUNCHER_PASSWORD=replace-with-a-distinct-launcher-password
-```
-
-```bash
-docker compose \
-  -f compose/docker-compose.yml \
-  -f compose/launcher-auth.yml \
-  up -d
-```
-
-To enable the generic Antigravity profile, set a separate `ANTIGRAVITY_WEB_PASSWORD` and follow the experimental Antigravity instructions. Never reuse the Codex password silently between endpoints.
+Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
-
-The public integrated AMD64 channel is:
 
 ```bash
 docker pull ghcr.io/experience83/remote-dev:edge-amd64
@@ -333,19 +267,13 @@ docker pull ghcr.io/experience83/remote-dev:edge-amd64
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-GHCR tags are mutable. For exact reproduction/rollback, record the published digest and use:
+For exact reproduction/rollback, record and use the published digest:
 
 ```text
 ghcr.io/experience83/remote-dev@sha256:<digest>
 ```
 
-Published `main` revisions also receive:
-
-```text
-ghcr.io/experience83/remote-dev:sha-<full-commit-sha>
-```
-
-A normal edge runtime identity now separates build identity from maturity channel:
+A normal edge runtime identity separates build identity and channel:
 
 ```text
 Image version: edge-YYYY.MM.DD-<7-char-sha>
@@ -354,32 +282,22 @@ Source revision: <full-commit-sha>
 Codex CLI: codex-cli <bundled-version>
 ```
 
-`latest` is **not** edge. The permanent contract is `dev -> edge -> stable = latest`; `stable`/`latest` move only after an explicit stable SemVer publication.
+`latest` is **not** edge. The permanent contract is `dev -> edge -> stable = latest`; `stable`/`latest` move only after explicit stable SemVer publication.
 
-See [`docs/releases.md`](docs/releases.md) for candidate publication, updater/Renovate changelog provenance, promotion criteria and rollback.
+See [`docs/releases.md`](docs/releases.md).
 
 ## Important warnings
 
 - Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN or a private mesh such as Tailscale.
 - Codex and Antigravity terminals remain independently authenticated with distinct configured passwords.
-- The launcher never embeds or forwards an agent password and does not make agent terminals a same-origin application.
-- Do not mount agent state or optional runtime state into the launcher.
-- Project selection changes working directory; it does not isolate sibling directories already mounted under the same `/workspace`.
-- Do not share one writable checkout across agent services by default; use separate clones/worktrees.
-- Do not mount a Docker/Podman socket or use privileged mode.
-- Agent root is constrained by the outer role container and its mounts; anyone with terminal access can use credentials visible to that service.
+- Do not mount agent state or a container-engine socket into the launcher.
+- Project selection changes working directory; it does not isolate sibling projects already mounted under the same `/workspace`.
+- Do not share one writable checkout across agent services by default.
+- Agent root is constrained by the outer role container and its mounts.
 - TrueNAS/Docker administrators can inspect deployment configuration and are inside the host trust boundary.
-- `auth.json`, GitHub tokens, Context7 keys and SSH keys are secrets.
-- Optional vendor agents are not bundled or covered by the project Apache-2.0 license.
 - Antigravity remains experimental even though its technical lifecycle/admission gates are implemented.
-- `edge` remains experimental and can move after integrated changes; no stable release exists yet.
-
-## Development and reviews
-
-Development happens through pull requests. CodeRabbit is configured for security-sensitive repository areas, but automated review is advisory; repository CI, exact workflow gates and required human/real-system validation remain authoritative.
-
-Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes.
+- `edge` remains experimental; no stable release exists yet.
 
 ## Documentation
 
@@ -396,14 +314,4 @@ Read `AGENTS.md` and `CONTRIBUTING.md` before proposing changes.
 - [`docs/truenas-acl-contract.md`](docs/truenas-acl-contract.md) / [`docs/truenas-acl-contract.es.md`](docs/truenas-acl-contract.es.md)
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)
 - [`docs/roadmap.md`](docs/roadmap.md)
-- [`third_party/README.md`](third_party/README.md)
 - [`third_party/optional-agents.md`](third_party/optional-agents.md)
-- `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md`
-
-## Upstream references
-
-- OpenAI Codex: https://github.com/openai/codex
-- Codex documentation: https://developers.openai.com/codex/cli
-- GitHub CLI: https://github.com/cli/cli
-- ttyd: https://github.com/tsl0922/ttyd
-- mise: https://github.com/jdx/mise
