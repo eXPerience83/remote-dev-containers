@@ -12,7 +12,7 @@
     "installed_license_or_notice_files": [],
     "shell_profiles_changed": false
   },
-  "inspection_date_utc": "2026-08-05",
+  "inspection_date_utc": "2026-09-04",
   "installed_binary": {
     "dynamic_dependencies": [
       "libc.so.6",
@@ -32,9 +32,9 @@
     },
     "help_check_exit_code": 0,
     "relative_path": ".local/bin/agy",
-    "sha256": "4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71",
-    "size": 193835456,
-    "version": "1.1.10",
+    "sha256": "a0a6a8044d01accd39e6f5926d29648d212a2e519ff14102f09e1c061e6171dd",
+    "size": 210247936,
+    "version": "1.1.26",
     "version_check_exit_code": 0
   },
   "installer": {
@@ -64,7 +64,7 @@
     "updater_state": "~/.gemini/antigravity-cli/updater/"
   },
   "repeat_install": {
-    "behavior": "The installer detects the existing binary, does not replace it, states that regular CLI runs self-update in the background, and recommends deleting the binary for a fresh installation.",
+    "behavior": "The installer detected the existing binary and a repeated reviewed run did not replace the admitted executable.",
     "binary_hash_unchanged": true,
     "exit_code": 0
   },

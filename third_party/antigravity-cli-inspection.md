@@ -6,12 +6,12 @@
 
 Current committed normalized review evidence:
 
-- inspection date: **2026-08-05 UTC**;
+- inspection date: **2026-09-04 UTC**;
 - official installer: `https://antigravity.google/cli/install.sh`;
 - installer SHA-256: `ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640` (7,354 bytes);
 - selected installer strategy: `custom-directory`;
 - referenced HTTPS hosts: `antigravity-cli-auto-updater-974169037036.us-central1.run.app`;
-- installed payload: `agy` **1.1.10**, SHA-256 `4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71` (193,835,456 bytes);
+- installed payload: `agy` **1.1.26**, SHA-256 `a0a6a8044d01accd39e6f5926d29648d212a2e519ff14102f09e1c061e6171dd` (210,247,936 bytes);
 - blocking findings: **none**.
 
 This summary is generated only from schema-validated metadata. It never embeds vendor stdout/stderr or proprietary bytes.
