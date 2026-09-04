@@ -4,7 +4,7 @@ This runbook describes the **current** TrueNAS Custom App deployment/revalidatio
 
 ```text
 Remote Dev stack
-├── launcher      7680 — navigation only
+├── launcher      7680 — password-free navigation only
 ├── codex         7681 — authenticated terminal
 └── antigravity   7682 — optional/experimental authenticated terminal
 ```
@@ -15,7 +15,7 @@ The selected image, `compose/truenas.yml` and every host-side helper used for la
 
 ## Current browser-password contract
 
-Remote Dev has one supported browser-terminal password runtime mechanism:
+Remote Dev uses `WEB_PASSWORD` for protected **agent** endpoints:
 
 ```text
 WEB_PASSWORD
@@ -23,11 +23,13 @@ WEB_PASSWORD
 
 - **Codex:** configure a non-empty single-line value for its protected endpoint.
 - **Antigravity:** configure its own entry when enabled. That entry may currently contain the same value as Codex or a different value.
-- **Optional authenticated launcher:** the generic launcher-auth override uses its own configuration entry; its value is likewise not required to differ from an agent value.
+- **Launcher:** the current supported launcher is navigation-only and password-free. It is not part of the current password contract.
 
-Separate configuration entries preserve per-service control but do **not** currently impose password complexity or uniqueness. Remote Dev does not enforce a minimum length, character-composition rule or cross-service difference at this stage. Those access-policy choices are deliberately deferred to a future browser-security decision.
+Separate agent configuration entries preserve per-service control but do **not** currently impose password complexity or uniqueness. Remote Dev does not enforce a minimum length, character-composition rule or cross-service difference at this stage. Those access-policy choices are deliberately deferred to a future browser-security decision.
 
-The launcher receives no agent password. The former file-backed browser-password path is retired. Browser passwords are deployment configuration, not part of the persistent data layout.
+The launcher receives no agent password. The former file-backed browser-password path is retired. Agent browser passwords are deployment configuration, not part of the persistent data layout.
+
+The existing `compose/launcher-auth.yml` override remains an advanced non-default mechanism only. It is not required by the current TrueNAS/private-network flow and must not be treated as the current security boundary. Stronger single-entry launcher/gateway authentication belongs to #181.
 
 A privileged TrueNAS administrator can inspect App/container configuration and is inside Remote Dev's trust boundary. Never publish real password values, lengths, hashes or credential-derived metadata in validation evidence.
 
@@ -35,10 +37,10 @@ A privileged TrueNAS administrator can inspect App/container configuration and i
 
 When a change affects deployment/runtime behavior, this runbook can revalidate:
 
-- launcher navigation on port 7680;
+- password-free launcher navigation on port 7680;
 - Codex on authenticated port 7681;
 - optional experimental Antigravity on authenticated port 7682;
-- separate endpoint/configuration authentication boundaries without requiring different password values;
+- separate agent endpoint/configuration authentication boundaries without requiring different password values;
 - intended common image identity across enabled roles;
 - canonical role-private persistent paths;
 - deterministic host bootstrap/preflight;
@@ -49,7 +51,7 @@ When a change affects deployment/runtime behavior, this runbook can revalidate:
 - isolation among launcher, Codex and Antigravity;
 - Antigravity explicit vendor-runtime/admission/integrity behavior when relevant.
 
-SMB sharing remains separate under #71 and must never expose `state`. Stronger browser/remote access and any future password-strength/reuse policy remain separate under #181 or a dedicated browser-security decision.
+SMB sharing remains separate under #71 and must never expose `state`. Stronger browser/remote access, a future secure launcher entry point and any future password-strength/reuse policy remain separate under #181 or a dedicated browser-security decision.
 
 ## Preserve the existing deployment first
 
@@ -232,14 +234,15 @@ Before saving the Custom App:
 1. set the image reference to `$pinned_image` for exact validation;
 2. replace every example bind IP with the trusted LAN/private-mesh address;
 3. replace the root path if needed;
-4. configure a non-empty single-line Codex browser password;
-5. configure Antigravity's password entry when retained; it may intentionally use the same value as Codex or another value;
-6. keep personalized values out of Git/screenshots/evidence;
-7. preserve `ipc: private`, `cap_drop: [ALL]`, the capability-free launcher and exact reviewed agent capability lists;
-8. do not add privileged mode, host/joined namespaces, broad host mounts or a Docker/Podman socket;
-9. keep the experimental Antigravity role enabled only when intentionally testing/using it.
+4. leave the launcher password-free in the current supported private-network model;
+5. configure a non-empty single-line Codex browser password;
+6. configure Antigravity's password entry when retained; it may intentionally use the same value as Codex or another value;
+7. keep personalized values out of Git/screenshots/evidence;
+8. preserve `ipc: private`, `cap_drop: [ALL]`, the capability-free launcher and exact reviewed agent capability lists;
+9. do not add privileged mode, host/joined namespaces, broad host mounts or a Docker/Podman socket;
+10. keep the experimental Antigravity role enabled only when intentionally testing/using it.
 
-No minimum length, composition or cross-service uniqueness rule is part of the current supported password contract. TrueNAS can rewrite formatting/comments/interpolation during Custom App save/edit. Validation must inspect the effective saved/rendered configuration.
+No minimum length, composition or cross-service uniqueness rule is part of the current supported agent-password contract. TrueNAS can rewrite formatting/comments/interpolation during Custom App save/edit. Validation must inspect the effective saved/rendered configuration.
 
 ## First deployment checks
 
@@ -259,7 +262,7 @@ Confirm the embedded revision equals `release_revision` and all enabled containe
 
 For changes that can affect container security, confirm:
 
-- launcher: UID/GID `65532`, read-only root, no restored capabilities, no supplementary groups, no persistent/agent mounts, PID limit `64`;
+- launcher: UID/GID `65532`, read-only root, no restored capabilities, no supplementary groups, no persistent/agent mounts, PID limit `64`, password-free in the current supported flow;
 - Codex/Antigravity: read-only root, `no-new-privileges`, `cap_drop=[ALL]`, no supplementary groups, PID limit `1024` and only the exact reviewed agent capability additions;
 - all roles: private IPC, no privileged mode, no host/joined namespaces, no engine socket and no broad host mount;
 - launcher navigation/origin/CSP/health remains secret-free;
@@ -271,7 +274,7 @@ See `docs/security.md` for exact current parameters.
 
 ## Browser checks
 
-- Port 7680 opens the navigation-only launcher on the trusted private network.
+- Port 7680 opens the password-free navigation-only launcher on the trusted private network.
 - Codex opens port 7681 and requires its configured credential.
 - Antigravity opens port 7682 and requires its configured credential.
 - The launcher never receives or forwards either agent password.
@@ -323,6 +326,6 @@ Never copy credentials casually between old/new trees and never delete productio
 
 ## Completion evidence
 
-Record sanitized evidence only: TrueNAS version/date, exact image digest/channel/build identity/full source revision, same-revision helper confirmation, bootstrap/preflight/ACL results when in scope, common image identity plus disjoint mounts, relevant hardening facts, launcher isolation, per-endpoint authentication configuration, Antigravity version/trust state when relevant and pass/fail for the specific lifecycle behavior affected by the candidate.
+Record sanitized evidence only: TrueNAS version/date, exact image digest/channel/build identity/full source revision, same-revision helper confirmation, bootstrap/preflight/ACL results when in scope, common image identity plus disjoint mounts, relevant hardening facts, password-free launcher isolation, per-agent authentication configuration, Antigravity version/trust state when relevant and pass/fail for the specific lifecycle behavior affected by the candidate.
 
 Never post passwords, OAuth codes/URLs, tokens, cookies, API keys, account email, private repository names, conversation content or raw credential listings.
