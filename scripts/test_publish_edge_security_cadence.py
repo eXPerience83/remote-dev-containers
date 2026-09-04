@@ -102,6 +102,31 @@ def main() -> None:
     require_text(helper, "org.opencontainers.image.revision", "source revision label check")
     require_text(helper, "org.opencontainers.image.version", "edge version label check")
     require_text(helper, "io.github.experience83.remote-dev.channel", "channel label check")
+
+    require_text(helper, "runtime_image_id=", "pulled runtime image-ID resolution")
+    require_text(helper, '"$runtime_image_id" >/dev/null', "strict fixture uses pulled image ID")
+    require_text(helper, "strict_launcher_preflight()", "strict launcher diagnostic preflight")
+    for required in (
+        "--user 65532:65532",
+        "--security-opt no-new-privileges:true",
+        "--cap-drop ALL",
+        "--read-only",
+        "--pids-limit 64",
+        "--ipc private",
+        "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+        "--tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755",
+        "--env REMOTE_DEV_ROLE=launcher",
+        "--env REMOTE_DEV_START_MODE=menu",
+        "--env WEB_CHECK_ORIGIN=1",
+        "--env WEB_PORT=7680",
+        "--env ALLOW_INSECURE_WEB=1",
+    ):
+        require_text(helper, required, "strict launcher hardening fixture")
+    require_text(helper, "docker logs --tail 80", "bounded launcher log diagnostics")
+    require_text(helper, ".State.ExitCode", "launcher exit-code diagnostics")
+    require_text(helper, ".State.OOMKilled", "launcher OOM diagnostics")
+    require(".Config.Env" not in helper, "diagnostics must never dump the candidate environment")
+
     require_text(helper, "remote-dev-notices", "exact candidate notice checks")
     require_text(helper, "codex-smoke-test", "exact candidate Codex smoke")
     require_text(helper, "runtime-smoke-test.sh", "exact candidate runtime smoke")
