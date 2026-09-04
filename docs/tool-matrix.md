@@ -7,8 +7,8 @@ The one-image, single-stack architecture is implemented. The current experimenta
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
-├── codex         7681 — independently authenticated terminal
-└── antigravity   7682 — optional/experimental independently authenticated terminal
+├── codex         7681 — authenticated terminal
+└── antigravity   7682 — optional/experimental authenticated terminal
 ```
 
 The launcher is not an agent container and is not a control plane: it has no agent mounts, credentials or container-engine socket. Mutable state remains private to each agent service even though executable image layers are shared.
@@ -44,9 +44,9 @@ The system Bubblewrap package/executable is deliberately absent. Supported Codex
 | Git global configuration | No | Private | Private |
 | SSH keys/configuration | No | Private | Private |
 | MCP/integration credentials | No | Private | Private when/if a reviewed integration exists |
-| Browser password | No agent password | Independent | Independent |
+| Browser password configuration | Optional launcher-only entry | Codex entry | Antigravity entry |
 
-The launcher may optionally receive its own distinct configuration-backed browser password, but never an agent password. The supported stack does not mount broad home/tool roots, the parent Remote Dev data root or a Docker/Podman socket wholesale.
+The launcher may optionally receive its own configuration-backed browser password, but never an agent password. Keeping separate configuration entries does not require different password values: the current product permits deliberate reuse and imposes no minimum-length/composition rule. The supported stack does not mount broad home/tool roots, the parent Remote Dev data root or a Docker/Podman socket wholesale.
 
 Each role-private `/workspace` is a project collection root. Normal agent Start/Resume selects a validated immediate child `/workspace/<project>` as the working directory; this selection is routing/session context, not isolation from sibling projects already mounted into the same role container.
 
@@ -80,10 +80,12 @@ The #83 maintenance path separates detection from execution:
 
 Protected terminal endpoints use one runtime mechanism: `WEB_PASSWORD`.
 
-- Codex and Antigravity receive distinct configured values.
+- Codex, Antigravity and optional launcher authentication keep separate configuration entries so each can be changed independently.
+- A protected endpoint currently requires a non-empty single-line value; there is no enforced minimum length, composition rule or requirement for different values between services.
+- The operator may therefore reuse the same password value across entries at this stage.
 - The former file-backed browser-password mechanism is retired and is not part of the current persistent-data or Compose contract.
-- Optional launcher authentication uses a distinct launcher value mapped to the launcher's own `WEB_PASSWORD`.
 - TrueNAS/Docker root/admin can inspect deployment configuration and remains inside the trust boundary.
+- Any stronger password/access policy is future work, alongside the broader browser-access/security design tracked by #181 or a dedicated follow-up.
 
 ## Optional integrations
 
@@ -106,6 +108,10 @@ The image does not replace host-side TrueNAS administration. The supported YAML 
 
 `docs/truenas-acl-contract.md` / `.es.md` own the ACL rationale and migration guidance.
 
+## Version/release identity
+
+The local development baseline is `0.1.1-dev`. It is a source/local-build default, not a stable release. Published edge builds use `edge-YYYY.MM.DD-<short-sha>` plus `Channel: edge`; explicit stable publication alone uses `vMAJOR.MINOR.PATCH` and moves `stable`/`latest`.
+
 ## Explicitly deferred
 
 - Additional Python/Node major lines without an explicit migration review.
@@ -117,7 +123,7 @@ The image does not replace host-side TrueNAS administration. The supported YAML 
 - Isolated container build/test tooling without a host Docker socket (#151).
 - Browser/frontend/mobile work tracked by #97/#90/#91/#152/#87.
 - Native TrueNAS Community App/ixVolumes packaging (#170).
-- Stronger browser access/gateway/passkey work (#181).
+- Stronger browser access/gateway/passkey/password-policy work (#181 or a dedicated browser-security decision).
 - A privileged inner-sandbox profile.
 - A virtual-machine distribution.
 
