@@ -2,17 +2,6 @@ name: Review Antigravity candidate
 
 on:
   workflow_dispatch:
-    inputs:
-      installer_sha256:
-        description: Deprecated compatibility field; leave blank. The pending candidate is resolved automatically.
-        required: false
-        default: ""
-        type: string
-      payload_sha256:
-        description: Deprecated compatibility field; leave blank. The pending candidate is resolved automatically.
-        required: false
-        default: ""
-        type: string
 
 permissions:
   contents: read
@@ -23,7 +12,7 @@ concurrency:
 
 jobs:
   candidate:
-    name: inspect the current human-approved pending candidate
+    name: inspect the current explicitly approved pending candidate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -76,6 +65,7 @@ jobs:
           artifact_baseline="$(jq -er '.reviewed_installer_sha256 | select(test("^[0-9a-f]{64}$"))' "$detection_path")"
           [[ "$artifact_baseline" == "$baseline_sha" ]] \
             || { echo "ERROR: pending detection was not generated from this main revision's reviewed baseline" >&2; exit 1; }
+
           python3 scripts/validate-antigravity-review-artifact.py \
             --kind discovery \
             --artifact "$discovery_path" \
@@ -164,9 +154,9 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]] \
             || { echo "ERROR: write-capable Antigravity review may only run from main" >&2; exit 1; }
           [[ "$INSTALLER_SHA256" =~ ^[0-9a-f]{64}$ ]] \
-            || { echo "ERROR: installer approval is not normalized" >&2; exit 1; }
+            || { echo "ERROR: installer admission is not normalized" >&2; exit 1; }
           [[ "$PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] \
-            || { echo "ERROR: payload approval is not normalized" >&2; exit 1; }
+            || { echo "ERROR: payload admission is not normalized" >&2; exit 1; }
 
           git fetch origin main
           set +e
@@ -195,14 +185,14 @@ jobs:
             --artifact third_party/antigravity-cli-detection.json \
             --expected-installer-sha256 "$INSTALLER_SHA256"
           [[ -f third_party/antigravity-cli-candidate.json ]] \
-            || { echo "ERROR: inspection requires a previously validated static candidate" >&2; exit 1; }
+            || { echo "ERROR: inspection requires the same previously validated static candidate" >&2; exit 1; }
           python3 scripts/validate-antigravity-review-artifact.py \
             --kind discovery \
             --artifact third_party/antigravity-cli-candidate.json \
             --expected-installer-sha256 "$INSTALLER_SHA256"
           candidate_payload_sha="$(jq -er '.payload.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-candidate.json)"
           [[ "$candidate_payload_sha" == "$PAYLOAD_SHA256" ]] \
-            || { echo "ERROR: payload approval does not match the pending statically discovered candidate" >&2; exit 1; }
+            || { echo "ERROR: admitted payload does not match the pending statically discovered candidate" >&2; exit 1; }
 
           python3 scripts/update-antigravity-review-evidence.py \
             --live "$ARTIFACT_PATH" \
@@ -229,7 +219,7 @@ jobs:
 
           version="$(jq -er '.installed_binary.version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+([+-][A-Za-z0-9._-]+)?$"))' third_party/antigravity-cli-inspection.json)"
           title="chore: review upstream updates"
-          body="Antigravity full candidate inspection is complete for explicitly admitted installer SHA-256 ${INSTALLER_SHA256} and agy SHA-256 ${PAYLOAD_SHA256}. The normalized committed review records agy ${version}; the static candidate file has been removed because the full review supersedes it. The vendor-execution job had no repository write permission and uploaded no proprietary bytes or raw stdout/stderr. Human review is still required: verify normalized evidence, compatibility findings, current Google terms/privacy policy and the preserved non-redistribution/non-affiliation policy before merge. Runtime availability remains independent of this review PR."
+          body="Antigravity full candidate inspection is complete for the current pending installer SHA-256 ${INSTALLER_SHA256} and agy SHA-256 ${PAYLOAD_SHA256}, explicitly admitted by the manual workflow dispatch. The normalized committed review records agy ${version}; the static candidate file has been removed because the full review supersedes it. The vendor-execution job had no repository write permission and uploaded no proprietary bytes or raw stdout/stderr. Human review is still required: verify normalized evidence, compatibility findings, current Google terms/privacy policy and the preserved non-redistribution/non-affiliation policy before merge. Runtime availability remains independent of this review PR."
 
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
