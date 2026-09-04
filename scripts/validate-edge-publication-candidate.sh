@@ -82,26 +82,20 @@ strict_launcher_preflight() (
   docker network create "$network" >/dev/null
   docker run -d \
     --name "$container" \
-    --user 65532:65532 \
-    --security-opt no-new-privileges:true \
-    --cap-drop ALL \
-    --read-only \
-    --pids-limit 64 \
     --network "$network" \
     --ipc private \
+    --read-only \
+    --user 65532:65532 \
+    --cap-drop ALL \
+    --pids-limit 64 \
+    --security-opt no-new-privileges:true \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=0755 \
+    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
     --env REMOTE_DEV_ROLE=launcher \
     --env REMOTE_DEV_START_MODE=menu \
-    --env ALLOW_INSECURE_WEB=1 \
-    --env WEB_BIND=0.0.0.0 \
-    --env WEB_PORT=7680 \
     --env WEB_CHECK_ORIGIN=1 \
-    --env REMOTE_DEV_LAUNCHER_CODEX_HOST=codex \
-    --env REMOTE_DEV_LAUNCHER_CODEX_PORT=7681 \
-    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \
-    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST=antigravity \
-    --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=7682 \
+    --env WEB_PORT=7680 \
+    --env ALLOW_INSECURE_WEB=1 \
     "$runtime_image_id" >/dev/null
 
   for _ in $(seq 1 30); do
