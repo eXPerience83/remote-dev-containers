@@ -79,6 +79,14 @@ def main() -> None:
         "<!-- remote-dev-periodic-rescan-alert -->",
         "managed issue marker",
     )
+    require_text(text, "gh api --paginate", "pagination-safe issue enumeration")
+    require_text(
+        text,
+        '"repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100"',
+        "direct all-issue API enumeration",
+    )
+    require_text(text, "select(.pull_request == null)", "exclude pull requests from issue ownership")
+    require("gh issue list" not in text, "managed issue lookup must not depend on search/index ranking")
     require_text(text, "gh issue create", "alert creation")
     require_text(text, "gh issue edit", "alert update")
     require_text(text, "gh issue reopen", "alert reopen")
