@@ -7,8 +7,8 @@ The implemented architecture is one user-installed Remote Dev stack, one canonic
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
-├── codex         7681 — independently authenticated terminal
-└── antigravity   7682 — optional/experimental independently authenticated terminal
+├── codex         7681 — authenticated terminal
+└── antigravity   7682 — optional/experimental authenticated terminal
 ```
 
 Implemented foundations include:
@@ -16,7 +16,7 @@ Implemented foundations include:
 - one canonical `ghcr.io/experience83/remote-dev` image/package reused by fixed roles;
 - `launcher`, `codex`, `antigravity` and `shell` runtime roles;
 - one primary launcher URL that navigates to independent agent endpoints rather than proxying terminal traffic;
-- one configuration-backed `WEB_PASSWORD` runtime contract for protected browser endpoints, with distinct values per role;
+- one configuration-backed `WEB_PASSWORD` runtime contract for protected browser endpoints, with separate configuration entries per service but no current requirement that their values differ;
 - role-private workspace, agent/runtime, GitHub, Git, SSH and integration state;
 - one canonical persistent-data layout with shared bootstrap/preflight code;
 - one bounded project resolver/manager below each role-private `/workspace` collection root;
@@ -52,7 +52,7 @@ The launcher:
 - applies a restrictive Content Security Policy;
 - supports optional configuration-backed Basic authentication without introducing agent credentials or persistent browser-password files.
 
-The normal private-network launcher is deliberately password-free because it is navigation only and carries no agent secret. Agent endpoints remain independently authenticated. A stronger single-origin/auth-gateway design, if adopted later, requires its own threat-model review under #181.
+The normal private-network launcher is deliberately password-free because it is navigation only and carries no agent secret. Agent endpoints remain separately authenticated. A stronger single-origin/auth-gateway or password-policy design, if adopted later, requires its own threat-model review under #181 or another explicit browser-access decision.
 
 ## Agent roles
 
@@ -125,7 +125,9 @@ Protected browser endpoints use one runtime variable:
 WEB_PASSWORD
 ```
 
-Codex and Antigravity receive distinct configured values. Optional launcher authentication uses its own value and the launcher never receives an agent password. The previous file-backed browser-password mechanism is retired.
+Codex, Antigravity and optional launcher authentication retain separate configuration entries so each service can be changed independently. For now a protected endpoint requires only a non-empty single-line value: the product does **not** enforce minimum length, password composition or cross-service uniqueness, and the operator may reuse the same value across services. The launcher never receives an agent password.
+
+The previous file-backed browser-password mechanism is retired. Stronger password/access rules are deliberately deferred to a future browser-security decision rather than being implicit in the current runtime or deployment contract.
 
 Host TrueNAS/Docker root/admin can inspect deployment configuration and is inside the trust boundary. The primary product boundary is private-network exposure plus container/mount/credential isolation, not secrecy from the host administrator.
 
@@ -140,6 +142,8 @@ The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, un
 ## Updates and release identity
 
 All enabled services use the same intended `REMOTE_DEV_IMAGE` reference. The image-bundled Codex release remains the reviewed fallback. Optional Codex and Antigravity runtimes persist only in their role-private state and are not immutable image contents.
+
+The local development baseline is `0.1.1-dev`; edge/stable workflows replace that local default with their channel-specific published identities.
 
 Release maturity and build identity are separate:
 
@@ -158,7 +162,7 @@ The full source revision and OCI digest remain stronger provenance. `latest` is 
 
 ## Validation contract
 
-Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, independent agent authentication, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
+Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, protected endpoint authentication without an undocumented password-complexity/uniqueness gate, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
 
 Manual TrueNAS validation remains required when a change affects real deployment behavior; completed lifecycle evidence should not be relisted as future work merely because the repository remains pre-stable.
 
