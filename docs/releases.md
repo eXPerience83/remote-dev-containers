@@ -110,7 +110,7 @@ The normal current deployment selector is:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-All enabled stack roles use the same intended image reference. The launcher remains navigation-only; mutable Codex/Antigravity runtime state remains role-private and is not implied to be part of the edge image digest.
+All enabled stack roles use the same intended image reference. The launcher remains password-free navigation-only; mutable Codex/Antigravity runtime state remains role-private and is not implied to be part of the edge image digest.
 
 ## Automated changelog provenance
 
@@ -197,7 +197,7 @@ Before creating the first or any later stable version tag, verify on one exact `
 4. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
 5. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
 6. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
-7. Launcher origin/CSP/navigation behavior is verified and it has no agent state/password or container-engine socket.
+7. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
 8. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
 9. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
 10. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
