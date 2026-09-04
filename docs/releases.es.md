@@ -16,6 +16,8 @@ dev -> edge -> stable = latest
 
 Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. Remote Dev **todavía no ha publicado una versión estable**; los despliegues públicos integrados actuales utilizan `edge`/`edge-amd64`.
 
+La base local de desarrollo del repositorio es `0.1.1-dev`. Ese valor es solo el predeterminado de código/build local: la publicación edge lo sustituye por una identidad edge fechada y únicamente la publicación estable utiliza SemVer exacto.
+
 ## Capas de identidad
 
 De la identidad más fuerte para reproducir a la etiqueta más orientada a personas:
@@ -23,7 +25,7 @@ De la identidad más fuerte para reproducir a la etiqueta más orientada a perso
 1. **Digest OCI** — `@sha256:<digest>` identifica exactamente el objeto inmutable del registro y es la referencia más fuerte para rollback/reproducción.
 2. **Revisión completa del código fuente** — el SHA completo del commit Git identifica el árbol de código. Las revisiones publicadas de `main` también reciben tags `sha-<full-sha>`.
 3. **Identidad de build/release** — edge usa `edge-YYYY.MM.DD-<7-char-sha>`; stable usa `vMAJOR.MINOR.PATCH` exacto; los candidatos de PR publicados explícitamente conservan una identidad específica del candidato.
-4. **Canal** — `dev`, `edge` o `stable` es el puntero mutable de madurez. `latest` es únicamente un alias de `stable`.
+4. **Canal** — `dev`, `edge` o `stable` es el puntero mutable de madurez. `latest` es siempre un alias de `stable`.
 
 La fecha de una identidad edge corresponde a la fecha UTC de publicación. Nunca se trata como evidencia más fuerte que el SHA completo o el digest OCI.
 
@@ -196,7 +198,7 @@ Antes de crear la primera o cualquier release estable posterior, verifica sobre 
 5. El layout Host Path de referencia TrueNAS cumple el contrato Generic/POSIX de estado privado o existe una decisión equivalente explícitamente documentada; ejecuta el audit ACL del host cuando corresponda.
 6. Launcher y agentes habilitados utilizan la referencia/digest común previsto manteniendo montajes escribibles/privados disjuntos.
 7. El launcher conserva origen/CSP/navegación correctos y no recibe estado/contraseña de agentes ni socket del motor de contenedores.
-8. Los endpoints Codex y Antigravity habilitado se autentican de forma independiente con `WEB_PASSWORD` de configuración; el launcher no recibe ninguna contraseña de agente.
+8. Los endpoints Codex y Antigravity habilitado se autentican mediante sus entradas de configuración separadas; el soporte actual no exige que esos valores de contraseña sean distintos ni que cumplan una longitud mínima/composición impuesta por el proyecto.
 9. Workspace/proyectos, estado del agente, GitHub/Git/SSH y estado runtime que deba persistir sobreviven stop/start y recreación.
 10. Login de dispositivo Codex, Resume de sesiones y las rutas soportadas autonomous/guarded funcionan en el despliegue objetivo.
 11. Si Antigravity forma parte del soporte anunciado, su ruta explícita de runtime del proveedor, estado actual de admisión/integridad y restricciones experimentales siguen siendo válidos; #53 no tiene un bloqueo out-of-cycle pendiente para esa afirmación exacta.
