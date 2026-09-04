@@ -14,11 +14,12 @@ on:
       - "config/**"
       - "third_party/**"
       - ".github/workflows/publish-edge-amd64.yml"
+  schedule:
+    - cron: "11 1 * * 0"
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: publish-edge-amd64
@@ -28,6 +29,9 @@ jobs:
   publish-edge:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,17 +135,6 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact edge base candidate for critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
-          format: json
-          output: trivy-publish-base.json
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
-          exit-code: "0"
-
       - name: Build untagged edge Remote Dev candidate
         id: runtime
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -166,6 +159,47 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Smoke-test the exact publication candidates
+        env:
+          NAMESPACE: ${{ steps.metadata.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+          PROJECT_VERSION: ${{ steps.metadata.outputs.project_version }}
+        run: |
+          set -euo pipefail
+          bash scripts/validate-edge-publication-candidate.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" \
+            "$GITHUB_SHA" \
+            "$PROJECT_VERSION"
+
+      - name: Generate exact edge base SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          format: spdx-json
+          output: sbom-publish-base.spdx.json
+
+      - name: Generate exact edge Remote Dev SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
+          format: spdx-json
+          output: sbom-publish-remote-dev.spdx.json
+          skip-setup-trivy: true
+
+      - name: Scan exact edge base candidate for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          format: json
+          output: trivy-publish-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+          skip-setup-trivy: true
+
       - name: Scan exact edge Remote Dev candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -176,13 +210,16 @@ jobs:
           vuln-type: os,library
           severity: CRITICAL
           exit-code: "0"
+          skip-setup-trivy: true
 
-      - name: Upload publication vulnerability reports
+      - name: Upload exact publication evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: trivy-publication-reports
+          name: edge-publication-reports
           path: |
+            sbom-publish-base.spdx.json
+            sbom-publish-remote-dev.spdx.json
             trivy-publish-base.json
             trivy-publish-remote-dev.json
           if-no-files-found: warn
@@ -194,7 +231,7 @@ jobs:
             "exact edge base publication candidate:trivy-publish-base.json" \
             "exact edge Remote Dev publication candidate:trivy-publish-remote-dev.json"
 
-      - name: Promote one scanned digest to canonical edge tags
+      - name: Promote one scanned and smoke-tested digest to canonical edge tags
         env:
           NAMESPACE: ${{ steps.metadata.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
@@ -223,11 +260,21 @@ jobs:
           promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
 
           if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
+            echo "ERROR: promoted base digest $promoted_base differs from validated digest $BASE_DIGEST" >&2
             exit 1
           fi
           if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
-            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
+            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from validated digest $REMOTE_DEV_DIGEST" >&2
+            exit 1
+          fi
+
+          base_tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:edge-amd64"
+          actual_base_digest="$(
+            docker buildx imagetools inspect "$base_tag_ref" \
+              --format '{{json .Manifest.Digest}}' | tr -d '"'
+          )"
+          if [[ "$actual_base_digest" != "$BASE_DIGEST" ]]; then
+            echo "ERROR: $base_tag_ref resolved to $actual_base_digest instead of $BASE_DIGEST" >&2
             exit 1
           fi
 
