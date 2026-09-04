@@ -24,7 +24,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 
 - One canonical `ghcr.io/experience83/remote-dev` image is reused by fixed-role services.
 - Launcher, Codex and optional Antigravity run in separate containers from the same intended image reference.
-- The launcher is navigation-only and receives no agent workspace/state/password or container-engine socket.
+- The launcher is navigation-only, password-free in the current supported private-network model and receives no agent workspace/state/password or container-engine socket.
 - Role-private workspace, agent state, GitHub/Git/SSH state and runtime-installed vendor state remain isolated.
 - `/workspace` is a role-private project collection root and normal agent Start/Resume resolves a concrete validated child project.
 - Cross-service canaries and exact TrueNAS isolation/lifecycle validation are complete.
@@ -34,7 +34,8 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - `compose/truenas.yml` is the supported canonical TrueNAS Custom App path.
 - One administrator-created root dataset plus ordinary role-private descendants is the normal layout.
 - Deterministic bootstrap and preflight consume the same shared data-layout contract.
-- Browser authentication uses separate configuration-backed `WEB_PASSWORD` entries per protected endpoint; current validation requires only a non-empty single-line value and does not enforce minimum length, composition or cross-service uniqueness, so the operator may reuse the same value.
+- Browser authentication applies to protected agent endpoints through separate configuration-backed `WEB_PASSWORD` entries for Codex and Antigravity; current validation requires only a non-empty single-line value and does not enforce minimum length, composition or cross-service uniqueness, so the operator may reuse the same value.
+- The current launcher is not part of that password contract. Stronger single-entry/gateway authentication is intentionally deferred to #181.
 - The former browser-password file/secret-tree design is gone.
 - The reference Host Path ACL contract is Generic/POSIX, with host-side audit/migration guidance in `docs/truenas-acl-contract.md` and `.es.md`.
 - Real migration/recreation/persistence/session validation for the current layout has completed.
@@ -60,7 +61,7 @@ Remote Dev still has no stable release. The current work is to make the public/s
 
 1. **#92 — documentation synchronization.** Align README EN/ES, project status, roadmap, architecture/security/tool/release guidance and changelog with the implemented stack and final experimental Antigravity wording.
 2. **#31 — tracker reconciliation.** Remove already completed gates from the pending lists and identify only blockers that genuinely remain for the support level claimed by the first stable release.
-3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, authentication, persistence, isolation, notices/SBOM and vulnerability gates.
+3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, agent authentication, persistence, isolation, notices/SBOM and vulnerability gates.
 4. **Stable publication.** Only after the gates pass, create the dated changelog release section and exact `vMAJOR.MINOR.PATCH`; publish `stable` and `latest` as the same reviewed digest.
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
@@ -76,7 +77,7 @@ A normal integrated deployment remains on `edge-amd64` until that explicit stabl
 
 These are not shipped by the current core contract unless their own issue says otherwise:
 
-- #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers, passkeys/MFA and any future password-strength/reuse policy.
+- #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers, passkeys/MFA, a future secure launcher entry point and any future password-strength/reuse policy.
 - #170 — deferred native TrueNAS Community App/ixVolumes research; current YAML remains supported.
 - #124 — optional role-scoped key-only inbound SSH/remote-client path.
 - #95 — Context7 for Antigravity.
