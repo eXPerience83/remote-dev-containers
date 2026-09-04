@@ -110,7 +110,7 @@ El selector de despliegue normal actual es:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:edge-amd64
 ```
 
-Todos los roles habilitados del stack utilizan la misma referencia de imagen prevista. El launcher sigue siendo solo navegación; el estado mutable de runtime de Codex/Antigravity continúa siendo privado por rol y no se considera parte implícita del digest de la imagen edge.
+Todos los roles habilitados del stack utilizan la misma referencia de imagen prevista. El launcher sigue siendo navegación sin contraseña; el estado mutable de runtime de Codex/Antigravity continúa siendo privado por rol y no se considera parte implícita del digest de la imagen edge.
 
 ## Procedencia automatizada del changelog
 
@@ -197,7 +197,7 @@ Antes de crear la primera o cualquier release estable posterior, verifica sobre 
 4. Existe la raíz TrueNAS prevista creada por el administrador y bootstrap/preflight de la misma revisión pasan.
 5. El layout Host Path de referencia TrueNAS cumple el contrato Generic/POSIX de estado privado o existe una decisión equivalente explícitamente documentada; ejecuta el audit ACL del host cuando corresponda.
 6. Launcher y agentes habilitados utilizan la referencia/digest común previsto manteniendo montajes escribibles/privados disjuntos.
-7. El launcher conserva origen/CSP/navegación correctos y no recibe estado/contraseña de agentes ni socket del motor de contenedores.
+7. Se verifica origen/CSP/navegación del launcher sin contraseña; no recibe estado/contraseña de agentes ni socket del motor de contenedores y está vinculado únicamente a la red privada/de confianza prevista. Una futura entrada segura central no forma parte de la afirmación estable actual salvo que #181 cambie explícitamente ese límite antes.
 8. Los endpoints Codex y Antigravity habilitado se autentican mediante sus entradas de configuración separadas; el soporte actual no exige que esos valores de contraseña sean distintos ni que cumplan una longitud mínima/composición impuesta por el proyecto.
 9. Workspace/proyectos, estado del agente, GitHub/Git/SSH y estado runtime que deba persistir sobreviven stop/start y recreación.
 10. Login de dispositivo Codex, Resume de sesiones y las rutas soportadas autonomous/guarded funcionan en el despliegue objetivo.
