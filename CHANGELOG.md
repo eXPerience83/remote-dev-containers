@@ -22,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Human-readable edge build identities in `edge-YYYY.MM.DD-<7-char-sha>` form, backed by the existing full source revision/digest and an explicit embedded `local|dev|edge|stable` image-channel field.
 - Bounded automated upstream changelog provenance that records only actual tracked component version deltas inside the automation-owned Unreleased section while preserving human-authored changelog text.
+- Deterministic Renovate-owned Ubuntu base-image changelog provenance in a separate bounded Unreleased block; Ubuntu tag/digest changes advance one machine-owned state anchor in the same human-reviewed PR, while CI-only GitHub Action/frontend pin maintenance is not mislabeled as a bundled runtime update.
+- Scheduled Antigravity review automation that discovers the current official installer/payload pair from bounded fixed-origin bytes as data without executing vendor code, records changed pairs as metadata-only review state and keeps executable inspection behind the explicit trusted review workflow.
 - Bounded, write-only OSC 52 handling for native Codex `/copy`, served through ttyd 1.7.7's supported `--index` path with deterministic upstream-baseline, provenance, notice and SPDX checks.
 - Shared remote-development base built on Ubuntu 26.04 LTS.
 - Browser-accessible Codex CLI environment using ttyd and persistent tmux sessions.
@@ -45,18 +47,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Accepted architecture contract for one user-installed App, one final image digest, one launcher and isolated per-agent services with private state.
 - A single `run-codex` command launcher shared by menu, resume and direct-start paths so the supported TrueNAS policy cannot silently diverge.
 - Canonical `start-remote-dev-web`, `remote-dev-menu`, `remote-dev-doctor` and role-aware healthcheck commands.
-- Implemented fixed `REMOTE_DEV_ROLE=launcher|codex|shell` resolution with `antigravity` and `claude` reserved.
+- Implemented fixed `REMOTE_DEV_ROLE=launcher|codex|antigravity|shell` resolution; Antigravity is optional/experimental and `claude` remains reserved/unimplemented.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
 - Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge, stable and PR-candidate publication use only this runtime package after exact-digest scanning.
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.
 - Stateless `remote-dev-launcher` page with fixed Codex navigation, optional Basic authentication, origin checking, nonce-based CSP, method restrictions and a secret-free health endpoint.
-- Generic and TrueNAS two-service stacks using the same image reference for the primary launcher on port 7680 and the isolated Codex terminal on port 7681.
+- Generic and TrueNAS stacks using the same image reference for the launcher on port 7680, Codex on port 7681 and optional experimental Antigravity on port 7682 while retaining disjoint mutable state.
 - Separate `compose/launcher-auth.yml` override for optional environment-backed launcher Basic authentication without adding a persistent credential mount.
 - Automated optional/authenticated launcher routing tests, launcher mount-boundary checks and runtime same-image-ID verification.
 - Canonical `REMOTE_DEV_DATA_ROOT` layout with separate `workspaces` and per-role `state` boundaries.
 - Host-side canonical data-layout preflight with regression tests for missing, symlinked or malformed persistent paths.
 - Deterministic host-side data-layout bootstrap sharing one canonical path contract with preflight; it requires an existing administrative root, creates only missing role-private descendants, is idempotent, preserves existing paths/content/modes including deliberate TrueNAS child-dataset mountpoints, and creates no browser-password secrets tree.
+- Read-only TrueNAS ACL audit plus English/Spanish Generic/POSIX private-state contract and NFSv4 migration/rollback guidance, validated on real TrueNAS data before the documentation synchronization.
 - Static Compose regressions for exact role-scoped mount targets, the launcher's bind/persistent-mount boundary and removal of the earlier experimental data-root names.
 - Antigravity conversation entry points using normal Start with in-TUI `/resume` for browsing older conversations and the vendor-supported `--continue` path for the latest conversation.
 - Optional Codex-only Context7 integration using the external Upstash-hosted Streamable HTTP MCP endpoint, with explicit status/install-repair/test/update/remove actions, no bundled Context7 runtime, an owned marked config block, private optional API-key storage and English/Spanish user documentation.
@@ -66,10 +69,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Synchronized the public/project documentation with the implemented single-stack topology: Antigravity is an optional experimental official-CLI integration with completed #29/#96/#106/#131 technical evidence and recorded #53 policy disposition; browser authentication uses only configuration-backed `WEB_PASSWORD`; the TrueNAS reference host layout is Generic/POSIX with the read-only ACL audit; #83 review automation and #189 Renovate provenance are shipped rather than future work.
 - Edge publication now embeds the dated build identity as OCI/runtime version metadata while the mutable `edge` tags remain unchanged; `dev`, stable SemVer tags, `latest = stable`, full source SHA and immutable digest semantics are preserved.
 - Grouped upstream-update PRs now add `CHANGELOG.md` to their deterministic tracked set and record exact old-to-new component version deltas; digest/notice-only refreshes do not create fake version entries.
 - Standardized browser authentication on one per-service `WEB_PASSWORD` contract, retired the alternative password-file path, removed browser-password files from the persistent data layout/preflight, and kept Codex, Antigravity and optional launcher credentials independently configurable.
-- TrueNAS YAML first-install setup now starts from one administrator-created root dataset and uses same-revision bootstrap plus preflight instead of a hand-maintained `mkdir` list; ordinary descendants are the default while deliberate child datasets remain supported and untouched.
+- TrueNAS YAML first-install setup now starts from one administrator-created Generic/POSIX root dataset and uses same-revision bootstrap, preflight and host ACL audit instead of a hand-maintained `mkdir` list or mode-bit-only assumptions; ordinary descendants are the default while deliberate child datasets remain supported and untouched.
 - Moved normal Codex and Antigravity temporary files and uv/npm/pip caches from the bounded `/tmp` tmpfs to a safely prepared hidden tree in each role-private disk-backed workspace, while preserving trusted staging and credential-environment boundaries.
 - Updated the immutable bundled Codex baseline to `0.149.1` and migrated guarded mode from the retired `approval_policy=untrusted` value to launch-scoped untrusted trust for the active project, preserving the outer-container boundary and one-launch mode precedence.
 - Made optional Codex runtime status and menu inspection lightweight and offline, added an offline full-SHA `verify` command, and made Codex diagnostics fail on full runtime-integrity errors. A newer optional runtime is still fully verified before launch; equal or older optional runtimes keep the bundled CLI without package hashing.
@@ -109,8 +113,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced the Codex-specific persistent directory contract with one clean role-neutral administrative root. No data-path alias, migration script, automatic copy, deletion or compatibility symlink is provided.
 - Changed all persistent bind mounts to long syntax with `create_host_path: false` as defense-in-depth and made the explicit host preflight authoritative because some Compose implementations may ignore that option.
 - Moved the TrueNAS reference paths under `/mnt/Pool1/remote-dev`, separating Codex and Antigravity workspace and role-private state trees from browser authentication configuration.
-- Deferred optional SMB/ACL workspace integration and Windows/Git validation to issue #71.
-- Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex start/resume now resolves a concrete `/workspace/<project>`, while experimental Antigravity project wiring reuses the same resolver without establishing supported deployment status. Shell mode remains at the collection root.
+- Kept optional SMB workspace integration and Windows/Git validation under #71 while moving the TrueNAS host private-state ACL contract to the completed Generic/POSIX audit/migration work under #186.
+- Changed `/workspace` from an implicit repository working directory into a private project collection root; Codex and experimental Antigravity start/resume now resolve a concrete `/workspace/<project>` through the shared bounded resolver. Shell mode remains at the collection root.
 - Changed successful project Select/Create actions to return directly to the calling Codex/Antigravity menu with the active project ready for Start/Resume/Continue, while Delete and recoverable invalid/failed/cancelled project actions remain in `Projects...`.
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
@@ -143,8 +147,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Publication workflows scan exact pushed digests before promoting public tags; `remote-dev` runtime tags are verified against `REMOTE_DEV_DIGEST`, while `remote-dev-base` promotion metadata is checked separately against `BASE_DIGEST`.
 - The parent Remote Dev data root is never mounted wholesale; each service receives only the specific child paths required by its role.
 - The host bootstrap/preflight contract rejects missing roots, unsafe symlink ancestry and malformed persistent paths before deployment while preserving existing administrator-created paths rather than silently rewriting them.
+- The TrueNAS host ACL audit rejects NFSv4/non-trivial or broadened private-state ACL conditions against the reviewed Generic/POSIX reference contract without mutating the filesystem; Doctor deliberately does not claim to infer host ACL type from inside the container.
 - Agent credentials, GitHub state, Git configuration, SSH state and workspaces remain private per service.
 - Project selection is a working-directory contract, not an intra-service filesystem sandbox: the full role-private `/workspace` mount remains accessible to processes in that agent container, including sibling projects.
 - Project names/selectors are constrained to direct non-symlink children of the validated role workspace; create/delete cannot target arbitrary paths, and recursive deletion requires exact project-name confirmation.
 - Remote Dev-managed Context7 API keys are kept out of Codex TOML, arguments and diagnostics, stored only in restrictive Codex-private state, and injected only into the Codex process for a healthy Remote Dev-managed integration; unmanaged Context7 configuration is never overwritten and passive lifecycle/status paths do not contact the external service.
 - Context7 device login executes the pinned transient vendor CLI only after explicit user action in credential-minimized private state, disables npm lifecycle scripts and vendor telemetry, drops root execution to an unprivileged identity, validates the returned long-lived key before adoption, and removes the complete transient CLI/login/cache state afterward.
+- Antigravity remains unbundled and experimental under the recorded #53 human support interpretation: Remote Dev uses only the official `agy` runtime path, does not implement an alternative Antigravity client or reuse Google/Antigravity OAuth for other agents/services, and does not present review evidence as vendor signing/certification/endorsement.
