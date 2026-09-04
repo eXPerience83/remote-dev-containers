@@ -176,19 +176,30 @@ jobs:
           marker='<!-- remote-dev-periodic-rescan-alert -->'
           actionable="$(jq -er '.actionable | tostring' "$evidence/periodic-rescan-state.json")"
 
-          issues_json="$(gh issue list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state all \
-            --search 'published image vulnerability alert in:title' \
-            --limit 100 \
-            --json number,title,state,body)"
+          issues_json="$(
+            gh api --paginate \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" \
+            | jq -s '
+                add
+                | map(
+                    select(.pull_request == null)
+                    | {
+                        number,
+                        title,
+                        state: (.state | ascii_upcase),
+                        body: (.body // "")
+                      }
+                  )
+              '
+          )"
 
           exact_count="$(jq --arg title "$title" '[.[] | select(.title == $title)] | length' <<< "$issues_json")"
           unmanaged_count="$(jq --arg title "$title" --arg marker "$marker" \
-            '[.[] | select(.title == $title and ((.body // "") | contains($marker) | not))] | length' \
+            '[.[] | select(.title == $title and (.body | contains($marker) | not))] | length' \
             <<< "$issues_json")"
           managed_count="$(jq --arg title "$title" --arg marker "$marker" \
-            '[.[] | select(.title == $title and ((.body // "") | contains($marker)))] | length' \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | length' \
             <<< "$issues_json")"
 
           if (( unmanaged_count > 0 )); then
@@ -201,10 +212,10 @@ jobs:
           fi
 
           issue_number="$(jq -r --arg title "$title" --arg marker "$marker" \
-            '[.[] | select(.title == $title and ((.body // "") | contains($marker)))] | first | .number // empty' \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | first | .number // empty' \
             <<< "$issues_json")"
           issue_state="$(jq -r --arg title "$title" --arg marker "$marker" \
-            '[.[] | select(.title == $title and ((.body // "") | contains($marker)))] | first | .state // empty' \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | first | .state // empty' \
             <<< "$issues_json")"
 
           if [[ "$actionable" == true ]]; then
