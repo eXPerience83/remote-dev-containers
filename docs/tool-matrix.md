@@ -6,7 +6,7 @@ The one-image, single-stack architecture is implemented. The current experimenta
 
 ```text
 Remote Dev stack
-├── launcher      7680 — navigation only
+├── launcher      7680 — password-free navigation only
 ├── codex         7681 — authenticated terminal
 └── antigravity   7682 — optional/experimental authenticated terminal
 ```
@@ -44,9 +44,9 @@ The system Bubblewrap package/executable is deliberately absent. Supported Codex
 | Git global configuration | No | Private | Private |
 | SSH keys/configuration | No | Private | Private |
 | MCP/integration credentials | No | Private | Private when/if a reviewed integration exists |
-| Browser password configuration | Optional launcher-only entry | Codex entry | Antigravity entry |
+| Browser password configuration | None in current supported launcher flow | Codex entry | Antigravity entry |
 
-The launcher may optionally receive its own configuration-backed browser password, but never an agent password. Keeping separate configuration entries does not require different password values: the current product permits deliberate reuse and imposes no minimum-length/composition rule. The supported stack does not mount broad home/tool roots, the parent Remote Dev data root or a Docker/Podman socket wholesale.
+The launcher is password-free in the current supported private-network model and never receives an agent password. Codex and Antigravity keep separate password configuration entries so they can be changed independently, but the current product permits deliberate value reuse and imposes no minimum-length/composition rule. The supported stack does not mount broad home/tool roots, the parent Remote Dev data root or a Docker/Podman socket wholesale.
 
 Each role-private `/workspace` is a project collection root. Normal agent Start/Resume selects a validated immediate child `/workspace/<project>` as the working directory; this selection is routing/session context, not isolation from sibling projects already mounted into the same role container.
 
@@ -78,14 +78,15 @@ The #83 maintenance path separates detection from execution:
 
 ## Browser authentication
 
-Protected terminal endpoints use one runtime mechanism: `WEB_PASSWORD`.
+Protected **agent** terminal endpoints use one runtime mechanism: `WEB_PASSWORD`.
 
-- Codex, Antigravity and optional launcher authentication keep separate configuration entries so each can be changed independently.
-- A protected endpoint currently requires a non-empty single-line value; there is no enforced minimum length, composition rule or requirement for different values between services.
-- The operator may therefore reuse the same password value across entries at this stage.
+- Codex and Antigravity keep separate configuration entries so each can be changed independently.
+- A protected agent endpoint currently requires a non-empty single-line value; there is no enforced minimum length, composition rule or requirement for different values between agents.
+- The operator may therefore reuse the same password value across Codex and Antigravity at this stage.
+- The normal launcher is outside this password contract and remains password-free.
 - The former file-backed browser-password mechanism is retired and is not part of the current persistent-data or Compose contract.
 - TrueNAS/Docker root/admin can inspect deployment configuration and remains inside the trust boundary.
-- Any stronger password/access policy is future work, alongside the broader browser-access/security design tracked by #181 or a dedicated follow-up.
+- Any stronger single-entry/gateway/password policy is future work under #181 or a dedicated browser-security decision.
 
 ## Optional integrations
 
