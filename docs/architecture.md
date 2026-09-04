@@ -6,7 +6,7 @@ The implemented architecture is one user-installed Remote Dev stack, one canonic
 
 ```text
 Remote Dev stack
-├── launcher      7680 — navigation only
+├── launcher      7680 — password-free navigation only
 ├── codex         7681 — authenticated terminal
 └── antigravity   7682 — optional/experimental authenticated terminal
 ```
@@ -16,7 +16,7 @@ Implemented foundations include:
 - one canonical `ghcr.io/experience83/remote-dev` image/package reused by fixed roles;
 - `launcher`, `codex`, `antigravity` and `shell` runtime roles;
 - one primary launcher URL that navigates to independent agent endpoints rather than proxying terminal traffic;
-- one configuration-backed `WEB_PASSWORD` runtime contract for protected browser endpoints, with separate configuration entries per service but no current requirement that their values differ;
+- one configuration-backed `WEB_PASSWORD` runtime contract for protected **agent** browser endpoints, with separate Codex/Antigravity configuration entries but no current requirement that their values differ;
 - role-private workspace, agent/runtime, GitHub, Git, SSH and integration state;
 - one canonical persistent-data layout with shared bootstrap/preflight code;
 - one bounded project resolver/manager below each role-private `/workspace` collection root;
@@ -50,9 +50,11 @@ The launcher:
 - exposes fixed reviewed navigation only;
 - validates destination/path inputs and matching origins;
 - applies a restrictive Content Security Policy;
-- supports optional configuration-backed Basic authentication without introducing agent credentials or persistent browser-password files.
+- is deliberately password-free in the current supported private-network deployment model.
 
-The normal private-network launcher is deliberately password-free because it is navigation only and carries no agent secret. Agent endpoints remain separately authenticated. A stronger single-origin/auth-gateway or password-policy design, if adopted later, requires its own threat-model review under #181 or another explicit browser-access decision.
+The launcher is currently a small navigation surface, not the trusted authentication gateway for the stack. Codex and Antigravity authenticate at their own endpoints. A future single secure entry point, central authentication/gateway or passkey/MFA design belongs to #181 and requires its own threat-model review before it changes this boundary.
+
+The existing `compose/launcher-auth.yml` override remains an advanced non-default compatibility/experimentation surface; it is not required by the current launcher contract and must not be presented as the normal deployment path.
 
 ## Agent roles
 
@@ -119,15 +121,17 @@ See `docs/truenas-acl-contract.md` / `.es.md` for rationale and migration/rollba
 
 ## Browser authentication contract
 
-Protected browser endpoints use one runtime variable:
+Protected **agent** browser endpoints use one runtime variable:
 
 ```text
 WEB_PASSWORD
 ```
 
-Codex, Antigravity and optional launcher authentication retain separate configuration entries so each service can be changed independently. For now a protected endpoint requires only a non-empty single-line value: the product does **not** enforce minimum length, password composition or cross-service uniqueness, and the operator may reuse the same value across services. The launcher never receives an agent password.
+Codex and Antigravity retain separate configuration entries so each agent can be changed independently. For now a protected agent endpoint requires only a non-empty single-line value: the product does **not** enforce minimum length, password composition or cross-service uniqueness, and the operator may reuse the same value across agents.
 
-The previous file-backed browser-password mechanism is retired. Stronger password/access rules are deliberately deferred to a future browser-security decision rather than being implicit in the current runtime or deployment contract.
+The normal launcher is not a protected agent endpoint and is outside this password contract. It stays password-free in the current architecture. Stronger launcher/gateway access rules are deliberately deferred to #181 rather than being implicit in the current runtime or deployment contract.
+
+The previous file-backed browser-password mechanism is retired.
 
 Host TrueNAS/Docker root/admin can inspect deployment configuration and is inside the trust boundary. The primary product boundary is private-network exposure plus container/mount/credential isolation, not secrecy from the host administrator.
 
@@ -162,10 +166,10 @@ The full source revision and OCI digest remain stronger provenance. `latest` is 
 
 ## Validation contract
 
-Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, protected endpoint authentication without an undocumented password-complexity/uniqueness gate, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
+Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, password-free launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, protected agent authentication without an undocumented password-complexity/uniqueness gate, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
 
 Manual TrueNAS validation remains required when a change affects real deployment behavior; completed lifecycle evidence should not be relisted as future work merely because the repository remains pre-stable.
 
 ## Non-goals
 
-The current architecture does not include enterprise multi-tenant RBAC, administrator secrecy, several agents in one container, shared mutable credentials/state between roles, one writable checkout shared by agents by default, dynamic privileged child containers, engine-socket access, weakened host/container security to force an inner sandbox, or Claude support before dedicated review.
+The current architecture does not include enterprise multi-tenant RBAC, administrator secrecy, several agents in one container, shared mutable credentials/state between roles, one writable checkout shared by agents by default, dynamic privileged child containers, engine-socket access, weakened host/container security to force an inner sandbox, a central secure launcher/gateway before #181, or Claude support before dedicated review.
