@@ -23,6 +23,20 @@
       "datasourceTemplate": "docker",
       "depNameTemplate": "ubuntu",
       "versioningTemplate": "ubuntu"
+    },
+    {
+      "customType": "regex",
+      "description": "Append bounded Ubuntu base-image provenance inside the Renovate-owned Unreleased changelog block",
+      "managerFilePatterns": [
+        "/^CHANGELOG\\.md$/"
+      ],
+      "matchStrings": [
+        "<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=(?<currentValue>\\d+\\.\\d+) UBUNTU_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64}) -->"
+      ],
+      "autoReplaceStringTemplate": "- Ubuntu LTS base {{{currentValue}}}@{{{currentDigest}}} → {{{newValue}}}@{{{newDigest}}}.\n<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION={{{newValue}}} UBUNTU_DIGEST={{{newDigest}}} -->",
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ubuntu",
+      "versioningTemplate": "ubuntu"
     }
   ],
   "packageRules": [
