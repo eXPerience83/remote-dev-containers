@@ -150,7 +150,7 @@ def validate(root: Path) -> None:
     edge_publish = active(
         bounded(
             edge,
-            "      - name: Promote one scanned digest to canonical edge tags\n",
+            "      - name: Promote one scanned and smoke-tested digest to canonical edge tags\n",
             None,
             "edge publication",
         )

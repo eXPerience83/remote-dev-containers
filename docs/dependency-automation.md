@@ -54,3 +54,31 @@ When the managed alert opens or reopens:
 For an unfixed `CRITICAL`, keep the report as evidence and review upstream status, but do not change the repository's gate semantics ad hoc. If project policy changes, update the shared Trivy gate and this monitoring workflow together in a focused review.
 
 This monitoring workflow contains no package-write permission, `docker push`, build/promotion path or `stable`/`latest` mutation. Stable images are intentionally absent until a first stable release exists; adding stable rescans later must resolve immutable stable digests without weakening versioned-tag immutability. #93 separately owns any future scheduled **rebuild and edge promotion** needed to pick up moving Ubuntu APT security revisions; #20 monitoring must not silently grow into that higher-privilege responsibility.
+
+## Controlled edge security rebuilds
+
+`.github/workflows/publish-edge-amd64.yml` is also the single publication implementation for the controlled #93 rebuild cadence. There is no second scheduler with copied registry/tag logic. Besides reviewed `main` pushes and explicit manual dispatch, the same publisher runs every Sunday at **01:11 UTC**, leaving substantial separation from the daily 05:17 upstream-review schedule and the Monday 04:23 published-image rescan.
+
+A scheduled rebuild intentionally re-evaluates moving package repositories used by the Dockerfiles. In particular, the Ubuntu image is pinned by immutable base digest, but `apt` installs the current package revisions available from that pinned Ubuntu release's configured repositories at build time. Therefore the repository source SHA and version pins may stay unchanged while the resulting Remote Dev image digest changes because newer Ubuntu security package revisions were resolved. The dated `edge-YYYY.MM.DD-<short-sha>` label records the rebuild date while the full source SHA still identifies the exact repository source used.
+
+The publisher's trust order is deliberately stricter than “build then tag”:
+
+1. validate trusted `main` repository configuration;
+2. build/push the untagged AMD64 base candidate by digest;
+3. build/push the untagged AMD64 Remote Dev candidate from that exact base digest;
+4. pull those exact immutable candidates and verify source-revision/version/channel labels;
+5. run bundled-notice checks and the exact runtime candidate smoke, Context7 isolation, `noexec` staging, browser-agent authentication and cross-service isolation suites;
+6. generate explicit SPDX JSON SBOMs from the exact candidate digests;
+7. run Trivy CRITICAL scans on the same exact candidate digests;
+8. apply the shared no-fixable-critical gate;
+9. only then promote those validated digests to the mutable `edge`/`edge-amd64` and commit-addressed edge tags and verify the promoted tags resolve back to the candidate digests.
+
+The workflow default permission is `contents: read`; only the trusted `publish-edge` job receives `packages: write`. It has no pull-request trigger. A failure during build, candidate smoke, notice validation, SBOM/Trivy generation, vulnerability gate, registry operation or digest verification prevents the promotion step, so the previously promoted mutable edge tags remain unchanged. Runtime-installed Antigravity bytes remain outside the image and are not redistributed by a rebuild.
+
+### Scheduled rebuild investigation and rollback
+
+For a failed scheduled rebuild, inspect the workflow step and retained `edge-publication-reports` artifact before changing anything. A failed candidate has no mutable edge tag, so do not “repair” the failure by manually tagging its digest. Fix the source/package/repository cause through the normal reviewed path and run the publisher again.
+
+For a successfully promoted rebuild that later shows a runtime regression, use the previously recorded immutable `ghcr.io/experience83/remote-dev@sha256:<digest>` as the rollback identity while investigating. Do not infer rollback identity from a mutable `edge` tag after it has moved. Restore the known-good digest in the deployment, confirm its embedded source revision/channel/version with `remote-dev-version`, and keep the newer digest available for diagnosis. Any later promotion must again pass the complete exact-candidate gate above.
+
+Scheduled rebuilds never create or move `stable`, `latest` or versioned stable tags. A first stable release remains an explicit separate release action with its own immutable candidate/review boundary.
