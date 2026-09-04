@@ -69,6 +69,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Bumped the local development baseline from `0.1.0-dev` to `0.1.1-dev`. This does not create a stable release: edge publication keeps its dated `edge-YYYY.MM.DD-<short-sha>` identity and stable/latest remain reserved for an explicit SemVer release.
+- Clarified the current browser-password policy: protected endpoints require only a non-empty single-line configured value unless an explicit reviewed insecure override is used; Remote Dev does not enforce minimum length, composition or cross-service uniqueness, and separate service configuration entries may intentionally reuse the same password pending a future browser-access/security decision.
 - Synchronized the public/project documentation with the implemented single-stack topology: Antigravity is an optional experimental official-CLI integration with completed #29/#96/#106/#131 technical evidence and recorded #53 policy disposition; browser authentication uses only configuration-backed `WEB_PASSWORD`; the TrueNAS reference host layout is Generic/POSIX with the read-only ACL audit; #83 review automation and #189 Renovate provenance are shipped rather than future work.
 - Edge publication now embeds the dated build identity as OCI/runtime version metadata while the mutable `edge` tags remain unchanged; `dev`, stable SemVer tags, `latest = stable`, full source SHA and immutable digest semantics are preserved.
 - Grouped upstream-update PRs now add `CHANGELOG.md` to their deterministic tracked set and record exact old-to-new component version deltas; digest/notice-only refreshes do not create fake version entries.
