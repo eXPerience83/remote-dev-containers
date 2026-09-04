@@ -48,7 +48,7 @@ Source revision: 22a3bda...<full SHA>
 | `sha-<full-sha>` | One published `main` revision | Source-addressed | Integrated source audit |
 | `@sha256:<digest>` | Exact OCI manifest | Immutable | Exact validation/reproduction/rollback |
 
-`latest` must never point to `dev` or `edge`.
+`latest` is always an alias of `stable`; it must never point to `dev` or `edge`.
 
 Until multi-architecture runtime publication is supported, the generic channel tags and `*-amd64` forms resolve to the AMD64 build. The architecture-specific `dev-amd64`, `edge-amd64` and future `stable-amd64` forms remain the recommended deployment selectors so an eventual architecture expansion can be explicit.
 
