@@ -75,11 +75,10 @@ candidate_startup_metadata() {
     -Lc '%n uid=%u gid=%g mode=%a size=%s' \
     /usr/bin/tini \
     /usr/local/bin/start-remote-dev-web \
-    /usr/local/lib/remote-dev-runtime.sh \
+    /usr/local/lib/remote-dev/remote-dev-runtime.sh \
     /usr/local/bin/remote-dev-launcher \
     /usr/bin/env \
-    /bin/bash \
-    /usr/bin/python3 >&2 \
+    /bin/bash >&2 \
     || fail "could not inspect exact candidate startup path metadata"
 }
 
@@ -178,7 +177,9 @@ strict_launcher_preflight() (
 
 # No candidate process executes before immutable reference, platform and labels pass.
 # Keep startup diagnostics bounded to explicit config fields and file metadata; never
-# dump the candidate environment or arbitrary Docker configuration.
+# dump the candidate environment or arbitrary Docker configuration. Python is supplied
+# by mise through PATH, so the execution probes below validate interpreter resolution
+# without assuming a distro-owned Python interpreter path.
 candidate_startup_metadata
 
 # Reproduce the strict launcher fixture independently, including its resolved local

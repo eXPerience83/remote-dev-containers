@@ -114,13 +114,20 @@ def main() -> None:
     for path in (
         "/usr/bin/tini",
         "/usr/local/bin/start-remote-dev-web",
-        "/usr/local/lib/remote-dev-runtime.sh",
+        "/usr/local/lib/remote-dev/remote-dev-runtime.sh",
         "/usr/local/bin/remote-dev-launcher",
         "/usr/bin/env",
         "/bin/bash",
-        "/usr/bin/python3",
     ):
         require_text(helper, path, "startup path metadata")
+    require(
+        "/usr/local/lib/remote-dev-runtime.sh" not in helper,
+        "startup diagnostics must use the installed runtime library path",
+    )
+    require(
+        "/usr/bin/python3" not in helper,
+        "startup diagnostics must not assume a distro-owned Python interpreter",
+    )
 
     require_text(helper, "strict_launcher_preflight()", "strict launcher diagnostic preflight")
     for required in (
