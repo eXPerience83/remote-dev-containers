@@ -19,3 +19,22 @@ The scheduler can therefore identify both the current installer SHA-256 and curr
 All grouped upstream maintenance shares the single `automation/update-upstreams` branch/PR and the `check-upstream` concurrency group. A scheduled rerun regenerates the branch from current `main` while preserving only schema-valid Antigravity discovery/full-review metadata that still matches the current statically discovered installer/payload pair. Fresh discovery invalidates stale review state. Candidate state is staged before the no-change decision so a newly created untracked candidate cannot be lost. Neither pending Context7 review nor pending/failed Antigravity review revokes or disables an intact runtime admitted under its separate runtime contract.
 
 `scripts/validate-renovate-ownership.py` enforces the Renovate boundary offline. It requires the exact two approved Ubuntu custom managers, synchronizes the changelog state anchor with both runtime pin locations, verifies that the anchor remains inside its machine-owned `Unreleased` boundary, and keeps the existing native-Dockerfile/default-deny and no-automerge guarantees. Regression tests cover a runtime-affecting Ubuntu digest update, deterministic refresh/append behavior, and a GitHub Action SHA-only change that must leave runtime changelog provenance untouched. Adding another manager or transferring a dependency requires a focused review of this contract.
+
+## Periodic published-image vulnerability monitoring
+
+`.github/workflows/rescan-published-images.yml` is a separate **read/scan/alert** maintenance boundary. It does not own versions, rebuild images or publish packages.
+
+Once per week, and on explicit manual dispatch from trusted `main`, the scan job:
+
+1. pulls only the public `edge-amd64` tags for `remote-dev-base` and `remote-dev`;
+2. resolves each mutable tag to exactly one canonical `name@sha256:<digest>` reference and rejects missing/ambiguous/noncanonical results;
+3. scans only those immutable digest references with Trivy using a fresh runner and with restored Trivy DB caching disabled;
+4. retains CRITICAL JSON reports plus `trivy --version` scanner/database metadata for 30 days;
+5. renders a bounded deterministic state/body offline;
+6. applies the same `scripts/enforce-trivy-gate.sh` policy used by normal image workflows: only `CRITICAL` findings with a known `FixedVersion` are actionable/failing, while unfixed critical findings remain visible evidence.
+
+The scan job has only `contents: read` and `packages: read`. A separate writer job has only `contents: read` and `issues: write`; it cannot read/write packages. Before using its write permission, the writer downloads the scan artifact, re-runs the repository renderer from trusted `main` against the raw reports and exact refs, and requires byte-for-byte equality with the transferred state/body.
+
+At most one managed issue uses the exact title `[security] published image vulnerability alert` plus the hidden `remote-dev-periodic-rescan-alert` marker. An actionable scan creates, updates or reopens that issue. The first later clean scan records the clean exact-digest result and closes it. A clean scan with no open managed alert is a no-op. If an exact-title issue is not marked as automation-owned, or multiple managed candidates exist, the workflow fails closed instead of overwriting ambiguous human content.
+
+This monitoring workflow contains no package-write permission, `docker push`, build/promotion path or `stable`/`latest` mutation. #93 separately owns any future scheduled **rebuild and edge promotion** needed to pick up moving Ubuntu APT security revisions; #20 monitoring must not silently grow into that higher-privilege responsibility.
