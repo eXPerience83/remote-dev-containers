@@ -98,6 +98,7 @@ def main() -> None:
         "^ghcr\\.io/experience83/remote-dev@sha256:[0-9a-f]{64}$",
         "helper canonical runtime digest restriction",
     )
+    require_text(helper, "{{.Os}}/{{.Architecture}}", "linux/amd64 platform inspection")
     require_text(helper, "org.opencontainers.image.revision", "source revision label check")
     require_text(helper, "org.opencontainers.image.version", "edge version label check")
     require_text(helper, "io.github.experience83.remote-dev.channel", "channel label check")
