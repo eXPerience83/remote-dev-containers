@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Weekly exact-digest vulnerability rescanning for published AMD64 edge images with fresh Trivy evidence, bounded 30-day reports, a deduplicated automation-owned alert for fixable `CRITICAL` findings, fail-closed report validation and split scan/issue-write permissions; image rebuilding and promotion remain separate under #93.
 - Human-readable edge build identities in `edge-YYYY.MM.DD-<7-char-sha>` form, backed by the existing full source revision/digest and an explicit embedded `local|dev|edge|stable` image-channel field.
 - Bounded automated upstream changelog provenance that records only actual tracked component version deltas inside the automation-owned Unreleased section while preserving human-authored changelog text.
 - Deterministic Renovate-owned Ubuntu base-image changelog provenance in a separate bounded Unreleased block; Ubuntu tag/digest changes advance one machine-owned state anchor in the same human-reviewed PR, while CI-only GitHub Action/frontend pin maintenance is not mislabeled as a bundled runtime update.
