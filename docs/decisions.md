@@ -36,9 +36,9 @@ This rejects both a single container holding every agent's private state and sev
 
 ## D009 — one isolated service per agent
 
-Accepted. Codex, Antigravity and any future Claude integration run in separate services. Each agent service has its own workspace/worktree, authentication, configuration, history, GitHub CLI state, Git configuration, SSH keys and integration credentials.
+Accepted. Codex, Antigravity and any future Claude integration run in separate services. Each agent service has its own workspace/worktree, authentication configuration, history, GitHub CLI state, Git configuration, SSH keys and integration credentials.
 
-The parent data directory and broad home/tool directories are never mounted wholesale. Sharing a writable checkout between agents is not the default.
+Separate authentication configuration does not imply that browser-password values must differ; current password strength/reuse policy is deferred. The parent data directory and broad home/tool directories are never mounted wholesale. Sharing a writable checkout between agents is not the default.
 
 ## D010 — the launcher is not a container control plane
 
@@ -58,11 +58,13 @@ The default image omits system Bubblewrap and the supported Codex launcher expli
 
 ## D013 — one configuration-backed browser password contract
 
-Accepted. Protected browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated independently for each service from deployment configuration.
+Accepted. Protected browser-terminal endpoints use one runtime variable, `WEB_PASSWORD`, populated from a separate deployment configuration entry for each service so roles can be changed independently.
 
 The former browser-password file/mount/secret mechanism is retired. A privileged TrueNAS/Docker administrator can inspect deployment configuration and is inside the product trust boundary; moving the same application password to another host file does not create administrator secrecy.
 
-The launcher receives no agent password. Optional launcher Basic authentication, when used, has its own distinct configuration-backed value.
+For the current pre-stable contract, a protected endpoint requires only a non-empty single-line password. Remote Dev does **not** enforce a minimum length, character-composition rule or cross-service uniqueness, and an operator may intentionally reuse the same value for Codex, Antigravity and optional launcher authentication. Any stronger password/access rule requires a future explicit browser-security decision rather than being inferred from separate configuration entries.
+
+The launcher receives no agent password even when optional launcher Basic authentication is enabled.
 
 ## D014 — Antigravity remains an experimental official-CLI integration
 
@@ -88,3 +90,5 @@ A material change to vendor terms, FAQ, privacy/auth model, installer origin/beh
 Accepted. Human-facing channels are permanently ordered `dev -> edge -> stable = latest`.
 
 An edge build may have a dated identity such as `edge-YYYY.MM.DD-<short-sha>`, but the separate channel remains `edge`; the full source SHA and OCI digest are stronger provenance. Stable publication continues to use exact SemVer and `latest` is only an alias of the same stable digest, never of `dev` or `edge`.
+
+The repository's local development baseline may advance independently between stable releases. It is `0.1.1-dev` after the current documentation/state synchronization and does not create a stable release or replace edge's dated identity.
