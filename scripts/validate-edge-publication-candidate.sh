@@ -58,6 +58,31 @@ for ref in "$base_ref" "$runtime_ref"; do
   assert_label "$ref" io.github.experience83.remote-dev.channel edge
 done
 
+candidate_startup_metadata() {
+  echo "Exact candidate startup config (safe fields only):" >&2
+  docker image inspect --format \
+    'entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}} user={{json .Config.User}} workdir={{json .Config.WorkingDir}}' \
+    "$runtime_image_id" >&2 \
+    || fail "could not inspect safe runtime startup config"
+
+  echo "Exact candidate startup path metadata:" >&2
+  docker run --rm \
+    --network none \
+    --read-only \
+    --user 0:0 \
+    --entrypoint /usr/bin/stat \
+    "$runtime_image_id" \
+    -Lc '%n uid=%u gid=%g mode=%a size=%s' \
+    /usr/bin/tini \
+    /usr/local/bin/start-remote-dev-web \
+    /usr/local/lib/remote-dev-runtime.sh \
+    /usr/local/bin/remote-dev-launcher \
+    /usr/bin/env \
+    /bin/bash \
+    /usr/bin/python3 >&2 \
+    || fail "could not inspect exact candidate startup path metadata"
+}
+
 strict_launcher_preflight() (
   set -euo pipefail
   local suffix="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}-${RANDOM}"
@@ -66,36 +91,73 @@ strict_launcher_preflight() (
 
   cleanup() {
     docker rm -f "$container" >/dev/null 2>&1 || true
+    docker rm -f "${container}-start-script" >/dev/null 2>&1 || true
+    docker rm -f "${container}-direct" >/dev/null 2>&1 || true
     docker network rm "$network" >/dev/null 2>&1 || true
   }
 
+  strict_run_args=(
+    --network "$network"
+    --ipc private
+    --read-only
+    --user 65532:65532
+    --cap-drop ALL
+    --pids-limit 64
+    --security-opt no-new-privileges:true
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755
+    --env REMOTE_DEV_ROLE=launcher
+    --env REMOTE_DEV_START_MODE=menu
+    --env WEB_CHECK_ORIGIN=1
+    --env WEB_PORT=7680
+    --env ALLOW_INSECURE_WEB=1
+  )
+
+  component_probe() {
+    local label="$1"
+    local entrypoint="$2"
+    local probe_name="${container}-${label}"
+    local state=""
+
+    if ! docker run -d --name "$probe_name" \
+      "${strict_run_args[@]}" \
+      --entrypoint "$entrypoint" \
+      "$runtime_image_id" >/dev/null 2>&1; then
+      echo "Strict launcher component probe $label: docker-run-failed" >&2
+      return 0
+    fi
+    sleep 1
+    state="$(docker container inspect --format \
+      'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}}' \
+      "$probe_name" 2>/dev/null || true)"
+    printf 'Strict launcher component probe %s: %s\n' "$label" "$state" >&2
+    docker logs --tail 40 "$probe_name" >&2 2>/dev/null || true
+    docker rm -f "$probe_name" >/dev/null 2>&1 || true
+  }
+
   diagnostics() {
+    local tini_status=0
     echo "Strict launcher candidate diagnostics:" >&2
     docker container inspect --format \
       'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' \
       "$container" >&2 2>/dev/null || true
     echo "Strict launcher candidate log tail (max 80 lines):" >&2
     docker logs --tail 80 "$container" >&2 2>/dev/null || true
+
+    timeout --foreground 15s docker run --rm \
+      "${strict_run_args[@]}" \
+      --entrypoint /usr/bin/tini \
+      "$runtime_image_id" -- /bin/true >/dev/null 2>&1 || tini_status=$?
+    printf 'Strict launcher component probe tini-true: exit=%s\n' "$tini_status" >&2
+
+    component_probe start-script /usr/local/bin/start-remote-dev-web
+    component_probe direct /usr/local/bin/remote-dev-launcher
   }
 
   trap cleanup EXIT INT TERM
   docker network create "$network" >/dev/null
-  docker run -d \
-    --name "$container" \
-    --network "$network" \
-    --ipc private \
-    --read-only \
-    --user 65532:65532 \
-    --cap-drop ALL \
-    --pids-limit 64 \
-    --security-opt no-new-privileges:true \
-    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
-    --env REMOTE_DEV_ROLE=launcher \
-    --env REMOTE_DEV_START_MODE=menu \
-    --env WEB_CHECK_ORIGIN=1 \
-    --env WEB_PORT=7680 \
-    --env ALLOW_INSECURE_WEB=1 \
+  docker run -d --name "$container" \
+    "${strict_run_args[@]}" \
     "$runtime_image_id" >/dev/null
 
   for _ in $(seq 1 30); do
@@ -115,9 +177,13 @@ strict_launcher_preflight() (
 )
 
 # No candidate process executes before immutable reference, platform and labels pass.
+# Keep startup diagnostics bounded to explicit config fields and file metadata; never
+# dump the candidate environment or arbitrary Docker configuration.
+candidate_startup_metadata
+
 # Reproduce the strict launcher fixture independently, including its resolved local
-# image config ID, so a failure leaves bounded, secret-free state/log evidence
-# before the larger isolation fixture cleans itself up.
+# image config ID. On failure, isolate tini, the start script and the launcher with
+# the same outer hardening so the larger isolation fixture cannot erase the cause.
 strict_launcher_preflight \
   || fail "strict launcher candidate preflight failed"
 

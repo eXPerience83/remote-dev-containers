@@ -105,6 +105,23 @@ def main() -> None:
 
     require_text(helper, "runtime_image_id=", "pulled runtime image-ID resolution")
     require_text(helper, '"$runtime_image_id" >/dev/null', "strict fixture uses pulled image ID")
+    require_text(helper, "candidate_startup_metadata()", "safe candidate startup metadata")
+    require_text(
+        helper,
+        "entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}} user={{json .Config.User}} workdir={{json .Config.WorkingDir}}",
+        "bounded startup config inspection",
+    )
+    for path in (
+        "/usr/bin/tini",
+        "/usr/local/bin/start-remote-dev-web",
+        "/usr/local/lib/remote-dev-runtime.sh",
+        "/usr/local/bin/remote-dev-launcher",
+        "/usr/bin/env",
+        "/bin/bash",
+        "/usr/bin/python3",
+    ):
+        require_text(helper, path, "startup path metadata")
+
     require_text(helper, "strict_launcher_preflight()", "strict launcher diagnostic preflight")
     for required in (
         "--user 65532:65532",
@@ -123,9 +140,16 @@ def main() -> None:
     ):
         require_text(helper, required, "strict launcher hardening fixture")
     require_text(helper, "docker logs --tail 80", "bounded launcher log diagnostics")
+    require_text(helper, "docker logs --tail 40", "bounded component log diagnostics")
     require_text(helper, ".State.ExitCode", "launcher exit-code diagnostics")
     require_text(helper, ".State.OOMKilled", "launcher OOM diagnostics")
+    require_text(helper, "component_probe start-script /usr/local/bin/start-remote-dev-web", "start-script isolation probe")
+    require_text(helper, "component_probe direct /usr/local/bin/remote-dev-launcher", "direct launcher isolation probe")
+    require_text(helper, "--entrypoint /usr/bin/tini", "tini execution probe")
+    require_text(helper, "timeout --foreground 15s", "bounded tini probe")
     require(".Config.Env" not in helper, "diagnostics must never dump the candidate environment")
+    require("{{json .Config}}" not in helper, "diagnostics must never dump arbitrary candidate config")
+    require("docker history" not in helper, "diagnostics must not dump build history")
 
     require_text(helper, "remote-dev-notices", "exact candidate notice checks")
     require_text(helper, "codex-smoke-test", "exact candidate Codex smoke")
