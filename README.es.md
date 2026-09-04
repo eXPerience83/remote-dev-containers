@@ -1,4 +1,4 @@
-# Remote Dev Containers — inicio v0.1
+# Remote Dev Containers — inicio v0.1.1-dev
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
@@ -14,8 +14,8 @@ Mantener herramientas de desarrollo, repositorios y agentes de programación en 
 ```text
 Stack Remote Dev
 ├── launcher      7680 — solo navegación
-├── codex         7681 — terminal autenticado de forma independiente
-└── antigravity   7682 — terminal opcional/experimental autenticado de forma independiente
+├── codex         7681 — terminal autenticado
+└── antigravity   7682 — terminal opcional/experimental autenticado
 ```
 
 Bases actuales:
@@ -28,7 +28,7 @@ Bases actuales:
 - Codex CLI desde un artefacto oficial fijado, más una ruta opcional explícita de runtime oficial conservando el CLI incluido como fallback;
 - GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd y tmux;
 - un único contrato canónico y neutral de persistencia;
-- un único contrato runtime de autenticación web basado en `WEB_PASSWORD`, con valores independientes por endpoint protegido;
+- un único contrato runtime de autenticación web basado en `WEB_PASSWORD`, con una entrada de configuración separada por endpoint protegido; actualmente los valores pueden reutilizarse entre servicios;
 - selección de proyecto debajo de cada `/workspace` privado;
 - semántica de releases `dev -> edge -> stable = latest`, manteniendo la identidad fechada de edge separada del canal y de la procedencia inmutable.
 
@@ -90,9 +90,11 @@ Antes de guardar la Custom App, revisa como mínimo:
 
 - cada IP bind de ejemplo y sustitúyela por la IP LAN/Tailscale/malla privada del host;
 - cada bind source `/mnt/Pool1/remote-dev` si tu pool/ruta es distinto;
-- `WEB_PASSWORD` de Codex y el valor independiente de Antigravity si mantienes ese servicio;
+- los valores `WEB_PASSWORD` configurados para Codex y Antigravity opcional; son entradas separadas, pero actualmente pueden contener el mismo valor;
 - zona horaria, identidad Git y modo de aprobación de Codex;
 - `REMOTE_DEV_PROJECT`: vacío para menú normal o un proyecto validado para modo directo.
+
+Remote Dev exige actualmente únicamente un valor no vacío de una sola línea para un endpoint protegido. No impone longitud mínima, composición ni unicidad entre servicios; esas reglas quedan deliberadamente aplazadas a una futura decisión sobre acceso/autenticación web.
 
 Un administrador privilegiado de TrueNAS puede inspeccionar la configuración guardada y está dentro del límite de confianza. Sanea capturas/exportaciones antes de compartirlas.
 
@@ -104,7 +106,7 @@ Cuando la App esté en ejecución, abre:
 http://<IP-LAN-o-malla-privada-de-TrueNAS>:7680
 ```
 
-Codex se autentica independientemente en `7681`; Antigravity utiliza su propia autenticación en `7682`. No expongas estos puertos directamente a Internet.
+Codex se autentica en `7681`; Antigravity lo hace en su endpoint `7682`. Que sean endpoints/configuraciones separadas no obliga a usar contraseñas distintas. No expongas estos puertos directamente a Internet.
 
 Continúa con la [guía práctica](docs/user-guide.es.md).
 
@@ -139,9 +141,9 @@ Seleccionar proyecto elige directorio de trabajo; **no** crea aislamiento de sis
 
 El launcher solo navega. No actúa como proxy ttyd, no gestiona contenedores y no recibe estado de agentes.
 
-Cada endpoint protegido utiliza un único `WEB_PASSWORD` basado en configuración. Compose mapea valores externos distintos a Codex y Antigravity. Las credenciales no se incluyen en enlaces ni pasan por el launcher.
+Cada endpoint protegido utiliza un único `WEB_PASSWORD` basado en configuración. Compose mantiene entradas de configuración separadas para Codex, Antigravity y la autenticación opcional del launcher para que puedan cambiarse de forma independiente. Remote Dev permite actualmente reutilizar el mismo valor entre esas entradas y no aplica reglas de longitud mínima o composición.
 
-El mecanismo antiguo de contraseña web basada en fichero está retirado. La autenticación Basic opcional del launcher sigue disponible mediante `compose/launcher-auth.yml` con un valor propio y sin añadir secretos de agentes.
+El mecanismo antiguo de contraseña web basada en fichero está retirado. La autenticación Basic opcional del launcher sigue disponible mediante `compose/launcher-auth.yml` con una entrada propia y sin añadir secretos de agentes.
 
 ## Modos de aprobación de Codex
 
@@ -242,10 +244,12 @@ mkdir -p \
   data/workspaces/codex/example-project \
   data/state/codex/{agent,gh,git,ssh}
 sudo install -d -o root -g root -m 0700 data/state/codex/runtime
-# Configura un WEB_PASSWORD no vacío y específico de Codex.
+# Configura un WEB_PASSWORD no vacío para Codex.
 make preflight
 ./scripts/build-local.sh
 ```
+
+La versión base de desarrollo local es `0.1.1-dev`; las publicaciones edge usan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar de ese valor local predeterminado.
 
 ## Pruebas públicas con edge
 
@@ -280,7 +284,7 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 
 - No publiques 7680, 7681 ni 7682 directamente a Internet.
 - Vincula el launcher sin contraseña solo a localhost, LAN de confianza o malla privada.
-- Codex y Antigravity mantienen autenticación independiente.
+- Los endpoints protegidos requieren una contraseña configurada no vacía de una sola línea salvo que se use explícitamente el override inseguro revisado; el producto actual no exige contraseñas largas ni mutuamente distintas.
 - No montes estado de agentes ni socket del motor de contenedores en el launcher.
 - Seleccionar proyecto no aísla hermanos ya montados bajo el mismo `/workspace`.
 - No compartas un checkout escribible entre agentes por defecto.
