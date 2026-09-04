@@ -37,4 +37,20 @@ The scan job has only `contents: read` and `packages: read`. A separate writer j
 
 At most one managed issue uses the exact title `[security] published image vulnerability alert` plus the hidden `remote-dev-periodic-rescan-alert` marker. An actionable scan creates, updates or reopens that issue. The first later clean scan records the clean exact-digest result and closes it. A clean scan with no open managed alert is a no-op. If an exact-title issue is not marked as automation-owned, or multiple managed candidates exist, the workflow fails closed instead of overwriting ambiguous human content.
 
-This monitoring workflow contains no package-write permission, `docker push`, build/promotion path or `stable`/`latest` mutation. #93 separately owns any future scheduled **rebuild and edge promotion** needed to pick up moving Ubuntu APT security revisions; #20 monitoring must not silently grow into that higher-privilege responsibility.
+A registry-resolution, Trivy setup/database, scan, report-parse, render or writer-revalidation failure fails visibly and cannot close an existing alert. Reports must contain the reviewed Trivy schema and a present `Results` list; incomplete JSON is never interpreted as a clean result.
+
+### Actionable-finding runbook
+
+When the managed alert opens or reopens:
+
+1. use the alert's workflow link and artifact to identify the exact affected `name@sha256:<digest>` and CVE/package pair;
+2. confirm the Trivy `FixedVersion` and follow the included `PrimaryURL`/reference when available; never infer a fix solely from a mutable tag;
+3. determine whether remediation is an Ubuntu/APT refresh, a tracked bundled dependency update or another image-input change;
+4. apply the fix through the normal reviewed source/update path. For moving Ubuntu package revisions without a source-pin change, #93 owns the controlled rebuild-and-edge-promotion path;
+5. do not manually retag, overwrite or promote an unscanned digest to silence the alert;
+6. after a reviewed image has been published, run or wait for a new periodic rescan and verify that it resolves/scans the new exact digest;
+7. let only a successful clean rescan update and close the managed alert. A failed scan is not evidence of remediation.
+
+For an unfixed `CRITICAL`, keep the report as evidence and review upstream status, but do not change the repository's gate semantics ad hoc. If project policy changes, update the shared Trivy gate and this monitoring workflow together in a focused review.
+
+This monitoring workflow contains no package-write permission, `docker push`, build/promotion path or `stable`/`latest` mutation. Stable images are intentionally absent until a first stable release exists; adding stable rescans later must resolve immutable stable digests without weakening versioned-tag immutability. #93 separately owns any future scheduled **rebuild and edge promotion** needed to pick up moving Ubuntu APT security revisions; #20 monitoring must not silently grow into that higher-privilege responsibility.
