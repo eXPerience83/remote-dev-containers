@@ -15,8 +15,6 @@ The launcher is not an agent container and is not a control plane: it has no age
 
 ## Shared immutable image contents
 
-These executables and project-owned runtime components are shared through read-only image layers:
-
 | Area | Included |
 |---|---|
 | Remote Dev runtime | role validation, launcher/menu, project resolver, diagnostics, version reporting, health checks and reviewed managers |
@@ -48,7 +46,7 @@ The system Bubblewrap package/executable is deliberately absent. Supported Codex
 | MCP/integration credentials | No | Private | Private when/if a reviewed integration exists |
 | Browser password | No agent password | Independent | Independent |
 
-The launcher may optionally receive its own distinct configuration-backed browser password, but never an agent password. The supported stack does not mount `/root`, `/home`, `/opt`, `/usr/local`, the parent Remote Dev data root or a Docker/Podman socket wholesale.
+The launcher may optionally receive its own distinct configuration-backed browser password, but never an agent password. The supported stack does not mount broad home/tool roots, the parent Remote Dev data root or a Docker/Podman socket wholesale.
 
 Each role-private `/workspace` is a project collection root. Normal agent Start/Resume selects a validated immediate child `/workspace/<project>` as the working directory; this selection is routing/session context, not isolation from sibling projects already mounted into the same role container.
 
@@ -56,7 +54,7 @@ Each role-private `/workspace` is a project collection root. Normal agent Start/
 
 | Agent | Distribution in final image | Current state |
 |---|---|---|
-| Codex CLI | Immutable reviewed fallback is bundled from the official pinned release path | **Reference implementation.** A newer compatible official runtime can be explicitly admitted into Codex-private state; the bundled CLI remains fallback |
+| Codex CLI | Immutable reviewed fallback bundled from the official pinned release path | **Reference implementation.** A newer compatible official runtime can be explicitly admitted into Codex-private state; the bundled CLI remains fallback |
 | Antigravity (`agy`) | **Not bundled or redistributed.** Installed/updated explicitly from the reviewed official Google source into Antigravity-private persistent state | **Implemented, optional and experimental.** Project-scoped Start/Resume, conversation continuity, update/rollback, integrity and TrueNAS lifecycle evidence are complete; support remains deliberately experimental under the recorded #53 policy disposition |
 | Claude Code | Not installed or advertised as available | Future dedicated research/implementation path only |
 | OpenCode | Not part of this stack | Independent external project |
@@ -83,7 +81,7 @@ The #83 maintenance path separates detection from execution:
 Protected terminal endpoints use one runtime mechanism: `WEB_PASSWORD`.
 
 - Codex and Antigravity receive distinct configured values.
-- `WEB_PASSWORD_FILE`, browser-password Compose secrets, `/run/secrets/web_password` and password-file persistence are retired.
+- The former file-backed browser-password mechanism is retired and is not part of the current persistent-data or Compose contract.
 - Optional launcher authentication uses a distinct launcher value mapped to the launcher's own `WEB_PASSWORD`.
 - TrueNAS/Docker root/admin can inspect deployment configuration and remains inside the trust boundary.
 
