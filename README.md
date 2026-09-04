@@ -13,7 +13,7 @@ Keep development tools, repositories and coding agents on a remote Docker host s
 
 ```text
 Remote Dev stack
-├── launcher      7680 — navigation only
+├── launcher      7680 — password-free navigation only
 ├── codex         7681 — authenticated terminal
 └── antigravity   7682 — optional/experimental authenticated terminal
 ```
@@ -28,7 +28,7 @@ Current foundations:
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime path with the bundled CLI retained as fallback;
 - GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd and tmux;
 - one canonical role-neutral persistent-data contract;
-- one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract with a separate configuration entry per protected endpoint; values may currently be reused across services;
+- one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract for protected agent endpoints, with separate Codex/Antigravity configuration entries; values may currently be reused across agents;
 - project selection below each private `/workspace` collection root;
 - `dev -> edge -> stable = latest` release semantics, with dated edge build identity separate from channel and immutable provenance.
 
@@ -80,7 +80,7 @@ sudo python3 scripts/truenas-acl-audit.py \
 
 The initializer creates only missing canonical descendants and is idempotent. It does not delete, migrate, rename or recursively rewrite existing project/state contents. Preflight validates the same path contract. The ACL audit is read-only and checks the reference Generic/POSIX private-state policy.
 
-Browser passwords are deployment configuration and are validated by their endpoints at startup. The retired browser-password file/secret-tree design is not part of bootstrap or preflight.
+Browser passwords are deployment configuration and are validated by their agent endpoints at startup. The retired browser-password file/secret-tree design is not part of bootstrap or preflight.
 
 If you intentionally maintain a local Codex-only YAML without Antigravity, omit `--include-antigravity` consistently. For exact candidate/digest validation, see the [TrueNAS validation runbook](docs/truenas-antigravity-validation.md) and [TrueNAS ACL contract](docs/truenas-acl-contract.md).
 
@@ -94,7 +94,7 @@ Before saving the Custom App, review at least:
 - timezone, Git identity and Codex approval mode where needed;
 - `REMOTE_DEV_PROJECT`: leave the YAML value empty for normal menu mode or set a validated fixed project for direct-agent use.
 
-Remote Dev currently requires only a non-empty single-line value for a protected endpoint. It does not enforce minimum length, composition or cross-service uniqueness yet; those choices are intentionally deferred to a future browser-access/security decision.
+Remote Dev currently requires only a non-empty single-line value for a protected agent endpoint. It does not enforce minimum length, composition or cross-service uniqueness yet; those choices are intentionally deferred to a future browser-access/security decision.
 
 A privileged TrueNAS administrator can inspect saved App/container configuration and is inside Remote Dev's trust boundary. Sanitize screenshots/YAML exports before sharing them.
 
@@ -106,7 +106,7 @@ After the App is running, open:
 http://<TrueNAS-LAN-or-private-mesh-IP>:7680
 ```
 
-Port `7680` is the launcher. Codex authenticates on `7681`; Antigravity authenticates separately on `7682`. Separate endpoints/configuration do not require different password values. Do not expose these ports directly to the public Internet.
+Port `7680` is the launcher and is intentionally password-free in the current private-network model. Codex authenticates on `7681`; Antigravity authenticates separately on `7682`. Separate agent endpoints/configuration do not require different password values. Do not expose these ports directly to the public Internet.
 
 Continue with the [practical user guide](docs/user-guide.md).
 
@@ -143,11 +143,15 @@ Project selection chooses a working directory; it is **not** a filesystem-isolat
 
 ## Launcher and browser authentication
 
-The launcher is navigation only. It does not proxy ttyd traffic, manage containers or receive agent state.
+The launcher is a small navigation-only interface. It does not proxy ttyd traffic, manage containers or receive agent state/credentials.
 
-Each protected endpoint uses one configuration-backed `WEB_PASSWORD` value. Generic Compose keeps separate operator-facing entries for Codex, Antigravity and optional launcher authentication so they can be changed independently. Remote Dev currently permits those entries to use the same password value and applies no minimum-length or composition rule.
+**The current supported launcher does not require a password.** Bind it only to localhost, a trusted LAN or a private mesh such as Tailscale. It is not yet the central secure authentication gateway for the stack.
 
-The former file-backed browser-password mechanism is retired. Optional launcher Basic authentication remains available for advanced generic Compose deployments through `compose/launcher-auth.yml`; its launcher-only configuration entry adds no agent secrets.
+Codex and enabled Antigravity are the protected endpoints. Each uses one configuration-backed `WEB_PASSWORD` value. Generic Compose keeps separate operator-facing entries for those agent services so they can be changed independently. Remote Dev currently permits those entries to use the same password value and applies no minimum-length or composition rule.
+
+The former file-backed browser-password mechanism is retired. Stronger single-entry authentication, a central gateway, identity/passkeys/MFA or a design where the launcher becomes the trusted entry boundary is future #181 work.
+
+An existing `compose/launcher-auth.yml` advanced override remains in the repository, but it is not part of the normal current deployment path and is not required to use Remote Dev.
 
 ## Codex approval modes
 
@@ -292,7 +296,8 @@ See [`docs/releases.md`](docs/releases.md).
 
 - Do not publish ports 7680, 7681 or 7682 directly to the Internet.
 - Bind the password-free launcher only to localhost, a trusted LAN or a private mesh such as Tailscale.
-- Protected endpoints require a configured non-empty single-line password unless explicitly placed behind the reviewed insecure override; the current product does not require long or mutually different password values.
+- Codex and enabled Antigravity require configured non-empty single-line passwords unless an explicit reviewed insecure override applies; the current product does not require long or mutually different password values.
+- The launcher is not yet the secure authentication gateway; that future design belongs to #181.
 - Do not mount agent state or a container-engine socket into the launcher.
 - Project selection changes working directory; it does not isolate sibling projects already mounted under the same `/workspace`.
 - Do not share one writable checkout across agent services by default.
