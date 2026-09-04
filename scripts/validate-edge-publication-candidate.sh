@@ -32,6 +32,11 @@ for ref in "$base_ref" "$runtime_ref"; do
   docker pull --quiet "$ref" >/dev/null
 done
 
+runtime_image_id="$(docker image inspect "$runtime_ref" --format '{{.Id}}')" \
+  || fail "could not resolve the pulled runtime image ID"
+[[ "$runtime_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || fail "pulled runtime image ID is malformed"
+
 assert_label() {
   local ref="$1"
   local key="$2"
@@ -97,7 +102,7 @@ strict_launcher_preflight() (
     --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_ENABLED=1 \
     --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_HOST=antigravity \
     --env REMOTE_DEV_LAUNCHER_ANTIGRAVITY_PORT=7682 \
-    "$runtime_ref" >/dev/null
+    "$runtime_image_id" >/dev/null
 
   for _ in $(seq 1 30); do
     if [[ "$(docker container inspect --format '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]]; then
@@ -116,8 +121,9 @@ strict_launcher_preflight() (
 )
 
 # No candidate process executes before immutable reference, platform and labels pass.
-# Reproduce the strict launcher fixture independently so a failure leaves bounded,
-# secret-free state/log evidence before the larger isolation fixture cleans itself up.
+# Reproduce the strict launcher fixture independently, including its resolved local
+# image config ID, so a failure leaves bounded, secret-free state/log evidence
+# before the larger isolation fixture cleans itself up.
 strict_launcher_preflight \
   || fail "strict launcher candidate preflight failed"
 
