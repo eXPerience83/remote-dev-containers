@@ -179,7 +179,7 @@ strict_launcher_preflight() (
 # Keep startup diagnostics bounded to explicit config fields and file metadata; never
 # dump the candidate environment or arbitrary Docker configuration. Python is supplied
 # by mise through PATH, so the execution probes below validate interpreter resolution
-# without assuming that a distro-owned /usr/bin/python3 exists.
+# without assuming a distro-owned Python interpreter path.
 candidate_startup_metadata
 
 # Reproduce the strict launcher fixture independently, including its resolved local
