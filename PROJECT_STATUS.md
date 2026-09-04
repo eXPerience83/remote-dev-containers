@@ -16,8 +16,6 @@
 
 ## Current implementation
 
-The implemented topology is:
-
 ```text
 Remote Dev stack
 ├── launcher      7680 — navigation only
@@ -41,7 +39,7 @@ There is one supported browser-terminal password runtime contract: `WEB_PASSWORD
 
 - Codex and Antigravity use independent non-empty configured values.
 - The launcher receives no agent password. Optional launcher Basic authentication uses its own configuration-backed password.
-- `WEB_PASSWORD_FILE`, `/run/secrets/web_password`, browser-password files and the old password `secrets/` tree are retired.
+- The former browser-password file/mount/secret-tree mechanism is retired and must not be presented as supported.
 - TrueNAS/Docker root/admin can inspect deployment configuration and is inside the trust boundary; the product does not claim secrecy from the host administrator.
 
 Persistent data is rooted at one administrator-selected `REMOTE_DEV_DATA_ROOT` but only narrow role-private descendants are mounted into agent containers. Each `/workspace` is a private project collection root; normal Start/Resume/direct-agent paths resolve a concrete validated `/workspace/<project>`.
