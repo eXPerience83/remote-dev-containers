@@ -13,7 +13,7 @@ Current high-level ownership:
 - #36 records the completed TrueNAS outer-isolation and no-system-Bubblewrap decision.
 - #42 records completed outer-container hardening and cross-service canaries.
 - #53 is the standing third-party/license/vendor-policy review log. Automation provides evidence, never legal approval.
-- #69 is the completed browser-authentication decision: one configuration-backed `WEB_PASSWORD` runtime contract; `WEB_PASSWORD_FILE` is retired.
+- #69 is the completed browser-authentication decision: one configuration-backed `WEB_PASSWORD` runtime contract; the former file-backed browser-password path is retired.
 - #70/#167 define the canonical persistent-data layout and deterministic TrueNAS bootstrap/preflight.
 - #186 defines the completed TrueNAS Generic/POSIX private-state ACL audit/migration contract.
 - #92 owns broad English/Spanish documentation and implementation-status synchronization.
@@ -81,7 +81,7 @@ Host TrueNAS/Docker root/admin is trusted and can inspect deployment configurati
 - Protected endpoints use `WEB_PASSWORD` only.
 - Codex and Antigravity values are independent.
 - Optional launcher authentication uses a distinct launcher value.
-- Do not reintroduce `WEB_PASSWORD_FILE`, `/run/secrets/web_password`, browser-password Compose secrets or a persistent password-file tree without a new explicit architecture decision.
+- Do not reintroduce the retired file-backed browser-authentication path, browser-password Compose secrets or persistent browser-password files without a new explicit architecture decision.
 - Never log or derive reusable metadata from password contents.
 
 ### Antigravity runtime-admission rules
