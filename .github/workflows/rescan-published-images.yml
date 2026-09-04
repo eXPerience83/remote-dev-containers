@@ -1,0 +1,245 @@
+name: Rescan published AMD64 images
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: periodic-published-image-rescan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      rendered: ${{ steps.render.outputs.rendered }}
+
+    steps:
+      - name: Checkout trusted main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve mutable edge tags to exact digests
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_ref="$(bash scripts/resolve-published-image-digest.sh \
+            ghcr.io/experience83/remote-dev-base edge-amd64)"
+          runtime_ref="$(bash scripts/resolve-published-image-digest.sh \
+            ghcr.io/experience83/remote-dev edge-amd64)"
+          printf 'base_ref=%s\n' "$base_ref" >> "$GITHUB_OUTPUT"
+          printf 'runtime_ref=%s\n' "$runtime_ref" >> "$GITHUB_OUTPUT"
+          printf 'Resolved base: %s\n' "$base_ref"
+          printf 'Resolved runtime: %s\n' "$runtime_ref"
+
+      - name: Scan exact published base digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.resolve.outputs.base_ref }}
+          format: json
+          output: trivy-published-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+          cache: false
+
+      - name: Scan exact published Remote Dev digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.resolve.outputs.runtime_ref }}
+          format: json
+          output: trivy-published-remote-dev.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+          cache: false
+          skip-setup-trivy: true
+
+      - name: Record scanner and vulnerability database metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy --version > trivy-version.txt
+          test -s trivy-version.txt
+          cat trivy-version.txt
+
+      - name: Render bounded alert metadata
+        id: render
+        shell: bash
+        env:
+          BASE_REF: ${{ steps.resolve.outputs.base_ref }}
+          RUNTIME_REF: ${{ steps.resolve.outputs.runtime_ref }}
+        run: |
+          set -euo pipefail
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          python3 scripts/render-vulnerability-rescan-alert.py \
+            --base-report trivy-published-base.json \
+            --runtime-report trivy-published-remote-dev.json \
+            --base-ref "$BASE_REF" \
+            --runtime-ref "$RUNTIME_REF" \
+            --scanner-metadata trivy-version.txt \
+            --run-url "$run_url" \
+            --body-output periodic-rescan-alert.md \
+            --state-output periodic-rescan-state.json
+          jq -e '.schema_version == 1 and (.actionable | type == "boolean")' \
+            periodic-rescan-state.json >/dev/null
+          echo 'rendered=true' >> "$GITHUB_OUTPUT"
+
+      - name: Upload exact rescan evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: periodic-image-rescan-${{ github.run_id }}
+          path: |
+            trivy-published-base.json
+            trivy-published-remote-dev.json
+            trivy-version.txt
+            periodic-rescan-alert.md
+            periodic-rescan-state.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce the existing fixable-critical gate
+        shell: bash
+        run: |
+          bash scripts/enforce-trivy-gate.sh \
+            "published base:trivy-published-base.json" \
+            "published Remote Dev:trivy-published-remote-dev.json"
+
+  reconcile-alert:
+    needs: scan
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.scan.outputs.rendered == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout trusted main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download rescan evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: periodic-image-rescan-${{ github.run_id }}
+          path: periodic-rescan-evidence
+
+      - name: Revalidate evidence after crossing into write-capable job
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence=periodic-rescan-evidence
+          jq -e '
+            .schema_version == 1
+            and .marker == "<!-- remote-dev-periodic-rescan-alert -->"
+            and (.actionable | type == "boolean")
+            and (.fixable_critical_count | type == "number")
+          ' "$evidence/periodic-rescan-state.json" >/dev/null
+          base_ref="$(jq -er '.base_ref | strings' "$evidence/periodic-rescan-state.json")"
+          runtime_ref="$(jq -er '.runtime_ref | strings' "$evidence/periodic-rescan-state.json")"
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          python3 scripts/render-vulnerability-rescan-alert.py \
+            --base-report "$evidence/trivy-published-base.json" \
+            --runtime-report "$evidence/trivy-published-remote-dev.json" \
+            --base-ref "$base_ref" \
+            --runtime-ref "$runtime_ref" \
+            --scanner-metadata "$evidence/trivy-version.txt" \
+            --run-url "$run_url" \
+            --body-output /tmp/revalidated-periodic-rescan-alert.md \
+            --state-output /tmp/revalidated-periodic-rescan-state.json
+          cmp "$evidence/periodic-rescan-alert.md" /tmp/revalidated-periodic-rescan-alert.md
+          cmp "$evidence/periodic-rescan-state.json" /tmp/revalidated-periodic-rescan-state.json
+
+      - name: Create, update or close the single vulnerability alert
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          evidence=periodic-rescan-evidence
+          title='[security] published image vulnerability alert'
+          marker='<!-- remote-dev-periodic-rescan-alert -->'
+          actionable="$(jq -er '.actionable | tostring' "$evidence/periodic-rescan-state.json")"
+
+          issues_json="$(
+            gh api --paginate \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" \
+            | jq -s '
+                add
+                | map(
+                    select(.pull_request == null)
+                    | {
+                        number,
+                        title,
+                        state: (.state | ascii_upcase),
+                        body: (.body // "")
+                      }
+                  )
+              '
+          )"
+
+          exact_count="$(jq --arg title "$title" '[.[] | select(.title == $title)] | length' <<< "$issues_json")"
+          unmanaged_count="$(jq --arg title "$title" --arg marker "$marker" \
+            '[.[] | select(.title == $title and (.body | contains($marker) | not))] | length' \
+            <<< "$issues_json")"
+          managed_count="$(jq --arg title "$title" --arg marker "$marker" \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | length' \
+            <<< "$issues_json")"
+
+          if (( unmanaged_count > 0 )); then
+            echo 'ERROR: exact alert title is already owned by a non-automation issue' >&2
+            exit 1
+          fi
+          if (( managed_count > 1 || exact_count > 1 )); then
+            echo 'ERROR: multiple periodic rescan alert issues exist; refusing ambiguous mutation' >&2
+            exit 1
+          fi
+
+          issue_number="$(jq -r --arg title "$title" --arg marker "$marker" \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | first | .number // empty' \
+            <<< "$issues_json")"
+          issue_state="$(jq -r --arg title "$title" --arg marker "$marker" \
+            '[.[] | select(.title == $title and (.body | contains($marker)))] | first | .state // empty' \
+            <<< "$issues_json")"
+
+          if [[ "$actionable" == true ]]; then
+            if [[ -z "$issue_number" ]]; then
+              gh issue create \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "$title" \
+                --body-file "$evidence/periodic-rescan-alert.md"
+            else
+              if [[ "$issue_state" == CLOSED ]]; then
+                gh issue reopen "$issue_number" --repo "$GITHUB_REPOSITORY"
+              fi
+              gh issue edit "$issue_number" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body-file "$evidence/periodic-rescan-alert.md"
+            fi
+          elif [[ -n "$issue_number" && "$issue_state" == OPEN ]]; then
+            gh issue edit "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body-file "$evidence/periodic-rescan-alert.md"
+            gh issue close "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --reason completed \
+              --comment 'The latest exact-digest periodic rescan found no fixable CRITICAL vulnerabilities. Closing the deduplicated alert; a later actionable rescan will reopen it.'
+          else
+            echo 'No actionable vulnerability alert is open; nothing to change.'
+          fi
