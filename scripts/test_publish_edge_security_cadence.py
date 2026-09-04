@@ -103,6 +103,8 @@ def main() -> None:
     require_text(helper, "org.opencontainers.image.version", "edge version label check")
     require_text(helper, "io.github.experience83.remote-dev.channel", "channel label check")
 
+    require_text(helper, "runtime_image_id=", "pulled runtime image-ID resolution")
+    require_text(helper, '"$runtime_image_id" >/dev/null', "strict fixture uses pulled image ID")
     require_text(helper, "strict_launcher_preflight()", "strict launcher diagnostic preflight")
     for required in (
         "--user 65532:65532",
