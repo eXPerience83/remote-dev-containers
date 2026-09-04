@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-09-02",
+  "refreshed_on": "2026-09-04",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.99.0",
+      "version": "2.100.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.99.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.100.0/LICENSE"
         }
       ]
     },
@@ -94,14 +94,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.9.0",
+      "version": "2026.9.1",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.9.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.9.1/LICENSE"
         }
       ]
     },
@@ -181,19 +181,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.152.1",
+      "version": "rust-v0.153.2",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.152.1/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.2/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.152.1/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.2/NOTICE"
         }
       ]
     }

@@ -1,52 +1,5 @@
 {
-  "schema_version": 2,
-  "inspection_date_utc": "2026-08-05",
-  "workflow": {
-    "name": "Inspect Antigravity CLI",
-    "path": ".github/workflows/inspect-antigravity-cli.yml",
-    "artifact_name": "antigravity-cli-inspection",
-    "retention_days": 14
-  },
-  "installer": {
-    "official_url": "https://antigravity.google/cli/install.sh",
-    "final_url": "https://antigravity.google/cli/install.sh",
-    "content_type": "application/x-sh",
-    "size": 7354,
-    "sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
-    "advertised_options": {
-      "custom_directory": true,
-      "skip_aliases": false,
-      "skip_path": false
-    },
-    "selected_strategy": "custom-directory",
-    "referenced_https_hosts": [
-      "antigravity-cli-auto-updater-974169037036.us-central1.run.app"
-    ]
-  },
-  "installed_binary": {
-    "relative_path": ".local/bin/agy",
-    "version": "1.1.10",
-    "size": 193835456,
-    "sha256": "4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71",
-    "format": {
-      "elf_64_bit": true,
-      "x86_64": true,
-      "pie": true,
-      "dynamically_linked": true,
-      "stripped": true,
-      "interpreter": "/lib64/ld-linux-x86-64.so.2"
-    },
-    "dynamic_dependencies": [
-      "libc.so.6",
-      "libdl.so.2",
-      "libm.so.6",
-      "libpthread.so.0",
-      "libresolv.so.2",
-      "librt.so.1"
-    ],
-    "version_check_exit_code": 0,
-    "help_check_exit_code": 0
-  },
+  "blocking_findings": [],
   "filesystem": {
     "created_relative_paths": [
       ".cache",
@@ -56,23 +9,70 @@
       ".local/bin",
       ".local/bin/agy"
     ],
-    "shell_profiles_changed": false,
-    "installed_license_or_notice_files": []
+    "installed_license_or_notice_files": [],
+    "shell_profiles_changed": false
   },
-  "repeat_install": {
-    "exit_code": 0,
-    "binary_hash_unchanged": true,
-    "behavior": "The installer detects the existing binary, does not replace it, states that regular CLI runs self-update in the background, and recommends deleting the binary for a fresh installation."
+  "inspection_date_utc": "2026-08-05",
+  "installed_binary": {
+    "dynamic_dependencies": [
+      "libc.so.6",
+      "libdl.so.2",
+      "libm.so.6",
+      "libpthread.so.0",
+      "libresolv.so.2",
+      "librt.so.1"
+    ],
+    "format": {
+      "dynamically_linked": true,
+      "elf_64_bit": true,
+      "interpreter": "/lib64/ld-linux-x86-64.so.2",
+      "pie": true,
+      "stripped": true,
+      "x86_64": true
+    },
+    "help_check_exit_code": 0,
+    "relative_path": ".local/bin/agy",
+    "sha256": "4217db798fd514cedce4e315013daea471a1a67666ab91547b2ad0dbee167a71",
+    "size": 193835456,
+    "version": "1.1.10",
+    "version_check_exit_code": 0
+  },
+  "installer": {
+    "advertised_options": {
+      "custom_directory": true,
+      "skip_aliases": false,
+      "skip_path": false
+    },
+    "content_type": "application/x-sh",
+    "final_url": "https://antigravity.google/cli/install.sh",
+    "official_url": "https://antigravity.google/cli/install.sh",
+    "referenced_https_hosts": [
+      "antigravity-cli-auto-updater-974169037036.us-central1.run.app"
+    ],
+    "selected_strategy": "custom-directory",
+    "sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
+    "size": 7354
+  },
+  "legal_and_distribution": {
+    "decision": "Do not copy the Antigravity installer or binary into the repository or public image. Any supported integration must perform an explicit user-initiated download from the fixed official vendor endpoint and remain subject to Google's separate terms and privacy policy.",
+    "installed_package_contains_separate_license_or_notice_files": false,
+    "redistribution_permission_confirmed": false
   },
   "official_runtime_controls": {
     "disable_background_auto_update": "AGY_CLI_DISABLE_AUTO_UPDATE=true",
     "persistent_settings": "~/.gemini/antigravity-cli/settings.json",
     "updater_state": "~/.gemini/antigravity-cli/updater/"
   },
-  "legal_and_distribution": {
-    "installed_package_contains_separate_license_or_notice_files": false,
-    "redistribution_permission_confirmed": false,
-    "decision": "Do not copy the Antigravity installer or binary into the repository or public image. Any supported integration must perform an explicit user-initiated download from the fixed official vendor endpoint and remain subject to Google's separate terms and privacy policy."
+  "repeat_install": {
+    "behavior": "The installer detects the existing binary, does not replace it, states that regular CLI runs self-update in the background, and recommends deleting the binary for a fresh installation.",
+    "binary_hash_unchanged": true,
+    "exit_code": 0
   },
-  "blocking_findings": []
+  "schema_version": 2,
+  "workflow": {
+    "artifact_name": "antigravity-cli-inspection",
+    "name": "Inspect Antigravity CLI",
+    "path": ".github/workflows/inspect-antigravity-cli.yml",
+    "retention_days": 14
+  }
 }
