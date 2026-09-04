@@ -16,6 +16,8 @@ dev -> edge -> stable = latest
 
 These concepts stay separate from human-readable build identity and immutable provenance. Remote Dev has **not published a stable release yet**; current public integrated deployments use `edge`/`edge-amd64`.
 
+The repository's local development baseline is `0.1.1-dev`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer.
+
 ## Identity layers
 
 From strongest reproduction identity to most human-oriented label:
@@ -23,7 +25,7 @@ From strongest reproduction identity to most human-oriented label:
 1. **OCI digest** — `@sha256:<digest>` is the exact immutable registry object and the strongest rollback/reproduction reference.
 2. **Full source revision** — the complete Git commit SHA identifies the source tree. Published `main` revisions also receive `sha-<full-sha>` tags.
 3. **Build/release identity** — edge uses `edge-YYYY.MM.DD-<7-char-sha>`; stable uses exact `vMAJOR.MINOR.PATCH`; explicitly published PR candidates keep candidate-specific identity.
-4. **Channel** — `dev`, `edge` or `stable` is the mutable maturity pointer. `latest` is only an alias of `stable`.
+4. **Channel** — `dev`, `edge` or `stable` is the mutable maturity pointer. `latest` is always an alias of `stable`.
 
 The date in an edge identity is the UTC publication date. It is never treated as stronger evidence than the full source SHA or OCI digest.
 
@@ -48,7 +50,7 @@ Source revision: 22a3bda...<full SHA>
 | `sha-<full-sha>` | One published `main` revision | Source-addressed | Integrated source audit |
 | `@sha256:<digest>` | Exact OCI manifest | Immutable | Exact validation/reproduction/rollback |
 
-`latest` is always an alias of `stable`; it must never point to `dev` or `edge`.
+`latest` must never point to `dev` or `edge`.
 
 Until multi-architecture runtime publication is supported, the generic channel tags and `*-amd64` forms resolve to the AMD64 build. The architecture-specific `dev-amd64`, `edge-amd64` and future `stable-amd64` forms remain the recommended deployment selectors so an eventual architecture expansion can be explicit.
 
@@ -196,7 +198,7 @@ Before creating the first or any later stable version tag, verify on one exact `
 5. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
 6. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
 7. Launcher origin/CSP/navigation behavior is verified and it has no agent state/password or container-engine socket.
-8. Codex and enabled Antigravity endpoints authenticate independently through configuration-backed `WEB_PASSWORD` values; launcher receives no agent password.
+8. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
 9. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
 10. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
 11. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
