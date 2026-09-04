@@ -58,6 +58,10 @@ jobs:
             scripts/validate-release-channel-contract.py \
             scripts/validate-renovate-ownership.py \
             scripts/test_validate_renovate_ownership.py \
+            scripts/render-vulnerability-rescan-alert.py \
+            scripts/test_render_vulnerability_rescan_alert.py \
+            scripts/test_resolve_published_image_digest.py \
+            scripts/test_periodic_image_rescan_workflow.py \
             web/ttyd-osc52/generate.py \
             web/ttyd-osc52/validate.py \
             web/ttyd-osc52/test_generate.py
@@ -94,6 +98,9 @@ jobs:
           jq -e . renovate.json >/dev/null
           python3 scripts/validate-renovate-ownership.py --root .
           python3 scripts/test_validate_renovate_ownership.py
+          python3 scripts/test_render_vulnerability_rescan_alert.py
+          python3 scripts/test_resolve_published_image_digest.py
+          python3 scripts/test_periodic_image_rescan_workflow.py
           jq -e '.schema_version == 2 and .blocking_findings == []' \
             third_party/antigravity-cli-inspection.json >/dev/null
           for file in compose/*.yml; do
