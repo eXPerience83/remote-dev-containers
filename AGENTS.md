@@ -13,7 +13,7 @@ Current high-level ownership:
 - #36 records the completed TrueNAS outer-isolation and no-system-Bubblewrap decision.
 - #42 records completed outer-container hardening and cross-service canaries.
 - #53 is the standing third-party/license/vendor-policy review log. Automation provides evidence, never legal approval.
-- #69 is the completed browser-authentication decision: one configuration-backed `WEB_PASSWORD` runtime contract; the former file-backed browser-password path is retired.
+- #69 is the completed browser-authentication decision: one configuration-backed `WEB_PASSWORD` runtime contract for protected agent endpoints; the former file-backed browser-password path is retired.
 - #70/#167 define the canonical persistent-data layout and deterministic TrueNAS bootstrap/preflight.
 - #186 defines the completed TrueNAS Generic/POSIX private-state ACL audit/migration contract.
 - #92 owns broad English/Spanish documentation and implementation-status synchronization.
@@ -69,18 +69,21 @@ Host TrueNAS/Docker root/admin is trusted and can inspect deployment configurati
 ### Launcher rules
 
 - `REMOTE_DEV_ROLE=launcher` is navigation only.
+- The current supported launcher is deliberately password-free and intended only for localhost/trusted LAN/private-mesh exposure.
 - It must not execute an agent, proxy/relay terminal HTTP/WebSocket traffic or manage containers without a separately reviewed threat-model change.
 - It may link only to fixed validated services declared by the stack.
-- Keep the reviewed private-network unauthenticated default, optional launcher authentication, origin checks, CSP, method restrictions and secret-free health behavior covered by tests.
+- Keep origin checks, CSP, method restrictions, secret-free health behavior and absence of agent mounts/socket covered by tests.
 - Never embed credentials in launcher URLs/HTML/JavaScript/logs/diagnostics.
-- Optional launcher authentication may add its own configuration-backed password but no agent password/state/mount/socket.
+- Do not turn launcher authentication into a current deployment requirement. A future secure single-entry/gateway design belongs to #181.
+- The existing `compose/launcher-auth.yml` override is non-default/advanced compatibility surface; changing its role or promoting it to the main security boundary requires explicit review.
 - Enabled services must use the intended common image reference while retaining disjoint mutable state.
 
 ### Browser-authentication rules
 
-- Protected endpoints use `WEB_PASSWORD` only.
-- Keep separate configuration entries for Codex, Antigravity and optional launcher authentication so each service can be changed independently.
-- The current product does **not** impose a minimum length, composition rule or requirement that those configured password values differ from one another. The operator may currently reuse a value across services.
+- The current password contract applies to protected agent endpoints: Codex and enabled Antigravity use `WEB_PASSWORD`.
+- Keep separate configuration entries for Codex and Antigravity so each service can be changed independently.
+- The current product does **not** impose a minimum length, composition rule or requirement that those configured agent password values differ from one another. The operator may currently reuse a value across agent services.
+- The normal launcher is outside this password contract and must remain password-free unless a future #181 decision explicitly changes the entry architecture.
 - Do not introduce password complexity or cross-service uniqueness enforcement without a future explicit browser-access/security decision and matching tests/documentation.
 - Do not reintroduce the retired file-backed browser-authentication path, browser-password Compose secrets or persistent browser-password files without a new explicit architecture decision.
 - Never log or derive reusable metadata from password contents.
@@ -126,11 +129,11 @@ Run the narrowest relevant tests during development and the repository's complet
 Runtime/deployment changes should preserve or extend coverage for, where affected:
 
 - role/start-mode validation and wrapper equivalence;
-- launcher authentication/origin/CSP/fixed navigation plus absence of agent mounts/socket;
+- password-free launcher origin/CSP/fixed navigation plus absence of agent mounts/socket;
 - intended common image identity across enabled roles;
 - role-private mount sources and canonical host layout;
 - bootstrap/preflight/ACL-audit behavior;
-- per-service `WEB_PASSWORD` authentication, including the absence of any undocumented complexity/uniqueness gate and absence of the retired file-backed path;
+- Codex/Antigravity `WEB_PASSWORD` authentication, including the absence of any undocumented complexity/uniqueness gate and absence of the retired file-backed path;
 - role-aware health checks;
 - Codex project-scoped Start/Resume, approval policy and bundled/optional runtime fallback;
 - Antigravity project-scoped Start/Resume, admission/integrity/review states and no-installer-network launch;
