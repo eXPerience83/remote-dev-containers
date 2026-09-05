@@ -38,6 +38,7 @@ agent-contract-tests:
 	python3 scripts/test-development-scratch.py
 	python3 scripts/test_truenas_acl_audit.py
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY=1 bash scripts/test-role-neutral-runtime.sh
+	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-collection-boundary.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-remote-dev-menu.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-antigravity-menu.sh
