@@ -8,6 +8,8 @@ readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 readonly context7_manager=/usr/local/bin/remote-dev-context7
+readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary
 readonly sandbox_mode=danger-full-access
 readonly default_approval_mode=autonomous
 
@@ -32,7 +34,7 @@ validate_approval_mode() {
 
 reject_policy_override() {
   local argument="$1"
-  echo "ERROR: run-codex owns the sandbox and approval policy; refusing argument: $argument" >&2
+  echo "ERROR: run-codex owns the sandbox, approval and project-boundary policy; refusing argument: $argument" >&2
   exit 2
 }
 
@@ -41,7 +43,7 @@ is_policy_config_override() {
   local key="${normalized%%=*}"
 
   case "$key" in
-    sandbox_mode|approval_policy|ask_for_approval|sandbox|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*)
+    sandbox_mode|approval_policy|ask_for_approval|sandbox|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*|shell_environment_policy|shell_environment_policy.*)
       return 0
       ;;
     *)
@@ -174,6 +176,9 @@ for argument in "${forwarded[@]}"; do
       ;;
   esac
 done
+if (( expect_config_value == 1 )); then
+  fail_usage "--config requires a value"
+fi
 
 runtime_manager_command=("$runtime_manager" resolve)
 resolved_codex_binary=""
@@ -299,10 +304,28 @@ finally:
 
 configure_context7_environment
 
+# Keep top-level informational commands usable even when no project is selected.
+# They do not execute model-reachable shell commands and therefore do not need
+# the project collection boundary.
+informational_only=0
+if (( ${#forwarded[@]} == 1 )); then
+  case "${forwarded[0]}" in
+    --help|-h|--version|-V) informational_only=1 ;;
+  esac
+fi
+
 owned_policy_args=(--sandbox "$sandbox_mode")
-if [[ "$approval_mode" == autonomous ]]; then
-  owned_policy_args+=(--ask-for-approval never)
-else
+if (( informational_only == 0 )); then
+  [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
+    || { echo "ERROR: Remote Dev project-boundary definitions are unavailable" >&2; exit 1; }
+  # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+  source "$runtime_lib"
+  [[ -x "$project_boundary_validator" && ! -L "$project_boundary_validator" ]] \
+    || { echo "ERROR: Codex project-boundary validator is unavailable" >&2; exit 1; }
+
+  workspace="$(remote_dev_workspace_root)" || exit $?
+  remote_dev_prepare_project_git_boundary "$workspace" || exit $?
+
   active_project=""
   expect_cd_value=0
   for argument in "${forwarded[@]}"; do
@@ -322,15 +345,50 @@ else
     fail_usage "--cd requires a project directory"
   fi
   if [[ -z "$active_project" ]]; then
-    active_project="$PWD"
+    if ! active_project="$(pwd -P 2>/dev/null)"; then
+      fail_usage "managed Codex launch requires a valid current project directory"
+    fi
   elif [[ "$active_project" != /* ]]; then
     active_project="$PWD/$active_project"
   fi
   if ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
-    fail_usage "guarded mode requires an existing project directory"
+    fail_usage "managed Codex launch requires an existing project directory"
   fi
-  project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
-  owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
+
+  remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
+  project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed during Codex launch: $active_project"
+    exit 2
+  }
+
+  if ! "$project_boundary_validator" \
+    --codex-binary "$resolved_codex_binary" \
+    --cwd "$active_project" \
+    --ceiling "$workspace"; then
+    echo "ERROR: Codex effective configuration cannot preserve the required project Git boundary" >&2
+    exit 2
+  fi
+  current_project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+    exit 2
+  }
+  if [[ "$current_project_identity" != "$project_identity" ]]; then
+    remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+    exit 2
+  fi
+  remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
+
+  workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
+  owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
+
+  if [[ "$approval_mode" == guarded ]]; then
+    project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
+    owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
+  fi
+fi
+
+if [[ "$approval_mode" == autonomous ]]; then
+  owned_policy_args+=(--ask-for-approval never)
 fi
 
 exec "$resolved_codex_binary" "${owned_policy_args[@]}" "${forwarded[@]}"
