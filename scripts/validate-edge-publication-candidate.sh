@@ -212,7 +212,7 @@ timeout --foreground 60s docker run --rm \
   --network none \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
   --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro \
+  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro" \
   -e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
   "$runtime_ref" /tmp/test-codex-runtime-noexec-staging.py
 
