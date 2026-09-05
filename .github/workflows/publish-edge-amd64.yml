@@ -135,6 +135,18 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Resolve exact edge base AMD64 manifest
+        id: base_manifest
+        env:
+          NAMESPACE: ${{ steps.metadata.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
+
       - name: Build untagged edge Remote Dev candidate
         id: runtime
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -144,7 +156,7 @@ jobs:
           platforms: linux/amd64
           outputs: type=image,name=ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+            BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}
             CODEX_RELEASE_TAG=${{ steps.metadata.outputs.codex_tag }}
             CODEX_AMD64_SHA256=${{ steps.metadata.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.metadata.outputs.codex_arm64_sha256 }}
@@ -159,31 +171,47 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Resolve exact edge Remote Dev AMD64 manifest
+        id: runtime_manifest
+        env:
+          NAMESPACE: ${{ steps.metadata.outputs.namespace }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
+
       - name: Smoke-test the exact publication candidates
         env:
           NAMESPACE: ${{ steps.metadata.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
           PROJECT_VERSION: ${{ steps.metadata.outputs.project_version }}
         run: |
           set -euo pipefail
           bash scripts/validate-edge-publication-candidate.sh \
             "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "$BASE_MANIFEST_REF" \
             "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" \
+            "$REMOTE_DEV_MANIFEST_REF" \
             "$GITHUB_SHA" \
             "$PROJECT_VERSION"
 
       - name: Generate exact edge base SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
           format: spdx-json
           output: sbom-publish-base.spdx.json
 
       - name: Generate exact edge Remote Dev SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
           format: spdx-json
           output: sbom-publish-remote-dev.spdx.json
           skip-setup-trivy: true
@@ -191,7 +219,7 @@ jobs:
       - name: Scan exact edge base candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
           format: json
           output: trivy-publish-base.json
           scanners: vuln
@@ -203,7 +231,7 @@ jobs:
       - name: Scan exact edge Remote Dev candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.metadata.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
           format: json
           output: trivy-publish-remote-dev.json
           scanners: vuln
