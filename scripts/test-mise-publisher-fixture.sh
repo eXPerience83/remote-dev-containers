@@ -17,96 +17,71 @@ trap cleanup EXIT INT TERM
 
 docker network create "$network" >/dev/null
 
-common=(
+strict=(
   --rm
-  --user 65532:65532
+  --network "$network"
+  --ipc private
   --read-only
+  --user 65532:65532
   --cap-drop ALL
   --pids-limit 64
   --security-opt no-new-privileges:true
-  --ipc private
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+  --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755
   --env REMOTE_DEV_ROLE=launcher
   --env REMOTE_DEV_START_MODE=menu
   --env WEB_CHECK_ORIGIN=1
   --env WEB_PORT=7680
   --env ALLOW_INSECURE_WEB=1
-  --entrypoint /usr/bin/env
 )
 
-run_probe() {
-  local label="$1"
-  shift
-  local status=0
-  if docker run "${common[@]}" "$@" "$image" python3 --version >/dev/null 2>"${RUNNER_TEMP:-/tmp}/remote-dev-mise-${suffix}-${label}.log"; then
-    printf 'Publisher-equivalent mise probe %-18s OK\n' "$label"
-    return 0
-  else
-    status=$?
-    printf 'Publisher-equivalent mise probe %-18s FAILED exit=%s\n' "$label" "$status" >&2
-    tail -n 20 "${RUNNER_TEMP:-/tmp}/remote-dev-mise-${suffix}-${label}.log" >&2 || true
-    return "$status"
-  fi
-}
-
-# Keep each comparison bounded to one changed isolation dimension. These probes
-# diagnose the gap between the existing non-root local smoke and the exact edge
-# publisher fixture without weakening the publisher gate itself.
-exact_status=0
-run_probe exact \
-  --network "$network" \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-  --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
-  || exact_status=$?
-
-run_probe no-tmpfs --network "$network" || true
-run_probe tmp-only \
-  --network "$network" \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-  || true
-run_probe run-only \
-  --network "$network" \
-  --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
-  || true
-run_probe network-none \
-  --network none \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-  --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
-  || true
-
-if (( exact_status != 0 )); then
-  echo "Publisher-equivalent mise selected environment diagnostics:" >&2
-  docker run "${common[@]}" \
-    --network "$network" \
-    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-    --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
+diagnostics() {
+  echo "Publisher-equivalent mise diagnostics (safe fields only):" >&2
+  docker run "${strict[@]}" \
     --entrypoint /bin/bash \
     "$image" -c '
       printf "uid=%s gid=%s cwd=%s\n" "$(id -u)" "$(id -g)" "$PWD"
       for name in HOME MISE_SYSTEM_CONFIG_DIR MISE_SYSTEM_CONFIG_FILE MISE_DATA_DIR MISE_CACHE_DIR PATH; do
         printf "%s=%s\n" "$name" "${!name-<unset>}"
       done
-      for path in /etc /etc/mise /etc/mise/config.toml /etc/mise/config.lock /opt /opt/remote-dev /opt/remote-dev/mise /opt/remote-dev/mise/installs /opt/remote-dev/mise/shims; do
+      for path in /etc /etc/mise /etc/mise/config.toml /etc/mise/config.lock /opt/remote-dev/mise /opt/remote-dev/mise/installs /opt/remote-dev/mise/shims; do
         /usr/bin/stat -Lc "%n uid=%u gid=%g mode=%a" "$path" || true
       done
-      if [[ -r /etc/mise/config.toml ]]; then
-        echo "system-config-readable=yes"
-        /usr/bin/sha256sum /etc/mise/config.toml || true
-      else
-        echo "system-config-readable=no"
-      fi
-      if [[ -r /etc/mise/config.lock ]]; then
-        echo "system-lock-readable=yes"
-        /usr/bin/sha256sum /etc/mise/config.lock || true
-      else
-        echo "system-lock-readable=no"
-      fi
       /usr/local/bin/mise --version || true
       /usr/local/bin/mise config get --system tools.python || true
-      /usr/local/bin/mise config ls || true
-      /usr/local/bin/mise ls --current || true
       /usr/local/bin/mise which python || true
-    ' 2>&1 | tail -n 100 >&2 || true
-  exit "$exact_status"
-fi
+    ' 2>&1 | tail -n 80 >&2 || true
+}
 
-echo "Publisher-equivalent non-root mise shim resolution: OK"
+fail() {
+  echo "ERROR: publisher-equivalent mise regression: $*" >&2
+  diagnostics
+  exit 1
+}
+
+mise_dir_mode="$(docker run "${strict[@]}" \
+  --entrypoint /usr/bin/stat \
+  "$image" -Lc '%a' /etc/mise)" \
+  || fail "could not inspect /etc/mise as the unprivileged runtime user"
+[[ "$mise_dir_mode" == 755 ]] \
+  || fail "/etc/mise mode is $mise_dir_mode, expected 755"
+
+docker run "${strict[@]}" \
+  --entrypoint /bin/bash \
+  "$image" -c 'test -r /etc/mise/config.toml && test -r /etc/mise/config.lock' \
+  >/dev/null 2>&1 \
+  || fail "canonical system config or lockfile is not readable as UID 65532"
+
+docker run "${strict[@]}" \
+  --entrypoint /usr/local/bin/mise \
+  "$image" config get --system tools.python \
+  >/dev/null 2>&1 \
+  || fail "mise cannot read tools.python from the system config as UID 65532"
+
+docker run "${strict[@]}" \
+  --entrypoint /usr/bin/env \
+  "$image" python3 --version \
+  >/dev/null 2>&1 \
+  || fail "python3 shim does not resolve under the exact publisher isolation fixture"
+
+echo "Publisher-equivalent non-root mise system config and shim resolution: OK"
