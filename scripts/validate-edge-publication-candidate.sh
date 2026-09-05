@@ -90,6 +90,8 @@ strict_launcher_preflight() (
 
   cleanup() {
     docker rm -f "$container" >/dev/null 2>&1 || true
+    docker rm -f "${container}-env-python3" >/dev/null 2>&1 || true
+    docker rm -f "${container}-python-launcher" >/dev/null 2>&1 || true
     docker rm -f "${container}-start-script" >/dev/null 2>&1 || true
     docker rm -f "${container}-direct" >/dev/null 2>&1 || true
     docker network rm "$network" >/dev/null 2>&1 || true
@@ -115,13 +117,14 @@ strict_launcher_preflight() (
   component_probe() {
     local label="$1"
     local entrypoint="$2"
+    shift 2
     local probe_name="${container}-${label}"
     local state=""
 
     if ! docker run -d --name "$probe_name" \
       "${strict_run_args[@]}" \
       --entrypoint "$entrypoint" \
-      "$runtime_image_id" >/dev/null 2>&1; then
+      "$runtime_image_id" "$@" >/dev/null 2>&1; then
       echo "Strict launcher component probe $label: docker-run-failed" >&2
       return 0
     fi
@@ -130,7 +133,7 @@ strict_launcher_preflight() (
       'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}}' \
       "$probe_name" 2>/dev/null || true)"
     printf 'Strict launcher component probe %s: %s\n' "$label" "$state" >&2
-    docker logs --tail 40 "$probe_name" >&2 2>/dev/null || true
+    docker logs --tail 40 "$probe_name" 2>&1 | tail -n 40 >&2 || true
     docker rm -f "$probe_name" >/dev/null 2>&1 || true
   }
 
@@ -141,7 +144,7 @@ strict_launcher_preflight() (
       'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' \
       "$container" >&2 2>/dev/null || true
     echo "Strict launcher candidate log tail (max 80 lines):" >&2
-    docker logs --tail 80 "$container" >&2 2>/dev/null || true
+    docker logs --tail 80 "$container" 2>&1 | tail -n 80 >&2 || true
 
     timeout --foreground 15s docker run --rm \
       "${strict_run_args[@]}" \
@@ -149,6 +152,8 @@ strict_launcher_preflight() (
       "$runtime_image_id" -- /bin/true >/dev/null 2>&1 || tini_status=$?
     printf 'Strict launcher component probe tini-true: exit=%s\n' "$tini_status" >&2
 
+    component_probe env-python3 /usr/bin/env python3 --version
+    component_probe python-launcher /opt/remote-dev/mise/shims/python /usr/local/bin/remote-dev-launcher
     component_probe start-script /usr/local/bin/start-remote-dev-web
     component_probe direct /usr/local/bin/remote-dev-launcher
   }
@@ -183,8 +188,9 @@ strict_launcher_preflight() (
 candidate_startup_metadata
 
 # Reproduce the strict launcher fixture independently, including its resolved local
-# image config ID. On failure, isolate tini, the start script and the launcher with
-# the same outer hardening so the larger isolation fixture cannot erase the cause.
+# image config ID. On failure, isolate tini, Python resolution, the start script and
+# the launcher with the same outer hardening so the larger isolation fixture cannot
+# erase the cause.
 strict_launcher_preflight \
   || fail "strict launcher candidate preflight failed"
 
@@ -206,7 +212,7 @@ timeout --foreground 60s docker run --rm \
   --network none \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
   --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro" \
+  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro \
   -e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
   "$runtime_ref" /tmp/test-codex-runtime-noexec-staging.py
 
