@@ -113,6 +113,9 @@ jobs:
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
 
+      - name: Reproduce publisher mise isolation fixture
+        run: bash scripts/test-mise-publisher-fixture.sh remote-dev:local
+
       - name: Verify canonical and legacy local aliases
         run: |
           set -euo pipefail
