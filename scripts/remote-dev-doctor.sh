@@ -71,6 +71,63 @@ check_private_mount_mode() {
   fi
 }
 
+check_project_collection_boundary() {
+  local workspace="${WORKSPACE:-/workspace}"
+  local validated=""
+  local project=""
+  local selector="${REMOTE_DEV_PROJECT:-}"
+
+  echo
+  echo 'Project collection safety:'
+  if ! validated="$(remote_dev_validate_workspace_root "$workspace" 2>/dev/null)"; then
+    echo "Workspace collection: BLOCKED (invalid or unavailable path)"
+    echo "Git collection root: unknown"
+    echo "Git discovery ceiling: unavailable"
+    echo "Selected project Git boundary: unavailable"
+    status=1
+    return 0
+  fi
+
+  if remote_dev_assert_project_collection "$validated" >/dev/null 2>&1; then
+    echo "Workspace collection: OK"
+    echo "Git collection root: not a repository"
+  else
+    echo "Workspace collection: CRITICAL — collection root is Git-contaminated or ambiguous"
+    echo "Git collection root: BLOCKED"
+    echo "Git discovery ceiling: $validated (agent launch remains blocked until recovery)"
+    echo "Selected project Git boundary: unavailable while collection is blocked"
+    echo "Recovery: stop affected agent sessions, preserve/snapshot data, then inspect manually from Login shell."
+    echo "Recovery: Remote Dev will not delete .git, reset Git, clean files or repair the collection automatically."
+    status=1
+    return 0
+  fi
+
+  if [[ "$validated" == *:* ]]; then
+    echo "Git discovery ceiling: BLOCKED (collection path contains ':')"
+    status=1
+  else
+    echo "Git discovery ceiling: $validated"
+  fi
+
+  if [[ -z "$selector" ]]; then
+    echo "Selected project Git boundary: not selected"
+    return 0
+  fi
+  if ! project="$(remote_dev_project_path "$validated" "$selector" 2>/dev/null)"; then
+    echo "Selected project Git boundary: BLOCKED (selected project is unavailable)"
+    status=1
+    return 0
+  fi
+  if remote_dev_assert_project_git_boundary "$validated" "$project" >/dev/null 2>&1; then
+    echo "Selected project: $selector"
+    echo "Selected project Git boundary: OK"
+  else
+    echo "Selected project: $selector"
+    echo "Selected project Git boundary: BLOCKED"
+    status=1
+  fi
+}
+
 cat <<EOF_HEADER
 Remote Dev diagnostics
 ======================
@@ -121,6 +178,10 @@ EOF_AGENT
   fi
 fi
 
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  check_project_collection_boundary
+fi
+
 echo
 if [[ "$role" == launcher ]]; then
   common_commands=(
@@ -150,11 +211,13 @@ if [[ "$role" == codex ]]; then
   check_cmd run-codex
   check_cmd /usr/local/bin/remote-dev-codex-runtime
   check_cmd /usr/local/bin/remote-dev-context7
+  check_cmd /usr/local/bin/validate-codex-project-boundary
 elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
   check_cmd remote-dev-update-antigravity
   check_cmd run-antigravity
+  check_cmd /usr/local/bin/validate-antigravity-project-boundary
 fi
 
 echo
@@ -257,6 +320,21 @@ elif [[ "$role" == antigravity ]]; then
   echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
   echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'
   echo 'Antigravity authentication: managed only by the official Google client.'
+  echo 'Antigravity managed terminal sandbox: launch-scoped --sandbox required; exact-runtime TrueNAS confinement must still be positively validated.'
+
+  if [[ -n "${REMOTE_DEV_PROJECT:-}" && -n "${ANTIGRAVITY_VENDOR_STATE_DIR:-}" ]]; then
+    selected_project="${WORKSPACE:-/workspace}/${REMOTE_DEV_PROJECT}"
+    if [[ -d "$selected_project" ]] && /usr/local/bin/validate-antigravity-project-boundary \
+      --settings "$ANTIGRAVITY_VENDOR_STATE_DIR/settings.json" \
+      --project "$selected_project" >/dev/null 2>&1; then
+      echo 'Antigravity configured confinement policy: OK'
+    else
+      echo 'Antigravity configured confinement policy: BLOCKED'
+      status=1
+    fi
+  else
+    echo 'Antigravity configured confinement policy: not checked (no selected project)'
+  fi
 fi
 
 if [[ "$role" != launcher ]]; then
