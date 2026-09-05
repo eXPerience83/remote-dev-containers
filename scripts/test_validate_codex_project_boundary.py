@@ -10,7 +10,12 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-VALIDATOR = ROOT / "scripts" / "validate-codex-project-boundary.py"
+VALIDATOR = Path(
+    os.environ.get(
+        "REMOTE_DEV_CODEX_PROJECT_BOUNDARY_VALIDATOR",
+        str(ROOT / "scripts" / "validate-codex-project-boundary.py"),
+    )
+)
 
 
 FAKE_CODEX = r'''#!/usr/bin/env python3
