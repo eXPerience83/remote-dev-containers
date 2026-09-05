@@ -10,7 +10,12 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-VALIDATOR = ROOT / "scripts" / "validate-antigravity-project-boundary.py"
+VALIDATOR = Path(
+    os.environ.get(
+        "REMOTE_DEV_ANTIGRAVITY_PROJECT_BOUNDARY_VALIDATOR",
+        str(ROOT / "scripts" / "validate-antigravity-project-boundary.py"),
+    )
+)
 
 
 class AntigravityBoundaryValidatorTests(unittest.TestCase):
