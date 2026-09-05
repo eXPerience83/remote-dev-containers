@@ -111,10 +111,18 @@ require_action_shas
 require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
 python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
-python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_validate_check-upstream-codex-companion.py" --root "$ROOT"
 
-if ! grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
-  echo "ERROR: base Dockerfile must use the committed mise.toml as its global config" >&2
+if ! grep -Fq 'MISE_SYSTEM_CONFIG_DIR=/etc/mise' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must use /etc/mise as the mise system config directory" >&2
+  exit 1
+fi
+if ! grep -Fq 'MISE_SYSTEM_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must use the committed mise.toml as its system config" >&2
+  exit 1
+fi
+if grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
+  echo "ERROR: shared runtime mise.toml must not be classified as user-global config" >&2
   exit 1
 fi
 if ! grep -Fq 'COPY --chmod=0444 mise.toml mise.lock /etc/mise/' "$base_dockerfile"; then
