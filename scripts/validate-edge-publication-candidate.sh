@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 4 )); then
-  echo "Usage: $0 <base@digest> <runtime@digest> <source-sha> <edge-version>" >&2
+if (( $# != 6 )); then
+  echo "Usage: $0 <base-index@digest> <base-amd64@digest> <runtime-index@digest> <runtime-amd64@digest> <source-sha> <edge-version>" >&2
   exit 2
 fi
 
-base_ref="$1"
-runtime_ref="$2"
-expected_revision="$3"
-expected_version="$4"
+base_index_ref="$1"
+base_ref="$2"
+runtime_index_ref="$3"
+runtime_ref="$4"
+expected_revision="$5"
+expected_version="$6"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+resolver="$root/scripts/resolve-oci-platform-manifest.sh"
 
 fail() {
   echo "ERROR: edge publication candidate validation: $*" >&2
   exit 1
 }
 
-[[ "$base_ref" =~ ^ghcr\.io/experience83/remote-dev-base@sha256:[0-9a-f]{64}$ ]] \
-  || fail "base reference is not the canonical immutable AMD64 repository digest"
-[[ "$runtime_ref" =~ ^ghcr\.io/experience83/remote-dev@sha256:[0-9a-f]{64}$ ]] \
-  || fail "runtime reference is not the canonical immutable AMD64 repository digest"
+for ref in "$base_index_ref" "$base_ref"; do
+  [[ "$ref" =~ ^ghcr\.io/experience83/remote-dev-base@sha256:[0-9a-f]{64}$ ]] \
+    || fail "base reference is not a canonical immutable GHCR digest"
+done
+for ref in "$runtime_index_ref" "$runtime_ref"; do
+  [[ "$ref" =~ ^ghcr\.io/experience83/remote-dev@sha256:[0-9a-f]{64}$ ]] \
+    || fail "runtime reference is not a canonical immutable GHCR digest"
+done
 [[ "$expected_revision" =~ ^[0-9a-f]{40}$ ]] \
   || fail "expected source revision must be a full lowercase Git SHA"
 [[ "$expected_version" =~ ^edge-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7}$ ]] \
@@ -28,6 +35,22 @@ fail() {
 [[ "${expected_version##*-}" == "${expected_revision:0:7}" ]] \
   || fail "edge version short SHA does not match expected source revision"
 
+resolved_base_ref="$(bash "$resolver" "$base_index_ref" linux amd64)" \
+  || fail "could not resolve base linux/amd64 manifest from publication index"
+[[ "$resolved_base_ref" == "$base_ref" ]] \
+  || fail "base AMD64 manifest is not the unique runnable linux/amd64 child of its publication index"
+resolved_runtime_ref="$(bash "$resolver" "$runtime_index_ref" linux amd64)" \
+  || fail "could not resolve runtime linux/amd64 manifest from publication index"
+[[ "$resolved_runtime_ref" == "$runtime_ref" ]] \
+  || fail "runtime AMD64 manifest is not the unique runnable linux/amd64 child of its publication index"
+
+echo "Exact publication index binding: OK"
+echo "  base:    ${base_index_ref##*@} -> ${base_ref##*@}"
+echo "  runtime: ${runtime_index_ref##*@} -> ${runtime_ref##*@}"
+
+# Pull the concrete runnable manifests, not the attestation-bearing OCI index.
+# This avoids Docker Engine platform materialization ambiguity while preserving the
+# root indexes for the later registry-level promotion step.
 for ref in "$base_ref" "$runtime_ref"; do
   docker pull --quiet "$ref" >/dev/null
 done
@@ -78,7 +101,11 @@ candidate_startup_metadata() {
     /usr/local/lib/remote-dev/remote-dev-runtime.sh \
     /usr/local/bin/remote-dev-launcher \
     /usr/bin/env \
-    /bin/bash >&2 \
+    /bin/bash \
+    /etc/mise/config.toml \
+    /etc/mise/config.lock \
+    /opt/remote-dev/mise/shims/python \
+    /opt/remote-dev/mise/installs/python >&2 \
     || fail "could not inspect exact candidate startup path metadata"
 }
 
@@ -180,11 +207,10 @@ strict_launcher_preflight() (
   return 1
 )
 
-# No candidate process executes before immutable reference, platform and labels pass.
-# Keep startup diagnostics bounded to explicit config fields and file metadata; never
-# dump the candidate environment or arbitrary Docker configuration. Python is supplied
-# by mise through PATH, so the execution probes below validate interpreter resolution
-# without assuming a distro-owned Python interpreter path.
+# No candidate process executes before index membership, immutable reference,
+# platform and labels all pass. Keep startup diagnostics bounded to explicit
+# config fields and file metadata; never dump the candidate environment or
+# arbitrary Docker configuration.
 candidate_startup_metadata
 
 # Reproduce the strict launcher fixture independently, including its resolved local
@@ -194,11 +220,12 @@ candidate_startup_metadata
 strict_launcher_preflight \
   || fail "strict launcher candidate preflight failed"
 
-# Bundled notices must validate on the exact images that may be promoted.
+# Bundled notices must validate on the exact runnable manifests that may be reached
+# through the promoted publication indexes.
 docker run --rm --entrypoint remote-dev-notices "$base_ref" --check
 docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
 
-# Exercise the exact runtime candidate rather than rebuilding a second image.
+# Exercise the exact runtime manifest rather than rebuilding a second image.
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$runtime_ref"
 docker run --rm \
   --network none \
