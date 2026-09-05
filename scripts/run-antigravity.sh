@@ -57,22 +57,7 @@ fi
 
 workspace="$(remote_dev_workspace_root)" || exit $?
 project="$(remote_dev_resolve_project "$workspace")" || exit $?
-project_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-}
-if ! cd -P -- "$project" || [[ "$PWD" != "$project" ]]; then
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-fi
-entered_project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-}
-if [[ "$entered_project_identity" != "$project_identity" ]]; then
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-fi
+remote_dev_enter_project "$workspace" "$project" || exit $?
 
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
 
@@ -186,6 +171,10 @@ start_picker_helper() {
 harden_on_exit() {
   local session_status=$?
   trap - EXIT INT TERM
+  if ! remote_dev_recover_safe_cwd; then
+    echo "ERROR: failed to recover a safe current directory after Antigravity exited" >&2
+    exit 1
+  fi
   stop_auxiliary_helpers
   if ! "$secure_state"; then
     echo "ERROR: failed to secure persistent state after Antigravity exited" >&2
