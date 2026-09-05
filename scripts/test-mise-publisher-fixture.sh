@@ -81,15 +81,31 @@ if (( exact_status != 0 )); then
     --tmpfs /run:rw,noexec,nosuid,nodev,size=16m,mode=755 \
     --entrypoint /bin/bash \
     "$image" -c '
-      printf "cwd=%s\n" "$PWD"
+      printf "uid=%s gid=%s cwd=%s\n" "$(id -u)" "$(id -g)" "$PWD"
       for name in HOME MISE_SYSTEM_CONFIG_DIR MISE_SYSTEM_CONFIG_FILE MISE_DATA_DIR MISE_CACHE_DIR PATH; do
         printf "%s=%s\n" "$name" "${!name-<unset>}"
       done
+      for path in /etc /etc/mise /etc/mise/config.toml /etc/mise/config.lock /opt /opt/remote-dev /opt/remote-dev/mise /opt/remote-dev/mise/installs /opt/remote-dev/mise/shims; do
+        /usr/bin/stat -Lc "%n uid=%u gid=%g mode=%a" "$path" || true
+      done
+      if [[ -r /etc/mise/config.toml ]]; then
+        echo "system-config-readable=yes"
+        /usr/bin/sha256sum /etc/mise/config.toml || true
+      else
+        echo "system-config-readable=no"
+      fi
+      if [[ -r /etc/mise/config.lock ]]; then
+        echo "system-lock-readable=yes"
+        /usr/bin/sha256sum /etc/mise/config.lock || true
+      else
+        echo "system-lock-readable=no"
+      fi
       /usr/local/bin/mise --version || true
+      /usr/local/bin/mise config get --system tools.python || true
       /usr/local/bin/mise config ls || true
       /usr/local/bin/mise ls --current || true
       /usr/local/bin/mise which python || true
-    ' 2>&1 | tail -n 80 >&2 || true
+    ' 2>&1 | tail -n 100 >&2 || true
   exit "$exact_status"
 fi
 
