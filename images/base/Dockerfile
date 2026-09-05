@@ -20,7 +20,7 @@ ARG MISE_ARM64_SHA256=0ef0a778eaa8599f3e90a8a0979c9fc3f79922cafb5fa6d39f366d974d
 ARG PYTHON_VERSION=3.14.7
 ARG NODE_VERSION=24.20.0
 ARG NPM_VERSION=12.0.2
-ARG UV_VERSION=0.12.9
+ARG UV_VERSION=0.12.10
 
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \

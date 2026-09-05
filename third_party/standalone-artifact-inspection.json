@@ -47,7 +47,7 @@
     },
     {
       "id": "codex-cli",
-      "version": "rust-v0.153.2",
+      "version": "rust-v0.153.4",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -64,16 +64,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.2/codex-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "e8cd1160071f725d2a10cab81073dd6818fc8b096372125d27ef6e66fdf0979e",
-          "asset_size": 98585206,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "f479424eca092484dc40d87ae28c44f4cc40234a60045d6131e493800d814a30",
+          "asset_size": 98582872,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.2/codex-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "878693f9b370320ea21793f99ea1f5687b7d9aa1f2c733de693d9ec0baa4e62a",
-          "asset_size": 90868447,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "5cda6182bd94c3a30f2eb63a495489ebf7f691fddb14d70f48c6c1a5071b6cde",
+          "asset_size": 90899740,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -81,7 +81,7 @@
     },
     {
       "id": "codex-code-mode-host",
-      "version": "rust-v0.153.2",
+      "version": "rust-v0.153.4",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -98,16 +98,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.2/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "177a4507b9cc7f97f113ac034697b39f6a71a876a8bd508ff6d7f52f342ebe4a",
-          "asset_size": 25723609,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "f95830a869590957664bbfc67bccb08773806b693670baf15908176f89b4cd31",
+          "asset_size": 25733165,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.2/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "70fe485e6919a038b75f70be71aa5782a19a5f36ee85597301e90bd1c9bcbf07",
-          "asset_size": 24353810,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "d8047b8d33370d6090e729d27eb76de60a2686baa1c143c138c9b05dc70d813b",
+          "asset_size": 24358441,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.9",
+      "version": "0.12.10",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460",
-          "asset_size": 19423276,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.10/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b",
+          "asset_size": 19339402,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "c36fe17937ff6bd16dc42fc13854b5465999fcab2efe0af559381e945e3c6001",
-          "asset_size": 18532532,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.10/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "9ff6b9d4665edcdd3a88dcc73cd1eb641754deb927f14e8c62ebfde6bf4f5f5e",
+          "asset_size": 18549904,
           "archive_member_count": 3,
           "legal_members": []
         }

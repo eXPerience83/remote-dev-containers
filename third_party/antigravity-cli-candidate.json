@@ -1,0 +1,37 @@
+{
+  "archive": {
+    "content_type": "application/x-tar",
+    "final_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz",
+    "member": "antigravity",
+    "sha512": "793d4b9ea2c08d9a7e50bafa02cfc8c19424bd60d6e83f91408d45f9c6d4ce79a5d576fede5bef164d823abf84f81359a14b4ca665952c47b0a7cfd743bb69c0",
+    "size": 56789301,
+    "source": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz"
+  },
+  "blocking_findings": [],
+  "installer": {
+    "archive_member": "antigravity",
+    "content_type": "application/x-sh",
+    "final_url": "https://antigravity.google/cli/install.sh",
+    "manifest_url": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
+    "sha256": "ee1ea43ce4e9e56356c4ab6dad907ef357ae4bdfcaadb682735909fb57c9c640",
+    "size": 7354,
+    "source": "https://antigravity.google/cli/install.sh"
+  },
+  "kind": "antigravity-payload-discovery",
+  "manifest": {
+    "content_type": "application/json",
+    "final_url": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
+    "payload_sha512": "793d4b9ea2c08d9a7e50bafa02cfc8c19424bd60d6e83f91408d45f9c6d4ce79a5d576fede5bef164d823abf84f81359a14b4ca665952c47b0a7cfd743bb69c0",
+    "payload_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz",
+    "sha256": "250054d35257aa7c7bed8d81da92a57c59157ade3c38692c3021df15c9e914a5",
+    "size": 303,
+    "source": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
+    "version": "1.1.27"
+  },
+  "payload": {
+    "path": ".local/bin/agy",
+    "sha256": "93eb2118b778a4005700b54cdd7e08b896fbe665d5ff338e38e9e53da9a091ea",
+    "size": 210551040
+  },
+  "schema_version": 2
+}

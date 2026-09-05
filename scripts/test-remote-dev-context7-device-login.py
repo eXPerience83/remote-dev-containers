@@ -101,9 +101,9 @@ def write_mise_config(path: Path, node_version: str = "24.19.0") -> None:
 
 
 def assert_reviewed_version_contract(module) -> None:
-    if module.REVIEWED_CONTEXT7_CLI_VERSION != "0.5.9":
+    if module.REVIEWED_CONTEXT7_CLI_VERSION != "0.5.10":
         raise AssertionError("Context7 reviewed CLI version drifted unexpectedly")
-    if module.reviewed_cli_version() != "0.5.9":
+    if module.reviewed_cli_version() != "0.5.10":
         raise AssertionError("reviewed Context7 CLI version was not resolved")
     if module.reviewed_cli_integrity() != module.REVIEWED_CONTEXT7_CLI_INTEGRITY:
         raise AssertionError("reviewed Context7 CLI integrity was not resolved")

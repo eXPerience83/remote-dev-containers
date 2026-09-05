@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-09-04",
+  "refreshed_on": "2026-09-05",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -160,19 +160,19 @@
       "name": "uv",
       "image_scope": "both",
       "version_key": "UV_VERSION",
-      "version": "0.12.9",
+      "version": "0.12.10",
       "source": "https://github.com/astral-sh/uv",
       "license": "Apache-2.0 OR MIT",
       "notices": [
         {
           "path": "components/uv/LICENSE-APACHE-2.0",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.9/LICENSE-APACHE"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.10/LICENSE-APACHE"
         },
         {
           "path": "components/uv/LICENSE-MIT",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.9/LICENSE-MIT"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.12.10/LICENSE-MIT"
         }
       ]
     },
@@ -181,19 +181,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.153.2",
+      "version": "rust-v0.153.4",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.2/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.2/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/NOTICE"
         }
       ]
     }
