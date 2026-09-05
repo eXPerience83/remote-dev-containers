@@ -146,10 +146,36 @@ def main() -> None:
         "--env ALLOW_INSECURE_WEB=1",
     ):
         require_text(helper, required, "strict launcher hardening fixture")
-    require_text(helper, "docker logs --tail 80", "bounded launcher log diagnostics")
-    require_text(helper, "docker logs --tail 40", "bounded component log diagnostics")
+    require_text(
+        helper,
+        'docker logs --tail 80 "$container" 2>&1 | tail -n 80 >&2',
+        "bounded merged launcher stdout/stderr diagnostics",
+    )
+    require_text(
+        helper,
+        'docker logs --tail 40 "$probe_name" 2>&1 | tail -n 40 >&2',
+        "bounded merged component stdout/stderr diagnostics",
+    )
+    require(
+        'docker logs --tail 80 "$container" >&2 2>/dev/null' not in helper,
+        "launcher diagnostics must not discard container stderr",
+    )
+    require(
+        'docker logs --tail 40 "$probe_name" >&2 2>/dev/null' not in helper,
+        "component diagnostics must not discard container stderr",
+    )
     require_text(helper, ".State.ExitCode", "launcher exit-code diagnostics")
     require_text(helper, ".State.OOMKilled", "launcher OOM diagnostics")
+    require_text(
+        helper,
+        "component_probe env-python3 /usr/bin/env python3 --version",
+        "launcher shebang Python resolution probe",
+    )
+    require_text(
+        helper,
+        "component_probe python-launcher /opt/remote-dev/mise/shims/python /usr/local/bin/remote-dev-launcher",
+        "direct fixed Python launcher probe",
+    )
     require_text(helper, "component_probe start-script /usr/local/bin/start-remote-dev-web", "start-script isolation probe")
     require_text(helper, "component_probe direct /usr/local/bin/remote-dev-launcher", "direct launcher isolation probe")
     require_text(helper, "--entrypoint /usr/bin/tini", "tini execution probe")
