@@ -163,15 +163,22 @@ RUN case "${TARGETARCH}" in \
     && cd / \
     && rm -rf "$workdir"
 
-# Runtime config and resolved artifacts are immutable build inputs. Keep canonical
-# system names so mise can discover them even if an image consumer drops env overrides;
-# preserve the repository-named copies for existing runtime readers and diagnostics.
+# Runtime config and resolved artifacts are immutable build inputs. Create the
+# system-config directory explicitly before COPY: BuildKit applies COPY --chmod
+# to an implicitly-created destination directory, which made /etc/mise mode 0444
+# in pushed images and prevented unprivileged runtimes from traversing it.
+RUN install -d -o 0 -g 0 -m 0755 \
+      "$MISE_SYSTEM_CONFIG_DIR" \
+      "$MISE_DATA_DIR" \
+      "$MISE_CACHE_DIR"
+# Keep canonical system names so mise can discover them even if an image consumer
+# drops env overrides; preserve repository-named copies for existing readers.
 COPY --chmod=0444 mise.toml /etc/mise/config.toml
 COPY --chmod=0444 mise.lock /etc/mise/config.lock
 COPY --chmod=0444 mise.toml mise.lock /etc/mise/
 
 # One current runtime per language. Other runtimes are deliberately not bundled.
-RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_SYSTEM_CONFIG_DIR" \
+RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && mise install --locked \
     && npm install --global --ignore-scripts --no-audit --no-fund "npm@${NPM_VERSION}" \
     && python --version \
