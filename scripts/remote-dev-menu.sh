@@ -17,11 +17,23 @@ active_project_name=""
 active_project_path=""
 project_choice_name=""
 project_count=0
+project_collection_blocked=0
 
 harden_state_or_exit() {
+  # An interactive child can delete the directory inherited by this menu.
+  # Recover before spawning post-session helpers so shell initialization never
+  # starts from a stale cwd. Return to the collection root afterwards when it
+  # still exists so normal menu behavior remains unchanged.
+  if ! remote_dev_recover_safe_cwd; then
+    echo "ERROR: failed to recover a safe current directory" >&2
+    exit 1
+  fi
   if ! /usr/local/bin/secure-persistent-state; then
     echo "ERROR: failed to secure persistent credential state" >&2
     exit 1
+  fi
+  if [[ -d "$workspace" && ! -L "$workspace" ]]; then
+    builtin cd -P -- "$workspace" 2>/dev/null || true
   fi
 }
 
@@ -116,9 +128,14 @@ run_github_login() {
 
 run_diagnostics() {
   local doctor_status=0
+  local -a doctor_command=(/usr/local/bin/remote-dev-doctor)
 
   clear
-  /usr/local/bin/remote-dev-doctor || doctor_status=$?
+  if [[ -n "$active_project_name" ]]; then
+    env REMOTE_DEV_PROJECT="$active_project_name" "${doctor_command[@]}" || doctor_status=$?
+  else
+    env -u REMOTE_DEV_PROJECT "${doctor_command[@]}" || doctor_status=$?
+  fi
   if (( doctor_status != 0 )); then
     echo >&2
     echo "ERROR: diagnostics reported one or more failures (status $doctor_status)" >&2
@@ -129,9 +146,18 @@ run_diagnostics() {
 refresh_project_selection() {
   local resolved=""
   local listing=""
+  local list_status=0
   local -a projects=()
 
-  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  project_collection_blocked=0
+  listing="$(remote_dev_list_projects "$workspace" 2>/dev/null)" || list_status=$?
+  if (( list_status != 0 )); then
+    active_project_name=""
+    active_project_path=""
+    project_count=0
+    project_collection_blocked=1
+    return 0
+  fi
   if [[ -n "$listing" ]]; then
     mapfile -t projects <<<"$listing"
   fi
@@ -158,7 +184,9 @@ refresh_project_selection() {
 }
 
 project_status_summary() {
-  if [[ -n "$active_project_name" ]]; then
+  if (( project_collection_blocked == 1 )); then
+    printf 'Project: BLOCKED (collection safety check failed; run diagnostics)\n'
+  elif [[ -n "$active_project_name" ]]; then
     printf 'Project: %s\n' "$active_project_name"
   elif (( project_count == 0 )); then
     printf 'Project: none (create one in Projects...)\n'
@@ -168,11 +196,10 @@ project_status_summary() {
 }
 
 ensure_active_project() {
-  local refresh_status=0
-
-  refresh_project_selection || refresh_status=$?
-  if (( refresh_status != 0 )); then
-    return "$refresh_status"
+  refresh_project_selection
+  if (( project_collection_blocked == 1 )); then
+    echo "ERROR: project collection safety check failed; agent launch is blocked. Run diagnostics and use Login shell for recovery." >&2
+    return 2
   fi
   if [[ -n "$active_project_name" ]]; then
     return 0
@@ -192,11 +219,16 @@ choose_project_name() {
   local normalized_choice=""
   local max_choice=""
   local listing=""
+  local list_status=0
   local index=0
   local -a projects=()
 
   project_choice_name=""
-  listing="$(remote_dev_list_projects "$workspace")" || return $?
+  listing="$(remote_dev_list_projects "$workspace" 2>/dev/null)" || list_status=$?
+  if (( list_status != 0 )); then
+    echo "ERROR: project collection safety check failed; project selection is blocked. Run diagnostics first." >&2
+    return 2
+  fi
   if [[ -n "$listing" ]]; then
     mapfile -t projects <<<"$listing"
   fi
@@ -333,6 +365,10 @@ ${summary}
 3) Delete project
 4) Back
 MENU
+    if (( project_collection_blocked == 1 )); then
+      echo "Safety block: project mutations are disabled until the collection is repaired."
+      echo "Use Back → Run diagnostics / Login shell for read-only inspection and recovery."
+    fi
     read -r -p "> " choice
     case "$choice" in
       1)
