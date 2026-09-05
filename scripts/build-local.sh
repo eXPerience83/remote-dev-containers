@@ -119,7 +119,7 @@ nonroot_mise_args=(
   --security-opt no-new-privileges:true
   --entrypoint /usr/bin/env
 )
-for runtime_command in python python3 node uv; do
+for runtime_command in python python3 node npm uv; do
   docker run "${nonroot_mise_args[@]}" \
     "$remote_dev_image" "$runtime_command" --version >/dev/null
 done
