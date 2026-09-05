@@ -116,6 +116,12 @@ jobs:
       - name: Reproduce publisher mise isolation fixture
         run: bash scripts/test-mise-publisher-fixture.sh remote-dev:local
 
+      - name: Compare failed published runtime child
+        run: |
+          published_ref="ghcr.io/experience83/remote-dev@sha256:7dd797bf1c39ecedd357adb78523aac1fd091f0d2d46f9db9e9037c94f8d7039"
+          docker pull --quiet "$published_ref"
+          bash scripts/test-mise-publisher-fixture.sh "$published_ref"
+
       - name: Verify canonical and legacy local aliases
         run: |
           set -euo pipefail
