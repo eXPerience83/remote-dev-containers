@@ -40,8 +40,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     REMOTE_DEV_UBUNTU_VERSION=${UBUNTU_VERSION} \
     MISE_DATA_DIR=/opt/remote-dev/mise \
     MISE_CACHE_DIR=/opt/remote-dev/mise-cache \
-    MISE_CONFIG_DIR=/etc/mise \
-    MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml \
+    MISE_SYSTEM_CONFIG_DIR=/etc/mise \
+    MISE_SYSTEM_CONFIG_FILE=/etc/mise/mise.toml \
     PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/root/.local/bin:${PATH} \
     GH_CONFIG_DIR=/root/.config/gh \
     GH_HOST=github.com \
@@ -168,7 +168,7 @@ RUN case "${TARGETARCH}" in \
 COPY --chmod=0444 mise.toml mise.lock /etc/mise/
 
 # One current runtime per language. Other runtimes are deliberately not bundled.
-RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_CONFIG_DIR" \
+RUN mkdir -p "$MISE_DATA_DIR" "$MISE_CACHE_DIR" "$MISE_SYSTEM_CONFIG_DIR" \
     && mise install --locked \
     && npm install --global --ignore-scripts --no-audit --no-fund "npm@${NPM_VERSION}" \
     && python --version \
