@@ -106,6 +106,25 @@ remote_dev_tag_compatibility_aliases \
   remote-dev:local \
   codex-remote-dev:local
 
+# The bundled mise configuration is system-wide. Prove every locked shim resolves
+# for the unprivileged UID used by the strict edge launcher fixture without
+# granting writes, capabilities, network access or a user-specific config.
+nonroot_mise_args=(
+  --rm
+  --user 65532:65532
+  --network none
+  --read-only
+  --cap-drop ALL
+  --pids-limit 64
+  --security-opt no-new-privileges:true
+  --entrypoint /usr/bin/env
+)
+for runtime_command in python python3 node uv; do
+  docker run "${nonroot_mise_args[@]}" \
+    "$remote_dev_image" "$runtime_command" --version >/dev/null
+done
+echo "Non-root mise shim resolution: OK"
+
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$remote_dev_image"
 docker run --rm \
   --network none \
