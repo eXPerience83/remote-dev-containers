@@ -41,7 +41,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MISE_DATA_DIR=/opt/remote-dev/mise \
     MISE_CACHE_DIR=/opt/remote-dev/mise-cache \
     MISE_SYSTEM_CONFIG_DIR=/etc/mise \
-    MISE_SYSTEM_CONFIG_FILE=/etc/mise/mise.toml \
+    MISE_SYSTEM_CONFIG_FILE=/etc/mise/config.toml \
     PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/root/.local/bin:${PATH} \
     GH_CONFIG_DIR=/root/.config/gh \
     GH_HOST=github.com \
@@ -163,8 +163,11 @@ RUN case "${TARGETARCH}" in \
     && cd / \
     && rm -rf "$workdir"
 
-# Runtime config and resolved artifacts are immutable build inputs. Strict locked
-# installation refuses missing URLs and verifies every committed checksum.
+# Runtime config and resolved artifacts are immutable build inputs. Keep canonical
+# system names so mise can discover them even if an image consumer drops env overrides;
+# preserve the repository-named copies for existing runtime readers and diagnostics.
+COPY --chmod=0444 mise.toml /etc/mise/config.toml
+COPY --chmod=0444 mise.lock /etc/mise/config.lock
 COPY --chmod=0444 mise.toml mise.lock /etc/mise/
 
 # One current runtime per language. Other runtimes are deliberately not bundled.
