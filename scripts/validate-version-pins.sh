@@ -111,7 +111,7 @@ require_action_shas
 require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
 python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
-python3 "$ROOT/scripts/test_validate_check-upstream-codex-companion.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
 
 if ! grep -Fq 'MISE_SYSTEM_CONFIG_DIR=/etc/mise' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use /etc/mise as the mise system config directory" >&2
