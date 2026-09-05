@@ -125,6 +125,19 @@ for runtime_command in python python3 node npm uv; do
 done
 echo "Non-root mise shim resolution: OK"
 
+# Also remove both system-config env overrides before invoking the shims. The
+# canonical /etc/mise/config.toml + config.lock pair must be sufficient by itself,
+# so push/pull or runtime metadata handling cannot make tool resolution depend on
+# MISE_SYSTEM_CONFIG_* being preserved.
+for runtime_command in python python3 node npm uv; do
+  docker run "${nonroot_mise_args[@]}" \
+    "$remote_dev_image" \
+    -u MISE_SYSTEM_CONFIG_FILE \
+    -u MISE_SYSTEM_CONFIG_DIR \
+    "$runtime_command" --version >/dev/null
+done
+echo "Non-root mise canonical fallback resolution: OK"
+
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$remote_dev_image"
 docker run --rm \
   --network none \

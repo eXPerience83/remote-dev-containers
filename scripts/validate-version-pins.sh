@@ -117,16 +117,24 @@ if ! grep -Fq 'MISE_SYSTEM_CONFIG_DIR=/etc/mise' "$base_dockerfile"; then
   echo "ERROR: base Dockerfile must use /etc/mise as the mise system config directory" >&2
   exit 1
 fi
-if ! grep -Fq 'MISE_SYSTEM_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
-  echo "ERROR: base Dockerfile must use the committed mise.toml as its system config" >&2
+if ! grep -Fq 'MISE_SYSTEM_CONFIG_FILE=/etc/mise/config.toml' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must point mise at its canonical system config path" >&2
   exit 1
 fi
-if grep -Fq 'MISE_GLOBAL_CONFIG_FILE=/etc/mise/mise.toml' "$base_dockerfile"; then
-  echo "ERROR: shared runtime mise.toml must not be classified as user-global config" >&2
+if grep -Fq 'MISE_GLOBAL_CONFIG_FILE=' "$base_dockerfile"; then
+  echo "ERROR: shared runtime mise config must not be classified as user-global config" >&2
+  exit 1
+fi
+if ! grep -Fq 'COPY --chmod=0444 mise.toml /etc/mise/config.toml' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must install mise.toml at the canonical system config path" >&2
+  exit 1
+fi
+if ! grep -Fq 'COPY --chmod=0444 mise.lock /etc/mise/config.lock' "$base_dockerfile"; then
+  echo "ERROR: base Dockerfile must install mise.lock beside the canonical system config" >&2
   exit 1
 fi
 if ! grep -Fq 'COPY --chmod=0444 mise.toml mise.lock /etc/mise/' "$base_dockerfile"; then
-  echo "ERROR: base Dockerfile must copy immutable mise config and lock inputs" >&2
+  echo "ERROR: base Dockerfile must preserve immutable repository-named mise inputs for runtime readers" >&2
   exit 1
 fi
 if ! grep -Fq 'mise install --locked' "$base_dockerfile"; then
