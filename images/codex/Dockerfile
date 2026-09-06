@@ -193,8 +193,7 @@ RUN --network=none \
     && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
     && context7_smoke_home="$(mktemp -d /root/.remote-dev-context7-smoke.XXXXXX)" \
     && CODEX_HOME="$context7_smoke_home" REMOTE_DEV_ROLE=codex /usr/local/bin/remote-dev-context7 install --yes --anonymous \
-    && context7_json="$(CODEX_HOME="$context7_smoke_home" HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 ALL_PROXY=http://127.0.0.1:9 NO_PROXY= /usr/local/bin/codex mcp get context7 --json)" \
-    && printf '%s' "$context7_json" | python -c 'import json,sys; d=json.load(sys.stdin); t=d.get("transport", {}); assert d.get("name") == "context7" and d.get("enabled") is True and t.get("type") == "streamable_http" and t.get("url") == "https://mcp.context7.com/mcp" and t.get("bearer_token_env_var") is None and t.get("http_headers") is None and t.get("env_http_headers") == {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"}' \
+    && python -c 'import sys,tomllib; d=tomllib.load(open(sys.argv[1],"rb")); t=d.get("mcp_servers",{}).get("context7"); assert t == {"url":"https://mcp.context7.com/mcp","env_http_headers":{"CONTEXT7_API_KEY":"CONTEXT7_API_KEY"},"enabled":True,"required":False}' "$context7_smoke_home/config.toml" \
     && rm -rf "$context7_smoke_home" \
     && bash /tmp/test-run-codex-context7 \
     && python /tmp/test-antigravity-oauth.py \
