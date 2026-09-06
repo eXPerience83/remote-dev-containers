@@ -248,6 +248,31 @@ assert_entered_project_identity() {
     remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
     return 2
   fi
+
+  # Identity alone is insufficient because stat -L follows a replacement
+  # symlink back to the original inode. Re-apply the complete direct-child/Git
+  # boundary, then repeat the inode check so a swap during that validation also
+  # fails closed.
+  if ! remote_dev_assert_project_git_boundary "$workspace" "$project"; then
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
+  current_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  if [[ "$current_identity" != "$entered_project_identity" \
+     || "$path_identity" != "$entered_project_identity" ]]; then
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
 }
 
 trap harden_on_exit EXIT
