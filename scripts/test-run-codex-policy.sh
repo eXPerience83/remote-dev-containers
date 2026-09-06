@@ -167,6 +167,9 @@ assert_validator() {
 
 ceiling_arg="shell_environment_policy.set.GIT_CEILING_DIRECTORIES=\"$workspace\""
 
+# Remote Dev's default remains the explicit equivalent of upstream Codex
+# --yolo: danger-full-access plus approval=never. The Git ceiling is an
+# independent ancestor-discovery invariant, not an inner sandbox.
 autonomous_expected=(--sandbox danger-full-access -c "$ceiling_arg" --ask-for-approval never)
 run_launcher __unset__ resume --last
 assert_args 'default autonomous mode' "${autonomous_expected[@]}" resume --last
@@ -230,6 +233,30 @@ assert_args 'per-launch autonomous override' \
 assert_validator "$project_b"
 
 echo 'Codex managed Git ceiling: autonomous, guarded and selected-project launches OK'
+
+# Explicit project selectors are rewritten to the same canonical direct-child
+# pathname that the preflight validated. This closes alias-retarget races and
+# keeps validation/execution semantics identical without changing the selected
+# project or Codex's full-access default.
+project_a_alias="$workdir/project-a-alias"
+ln -s -- "$project_a" "$project_a_alias"
+run_launcher guarded --cd "$project_a_alias" resume --last
+assert_args 'symlink alias canonicalization' \
+  --sandbox danger-full-access \
+  -c "$ceiling_arg" \
+  -c "projects={\"$project_a\"={trust_level=\"untrusted\"}}" \
+  --cd "$project_a" resume --last
+assert_validator "$project_a"
+
+run_launcher guarded --cd=../project-a resume --last
+assert_args 'relative inline project canonicalization' \
+  --sandbox danger-full-access \
+  -c "$ceiling_arg" \
+  -c "projects={\"$project_a\"={trust_level=\"untrusted\"}}" \
+  --cd="$project_a" resume --last
+assert_validator "$project_a"
+
+echo 'Codex explicit project selectors: canonicalized before vendor execution'
 
 # Swap the selected pathname only after run-codex has captured its identity and
 # the effective-policy validator has run. This is the actual TOCTOU boundary:
@@ -374,12 +401,15 @@ assert_rejected 'joined short sandbox override' -sread-only
 assert_rejected 'approval override' --ask-for-approval never
 assert_rejected 'short approval override' -a never
 assert_rejected 'joined short approval override' -anever
+assert_rejected 'automatic-review override' --approve-for-me
+assert_rejected 'not-so-yolo alias' --not-so-yolo
 assert_rejected 'dangerous bypass' --dangerously-bypass-approvals-and-sandbox
 assert_rejected 'legacy dangerous auto approve' --dangerously-auto-approve-everything
 assert_rejected 'yolo alias' --yolo
 assert_rejected 'full-auto alias' --full-auto
 assert_rejected 'profile selection' --profile test
 assert_rejected 'short profile selection' -p test
+assert_rejected 'config profile selector' -c 'profile="test"'
 assert_rejected 'project trust override' -c 'projects={"/workspace"={trust_level="trusted"}}'
 assert_rejected 'sandbox config override' -c 'sandbox_mode="read-only"'
 assert_rejected 'approval config override' --config 'approval_policy="never"'
@@ -417,7 +447,17 @@ assert_invalid_mode 'print policy with Codex arguments' '--print-policy cannot b
 assert_invalid_mode 'missing config value' '--config requires a value' \
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --config
 
-echo 'Invalid Codex launch-owned policy input: rejected without execution'
+# Duplicate project selectors are ambiguous at the wrapper boundary and must be
+# rejected before Codex can choose a different effective cwd than the one that
+# Remote Dev validated.
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
+status=0
+run_launcher __unset__ --cd "$project_a" -C "$project_b" >/dev/null 2>"$workdir/duplicate-cd-error" || status=$?
+(( status == 2 )) || { echo "ERROR: duplicate --cd/-C returned $status, expected 2" >&2; cat "$workdir/duplicate-cd-error" >&2; exit 1; }
+[[ ! -e "$args_file" ]] || { echo 'ERROR: duplicate --cd/-C invoked Codex' >&2; exit 1; }
+grep -Fq -- '--cd/-C may be specified only once' "$workdir/duplicate-cd-error"
+
+echo 'Invalid Codex launch-owned policy/project selector input: rejected without execution'
 
 # Empty explicit project selectors are usage errors rather than a request to
 # silently fall back to the inherited cwd.
