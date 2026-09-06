@@ -118,6 +118,10 @@ cat >"$validator" <<'VALIDATOR'
 set -euo pipefail
 printf '%s\n' "$@" >"$REMOTE_DEV_TEST_VALIDATOR_ARGS"
 [[ "${REMOTE_DEV_TEST_VALIDATOR_FAIL:-0}" != 1 ]] || exit 2
+if [[ "${REMOTE_DEV_TEST_POST_VALIDATOR_SWAP:-0}" == 1 ]]; then
+  mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_ORIGINAL_PROJECT"
+  mv -- "$REMOTE_DEV_TEST_REPLACEMENT_PROJECT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
+fi
 VALIDATOR
 
 cat >"$picker" <<'PICKER'
@@ -276,6 +280,28 @@ grep -Fq "ERROR: project path changed during launch: $project" "$workdir/directo
 [[ -e "$directory_swap_marker" && ! -e "$REMOTE_DEV_TEST_VALIDATOR_ARGS" && ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
 rm -rf -- "$project"
 mv -- "$original_project" "$project"
+
+# Replace the selected directory after the settings validator has accepted it.
+# The vendor must still inherit the exact inode that was originally entered.
+rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VALIDATOR_ARGS"
+post_validator_replacement="$workdir/post-validator-replacement"
+post_validator_original="$workdir/post-validator-original"
+mkdir -p "$post_validator_replacement"
+export REMOTE_DEV_TEST_POST_VALIDATOR_SWAP=1
+export REMOTE_DEV_TEST_SWAP_PROJECT="$project"
+export REMOTE_DEV_TEST_ORIGINAL_PROJECT="$post_validator_original"
+export REMOTE_DEV_TEST_REPLACEMENT_PROJECT="$post_validator_replacement"
+status=0
+"$runner" normal >"$workdir/post-validator-swap-output" 2>&1 || status=$?
+unset REMOTE_DEV_TEST_POST_VALIDATOR_SWAP REMOTE_DEV_TEST_SWAP_PROJECT \
+  REMOTE_DEV_TEST_ORIGINAL_PROJECT REMOTE_DEV_TEST_REPLACEMENT_PROJECT
+[[ "$status" == 2 ]]
+grep -Fq "ERROR: project path changed before Antigravity vendor launch: $project" \
+  "$workdir/post-validator-swap-output"
+[[ -e "$REMOTE_DEV_TEST_VALIDATOR_ARGS" && ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
+tail -n 1 "$REMOTE_DEV_TEST_HARDENING" | grep -Fx 'cwd=/'
+rm -rf -- "$project"
+mv -- "$post_validator_original" "$project"
 
 status=0
 TMUX_PANE=invalid "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1 || status=$?
