@@ -44,10 +44,43 @@ if git -C "$workspace/empty" rev-parse --show-toplevel >/dev/null 2>&1; then
   fail "empty project unexpectedly resolved a Git worktree"
 fi
 
+# The ceiling must also stop an empty project from inheriting a Git repository
+# that exists above the collection root. This is distinct from rejecting a
+# repository whose own top-level is the collection itself.
+ancestor_repo="$root/ancestor-repo"
+ancestor_workspace="$ancestor_repo/workspace"
+mkdir -p "$ancestor_workspace/empty"
+git -C "$ancestor_repo" init -q
+remote_dev_prepare_project_git_boundary "$ancestor_workspace"
+remote_dev_assert_project_git_boundary "$ancestor_workspace" "$ancestor_workspace/empty"
+if git -C "$ancestor_workspace/empty" rev-parse --show-toplevel >/dev/null 2>&1; then
+  fail "empty project inherited a Git repository above the managed collection ceiling"
+fi
+
 # A normal repository rooted at the selected child remains valid.
 git -C "$workspace/empty" init -q
 remote_dev_assert_project_git_boundary "$workspace" "$workspace/empty"
 assert_eq "$workspace/empty" "$(git -C "$workspace/empty" rev-parse --show-toplevel)" "child Git root"
+
+# A legitimate linked worktree rooted at the selected child uses a .git file,
+# not a directory. Preserve that topology when its effective top-level is still
+# exactly the selected project.
+linked_source="$root/linked-source"
+linked_workspace="$root/linked/workspace"
+linked_project="$linked_workspace/project"
+mkdir -p "$linked_source" "$linked_workspace"
+git -C "$linked_source" init -q
+printf 'tracked\n' >"$linked_source/tracked.txt"
+git -C "$linked_source" add tracked.txt
+git -C "$linked_source" -c user.name=remote-dev-test -c user.email=test@example.invalid \
+  commit -qm initial
+git -C "$linked_source" worktree add -q --detach "$linked_project" HEAD
+[[ -f "$linked_project/.git" ]] || fail "linked-worktree fixture did not create a child .git file"
+remote_dev_prepare_project_git_boundary "$linked_workspace"
+remote_dev_assert_project_git_boundary "$linked_workspace" "$linked_project"
+assert_eq "$linked_project" \
+  "$(GIT_CEILING_DIRECTORIES="$linked_workspace" git -C "$linked_project" rev-parse --show-toplevel)" \
+  "linked child worktree root"
 
 # The common entry helper must establish both physical-cwd and Git boundaries.
 (
@@ -86,17 +119,37 @@ assert_fails_with 2 "CRITICAL: project collection root contains .git" remote_dev
 assert_fails_with 2 "CRITICAL: project collection root contains .git" remote_dev_delete_project "$contaminated" beta beta
 [[ -f "$contaminated/beta/canary" ]] || fail "blocked deletion modified sibling contents"
 
-# Any .git entry is unsafe at the collection root, including dangling symlinks
-# and malformed gitfiles. Never follow or repair it automatically.
+# Any .git entry is unsafe at the collection root, including dangling symlinks,
+# special filesystem entries and malformed gitfiles. Never follow or repair it.
 symlink_root="$root/symlink/workspace"
 mkdir -p "$symlink_root/project"
 ln -s "$root/does-not-exist" "$symlink_root/.git"
 assert_fails_with 2 "CRITICAL: project collection root contains .git" remote_dev_assert_project_collection "$symlink_root"
 
+fifo_root="$root/fifo/workspace"
+mkdir -p "$fifo_root/project"
+mkfifo "$fifo_root/.git"
+assert_fails_with 2 "CRITICAL: project collection root contains .git" remote_dev_assert_project_collection "$fifo_root"
+
 malformed_root="$root/malformed/workspace"
 mkdir -p "$malformed_root/project"
 printf 'not a gitfile\n' > "$malformed_root/.git"
 assert_fails_with 2 "CRITICAL: project collection root contains .git" remote_dev_assert_project_collection "$malformed_root"
+
+# A valid linked-worktree gitfile at the collection root is still forbidden: the
+# collection is never itself a project even when Git metadata is well formed.
+root_gitfile_source="$root/root-gitfile-source"
+root_gitfile_workspace="$root/root-gitfile/workspace"
+mkdir -p "$root_gitfile_source" "$(dirname "$root_gitfile_workspace")"
+git -C "$root_gitfile_source" init -q
+printf 'tracked\n' >"$root_gitfile_source/tracked.txt"
+git -C "$root_gitfile_source" add tracked.txt
+git -C "$root_gitfile_source" -c user.name=remote-dev-test -c user.email=test@example.invalid \
+  commit -qm initial
+git -C "$root_gitfile_source" worktree add -q --detach "$root_gitfile_workspace" HEAD
+[[ -f "$root_gitfile_workspace/.git" ]] || fail "root gitfile fixture did not create .git file"
+assert_fails_with 2 "CRITICAL: project collection root contains .git" \
+  remote_dev_assert_project_collection "$root_gitfile_workspace"
 
 # A bare repository at the collection root has no .git child, so detect it
 # independently through bounded Git plumbing.
