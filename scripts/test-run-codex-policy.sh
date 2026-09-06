@@ -76,6 +76,19 @@ set -euo pipefail
 printf '%s\n' "$@" >"$REMOTE_DEV_CODEX_VALIDATOR_FILE"
 printf 'ceiling=%s\n' "${GIT_CEILING_DIRECTORIES:-}" >>"$REMOTE_DEV_CODEX_VALIDATOR_FILE"
 [[ "${REMOTE_DEV_TEST_VALIDATOR_FAIL:-0}" != 1 ]] || exit 2
+
+case "${REMOTE_DEV_TEST_POST_VALIDATOR_SWAP:-none}" in
+  none) ;;
+  replace)
+    mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_SWAP_ORIGINAL"
+    mv -- "$REMOTE_DEV_TEST_SWAP_REPLACEMENT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
+    ;;
+  symlink)
+    mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_SWAP_ORIGINAL"
+    ln -s -- "$REMOTE_DEV_TEST_SWAP_ORIGINAL" "$REMOTE_DEV_TEST_SWAP_PROJECT"
+    ;;
+  *) exit 96 ;;
+esac
 FAKE_VALIDATOR
 chmod 0755 "$test_validator"
 
@@ -163,9 +176,10 @@ assert_validator "$default_project"
 [[ "$(<"$cwd_identity_file")" == "$(stat -Lc '%d:%i' -- "$default_project")" ]] \
   || { echo 'ERROR: default Codex launch inherited the wrong project inode' >&2; exit 1; }
 
-# A shell can retain a stale textual PWD after its directory is renamed. With
-# no explicit --cd, run-codex must re-enter the canonical selected path before
-# exec so Codex cannot inherit the old inode while validation inspects the new one.
+# If the caller's cwd is renamed before run-codex starts, its physical renamed
+# direct child is the current project. Do not silently jump to a newly-created
+# replacement at the old pathname; keep validation and inherited cwd on the same
+# inode/path instead.
 stale_workspace="$workdir/stale-workspace"
 stale_project="$stale_workspace/project"
 stale_original="$stale_workspace/project-old"
@@ -187,17 +201,17 @@ rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator
     REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
     "$test_launcher" resume --last
 )
-stale_selected_identity="$(stat -Lc '%d:%i' -- "$stale_project")"
-[[ "$stale_selected_identity" != "$stale_original_identity" ]] \
-  || { echo 'ERROR: stale-PWD fixture did not replace the project inode' >&2; exit 1; }
-[[ "$(<"$cwd_identity_file")" == "$stale_selected_identity" ]] \
-  || { echo 'ERROR: Codex inherited stale cwd inode after project replacement' >&2; exit 1; }
+stale_replacement_identity="$(stat -Lc '%d:%i' -- "$stale_project")"
+[[ "$stale_replacement_identity" != "$stale_original_identity" ]] \
+  || { echo 'ERROR: stale-cwd fixture did not replace the old project pathname' >&2; exit 1; }
+[[ "$(<"$cwd_identity_file")" == "$stale_original_identity" ]] \
+  || { echo 'ERROR: Codex did not preserve the physical current project inode' >&2; exit 1; }
 [[ "$(<"$env_file")" == "$stale_workspace" ]] \
-  || { echo 'ERROR: stale-PWD launch missed its Git ceiling' >&2; exit 1; }
-grep -Fxq -- "$stale_project" "$validator_file"
+  || { echo 'ERROR: stale-cwd launch missed its Git ceiling' >&2; exit 1; }
+grep -Fxq -- "$stale_original" "$validator_file"
 grep -Fxq -- "ceiling=$stale_workspace" "$validator_file"
 
-echo 'Codex stale-PWD project replacement: canonical selected inode inherited'
+echo 'Codex pre-launch cwd rename: physical current project preserved'
 
 run_launcher guarded --cd "$project_a" resume --last
 assert_args 'guarded project A' \
@@ -216,6 +230,74 @@ assert_args 'per-launch autonomous override' \
 assert_validator "$project_b"
 
 echo 'Codex managed Git ceiling: autonomous, guarded and selected-project launches OK'
+
+# Swap the selected pathname only after run-codex has captured its identity and
+# the effective-policy validator has run. This is the actual TOCTOU boundary:
+# the vendor must not execute when validation and inherited cwd/path diverge.
+swap_workspace="$workdir/post-validator-workspace"
+swap_project="$swap_workspace/project"
+swap_original="$swap_workspace/project-old"
+swap_replacement="$workdir/post-validator-replacement"
+mkdir -p "$swap_project" "$swap_replacement"
+printf 'original\n' >"$swap_project/canary"
+printf 'replacement\n' >"$swap_replacement/canary"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
+status=0
+(
+  cd "$swap_project"
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
+    WORKSPACE="$swap_workspace" \
+    REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+    REMOTE_DEV_CODEX_ENV_FILE="$env_file" \
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file" \
+    REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file" \
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
+    REMOTE_DEV_TEST_POST_VALIDATOR_SWAP=replace \
+    REMOTE_DEV_TEST_SWAP_PROJECT="$swap_project" \
+    REMOTE_DEV_TEST_SWAP_ORIGINAL="$swap_original" \
+    REMOTE_DEV_TEST_SWAP_REPLACEMENT="$swap_replacement" \
+    "$test_launcher" resume --last
+) >/dev/null 2>"$workdir/post-validator-swap-error" || status=$?
+(( status == 2 )) || { echo "ERROR: post-validator project swap returned $status, expected 2" >&2; cat "$workdir/post-validator-swap-error" >&2; exit 1; }
+[[ -e "$validator_file" && ! -e "$args_file" ]] || { echo 'ERROR: post-validator project swap reached Codex' >&2; exit 1; }
+[[ "$(<"$swap_original/canary")" == original && "$(<"$swap_project/canary")" == replacement ]] \
+  || { echo 'ERROR: post-validator replacement fixture was modified unexpectedly' >&2; exit 1; }
+
+grep -Fq 'project path changed during Codex configuration validation' "$workdir/post-validator-swap-error"
+
+echo 'Codex post-validator project replacement: blocked before vendor exec'
+
+# A symlink to the original inode defeats stat -L identity checks by itself.
+# The full direct-child/Git-boundary assertion must still reject that swap.
+symlink_workspace="$workdir/post-validator-symlink-workspace"
+symlink_project="$symlink_workspace/project"
+symlink_original="$symlink_workspace/project-old"
+mkdir -p "$symlink_project"
+printf 'original\n' >"$symlink_project/canary"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
+status=0
+(
+  cd "$symlink_project"
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
+    WORKSPACE="$symlink_workspace" \
+    REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+    REMOTE_DEV_CODEX_ENV_FILE="$env_file" \
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file" \
+    REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file" \
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
+    REMOTE_DEV_TEST_POST_VALIDATOR_SWAP=symlink \
+    REMOTE_DEV_TEST_SWAP_PROJECT="$symlink_project" \
+    REMOTE_DEV_TEST_SWAP_ORIGINAL="$symlink_original" \
+    "$test_launcher" resume --last
+) >/dev/null 2>"$workdir/post-validator-symlink-error" || status=$?
+(( status == 2 )) || { echo "ERROR: post-validator project symlink returned $status, expected 2" >&2; cat "$workdir/post-validator-symlink-error" >&2; exit 1; }
+[[ -L "$symlink_project" && -e "$validator_file" && ! -e "$args_file" ]] \
+  || { echo 'ERROR: post-validator symlink swap reached Codex or fixture is invalid' >&2; exit 1; }
+grep -Fq 'project must not be a symlink' "$workdir/post-validator-symlink-error"
+
+echo 'Codex post-validator symlink-to-original swap: blocked before vendor exec'
 
 # Resolver failure still uses immutable bundled fallback and validates that
 # exact executable before launch.
@@ -287,10 +369,24 @@ assert_rejected() {
 }
 
 assert_rejected 'sandbox override' --sandbox read-only
+assert_rejected 'short sandbox override' -s read-only
+assert_rejected 'joined short sandbox override' -sread-only
 assert_rejected 'approval override' --ask-for-approval never
+assert_rejected 'short approval override' -a never
+assert_rejected 'joined short approval override' -anever
 assert_rejected 'dangerous bypass' --dangerously-bypass-approvals-and-sandbox
+assert_rejected 'legacy dangerous auto approve' --dangerously-auto-approve-everything
+assert_rejected 'yolo alias' --yolo
+assert_rejected 'full-auto alias' --full-auto
 assert_rejected 'profile selection' --profile test
+assert_rejected 'short profile selection' -p test
 assert_rejected 'project trust override' -c 'projects={"/workspace"={trust_level="trusted"}}'
+assert_rejected 'sandbox config override' -c 'sandbox_mode="read-only"'
+assert_rejected 'approval config override' --config 'approval_policy="never"'
+assert_rejected 'spaced config override' -c ' sandbox_mode = "read-only" '
+assert_rejected 'inline config override' -c=sandbox_mode=read-only
+assert_rejected 'profile sandbox config override' -c 'profiles.test.sandbox_mode="read-only"'
+assert_rejected 'profile project config override' -c 'profiles.test.projects.foo.trust_level="trusted"'
 assert_rejected 'shell policy set override' -c 'shell_environment_policy.set.GIT_CEILING_DIRECTORIES="/tmp"'
 assert_rejected 'shell include override' --config 'shell_environment_policy.include_only=["PATH"]'
 
@@ -312,10 +408,25 @@ assert_invalid_mode 'invalid explicit mode' 'unsupported per-launch approval mod
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --approval-mode 'autonomous;id'
 assert_invalid_mode 'missing explicit mode' '--approval-mode requires autonomous or guarded' \
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --approval-mode
+assert_invalid_mode 'empty inline explicit mode' '--approval-mode requires autonomous or guarded' \
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --approval-mode=
+assert_invalid_mode 'duplicate explicit mode' '--approval-mode may be specified only once' \
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --approval-mode autonomous --approval-mode guarded
+assert_invalid_mode 'print policy with Codex arguments' '--print-policy cannot be combined with Codex arguments' \
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --print-policy resume
 assert_invalid_mode 'missing config value' '--config requires a value' \
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE "$test_launcher" --config
 
 echo 'Invalid Codex launch-owned policy input: rejected without execution'
+
+# Empty explicit project selectors are usage errors rather than a request to
+# silently fall back to the inherited cwd.
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
+status=0
+run_launcher __unset__ --cd= >/dev/null 2>"$workdir/empty-cd-error" || status=$?
+(( status == 2 )) || { echo "ERROR: empty --cd returned $status, expected 2" >&2; cat "$workdir/empty-cd-error" >&2; exit 1; }
+[[ ! -e "$args_file" ]] || { echo 'ERROR: empty --cd invoked Codex' >&2; exit 1; }
+grep -Fq -- '--cd requires a project directory' "$workdir/empty-cd-error"
 
 # If the effective-policy validator fails, the resolved Codex binary is never
 # launched even though the collection itself is healthy.
