@@ -54,6 +54,10 @@ for raw in sys.stdin:
             policy["include_only"] = ["GIT_CEILING_DIRECTORIES"]
         elif policy_name == "include_wildcard":
             policy["include_only"] = ["GIT_*", "PATH"]
+        elif policy_name == "include_question":
+            policy["include_only"] = ["GIT_CEILING_DIRECTOR?ES"]
+        elif policy_name == "include_bracket_class":
+            policy["include_only"] = ["GIT_[C]EILING_DIRECTORIES"]
         elif policy_name == "wrong_set":
             policy["set"]["GIT_CEILING_DIRECTORIES"] = "/wrong"
         elif policy_name == "missing_policy":
@@ -127,9 +131,13 @@ class CodexProjectBoundaryValidatorTests(unittest.TestCase):
     def test_coalesced_informational_and_response_lines_do_not_timeout(self) -> None:
         self.assert_passes("coalesced")
 
-    def test_exact_and_wildcard_include_only_keep_ceiling(self) -> None:
+    def test_exact_star_and_question_wildcards_keep_ceiling(self) -> None:
         self.assert_passes("include_exact")
         self.assert_passes("include_wildcard")
+        self.assert_passes("include_question")
+
+    def test_non_codex_character_class_syntax_does_not_prove_survival(self) -> None:
+        self.assert_blocks("include_bracket_class", "filters out the required Git ceiling")
 
     def test_include_only_without_ceiling_fails_closed(self) -> None:
         self.assert_blocks("include_drop", "filters out the required Git ceiling")
