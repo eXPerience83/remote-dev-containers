@@ -123,6 +123,23 @@ class AntigravityBoundaryValidatorTests(unittest.TestCase):
         ]
         self.assert_blocks(data, "outside the selected project")
 
+    def test_absolute_parent_traversal_cannot_hide_behind_project_prefix(self) -> None:
+        data = self.safe_settings()
+        data["permissions"]["allow"] = [  # type: ignore[index]
+            f"write_file({self.project}/../sibling)",
+        ]
+        self.assert_blocks(data, "outside the selected project")
+
+    def test_file_grant_cannot_cross_existing_project_symlink(self) -> None:
+        sibling = self.project.parent / "sibling"
+        sibling.mkdir()
+        (self.project / "external").symlink_to(sibling, target_is_directory=True)
+        data = self.safe_settings()
+        data["permissions"]["allow"] = [  # type: ignore[index]
+            "read_file(external/)",
+        ]
+        self.assert_blocks(data, "outside the selected project")
+
     def test_global_parent_and_home_file_grants_are_blocked(self) -> None:
         for rule in ("read_file(*)", "write_file(../sibling)", "read_file(~/.ssh)", "write_file(/workspace)"):
             data = self.safe_settings()
