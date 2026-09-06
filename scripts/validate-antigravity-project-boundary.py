@@ -87,24 +87,46 @@ def _read_settings(path: Path) -> dict[str, Any]:
     return data
 
 
-def _inside_project(target: str, project: PurePosixPath) -> bool:
+def _file_grant_inside_project(target: str, project: Path) -> bool:
+    """Accept only lexical project descendants with no existing symlink hop."""
     if not target or any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
         return False
     if target == "*" or target.startswith("~"):
         return False
 
     candidate = PurePosixPath(target)
+    project_posix = PurePosixPath(str(project))
     if candidate.is_absolute():
         try:
-            candidate.relative_to(project)
+            relative = candidate.relative_to(project_posix)
         except ValueError:
             return False
-        return True
+    else:
+        relative = candidate
 
-    # File permission targets are documented as relative to project workspace
-    # roots. Parent traversal would make that interpretation escape the selected
-    # project, so it cannot be accepted for a managed session.
-    return ".." not in candidate.parts
+    # PurePosixPath deliberately preserves parent traversal. Reject it before
+    # any filesystem lookup so an absolute-looking project/../sibling grant
+    # cannot pass a simple lexical prefix check.
+    if ".." in relative.parts:
+        return False
+
+    current = project
+    for part in relative.parts:
+        if part in ("", "."):
+            continue
+        current = current / part
+        try:
+            info = os.lstat(current)
+        except FileNotFoundError:
+            # A future path below a verified in-project ancestor is still
+            # bounded lexically. No deeper existing symlink can exist yet.
+            break
+        except OSError:
+            return False
+        if stat.S_ISLNK(info.st_mode):
+            return False
+
+    return True
 
 
 def _validate_rule_list(value: Any, label: str) -> list[str]:
@@ -153,13 +175,12 @@ def validate(settings: dict[str, Any], project: Path) -> None:
             "Antigravity permissions.allow contains an unsandboxed grant; remove it before managed launch"
         )
 
-    project_posix = PurePosixPath(str(project))
     for rule in allow:
         parsed = _parse_file_rule(rule)
         if parsed is None:
             continue
         action, target = parsed
-        if not _inside_project(target, project_posix):
+        if not _file_grant_inside_project(target, project):
             raise BoundaryError(
                 f"Antigravity {action} allow rule expands filesystem access outside the selected project"
             )
