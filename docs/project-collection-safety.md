@@ -17,6 +17,8 @@ A project can be an ordinary Git worktree, a linked Git worktree whose `.git` en
 
 The collection itself is not allowed to contain a `.git` entry of any kind and must not be a bare Git repository. Remote Dev does not try to decide whether collection-root Git metadata was intentional, stale or accidental: managed project actions fail closed instead.
 
+Doctor also audits the top-level collection layout. The expected entries are valid direct-child project directories plus the optional managed `.remote-dev-tmp` directory. Other files, symlinks, hidden directories or special entries are reported for manual inspection; Doctor never deletes or rewrites them.
+
 ## Git ancestor discovery
 
 Managed Codex and experimental Antigravity project launches set:
@@ -40,24 +42,18 @@ If `/workspace` contains `.git`, is recognized as a bare Git repository, or othe
 - project discovery, Select, Create and Delete are blocked;
 - an existing menu selection is discarded rather than reused as stale state;
 - **Run diagnostics** remains available;
-- **Open a login shell** remains available for manual recovery;
+- **Open a login shell** remains available for manual inspection/cleanup;
 - Remote Dev does not delete `.git`, run `git reset`, run `git clean`, move projects, or rewrite repository metadata automatically.
 
 Doctor reports the collection as `CRITICAL`/`BLOCKED` without printing remotes, repository contents, credentials or other private data.
 
-## Recovery procedure
+## Manual cleanup
 
-Treat a collection-root Git repository as a data-safety incident until you understand its origin.
+Remote Dev deliberately does not automate cleanup. For a known disposable/experimental contamination such as the confirmed Antigravity incident, the operator may remove the exact `/workspace/.git` entry manually after checking that this is the unintended collection-root metadata. No other collection entry should be removed as part of that cleanup.
 
-1. Stop managed agent work in the affected role. Do not start another agent session against that collection.
-2. Preserve the current data first. On TrueNAS, take an appropriate dataset snapshot or equivalent backup before destructive repair.
-3. Use **Run diagnostics** to confirm that the collection boundary is what is blocking launch.
-4. Use **Open a login shell** only for inspection. Determine whether `/workspace/.git` is a directory, gitfile, symlink/special entry, or whether `/workspace` is a bare repository.
-5. Identify which project, if any, the Git metadata actually belongs to before moving or removing anything.
-6. Repair the layout manually so `/workspace` is only a collection and every repository is rooted at its intended `/workspace/<project>` child.
-7. Run diagnostics again. Managed launches should remain blocked until the collection and selected-project checks both pass.
+For data that matters, inspect or snapshot it before destructive repair. Never begin with collection-root `git clean -fd`, `git reset --hard`, forced checkout, or similar Git cleanup: if `/workspace` is accidentally the repository root, sibling project directories can be interpreted as untracked repository content and deleted.
 
-Do **not** use a collection-root `git clean -fd`, `git reset --hard`, forced checkout, or similar cleanup as a first recovery step. If `/workspace` is accidentally the repository root, sibling project directories can be interpreted as untracked repository content and deleted.
+After manual cleanup, run Doctor again. The collection must report that its Git root is clean; unexpected top-level entries should also be inspected until the layout contains only valid project directories plus optional `.remote-dev-tmp`.
 
 ## Deleted-current-directory recovery
 
@@ -65,23 +61,11 @@ An agent can rename or delete the project directory it was launched from. Post-s
 
 This prevents a deleted cwd from turning the cleanup path into a secondary `getcwd` failure.
 
-## Experimental Antigravity confinement
+## Agent-specific behavior
 
-Antigravity remains experimental and does not become a supported TrueNAS integration merely because the common collection checks pass.
+The collection/Git boundary is a Remote Dev runtime contract shared by Codex and experimental Antigravity. It does not introduce a new nested sandbox and does not claim filesystem isolation from sibling projects that remain mounted in the same role container.
 
-For the managed experimental path, Remote Dev currently:
-
-- forces the vendor's documented session-scoped `--sandbox` flag;
-- rejects caller attempts to disable/replace the sandbox or use the dangerous permission-skip flag;
-- validates `~/.gemini/antigravity-cli/settings.json` **read-only** and byte-preservingly;
-- requires `allowNonWorkspaceAccess` to be disabled;
-- requires `permissions.deny` to contain `unsandboxed(*)`;
-- rejects persistent `unsandboxed(...)` allow grants;
-- rejects `read_file(...)` / `write_file(...)` allow grants that lexically escape the selected project or traverse an existing symlink from the project to an outside path.
-
-Google's current CLI documentation states that `--sandbox` forces sandboxing for the session, that filesystem mounts are derived from `read_file`/`write_file` permissions, and that permission precedence is `Deny > Ask > Allow`. It also documents `unsandboxed(...)` as the sandbox escape resource. See the upstream [Sandbox](https://antigravity.google/docs/cli/sandbox/) and [Permissions](https://antigravity.google/docs/permissions/) documentation.
-
-Those documented semantics are necessary but not sufficient evidence for this project. The exact admitted Antigravity runtime still has to pass the disposable TrueNAS acceptance matrix from #213. If the exact runtime cannot demonstrate sibling and private-state confinement under the supported outer-container topology, managed Antigravity remains blocked; the Codex/common fix does not wait for that proof.
+Codex keeps the established #36/#42 outer-container model and its existing autonomous/guarded policy. Antigravity keeps its existing experimental vendor launch behavior; #213 does not force or configure a vendor sandbox. Future agent integrations should reuse the common collection/project helpers rather than reimplementing Git-boundary logic independently.
 
 ## Validation expectations
 
@@ -97,6 +81,7 @@ The repository regression suite covers at least:
 - sibling canaries remaining intact when the managed preflight blocks;
 - deleted-cwd recovery before post-session hardening;
 - Codex effective shell-environment policy preserving the ceiling;
-- experimental Antigravity persistent-settings validation remaining read-only.
+- Antigravity using the same common collection entry/Git ceiling before vendor launch;
+- Doctor reporting unexpected collection-root entries without modifying them.
 
 The final TrueNAS evidence must use disposable A/B projects and canaries. Never reproduce the destructive control case against real user project data.
