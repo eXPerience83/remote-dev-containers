@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import os
 from pathlib import Path
@@ -105,13 +104,44 @@ def _read_response(
 
 
 def _matches_required(pattern: str) -> bool:
-    # Codex EnvironmentVariablePattern uses case-insensitive wildcard matching
-    # for shell policy entries (for example *KEY*). Be conservative: an
-    # unrecognized/odd pattern simply does not prove that the required name is
-    # retained, so launch remains fail-closed.
+    # Codex 0.153.4 uses WildMatchPattern<'*', '?'> for environment-variable
+    # patterns, not shell/Python fnmatch syntax. In particular, character-class
+    # notation such as [A-Z] is literal. Mirror exactly the two wildcard
+    # operators that Codex accepts so the validator never proves survival using
+    # a pattern that the runtime would interpret differently.
     if not pattern or any(ord(ch) < 32 or ord(ch) == 127 for ch in pattern):
         return False
-    return fnmatch.fnmatchcase(REQUIRED_ENV.casefold(), pattern.casefold())
+
+    candidate = REQUIRED_ENV.casefold()
+    wildcard = pattern.casefold()
+    candidate_index = 0
+    pattern_index = 0
+    star_index = -1
+    star_candidate_index = 0
+
+    while candidate_index < len(candidate):
+        if pattern_index < len(wildcard) and (
+            wildcard[pattern_index] == "?"
+            or wildcard[pattern_index] == candidate[candidate_index]
+        ):
+            candidate_index += 1
+            pattern_index += 1
+            continue
+        if pattern_index < len(wildcard) and wildcard[pattern_index] == "*":
+            star_index = pattern_index
+            star_candidate_index = candidate_index
+            pattern_index += 1
+            continue
+        if star_index >= 0:
+            star_candidate_index += 1
+            candidate_index = star_candidate_index
+            pattern_index = star_index + 1
+            continue
+        return False
+
+    while pattern_index < len(wildcard) and wildcard[pattern_index] == "*":
+        pattern_index += 1
+    return pattern_index == len(wildcard)
 
 
 def _validate_policy(config: dict[str, Any], ceiling: str) -> None:
