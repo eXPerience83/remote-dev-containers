@@ -4,8 +4,6 @@ set -euo pipefail
 readonly manager=/usr/local/bin/remote-dev-antigravity
 readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth
 readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker
-readonly project_boundary_validator=/usr/local/bin/validate-antigravity-project-boundary
-readonly antigravity_settings=/root/.gemini/antigravity-cli/settings.json
 readonly secure_state=/usr/local/bin/secure-persistent-state
 readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 
@@ -14,15 +12,6 @@ if [[ "${1:-}" == --remote-dev-open-resume-picker ]]; then
   open_resume_picker=1
   shift
 fi
-
-for argument in "$@"; do
-  case "$argument" in
-    --sandbox|--sandbox=*|--no-sandbox|--dangerously-skip-permissions|--dangerously-skip-permissions=*)
-      echo "ERROR: Remote Dev owns Antigravity sandbox and permission-bypass policy; refusing argument: $argument" >&2
-      exit 2
-      ;;
-  esac
-done
 
 [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
   || { echo "ERROR: Remote Dev role definitions are unavailable" >&2; exit 1; }
@@ -37,8 +26,6 @@ export REMOTE_DEV_ROLE="$resolved_role"
 
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
 [[ -x "$secure_state" ]] || { echo "ERROR: persistent-state hardening command is unavailable" >&2; exit 1; }
-[[ -x "$project_boundary_validator" && ! -L "$project_boundary_validator" ]] \
-  || { echo "ERROR: Antigravity project-boundary validator is unavailable" >&2; exit 1; }
 if (( open_resume_picker )); then
   [[ "${TMUX_PANE:-}" =~ ^%[0-9]+$ ]] \
     || { echo "ERROR: the Antigravity conversation picker requires a tmux pane" >&2; exit 2; }
@@ -84,11 +71,6 @@ entered_project_path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" ||
 if [[ "$entered_project_identity" != "$entered_project_path_identity" ]]; then
   remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
   remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
-  exit 2
-fi
-if ! "$project_boundary_validator" --settings "$antigravity_settings" --project "$project"; then
-  echo "ERROR: Antigravity settings do not satisfy the managed project-confinement contract." >&2
-  echo "Keep allowNonWorkspaceAccess disabled and deny unsandboxed(*) before retrying." >&2
   exit 2
 fi
 
@@ -286,16 +268,15 @@ start_oauth_helper
 # accepts its prompt only after the screen has changed from this baseline.
 capture_picker_baseline
 
-# Revalidate the directory object after every prelaunch helper/validator has
-# finished. A concurrent replacement must not make the validator inspect one
-# path while the vendor inherits a different directory inode as its cwd.
+# Revalidate the selected project after the prelaunch helpers have finished. A
+# concurrent replacement must not make Remote Dev validate one directory while
+# the vendor process inherits another directory inode as its cwd.
 assert_entered_project_identity || exit $?
 
-# Force the vendor's documented session-scoped terminal sandbox. Persistent
-# settings are validated read-only above; Remote Dev never rewrites them.
 # Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
-# when job control is disabled, so preserve fd 0 and reset signal dispositions.
-env --default-signal=INT,TERM,QUIT -- "$binary" --sandbox "$@" <&0 &
+# when job control is disabled. Preserve fd 0 explicitly and reset those signal
+# dispositions before execing the interactive vendor CLI.
+env --default-signal=INT,TERM,QUIT -- "$binary" "$@" <&0 &
 child_pid=$!
 start_picker_helper
 session_status=0
