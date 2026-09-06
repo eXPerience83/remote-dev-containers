@@ -166,6 +166,28 @@ printf 'broken\n' > "$invalid_child_root/project/.git"
 remote_dev_prepare_project_git_boundary "$invalid_child_root"
 assert_fails_with 2 "invalid Git metadata" remote_dev_assert_project_git_boundary "$invalid_child_root" "$invalid_child_root/project"
 
+# A selected project's .git entry must itself be a safe filesystem object. Git
+# follows a .git symlink and can report the selected directory as the worktree
+# root even when repository metadata belongs to a sibling, so reject it before
+# invoking Git rather than trusting rev-parse alone.
+symlink_child_root="$root/symlink-child/workspace"
+mkdir -p "$symlink_child_root/project-a" "$symlink_child_root/project-b"
+git -C "$symlink_child_root/project-b" init -q
+ln -s "$symlink_child_root/project-b/.git" "$symlink_child_root/project-a/.git"
+remote_dev_prepare_project_git_boundary "$symlink_child_root"
+assert_fails_with 2 ".git must not be a symlink" \
+  remote_dev_assert_project_git_boundary "$symlink_child_root" "$symlink_child_root/project-a"
+
+# Special .git entries can make Git block while opening metadata. The preflight
+# must reject them by type before any repository probe. Run through timeout so a
+# future regression fails deterministically instead of hanging CI.
+special_child_root="$root/special-child/workspace"
+mkdir -p "$special_child_root/project"
+mkfifo "$special_child_root/project/.git"
+assert_fails_with 2 ".git must be a regular file or directory" \
+  timeout 5 bash -c 'source "$1"; remote_dev_assert_project_git_boundary "$2" "$3"' \
+    _ "$runtime_lib" "$special_child_root" "$special_child_root/project"
+
 # Reproduce the important destructive mechanism only inside a disposable
 # control fixture: once the collection itself is the repository, an explicit
 # root-level clean treats sibling project directories as untracked content.
