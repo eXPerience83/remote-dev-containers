@@ -327,18 +327,29 @@ if (( informational_only == 0 )); then
   remote_dev_prepare_project_git_boundary "$workspace" || exit $?
 
   active_project=""
+  explicit_project_cd=0
   expect_cd_value=0
   for argument in "${forwarded[@]}"; do
     if (( expect_cd_value == 1 )); then
       active_project="$argument"
+      explicit_project_cd=1
       expect_cd_value=0
       continue
     fi
     case "$argument" in
       --) break ;;
-      --cd|-C) expect_cd_value=1 ;;
-      --cd=*) active_project="${argument#*=}" ;;
-      -C?*) active_project="${argument#-C}" ;;
+      --cd|-C)
+        explicit_project_cd=1
+        expect_cd_value=1
+        ;;
+      --cd=*)
+        explicit_project_cd=1
+        active_project="${argument#*=}"
+        ;;
+      -C?*)
+        explicit_project_cd=1
+        active_project="${argument#-C}"
+        ;;
     esac
   done
   if (( expect_cd_value == 1 )); then
@@ -355,12 +366,48 @@ if (( informational_only == 0 )); then
     fail_usage "managed Codex launch requires an existing project directory"
   fi
 
-  remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
-  project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
-    remote_dev_runtime_error "project path changed during Codex launch: $active_project"
-    exit 2
+  if (( explicit_project_cd == 0 )); then
+    # With no explicit --cd, Codex inherits this process's cwd. Re-enter the
+    # canonical selected path so a stale PWD after a concurrent rename cannot
+    # make validation inspect one inode while Codex inherits another.
+    remote_dev_enter_project "$workspace" "$active_project" || exit $?
+    project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex launch: $active_project"
+      exit 2
+    }
+  else
+    remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
+    project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex launch: $active_project"
+      exit 2
+    }
+  fi
+
+  assert_managed_codex_project_identity() {
+    local path_identity=""
+    local cwd_identity=""
+
+    path_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+      return 2
+    }
+    if [[ "$path_identity" != "$project_identity" ]]; then
+      remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+      return 2
+    fi
+    if (( explicit_project_cd == 0 )); then
+      cwd_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+        remote_dev_runtime_error "current project directory changed during Codex launch: $active_project"
+        return 2
+      }
+      if [[ "$cwd_identity" != "$project_identity" ]]; then
+        remote_dev_runtime_error "current project directory changed during Codex launch: $active_project"
+        return 2
+      fi
+    fi
   }
 
+  assert_managed_codex_project_identity || exit $?
   if ! "$project_boundary_validator" \
     --codex-binary "$resolved_codex_binary" \
     --cwd "$active_project" \
@@ -368,15 +415,11 @@ if (( informational_only == 0 )); then
     echo "ERROR: Codex effective configuration cannot preserve the required project Git boundary" >&2
     exit 2
   fi
-  current_project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
-    remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
-    exit 2
-  }
-  if [[ "$current_project_identity" != "$project_identity" ]]; then
-    remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
-    exit 2
-  fi
+  assert_managed_codex_project_identity || exit $?
   remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
+  # Recheck after the full path/Git assertion so a replacement occurring during
+  # that validation cannot survive into the vendor exec.
+  assert_managed_codex_project_identity || exit $?
 
   workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
   owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
