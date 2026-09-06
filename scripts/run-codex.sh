@@ -474,6 +474,14 @@ if (( informational_only == 0 )); then
   workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
   owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
 
+  if (( explicit_project_cd == 0 )); then
+    # Codex 0.153.x may otherwise offer a resumed thread's historical cwd. An
+    # explicit managed --cd makes upstream resume semantics choose the current
+    # selected project, so a conversation cannot move the runtime into a sibling
+    # after Remote Dev has validated this project's boundary.
+    owned_policy_args+=(--cd "$active_project")
+  fi
+
   if [[ "$approval_mode" == guarded ]]; then
     project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
     owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
