@@ -355,21 +355,23 @@ if (( informational_only == 0 )); then
   if (( expect_cd_value == 1 )); then
     fail_usage "--cd requires a project directory"
   fi
-  if [[ -z "$active_project" ]]; then
+  if (( explicit_project_cd == 1 )) && [[ -z "$active_project" ]]; then
+    fail_usage "--cd requires a project directory"
+  fi
+
+  if (( explicit_project_cd == 0 )); then
     if ! active_project="$(pwd -P 2>/dev/null)"; then
       fail_usage "managed Codex launch requires a valid current project directory"
     fi
-  elif [[ "$active_project" != /* ]]; then
-    active_project="$PWD/$active_project"
-  fi
-  if ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
+  elif ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
     fail_usage "managed Codex launch requires an existing project directory"
   fi
 
   if (( explicit_project_cd == 0 )); then
-    # With no explicit --cd, Codex inherits this process's cwd. Re-enter the
-    # canonical selected path so a stale PWD after a concurrent rename cannot
-    # make validation inspect one inode while Codex inherits another.
+    # Codex will inherit this process's cwd. Re-enter the physical current
+    # direct child and bind subsequent validation to that inode. If the caller's
+    # directory was renamed before launch, the renamed direct child is the
+    # current project; a newly-created replacement pathname is not substituted.
     remote_dev_enter_project "$workspace" "$active_project" || exit $?
     project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
       remote_dev_runtime_error "project path changed during Codex launch: $active_project"
@@ -407,7 +409,15 @@ if (( informational_only == 0 )); then
     fi
   }
 
-  assert_managed_codex_project_identity || exit $?
+  assert_managed_codex_project_boundary() {
+    assert_managed_codex_project_identity || return $?
+    remote_dev_assert_project_git_boundary "$workspace" "$active_project" || return $?
+    # Repeat the identity check after path/Git validation so a concurrent swap
+    # during the probe cannot survive into the next launch stage.
+    assert_managed_codex_project_identity
+  }
+
+  assert_managed_codex_project_boundary || exit $?
   if ! "$project_boundary_validator" \
     --codex-binary "$resolved_codex_binary" \
     --cwd "$active_project" \
@@ -415,11 +425,7 @@ if (( informational_only == 0 )); then
     echo "ERROR: Codex effective configuration cannot preserve the required project Git boundary" >&2
     exit 2
   fi
-  assert_managed_codex_project_identity || exit $?
-  remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
-  # Recheck after the full path/Git assertion so a replacement occurring during
-  # that validation cannot survive into the vendor exec.
-  assert_managed_codex_project_identity || exit $?
+  assert_managed_codex_project_boundary || exit $?
 
   workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
   owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
@@ -432,6 +438,14 @@ fi
 
 if [[ "$approval_mode" == autonomous ]]; then
   owned_policy_args+=(--ask-for-approval never)
+fi
+
+# Narrow the remaining pathname race immediately before vendor execution. This
+# cannot provide filesystem isolation from an explicitly malicious sibling
+# writer, but it prevents the managed launch from knowingly validating one
+# project inode/path and executing against another.
+if (( informational_only == 0 )); then
+  assert_managed_codex_project_boundary || exit $?
 fi
 
 exec "$resolved_codex_binary" "${owned_policy_args[@]}" "${forwarded[@]}"
