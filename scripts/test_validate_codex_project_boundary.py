@@ -33,7 +33,11 @@ for raw in sys.stdin:
     except json.JSONDecodeError:
         continue
     if message.get("method") == "initialize":
-        print(json.dumps({"id": message.get("id"), "result": {}}), flush=True)
+        response = json.dumps({"id": message.get("id"), "result": {}})
+        if policy_name == "coalesced":
+            os.write(sys.stdout.fileno(), ("notice\n" + response + "\n").encode("utf-8"))
+        else:
+            print(response, flush=True)
     elif message.get("method") == "initialized":
         continue
     elif message.get("method") == "config/read":
@@ -119,6 +123,9 @@ class CodexProjectBoundaryValidatorTests(unittest.TestCase):
 
     def test_default_policy_keeps_managed_set_value(self) -> None:
         self.assert_passes("safe")
+
+    def test_coalesced_informational_and_response_lines_do_not_timeout(self) -> None:
+        self.assert_passes("coalesced")
 
     def test_exact_and_wildcard_include_only_keep_ceiling(self) -> None:
         self.assert_passes("include_exact")
