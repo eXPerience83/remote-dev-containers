@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -78,12 +79,18 @@ class CodexProjectBoundaryValidatorTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def validator_command(self) -> list[str]:
+        # Files created through GitHub's contents API are checked out as 0644.
+        # Production installs this helper as an executable in the image, while
+        # source-tree unit tests invoke it explicitly through the interpreter.
+        return [sys.executable, str(VALIDATOR)]
+
     def run_validator(self, policy: str = "safe") -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["REMOTE_DEV_TEST_POLICY"] = policy
         return subprocess.run(
             [
-                str(VALIDATOR),
+                *self.validator_command(),
                 "--codex-binary",
                 str(self.binary),
                 "--cwd",
@@ -138,7 +145,7 @@ class CodexProjectBoundaryValidatorTests(unittest.TestCase):
         link.symlink_to(self.binary)
         result = subprocess.run(
             [
-                str(VALIDATOR),
+                *self.validator_command(),
                 "--codex-binary",
                 str(link),
                 "--cwd",
