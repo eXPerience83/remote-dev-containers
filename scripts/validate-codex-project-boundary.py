@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 MAX_LINE_BYTES = 1024 * 1024
+READ_CHUNK_BYTES = 64 * 1024
 STARTUP_TIMEOUT_SECONDS = 6.0
 REQUIRED_ENV = "GIT_CEILING_DIRECTORIES"
 
@@ -30,22 +31,63 @@ def _write_message(process: subprocess.Popen[str], payload: dict[str, Any]) -> N
     process.stdin.flush()
 
 
-def _read_response(process: subprocess.Popen[str], request_id: int) -> dict[str, Any]:
+def _next_line(
+    process: subprocess.Popen[str], pending: bytearray, deadline: float
+) -> bytes:
     if process.stdout is None:
         raise BoundaryError("Codex configuration probe stdout is unavailable")
-    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+    descriptor = process.stdout.fileno()
+
     while True:
+        newline = pending.find(b"\n")
+        if newline >= 0:
+            if newline > MAX_LINE_BYTES:
+                raise BoundaryError(
+                    "Codex configuration probe response exceeded the safety bound"
+                )
+            line = bytes(pending[:newline])
+            del pending[: newline + 1]
+            return line
+        if len(pending) > MAX_LINE_BYTES:
+            raise BoundaryError(
+                "Codex configuration probe response exceeded the safety bound"
+            )
+
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise BoundaryError("Codex configuration probe timed out")
-        ready, _, _ = select.select([process.stdout], [], [], remaining)
+        ready, _, _ = select.select([descriptor], [], [], remaining)
         if not ready:
             raise BoundaryError("Codex configuration probe timed out")
-        line = process.stdout.readline(MAX_LINE_BYTES + 1)
-        if not line:
+
+        chunk = os.read(descriptor, READ_CHUNK_BYTES)
+        if not chunk:
+            if pending:
+                if len(pending) > MAX_LINE_BYTES:
+                    raise BoundaryError(
+                        "Codex configuration probe response exceeded the safety bound"
+                    )
+                line = bytes(pending)
+                pending.clear()
+                return line
             raise BoundaryError("Codex configuration probe exited before responding")
-        if len(line.encode("utf-8", errors="replace")) > MAX_LINE_BYTES:
-            raise BoundaryError("Codex configuration probe response exceeded the safety bound")
+        pending.extend(chunk)
+
+
+def _read_response(
+    process: subprocess.Popen[str],
+    request_id: int,
+    pending: bytearray,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+    while True:
+        raw_line = _next_line(process, pending, deadline)
+        try:
+            line = raw_line.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise BoundaryError(
+                "Codex configuration probe returned invalid UTF-8"
+            ) from exc
         try:
             message = json.loads(line)
         except json.JSONDecodeError:
@@ -134,6 +176,7 @@ def validate(binary: Path, cwd: Path, ceiling: Path) -> None:
         errors="strict",
         bufsize=1,
     )
+    pending = bytearray()
     try:
         _write_message(
             process,
@@ -150,7 +193,7 @@ def validate(binary: Path, cwd: Path, ceiling: Path) -> None:
                 },
             },
         )
-        _read_response(process, 1)
+        _read_response(process, 1, pending)
         _write_message(process, {"method": "initialized"})
         _write_message(
             process,
@@ -160,7 +203,7 @@ def validate(binary: Path, cwd: Path, ceiling: Path) -> None:
                 "params": {"includeLayers": False, "cwd": str(cwd)},
             },
         )
-        result = _read_response(process, 2)
+        result = _read_response(process, 2, pending)
         config = result.get("config")
         if not isinstance(config, dict):
             raise BoundaryError("Codex did not return an effective configuration")
