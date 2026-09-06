@@ -168,9 +168,9 @@ assert_validator() {
 ceiling_arg="shell_environment_policy.set.GIT_CEILING_DIRECTORIES=\"$workspace\""
 
 # Remote Dev's default remains the explicit equivalent of upstream Codex
-# --yolo: danger-full-access plus approval=never. The Git ceiling is an
-# independent ancestor-discovery invariant, not an inner sandbox.
-autonomous_expected=(--sandbox danger-full-access -c "$ceiling_arg" --ask-for-approval never)
+# --yolo: danger-full-access plus approval=never. The Git ceiling and managed
+# --cd are project-selection invariants, not an inner sandbox.
+autonomous_expected=(--sandbox danger-full-access -c "$ceiling_arg" --cd "$default_project" --ask-for-approval never)
 run_launcher __unset__ resume --last
 assert_args 'default autonomous mode' "${autonomous_expected[@]}" resume --last
 assert_identity runtime 'default autonomous mode'
@@ -213,8 +213,9 @@ stale_replacement_identity="$(stat -Lc '%d:%i' -- "$stale_project")"
   || { echo 'ERROR: stale-cwd launch missed its Git ceiling' >&2; exit 1; }
 grep -Fxq -- "$stale_original" "$validator_file"
 grep -Fxq -- "ceiling=$stale_workspace" "$validator_file"
+grep -Fxq -- "$stale_original" "$args_file"
 
-echo 'Codex pre-launch cwd rename: physical current project preserved'
+echo 'Codex pre-launch cwd rename: physical current project preserved and pinned for resume'
 
 run_launcher guarded --cd "$project_a" resume --last
 assert_args 'guarded project A' \
@@ -505,6 +506,7 @@ run_launcher guarded -- --approval-mode autonomous --sandbox-is-prompt-text
 assert_args 'option separator preservation' \
   --sandbox danger-full-access \
   -c "$ceiling_arg" \
+  --cd "$default_project" \
   -c "projects={\"$default_project\"={trust_level=\"untrusted\"}}" \
   -- --approval-mode autonomous --sandbox-is-prompt-text
 
