@@ -144,19 +144,34 @@ run_diagnostics() {
 }
 
 refresh_project_selection() {
+  local validated=""
   local resolved=""
   local listing=""
   local list_status=0
   local -a projects=()
 
   project_collection_blocked=0
-  listing="$(remote_dev_list_projects "$workspace" 2>/dev/null)" || list_status=$?
+  # A broken/missing/symlinked WORKSPACE is not the recoverable contamination
+  # state owned by #213. Preserve that producer error instead of presenting it
+  # as a normal blocked collection.
+  validated="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  listing="$(remote_dev_list_projects "$validated")" || list_status=$?
   if (( list_status != 0 )); then
-    active_project_name=""
-    active_project_path=""
-    project_count=0
-    project_collection_blocked=1
-    return 0
+    case "$list_status" in
+      1|2)
+        # Collection Git contamination/ambiguity is recoverable from the menu:
+        # clear stale selection, disable agent/project actions, and keep Doctor
+        # plus Login shell reachable. Other producer failures still propagate.
+        active_project_name=""
+        active_project_path=""
+        project_count=0
+        project_collection_blocked=1
+        return 0
+        ;;
+      *)
+        return "$list_status"
+        ;;
+    esac
   fi
   if [[ -n "$listing" ]]; then
     mapfile -t projects <<<"$listing"
@@ -164,7 +179,7 @@ refresh_project_selection() {
   project_count="${#projects[@]}"
 
   if [[ -n "$active_project_name" ]]; then
-    if resolved="$(remote_dev_project_path "$workspace" "$active_project_name" 2>/dev/null)"; then
+    if resolved="$(remote_dev_project_path "$validated" "$active_project_name" 2>/dev/null)"; then
       active_project_path="$resolved"
       return 0
     fi
@@ -174,7 +189,7 @@ refresh_project_selection() {
 
   if (( project_count == 1 )); then
     active_project_name="${projects[0]}"
-    if resolved="$(remote_dev_project_path "$workspace" "$active_project_name" 2>/dev/null)"; then
+    if resolved="$(remote_dev_project_path "$validated" "$active_project_name" 2>/dev/null)"; then
       active_project_path="$resolved"
     else
       active_project_name=""
@@ -218,16 +233,18 @@ choose_project_name() {
   local choice=""
   local normalized_choice=""
   local max_choice=""
+  local validated=""
   local listing=""
   local list_status=0
   local index=0
   local -a projects=()
 
   project_choice_name=""
-  listing="$(remote_dev_list_projects "$workspace" 2>/dev/null)" || list_status=$?
+  validated="$(remote_dev_validate_workspace_root "$workspace")" || return $?
+  listing="$(remote_dev_list_projects "$validated")" || list_status=$?
   if (( list_status != 0 )); then
     echo "ERROR: project collection safety check failed; project selection is blocked. Run diagnostics first." >&2
-    return 2
+    return "$list_status"
   fi
   if [[ -n "$listing" ]]; then
     mapfile -t projects <<<"$listing"
@@ -497,7 +514,6 @@ run_codex_action() {
 
   run_interactive_and_harden "$label" "${command[@]}"
 }
-
 run_antigravity_action() {
   local label="$1"
   shift
