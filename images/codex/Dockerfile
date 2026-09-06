@@ -191,7 +191,7 @@ RUN --network=none \
     && REMOTE_DEV_RUN_DIRECT_SESSION=/usr/local/bin/run-direct-session bash /tmp/test-run-direct-session-cwd \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
     && test -z "${REMOTE_DEV_CODEX_RUNTIME_ROOT:-}" \
-    && context7_smoke_home="$(mktemp -d)" \
+    && context7_smoke_home="$(mktemp -d /root/.remote-dev-context7-smoke.XXXXXX)" \
     && CODEX_HOME="$context7_smoke_home" REMOTE_DEV_ROLE=codex /usr/local/bin/remote-dev-context7 install --yes --anonymous \
     && context7_json="$(CODEX_HOME="$context7_smoke_home" HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 ALL_PROXY=http://127.0.0.1:9 NO_PROXY= /usr/local/bin/codex mcp get context7 --json)" \
     && printf '%s' "$context7_json" | python -c 'import json,sys; d=json.load(sys.stdin); t=d.get("transport", {}); assert d.get("name") == "context7" and d.get("enabled") is True and t.get("type") == "streamable_http" and t.get("url") == "https://mcp.context7.com/mcp" and t.get("bearer_token_env_var") is None and t.get("http_headers") is None and t.get("env_http_headers") == {"CONTEXT7_API_KEY": "CONTEXT7_API_KEY"}' \
