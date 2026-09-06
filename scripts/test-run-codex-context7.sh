@@ -99,6 +99,7 @@ chmod 0600 "$key_file"
 run_case() {
   local state="$1" inherited="$2" output="$3"
   local codex_home="${4:-$workdir}"
+  local -a common_env=()
   rm -f "$env_file" "$args_file" "$boundary_args_file" "$output"
   common_env=(
     REMOTE_DEV_TEST_CODEX="$test_codex"
@@ -125,12 +126,12 @@ read_env() {
 
 assert_boundary_probe() {
   local -a actual=()
-  mapfile -t actual < "$boundary_args_file"
-  expected=(
+  local -a expected=(
     --codex-binary "$test_codex"
     --cwd "$test_project"
     --ceiling "$test_workspace"
   )
+  mapfile -t actual < "$boundary_args_file"
   if (( ${#actual[@]} != ${#expected[@]} )); then
     echo 'ERROR: Context7 fixture did not preserve the managed Codex boundary probe' >&2
     exit 1
