@@ -17,6 +17,8 @@ Un proyecto puede ser un worktree Git normal, un worktree Git enlazado cuyo `.gi
 
 La colección no puede contener una entrada `.git` de ningún tipo ni ser un repositorio Git bare. Remote Dev no intenta decidir si unos metadatos Git en la raíz de la colección son intencionados, antiguos o accidentales: las acciones gestionadas sobre proyectos se bloquean de forma segura.
 
+Doctor también audita la estructura del primer nivel de la colección. Las entradas esperadas son directorios de proyecto válidos y, opcionalmente, el directorio gestionado `.remote-dev-tmp`. Otros archivos, enlaces simbólicos, directorios ocultos o entradas especiales se notifican para inspección manual; Doctor nunca los borra ni los modifica.
+
 ## Descubrimiento de ancestros Git
 
 Los lanzamientos gestionados de proyectos con Codex y con Antigravity experimental establecen:
@@ -40,24 +42,18 @@ Si `/workspace` contiene `.git`, se reconoce como repositorio Git bare o falla d
 - se bloquean la detección, Select, Create y Delete de proyectos;
 - se descarta una selección anterior del menú en lugar de reutilizar estado obsoleto;
 - **Run diagnostics** sigue disponible;
-- **Open a login shell** sigue disponible para recuperación manual;
+- **Open a login shell** sigue disponible para inspección/limpieza manual;
 - Remote Dev no borra `.git`, no ejecuta `git reset`, no ejecuta `git clean`, no mueve proyectos ni reescribe metadatos del repositorio automáticamente.
 
 Doctor muestra la colección como `CRITICAL`/`BLOCKED` sin imprimir remotos, contenido del repositorio, credenciales u otros datos privados.
 
-## Procedimiento de recuperación
+## Limpieza manual
 
-Trata un repositorio Git en la raíz de la colección como un incidente de seguridad de datos hasta entender su origen.
+Remote Dev no automatiza deliberadamente la limpieza. Para una contaminación conocida y desechable/experimental, como el incidente confirmado de Antigravity, el operador puede eliminar manualmente la entrada exacta `/workspace/.git` después de comprobar que se trata de los metadatos no deseados de la raíz de colección. Como parte de esa limpieza no debe borrarse ninguna otra entrada de la colección.
 
-1. Detén el trabajo gestionado de agentes en el rol afectado. No inicies otra sesión de agente contra esa colección.
-2. Conserva primero los datos actuales. En TrueNAS, crea una snapshot adecuada del dataset o una copia equivalente antes de realizar una reparación destructiva.
-3. Usa **Run diagnostics** para confirmar que la frontera de la colección es lo que está bloqueando el lanzamiento.
-4. Usa **Open a login shell** solo para inspeccionar. Determina si `/workspace/.git` es un directorio, gitfile, enlace simbólico/entrada especial, o si `/workspace` es un repositorio bare.
-5. Identifica a qué proyecto pertenecen realmente esos metadatos Git, si pertenecen a alguno, antes de mover o borrar nada.
-6. Repara manualmente la estructura para que `/workspace` solo agrupe proyectos y cada repositorio tenga como raíz su `/workspace/<proyecto>` correspondiente.
-7. Ejecuta de nuevo diagnostics. Los lanzamientos gestionados deben seguir bloqueados hasta que pasen tanto la comprobación de colección como la del proyecto seleccionado.
+Si los datos importan, inspecciónalos o crea una snapshot antes de una reparación destructiva. Nunca empieces con `git clean -fd`, `git reset --hard`, checkout forzado o una limpieza Git similar desde la raíz de la colección: si `/workspace` se ha convertido accidentalmente en la raíz del repositorio, Git puede interpretar los directorios de proyectos hermanos como contenido no rastreado y borrarlos.
 
-No uses como primer paso de recuperación un `git clean -fd`, `git reset --hard`, checkout forzado o limpieza similar desde la raíz de la colección. Si `/workspace` se ha convertido accidentalmente en la raíz del repositorio, Git puede interpretar los directorios de proyectos hermanos como contenido no rastreado y borrarlos.
+Tras la limpieza manual, ejecuta Doctor de nuevo. La colección debe indicar que su raíz Git está limpia; las entradas inesperadas del primer nivel también deben inspeccionarse hasta que la estructura contenga únicamente directorios de proyecto válidos y el `.remote-dev-tmp` opcional.
 
 ## Recuperación cuando desaparece el directorio actual
 
@@ -65,23 +61,11 @@ Un agente puede renombrar o borrar el directorio del proyecto desde el que fue l
 
 Así se evita que un cwd eliminado convierta el camino de limpieza en un segundo fallo de `getcwd`.
 
-## Confinamiento experimental de Antigravity
+## Comportamiento específico de cada agente
 
-Antigravity sigue siendo experimental y no pasa a ser una integración soportada en TrueNAS solo porque supere las comprobaciones comunes de colección.
+La frontera de colección/Git es un contrato del runtime de Remote Dev compartido por Codex y Antigravity experimental. No introduce un nuevo sandbox anidado ni afirma aislamiento de filesystem frente a proyectos hermanos que sigan montados en el mismo contenedor de rol.
 
-Para la ruta experimental gestionada, Remote Dev actualmente:
-
-- fuerza el flag del proveedor `--sandbox` documentado para la sesión;
-- rechaza intentos del llamador de desactivar/sustituir el sandbox o usar el flag peligroso que omite permisos;
-- valida `~/.gemini/antigravity-cli/settings.json` en **solo lectura** y conservando sus bytes;
-- exige que `allowNonWorkspaceAccess` esté desactivado;
-- exige que `permissions.deny` contenga `unsandboxed(*)`;
-- rechaza reglas persistentes `unsandboxed(...)` en allow;
-- rechaza reglas allow `read_file(...)` / `write_file(...)` que escapen léxicamente del proyecto seleccionado o atraviesen un enlace simbólico existente desde el proyecto hacia una ruta exterior.
-
-La documentación actual del CLI de Google indica que `--sandbox` fuerza el sandbox durante la sesión, que los montajes de sistema de archivos se derivan de los permisos `read_file`/`write_file` y que la precedencia de permisos es `Deny > Ask > Allow`. También documenta `unsandboxed(...)` como el recurso de escape del sandbox. Consulta la documentación upstream de [Sandbox](https://antigravity.google/docs/cli/sandbox/) y [Permissions](https://antigravity.google/docs/permissions/).
-
-Esa semántica documentada es necesaria, pero no constituye por sí sola evidencia suficiente para este proyecto. El runtime exacto de Antigravity admitido todavía debe superar la matriz desechable de aceptación en TrueNAS de #213. Si el runtime exacto no puede demostrar confinamiento de proyectos hermanos y estado privado con la topología soportada del contenedor exterior, Antigravity gestionado seguirá bloqueado; la corrección común/Codex no espera a esa prueba.
+Codex conserva el modelo de contenedor exterior establecido por #36/#42 y su política autonomous/guarded actual. Antigravity conserva su comportamiento experimental de lanzamiento del proveedor; #213 no fuerza ni configura un sandbox del proveedor. Las futuras integraciones de agentes deberían reutilizar los helpers comunes de colección/proyecto en vez de reimplementar por separado la lógica de frontera Git.
 
 ## Expectativas de validación
 
@@ -97,6 +81,7 @@ La suite de regresión del repositorio cubre como mínimo:
 - canarios de proyectos hermanos que permanecen intactos cuando el preflight gestionado bloquea;
 - recuperación de cwd eliminado antes del hardening posterior a la sesión;
 - política efectiva del entorno de shell de Codex conservando el ceiling;
-- validación de settings persistentes de Antigravity manteniéndose de solo lectura.
+- Antigravity usando la misma entrada común a la colección y el mismo Git ceiling antes del lanzamiento del proveedor;
+- Doctor notificando entradas inesperadas en la raíz de colección sin modificarlas.
 
 La evidencia final en TrueNAS debe usar proyectos A/B y canarios desechables. No reproduzcas nunca el caso destructivo de control contra datos de proyectos reales del usuario.
