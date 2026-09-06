@@ -40,6 +40,7 @@ agent-contract-tests:
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY=1 bash scripts/test-role-neutral-runtime.sh
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-collection-boundary.sh
 	REMOTE_DEV_RUN_DIRECT_SESSION=./scripts/run-direct-session.sh bash scripts/test-run-direct-session-cwd.sh
+	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-collection-recovery-menu.sh
 	python3 scripts/test_validate_codex_project_boundary.py
 	python3 scripts/test_validate_antigravity_project_boundary.py
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-remote-dev-menu.sh
