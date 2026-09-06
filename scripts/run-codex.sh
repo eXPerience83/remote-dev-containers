@@ -43,7 +43,7 @@ is_policy_config_override() {
   local key="${normalized%%=*}"
 
   case "$key" in
-    sandbox_mode|approval_policy|ask_for_approval|sandbox|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*|shell_environment_policy|shell_environment_policy.*)
+    sandbox_mode|approval_policy|ask_for_approval|sandbox|profile|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*|shell_environment_policy|shell_environment_policy.*)
       return 0
       ;;
     *)
@@ -151,6 +151,9 @@ for argument in "${forwarded[@]}"; do
       reject_policy_override "$argument"
       ;;
     --ask-for-approval|--ask-for-approval=*|--approval-policy|--approval-policy=*|-a|-a=*|-a?*)
+      reject_policy_override "$argument"
+      ;;
+    --approve-for-me|--approve-for-me=*|--not-so-yolo|--not-so-yolo=*)
       reject_policy_override "$argument"
       ;;
     --dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-approvals-and-sandbox=*|--dangerously-auto-approve-everything|--yolo|--full-auto)
@@ -328,25 +331,37 @@ if (( informational_only == 0 )); then
 
   active_project=""
   explicit_project_cd=0
+  project_selector_count=0
   expect_cd_value=0
   for argument in "${forwarded[@]}"; do
     if (( expect_cd_value == 1 )); then
       active_project="$argument"
-      explicit_project_cd=1
       expect_cd_value=0
       continue
     fi
     case "$argument" in
       --) break ;;
       --cd|-C)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
         explicit_project_cd=1
         expect_cd_value=1
         ;;
       --cd=*)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
         explicit_project_cd=1
         active_project="${argument#*=}"
         ;;
       -C?*)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
         explicit_project_cd=1
         active_project="${argument#-C}"
         ;;
@@ -365,6 +380,35 @@ if (( informational_only == 0 )); then
     fi
   elif ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
     fail_usage "managed Codex launch requires an existing project directory"
+  fi
+
+  if (( explicit_project_cd == 1 )); then
+    # Validate and execute against the same canonical pathname. In particular,
+    # never leave a symlink/relative alias in argv after validating the physical
+    # direct child it happened to resolve to: that alias could be retargeted
+    # between preflight and Codex resolving --cd itself.
+    expect_cd_value=0
+    for index in "${!forwarded[@]}"; do
+      argument="${forwarded[$index]}"
+      if (( expect_cd_value == 1 )); then
+        forwarded[$index]="$active_project"
+        break
+      fi
+      case "$argument" in
+        --) break ;;
+        --cd|-C)
+          expect_cd_value=1
+          ;;
+        --cd=*)
+          forwarded[$index]="--cd=$active_project"
+          break
+          ;;
+        -C?*)
+          forwarded[$index]="-C$active_project"
+          break
+          ;;
+      esac
+    done
   fi
 
   if (( explicit_project_cd == 0 )); then
