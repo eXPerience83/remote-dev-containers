@@ -6,8 +6,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <linux/capability.h>
+#include <linux/close_range.h>
 #include <linux/landlock.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +25,7 @@
 #endif
 
 #define REMOTE_DEV_MIN_LANDLOCK_ABI 3
+#define REMOTE_DEV_SIGNAL_SCOPE_ABI 6
 #define REMOTE_DEV_MAX_WRITE_PATHS 32
 
 static void usage(FILE *stream) {
@@ -174,6 +178,30 @@ static int add_write_rule(int ruleset_fd, const char *path, uint64_t access) {
     return result;
 }
 
+static int clear_process_capabilities(void) {
+    if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0) != 0 &&
+        errno != EINVAL) {
+        return -errno;
+    }
+
+    struct __user_cap_header_struct header = {
+        .version = _LINUX_CAPABILITY_VERSION_3,
+        .pid = 0,
+    };
+    struct __user_cap_data_struct data[2] = {{0}};
+    if (syscall(SYS_capset, &header, &data) != 0) {
+        return -errno;
+    }
+    return 0;
+}
+
+static int mark_inherited_fds_close_on_exec(void) {
+    if (syscall(SYS_close_range, 3U, UINT_MAX, CLOSE_RANGE_CLOEXEC) != 0) {
+        return -errno;
+    }
+    return 0;
+}
+
 static void print_errno_message(const char *prefix, int negative_errno) {
     int error = negative_errno < 0 ? -negative_errno : negative_errno;
     fprintf(stderr, "ERROR: %s: %s\n", prefix, strerror(error));
@@ -193,6 +221,8 @@ int main(int argc, char **argv) {
             return 2;
         }
         printf("Landlock ABI: %d\n", abi);
+        printf("Signal scope: %s\n",
+               abi >= REMOTE_DEV_SIGNAL_SCOPE_ABI ? "available" : "unavailable");
         return 0;
     }
 
@@ -289,9 +319,9 @@ int main(int argc, char **argv) {
         }
 
         const char *candidate = canonical_writes[index];
-        if (strcmp(candidate, workspace) == 0) {
+        if (is_path_prefix(candidate, workspace)) {
             fprintf(stderr,
-                    "ERROR: the workspace collection root can never be a managed writable path\n");
+                    "ERROR: the workspace collection root or one of its ancestors can never be a managed writable path\n");
             return 2;
         }
         if (is_path_prefix(workspace, candidate) &&
@@ -314,10 +344,14 @@ int main(int argc, char **argv) {
     const uint64_t handled_access = handled_write_access();
     struct landlock_ruleset_attr ruleset = {
         .handled_access_fs = handled_access,
+        .scoped = abi >= REMOTE_DEV_SIGNAL_SCOPE_ABI ? LANDLOCK_SCOPE_SIGNAL : 0,
     };
+    size_t ruleset_size = abi >= REMOTE_DEV_SIGNAL_SCOPE_ABI
+                              ? sizeof(ruleset)
+                              : sizeof(ruleset.handled_access_fs);
 
     int ruleset_fd = (int)syscall(SYS_landlock_create_ruleset, &ruleset,
-                                  sizeof(ruleset.handled_access_fs), 0);
+                                  ruleset_size, 0);
     if (ruleset_fd < 0) {
         print_errno_message("failed to create Landlock project write ruleset", -errno);
         return 2;
@@ -346,6 +380,20 @@ int main(int argc, char **argv) {
         return 2;
     }
     close(ruleset_fd);
+
+    int capability_result = clear_process_capabilities();
+    if (capability_result != 0) {
+        print_errno_message("failed to drop management capabilities before agent execution",
+                            capability_result);
+        return 2;
+    }
+
+    int fd_result = mark_inherited_fds_close_on_exec();
+    if (fd_result != 0) {
+        print_errno_message("failed to close inherited management file descriptors",
+                            fd_result);
+        return 2;
+    }
 
     execvp(argv[command_index], &argv[command_index]);
     print_errno_message("managed agent executable could not be started", -errno);
