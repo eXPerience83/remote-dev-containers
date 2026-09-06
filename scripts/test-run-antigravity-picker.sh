@@ -81,6 +81,15 @@ remote_dev_enter_project() {
   export GIT_CEILING_DIRECTORIES="$root"
 }
 
+remote_dev_assert_project_git_boundary() {
+  local root="$1"
+  local project="$2"
+  if [[ "$project" != "$root/project" || ! -d "$project" || -L "$project" ]]; then
+    remote_dev_runtime_error "project path changed during launch: $project"
+    return 2
+  fi
+}
+
 remote_dev_recover_safe_cwd() {
   builtin cd -P -- /
 }
@@ -121,6 +130,9 @@ printf '%s\n' "$@" >"$REMOTE_DEV_TEST_VALIDATOR_ARGS"
 if [[ "${REMOTE_DEV_TEST_POST_VALIDATOR_SWAP:-0}" == 1 ]]; then
   mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_ORIGINAL_PROJECT"
   mv -- "$REMOTE_DEV_TEST_REPLACEMENT_PROJECT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
+elif [[ "${REMOTE_DEV_TEST_POST_VALIDATOR_SYMLINK:-0}" == 1 ]]; then
+  mv -- "$REMOTE_DEV_TEST_SWAP_PROJECT" "$REMOTE_DEV_TEST_ORIGINAL_PROJECT"
+  ln -s -- "$REMOTE_DEV_TEST_ORIGINAL_PROJECT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
 fi
 VALIDATOR
 
@@ -302,6 +314,26 @@ grep -Fq "ERROR: project path changed before Antigravity vendor launch: $project
 tail -n 1 "$REMOTE_DEV_TEST_HARDENING" | grep -Fx 'cwd=/'
 rm -rf -- "$project"
 mv -- "$post_validator_original" "$project"
+
+# A symlink can preserve the same stat -L inode after the validator, so the
+# final full project-boundary assertion must reject it independently of identity.
+rm -f "$REMOTE_DEV_TEST_VENDOR_ARGS" "$REMOTE_DEV_TEST_VALIDATOR_ARGS"
+post_validator_symlink_original="$workdir/post-validator-symlink-original"
+export REMOTE_DEV_TEST_POST_VALIDATOR_SYMLINK=1
+export REMOTE_DEV_TEST_SWAP_PROJECT="$project"
+export REMOTE_DEV_TEST_ORIGINAL_PROJECT="$post_validator_symlink_original"
+status=0
+"$runner" normal >"$workdir/post-validator-symlink-output" 2>&1 || status=$?
+unset REMOTE_DEV_TEST_POST_VALIDATOR_SYMLINK REMOTE_DEV_TEST_SWAP_PROJECT \
+  REMOTE_DEV_TEST_ORIGINAL_PROJECT
+[[ "$status" == 2 ]]
+grep -Fq "ERROR: project path changed during launch: $project" \
+  "$workdir/post-validator-symlink-output"
+[[ -e "$REMOTE_DEV_TEST_VALIDATOR_ARGS" && ! -e "$REMOTE_DEV_TEST_VENDOR_ARGS" ]]
+[[ -L "$project" ]]
+tail -n 1 "$REMOTE_DEV_TEST_HARDENING" | grep -Fx 'cwd=/'
+rm -f -- "$project"
+mv -- "$post_validator_symlink_original" "$project"
 
 status=0
 TMUX_PANE=invalid "$runner" --remote-dev-open-resume-picker >/dev/null 2>&1 || status=$?
