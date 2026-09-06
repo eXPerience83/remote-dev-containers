@@ -177,16 +177,15 @@ git -C "$control" clean -fdq
 [[ ! -e "$control/project-b/DO_NOT_DELETE" ]] || fail "control fixture did not reproduce root-level sibling cleanup"
 
 # Under the managed contract, the same contaminated layout is rejected before
-# any agent command can execute, so the canary remains intact.
+# any agent command can execute, so the canary remains intact. Use an explicit
+# command chain here because Bash disables errexit inside an `if` condition.
 protected="$root/protected/workspace"
 mkdir -p "$protected/project-a" "$protected/project-b"
 printf 'canary\n' > "$protected/project-b/DO_NOT_DELETE"
 git -C "$protected" init -q
 agent_marker="$root/agent-ran"
-if (
-  remote_dev_prepare_project_git_boundary "$protected"
-  printf 'ran\n' > "$agent_marker"
-); then
+if remote_dev_prepare_project_git_boundary "$protected" \
+  && printf 'ran\n' > "$agent_marker"; then
   fail "contaminated collection unexpectedly passed managed preflight"
 fi
 [[ ! -e "$agent_marker" ]] || fail "fake agent executed after contaminated preflight"
