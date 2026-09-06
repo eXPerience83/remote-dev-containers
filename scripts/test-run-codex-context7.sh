@@ -7,9 +7,13 @@ test_launcher="$workdir/run-codex"
 test_codex="$workdir/codex"
 test_runtime_manager="$workdir/remote-dev-codex-runtime"
 test_context7_manager="$workdir/remote-dev-context7"
+test_boundary_validator="$workdir/validate-codex-project-boundary"
+test_workspace="$workdir/workspace"
+test_project="$test_workspace/project"
 key_file="$workdir/.remote-dev-context7/api-key"
 env_file="$workdir/context7-env"
 args_file="$workdir/args"
+boundary_args_file="$workdir/boundary-args"
 readonly synthetic_key='ctx7-test-key-do-not-use'
 
 cleanup() {
@@ -21,7 +25,8 @@ trap 'exit 143' TERM
 
 for expected in \
   'readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime' \
-  'readonly context7_manager=/usr/local/bin/remote-dev-context7'; do
+  'readonly context7_manager=/usr/local/bin/remote-dev-context7' \
+  'readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary'; do
   if ! grep -Fxq "$expected" "$launcher_source"; then
     echo "ERROR: run-codex is missing expected managed dependency: $expected" >&2
     exit 1
@@ -71,12 +76,21 @@ esac
 CONTEXT7
 chmod 0755 "$test_context7_manager"
 
+cat > "$test_boundary_validator" <<'BOUNDARY'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" > "$REMOTE_DEV_TEST_BOUNDARY_ARGS_FILE"
+BOUNDARY
+chmod 0755 "$test_boundary_validator"
+
 sed \
   -e "s|^readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime$|readonly runtime_manager=$test_runtime_manager|" \
   -e "s|^readonly context7_manager=/usr/local/bin/remote-dev-context7$|readonly context7_manager=$test_context7_manager|" \
+  -e "s|^readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary$|readonly project_boundary_validator=$test_boundary_validator|" \
   "$launcher_source" > "$test_launcher"
 chmod 0755 "$test_launcher"
 
+mkdir -p "$test_project"
 mkdir -p "$(dirname "$key_file")"
 chmod 0700 "$(dirname "$key_file")"
 printf '%s' "$synthetic_key" > "$key_file"
@@ -85,19 +99,21 @@ chmod 0600 "$key_file"
 run_case() {
   local state="$1" inherited="$2" output="$3"
   local codex_home="${4:-$workdir}"
-  rm -f "$env_file" "$args_file" "$output"
+  rm -f "$env_file" "$args_file" "$boundary_args_file" "$output"
   common_env=(
     REMOTE_DEV_TEST_CODEX="$test_codex"
     REMOTE_DEV_TEST_CONTEXT7_STATE="$state"
     REMOTE_DEV_TEST_CONTEXT7_KEY_FILE="$key_file"
     REMOTE_DEV_TEST_CONTEXT7_ENV_FILE="$env_file"
     REMOTE_DEV_TEST_CODEX_ARGS_FILE="$args_file"
+    REMOTE_DEV_TEST_BOUNDARY_ARGS_FILE="$boundary_args_file"
     CODEX_HOME="$codex_home"
+    WORKSPACE="$test_workspace"
   )
   if [[ "$inherited" == __unset__ ]]; then
-    env -u CONTEXT7_API_KEY "${common_env[@]}" "$test_launcher" resume --last >"$output" 2>&1
+    (cd "$test_project" && env -u CONTEXT7_API_KEY "${common_env[@]}" "$test_launcher" resume --last) >"$output" 2>&1
   else
-    env CONTEXT7_API_KEY="$inherited" "${common_env[@]}" "$test_launcher" resume --last >"$output" 2>&1
+    (cd "$test_project" && env CONTEXT7_API_KEY="$inherited" "${common_env[@]}" "$test_launcher" resume --last) >"$output" 2>&1
   fi
 }
 
@@ -105,6 +121,26 @@ read_env() {
   local value=""
   IFS= read -r value < "$env_file"
   printf '%s\n' "$value"
+}
+
+assert_boundary_probe() {
+  local -a actual=()
+  mapfile -t actual < "$boundary_args_file"
+  expected=(
+    --codex-binary "$test_codex"
+    --cwd "$test_project"
+    --ceiling "$test_workspace"
+  )
+  if (( ${#actual[@]} != ${#expected[@]} )); then
+    echo 'ERROR: Context7 fixture did not preserve the managed Codex boundary probe' >&2
+    exit 1
+  fi
+  for index in "${!expected[@]}"; do
+    if [[ "${actual[$index]}" != "${expected[$index]}" ]]; then
+      echo "ERROR: Context7 fixture changed boundary probe argument $index" >&2
+      exit 1
+    fi
+  done
 }
 
 assert_rejected_key() {
@@ -140,6 +176,7 @@ if grep -Fq "$synthetic_key" "$output"; then
   echo 'ERROR: managed Context7 key leaked into launcher output' >&2
   exit 1
 fi
+assert_boundary_probe
 
 echo 'Managed Context7 key injection: OK'
 
@@ -247,8 +284,10 @@ fi
 echo 'Unmanaged Context7 environment: preserved'
 
 mapfile -t actual_args < "$args_file"
+ceiling_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$test_workspace")"
 expected_args=(
   --sandbox danger-full-access
+  -c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$ceiling_json"
   --ask-for-approval never
   resume --last
 )
@@ -263,4 +302,4 @@ for index in "${!expected_args[@]}"; do
   fi
 done
 
-echo 'Context7 credential injection leaves Codex policy arguments unchanged: OK'
+echo 'Context7 credential injection preserves Codex-owned policy arguments: OK'
