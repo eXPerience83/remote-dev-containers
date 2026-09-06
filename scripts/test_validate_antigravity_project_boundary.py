@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,6 +30,12 @@ class AntigravityBoundaryValidatorTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def validator_command(self) -> list[str]:
+        # Source-tree checkout mode is not part of the production contract. The
+        # image installs this helper executable; unit tests run the source via
+        # the interpreter so repository file mode is irrelevant.
+        return [sys.executable, str(VALIDATOR)]
+
     def write_settings(self, data: object) -> bytes:
         raw = (json.dumps(data, separators=(",", ":")) + "\n").encode()
         self.settings.write_bytes(raw)
@@ -38,7 +45,7 @@ class AntigravityBoundaryValidatorTests(unittest.TestCase):
     def run_validator(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
-                str(VALIDATOR),
+                *self.validator_command(),
                 "--settings",
                 str(self.settings),
                 "--project",
