@@ -22,6 +22,10 @@ remote_dev_validate_workspace_root() {
   printf '%s\n' "$1"
 }
 
+remote_dev_recover_safe_cwd() {
+  builtin cd -P -- /
+}
+
 remote_dev_validate_project_name() {
   local name="$1"
   (( ${#name} >= 1 && ${#name} <= 128 )) || return 2
