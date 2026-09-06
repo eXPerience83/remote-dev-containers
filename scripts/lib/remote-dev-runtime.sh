@@ -193,6 +193,23 @@ remote_dev_project_path() {
   printf '%s\n' "$project"
 }
 
+remote_dev_assert_safe_project_git_entry() {
+  local project="$1"
+  local git_entry="$project/.git"
+
+  # A regular .git file is required for legitimate linked worktrees/submodules,
+  # and a directory is the normal repository form. Symlinks and special entries
+  # are never needed here and can redirect Git or make repository probing block.
+  if [[ -L "$git_entry" ]]; then
+    remote_dev_runtime_error "selected project .git must not be a symlink; agent launch is blocked"
+    return 2
+  fi
+  if [[ -e "$git_entry" && ! -d "$git_entry" && ! -f "$git_entry" ]]; then
+    remote_dev_runtime_error "selected project .git must be a regular file or directory; agent launch is blocked"
+    return 2
+  fi
+}
+
 remote_dev_assert_project_git_boundary() {
   local workspace="$1"
   local project="$2"
@@ -219,6 +236,7 @@ remote_dev_assert_project_git_boundary() {
     remote_dev_runtime_error "selected project physical path does not match its collection path"
     return 2
   fi
+  remote_dev_assert_safe_project_git_entry "$project" || return $?
 
   if inside_state="$(
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR \
@@ -264,9 +282,15 @@ remote_dev_assert_project_git_boundary() {
         return 2
         ;;
     esac
+    # Recheck the entry type after Git has inspected it so a concurrent
+    # directory-to-symlink/special swap cannot be accepted by the preflight.
+    remote_dev_assert_safe_project_git_entry "$project" || return $?
     return 0
   fi
 
+  # Recheck before classifying a failed probe. A newly-created/non-Git project
+  # is valid, but malformed or concurrently-created Git metadata is not.
+  remote_dev_assert_safe_project_git_entry "$project" || return $?
   if [[ -e "$project/.git" || -L "$project/.git" ]]; then
     remote_dev_runtime_error "selected project contains invalid Git metadata; agent launch is blocked"
     return 2
