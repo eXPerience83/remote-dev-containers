@@ -14,6 +14,7 @@ test_launcher="$workdir/run-codex"
 args_file="$workdir/args"
 identity_file="$workdir/identity"
 env_file="$workdir/env"
+cwd_identity_file="$workdir/cwd-identity"
 validator_file="$workdir/validator"
 workspace="$workdir/workspace"
 default_project="$workspace/default"
@@ -45,6 +46,7 @@ set -euo pipefail
 printf '%s\n' bundled >"$REMOTE_DEV_CODEX_IDENTITY_FILE"
 printf '%s\n' "$@" >"$REMOTE_DEV_CODEX_ARGS_FILE"
 printf '%s\n' "${GIT_CEILING_DIRECTORIES:-}" >"$REMOTE_DEV_CODEX_ENV_FILE"
+stat -Lc '%d:%i' -- . >"$REMOTE_DEV_CODEX_CWD_IDENTITY_FILE"
 FAKE_CODEX
 chmod 0755 "$test_bundled_codex"
 
@@ -54,6 +56,7 @@ set -euo pipefail
 printf '%s\n' runtime >"$REMOTE_DEV_CODEX_IDENTITY_FILE"
 printf '%s\n' "$@" >"$REMOTE_DEV_CODEX_ARGS_FILE"
 printf '%s\n' "${GIT_CEILING_DIRECTORIES:-}" >"$REMOTE_DEV_CODEX_ENV_FILE"
+stat -Lc '%d:%i' -- . >"$REMOTE_DEV_CODEX_CWD_IDENTITY_FILE"
 FAKE_CODEX
 chmod 0755 "$test_runtime_codex"
 
@@ -90,12 +93,13 @@ run_launcher_at() {
   local deployment_mode="$3"
   shift 3
 
-  rm -f "$args_file" "$identity_file" "$env_file" "$validator_file"
+  rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
   common_env=(
     WORKSPACE="$root"
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file"
     REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file"
     REMOTE_DEV_CODEX_ENV_FILE="$env_file"
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file"
     REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file"
     REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex"
   )
@@ -156,6 +160,44 @@ assert_args 'default autonomous mode' "${autonomous_expected[@]}" resume --last
 assert_identity runtime 'default autonomous mode'
 assert_validator "$default_project"
 [[ "$(<"$env_file")" == "$workspace" ]] || { echo 'ERROR: Codex process missed Git ceiling' >&2; exit 1; }
+[[ "$(<"$cwd_identity_file")" == "$(stat -Lc '%d:%i' -- "$default_project")" ]] \
+  || { echo 'ERROR: default Codex launch inherited the wrong project inode' >&2; exit 1; }
+
+# A shell can retain a stale textual PWD after its directory is renamed. With
+# no explicit --cd, run-codex must re-enter the canonical selected path before
+# exec so Codex cannot inherit the old inode while validation inspects the new one.
+stale_workspace="$workdir/stale-workspace"
+stale_project="$stale_workspace/project"
+stale_original="$stale_workspace/project-old"
+stale_replacement="$workdir/stale-replacement"
+mkdir -p "$stale_project" "$stale_replacement"
+stale_original_identity="$(stat -Lc '%d:%i' -- "$stale_project")"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
+(
+  cd "$stale_project"
+  mv -- "$stale_project" "$stale_original"
+  mv -- "$stale_replacement" "$stale_project"
+  env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
+    WORKSPACE="$stale_workspace" \
+    REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
+    REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
+    REMOTE_DEV_CODEX_ENV_FILE="$env_file" \
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file" \
+    REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file" \
+    REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
+    "$test_launcher" resume --last
+)
+stale_selected_identity="$(stat -Lc '%d:%i' -- "$stale_project")"
+[[ "$stale_selected_identity" != "$stale_original_identity" ]] \
+  || { echo 'ERROR: stale-PWD fixture did not replace the project inode' >&2; exit 1; }
+[[ "$(<"$cwd_identity_file")" == "$stale_selected_identity" ]] \
+  || { echo 'ERROR: Codex inherited stale cwd inode after project replacement' >&2; exit 1; }
+[[ "$(<"$env_file")" == "$stale_workspace" ]] \
+  || { echo 'ERROR: stale-PWD launch missed its Git ceiling' >&2; exit 1; }
+grep -Fxq -- "$stale_project" "$validator_file"
+grep -Fxq -- "ceiling=$stale_workspace" "$validator_file"
+
+echo 'Codex stale-PWD project replacement: canonical selected inode inherited'
 
 run_launcher guarded --cd "$project_a" resume --last
 assert_args 'guarded project A' \
@@ -177,7 +219,7 @@ echo 'Codex managed Git ceiling: autonomous, guarded and selected-project launch
 
 # Resolver failure still uses immutable bundled fallback and validates that
 # exact executable before launch.
-rm -f "$args_file" "$identity_file" "$env_file" "$validator_file"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
 (
   cd "$default_project"
   env -u REMOTE_DEV_CODEX_APPROVAL_MODE \
@@ -185,6 +227,7 @@ rm -f "$args_file" "$identity_file" "$env_file" "$validator_file"
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
     REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
     REMOTE_DEV_CODEX_ENV_FILE="$env_file" \
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file" \
     REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file" \
     REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
     REMOTE_DEV_TEST_RESOLVER_FAIL=1 \
@@ -236,7 +279,7 @@ assert_rejected() {
   local label="$1"
   shift
   local status=0 error_file="$workdir/rejected-error"
-  rm -f "$args_file" "$identity_file" "$env_file" "$validator_file" "$error_file"
+  rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file" "$error_file"
   run_launcher __unset__ "$@" >/dev/null 2>"$error_file" || status=$?
   (( status == 2 )) || { echo "ERROR: $label returned $status, expected 2" >&2; cat "$error_file" >&2; exit 1; }
   [[ ! -e "$args_file" ]] || { echo "ERROR: $label invoked Codex" >&2; exit 1; }
@@ -276,7 +319,7 @@ echo 'Invalid Codex launch-owned policy input: rejected without execution'
 
 # If the effective-policy validator fails, the resolved Codex binary is never
 # launched even though the collection itself is healthy.
-rm -f "$args_file" "$identity_file" "$env_file" "$validator_file"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
 status=0
 (
   cd "$default_project"
@@ -284,6 +327,7 @@ status=0
     REMOTE_DEV_CODEX_ARGS_FILE="$args_file" \
     REMOTE_DEV_CODEX_IDENTITY_FILE="$identity_file" \
     REMOTE_DEV_CODEX_ENV_FILE="$env_file" \
+    REMOTE_DEV_CODEX_CWD_IDENTITY_FILE="$cwd_identity_file" \
     REMOTE_DEV_CODEX_VALIDATOR_FILE="$validator_file" \
     REMOTE_DEV_TEST_RUNTIME_CODEX="$test_runtime_codex" \
     REMOTE_DEV_TEST_VALIDATOR_FAIL=1 \
@@ -297,7 +341,7 @@ grep -Fq 'cannot preserve the required project Git boundary' "$workdir/validator
 contaminated="$workdir/contaminated"
 mkdir -p "$contaminated/project"
 git -C "$contaminated" init -q
-rm -f "$args_file" "$identity_file" "$env_file" "$validator_file"
+rm -f "$args_file" "$identity_file" "$env_file" "$cwd_identity_file" "$validator_file"
 status=0
 run_launcher_at "$contaminated" "$contaminated/project" __unset__ >/dev/null 2>"$workdir/contamination-error" || status=$?
 (( status == 2 )) || { echo "ERROR: contaminated collection returned $status" >&2; exit 1; }
