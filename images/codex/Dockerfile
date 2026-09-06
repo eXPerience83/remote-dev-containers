@@ -96,7 +96,6 @@ COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-a
 COPY scripts/remote-dev-antigravity-oauth.py /usr/local/bin/remote-dev-antigravity-oauth
 COPY scripts/remote-dev-antigravity-picker.py /usr/local/bin/remote-dev-antigravity-picker
 COPY scripts/run-antigravity.sh /usr/local/bin/run-antigravity
-COPY scripts/validate-antigravity-project-boundary.py /usr/local/bin/validate-antigravity-project-boundary
 COPY scripts/remote-dev-launcher.py /usr/local/bin/remote-dev-launcher
 COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
 COPY scripts/codex-menu.sh /usr/local/bin/codex-menu
@@ -121,7 +120,6 @@ RUN --network=none \
     --mount=type=bind,source=scripts/test-project-collection-boundary.sh,target=/tmp/test-project-collection-boundary,ro \
     --mount=type=bind,source=scripts/test-run-direct-session-cwd.sh,target=/tmp/test-run-direct-session-cwd,ro \
     --mount=type=bind,source=scripts/test_validate_codex_project_boundary.py,target=/tmp/test_validate_codex_project_boundary.py,ro \
-    --mount=type=bind,source=scripts/test_validate_antigravity_project_boundary.py,target=/tmp/test_validate_antigravity_project_boundary.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-launcher.sh,target=/tmp/test-remote-dev-launcher,ro \
     --mount=type=bind,source=scripts/remote-dev-codex-runtime.py,target=/tmp/remote-dev-codex-runtime.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-codex-runtime.py,target=/tmp/test-remote-dev-codex-runtime.py,ro \
@@ -148,7 +146,6 @@ RUN --network=none \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /usr/local/bin/run-antigravity \
-      /usr/local/bin/validate-antigravity-project-boundary \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-menu \
       /usr/local/bin/codex-menu \
@@ -171,13 +168,11 @@ RUN --network=none \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \
       /usr/local/bin/validate-codex-project-boundary \
-      /usr/local/bin/validate-antigravity-project-boundary \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
       /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /tmp/test_validate_codex_project_boundary.py \
-      /tmp/test_validate_antigravity_project_boundary.py \
       /tmp/test-codex-code-mode-host.py \
       /tmp/test-development-scratch.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
@@ -185,8 +180,6 @@ RUN --network=none \
       python /tmp/test-development-scratch.py \
     && REMOTE_DEV_CODEX_PROJECT_BOUNDARY_VALIDATOR=/usr/local/bin/validate-codex-project-boundary \
       python /tmp/test_validate_codex_project_boundary.py \
-    && REMOTE_DEV_ANTIGRAVITY_PROJECT_BOUNDARY_VALIDATOR=/usr/local/bin/validate-antigravity-project-boundary \
-      python /tmp/test_validate_antigravity_project_boundary.py \
     && REMOTE_DEV_RUNTIME_LIB=/usr/local/lib/remote-dev/remote-dev-runtime.sh bash /tmp/test-project-collection-boundary \
     && REMOTE_DEV_RUN_DIRECT_SESSION=/usr/local/bin/run-direct-session bash /tmp/test-run-direct-session-cwd \
     && REMOTE_DEV_CODEX_RUNTIME_ROOT=/tmp/nonexistent-codex-runtime /usr/local/bin/remote-dev-codex-runtime status --menu | grep -Eq '^Codex: bundled [0-9]+\.[0-9]+\.[0-9]+$' \
@@ -221,7 +214,6 @@ RUN --network=none \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker' /usr/local/bin/run-antigravity \
-    && grep -Fx 'readonly project_boundary_validator=/usr/local/bin/validate-antigravity-project-boundary' /usr/local/bin/run-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
     && run-codex --print-policy | grep -Fx 'Isolation boundary: outer container' \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
