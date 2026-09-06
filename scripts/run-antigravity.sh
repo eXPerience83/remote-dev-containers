@@ -71,6 +71,21 @@ fi
 workspace="$(remote_dev_workspace_root)" || exit $?
 project="$(remote_dev_resolve_project "$workspace")" || exit $?
 remote_dev_enter_project "$workspace" "$project" || exit $?
+entered_project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+  exit 2
+}
+entered_project_path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+  exit 2
+}
+if [[ "$entered_project_identity" != "$entered_project_path_identity" ]]; then
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+  exit 2
+fi
 if ! "$project_boundary_validator" --settings "$antigravity_settings" --project "$project"; then
   echo "ERROR: Antigravity settings do not satisfy the managed project-confinement contract." >&2
   echo "Keep allowNonWorkspaceAccess disabled and deny unsandboxed(*) before retrying." >&2
@@ -213,6 +228,28 @@ forward_signal() {
   exit "$signal_status"
 }
 
+assert_entered_project_identity() {
+  local current_identity=""
+  local path_identity=""
+
+  current_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  if [[ "$current_identity" != "$entered_project_identity" \
+     || "$path_identity" != "$entered_project_identity" ]]; then
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
+}
+
 trap harden_on_exit EXIT
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
@@ -223,6 +260,11 @@ start_oauth_helper
 # Record the current visible pane before Antigravity starts. The picker helper
 # accepts its prompt only after the screen has changed from this baseline.
 capture_picker_baseline
+
+# Revalidate the directory object after every prelaunch helper/validator has
+# finished. A concurrent replacement must not make the validator inspect one
+# path while the vendor inherits a different directory inode as its cwd.
+assert_entered_project_identity || exit $?
 
 # Force the vendor's documented session-scoped terminal sandbox. Persistent
 # settings are validated read-only above; Remote Dev never rewrites them.
