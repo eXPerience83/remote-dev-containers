@@ -211,7 +211,12 @@ project_status_summary() {
 }
 
 ensure_active_project() {
-  refresh_project_selection
+  local refresh_status=0
+
+  refresh_project_selection || refresh_status=$?
+  if (( refresh_status != 0 )); then
+    return "$refresh_status"
+  fi
   if (( project_collection_blocked == 1 )); then
     echo "ERROR: project collection safety check failed; agent launch is blocked. Run diagnostics and use Login shell for recovery." >&2
     return 2
