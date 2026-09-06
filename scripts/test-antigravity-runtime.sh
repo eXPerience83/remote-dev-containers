@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANAGER_SOURCE="$ROOT/scripts/remote-dev-antigravity.sh"
 RUNNER_SOURCE="$ROOT/scripts/run-antigravity.sh"
 RUNTIME_SOURCE="$ROOT/scripts/lib/remote-dev-runtime.sh"
-PROJECT_VALIDATOR_SOURCE="$ROOT/scripts/validate-antigravity-project-boundary.py"
 ANTIGRAVITY_LIB_SOURCE="$ROOT/scripts/lib/antigravity-runtime"
 
 temporary="$(mktemp -d)"
@@ -15,8 +14,6 @@ test_bin="$temporary/test-bin"
 MANAGER="$harness/remote-dev-antigravity"
 RUNNER="$harness/run-antigravity"
 RUNTIME_LIB="$harness/remote-dev-runtime.sh"
-PROJECT_VALIDATOR="$harness/validate-antigravity-project-boundary"
-SETTINGS="$harness/settings.json"
 PATHS_LIB="$harness/antigravity-paths.sh"
 ANTIGRAVITY_LIB_DIR="$harness/antigravity-runtime"
 SECURE_SCRIPT="$harness/secure-persistent-state"
@@ -27,20 +24,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 expect_failure() { if "$@"; then fail "command unexpectedly succeeded: $*"; fi; }
 
 cp -- "$RUNTIME_SOURCE" "$RUNTIME_LIB"
-cp -- "$PROJECT_VALIDATOR_SOURCE" "$PROJECT_VALIDATOR"
 chmod 0444 "$RUNTIME_LIB"
-chmod 0755 "$PROJECT_VALIDATOR"
-printf '%s\n' \
-  '{' \
-  '  "allowNonWorkspaceAccess": false,' \
-  '  "permissions": {' \
-  '    "allow": [],' \
-  '    "ask": ["command(*)"],' \
-  '    "deny": ["unsandboxed(*)"]' \
-  '  }' \
-  '}' >"$SETTINGS"
-chmod 0600 "$SETTINGS"
-
 python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" "$test_bin" <<'PY'
 from pathlib import Path
 import shlex
@@ -59,11 +43,11 @@ for old, new in {
     text = text.replace(old, new)
 destination.write_text(text, encoding="utf-8")
 PY
-python3 - "$RUNNER_SOURCE" "$RUNNER" "$MANAGER" "$SECURE_SCRIPT" "$RUNTIME_LIB" "$PROJECT_VALIDATOR" "$SETTINGS" <<'PY'
+python3 - "$RUNNER_SOURCE" "$RUNNER" "$MANAGER" "$SECURE_SCRIPT" "$RUNTIME_LIB" <<'PY'
 from pathlib import Path
 import shlex
 import sys
-source, destination, manager, secure_state, runtime_lib, project_validator, settings = map(Path, sys.argv[1:])
+source, destination, manager, secure_state, runtime_lib = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
     "readonly manager=/usr/local/bin/remote-dev-antigravity":
@@ -72,10 +56,6 @@ for old, new in {
         f"readonly secure_state={shlex.quote(str(secure_state))}",
     "readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
         f"readonly runtime_lib={shlex.quote(str(runtime_lib))}",
-    "readonly project_boundary_validator=/usr/local/bin/validate-antigravity-project-boundary":
-        f"readonly project_boundary_validator={shlex.quote(str(project_validator))}",
-    "readonly antigravity_settings=/root/.gemini/antigravity-cli/settings.json":
-        f"readonly antigravity_settings={shlex.quote(str(settings))}",
 }.items():
     if text.count(old) != 1:
         raise SystemExit(f"missing runner fixture anchor: {old}")
@@ -360,10 +340,8 @@ bash "$RUNNER" launch-probe
 test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
   || fail "launch did not hash the canonical executable exactly once"
 mapfile -t vendor_invocations <"$vendor_invocation_log"
-test "${#vendor_invocations[@]}" = 2 \
-  && test "${vendor_invocations[0]}" = --sandbox \
-  && test "${vendor_invocations[1]}" = launch-probe \
-  || fail "launch did not force --sandbox before executing the vendor binary"
+test "${#vendor_invocations[@]}" = 1 && test "${vendor_invocations[0]}" = launch-probe \
+  || fail "launch did not execute the vendor binary exactly once"
 
 # A manifest-bound executable that would fail if invoked proves that status and
 # explicit verification do not probe vendor --version at runtime.
@@ -422,8 +400,8 @@ chmod 0700 "$BINARY"
 unset REMOTE_DEV_TEST_SHA_LOG
 unset REMOTE_DEV_TEST_ARGS_FILE
 
-# The launcher preserves literal arguments, forces the sandbox, disables vendor
-# self-update, uses the selected project working directory and preserves exit status.
+# The launcher preserves literal arguments, disables vendor self-update, uses the
+# selected project working directory and preserves exit status.
 export REMOTE_DEV_TEST_SECURE_MARKER="$temporary/secure-called"
 export REMOTE_DEV_TEST_ARGS_FILE="$temporary/args.log"
 export REMOTE_DEV_TEST_AUTO_UPDATE_FILE="$temporary/auto-update.log"
@@ -434,10 +412,9 @@ bash "$RUNNER" 'literal space' "\$(touch $pwned)" ';echo injected'
 test -f "$REMOTE_DEV_TEST_SECURE_MARKER" || fail "runner did not harden state"
 test ! -e "$pwned" || fail "runner evaluated a literal argument"
 mapfile -t recorded_args <"$REMOTE_DEV_TEST_ARGS_FILE"
-test "${recorded_args[0]}" = --sandbox || fail "runner did not force sandbox first"
-test "${recorded_args[1]}" = 'literal space' || fail "runner changed argument one"
-test "${recorded_args[2]}" = "\$(touch $pwned)" || fail "runner changed argument two"
-test "${recorded_args[3]}" = ';echo injected' || fail "runner changed argument three"
+test "${recorded_args[0]}" = 'literal space' || fail "runner changed argument one"
+test "${recorded_args[1]}" = "\$(touch $pwned)" || fail "runner changed argument two"
+test "${recorded_args[2]}" = ';echo injected' || fail "runner changed argument three"
 test "$(<"$REMOTE_DEV_TEST_AUTO_UPDATE_FILE")" = true || fail "runner did not disable auto-update"
 test "$(<"$REMOTE_DEV_TEST_CWD_FILE")" = "$WORKSPACE/project" || fail "runner did not use selected project cwd"
 export REMOTE_DEV_TEST_EXIT_CODE=23
