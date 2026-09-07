@@ -226,4 +226,60 @@ mkdir -p "$deleted_cwd"
   assert_eq / "$PWD" "safe cwd recovery"
 )
 
+# Doctor must preserve the helper's distinction between an unavailable Git
+# binary (status 1) and actual/ambiguous collection contamination (status 2).
+doctor_source="${REMOTE_DEV_DOCTOR:-./scripts/remote-dev-doctor.sh}"
+[[ -f "$doctor_source" ]] || fail "Doctor source is unavailable: $doctor_source"
+doctor_runtime="$root/doctor-runtime.sh"
+doctor_fixture="$root/remote-dev-doctor"
+doctor_workspace="$root/doctor-workspace"
+mkdir -p "$doctor_workspace"
+cat >"$doctor_runtime" <<'DOCTOR_RUNTIME'
+remote_dev_resolve_role() {
+  printf 'codex\n'
+}
+remote_dev_validate_workspace_root() {
+  printf '%s\n' "$1"
+}
+remote_dev_assert_project_collection() {
+  return "${REMOTE_DEV_TEST_COLLECTION_STATUS:?}"
+}
+DOCTOR_RUNTIME
+python3 - "$doctor_source" "$doctor_fixture" "$doctor_runtime" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination, runtime = map(Path, sys.argv[1:])
+text = source.read_text(encoding="utf-8")
+anchor = "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh"
+if anchor not in text:
+    raise SystemExit("missing Doctor runtime-lib anchor")
+text = text.replace(anchor, f"runtime_lib={runtime}", 1)
+destination.write_text(text, encoding="utf-8")
+PY
+chmod 0755 "$doctor_fixture"
+
+doctor_unavailable_output="$root/doctor-git-unavailable"
+env WORKSPACE="$doctor_workspace" REMOTE_DEV_TEST_COLLECTION_STATUS=1 \
+  "$doctor_fixture" >"$doctor_unavailable_output" 2>&1 || true
+grep -Fq 'Workspace collection: BLOCKED (Git is unavailable; collection safety cannot be verified)' \
+  "$doctor_unavailable_output" \
+  || fail "Doctor did not report unavailable Git distinctly"
+if grep -Fq 'Workspace collection: CRITICAL — collection root is Git-contaminated or ambiguous' \
+  "$doctor_unavailable_output"; then
+  fail "Doctor mislabeled unavailable Git as collection contamination"
+fi
+if grep -Fq 'Recovery: stop affected agent sessions' "$doctor_unavailable_output"; then
+  fail "Doctor printed Git-contamination recovery for unavailable Git"
+fi
+
+doctor_contaminated_output="$root/doctor-git-contaminated"
+env WORKSPACE="$doctor_workspace" REMOTE_DEV_TEST_COLLECTION_STATUS=2 \
+  "$doctor_fixture" >"$doctor_contaminated_output" 2>&1 || true
+grep -Fq 'Workspace collection: CRITICAL — collection root is Git-contaminated or ambiguous' \
+  "$doctor_contaminated_output" \
+  || fail "Doctor did not preserve the contamination diagnostic for status 2"
+grep -Fq 'Recovery: stop affected agent sessions' "$doctor_contaminated_output" \
+  || fail "Doctor omitted contamination recovery guidance for status 2"
+
 echo "Project collection Git-boundary regressions: OK"
