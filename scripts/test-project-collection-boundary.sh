@@ -98,6 +98,8 @@ assert_fails_with 2 "inherited GIT_WORK_TREE" \
   env GIT_WORK_TREE="$workspace/empty" bash -c 'source "$1"; remote_dev_prepare_project_git_boundary "$2"' _ "$runtime_lib" "$workspace"
 assert_fails_with 2 "inherited GIT_COMMON_DIR" \
   env GIT_COMMON_DIR="$workspace/empty/.git" bash -c 'source "$1"; remote_dev_prepare_project_git_boundary "$2"' _ "$runtime_lib" "$workspace"
+assert_fails_with 2 "inherited GIT_OBJECT_DIRECTORY" \
+  env GIT_OBJECT_DIRECTORY="$root/redirected-objects" bash -c 'source "$1"; remote_dev_prepare_project_git_boundary "$2"' _ "$runtime_lib" "$workspace"
 
 # Managed Git ceiling entries are colon-separated on Linux. Reject a collection
 # path containing ':' for agent execution instead of creating an ambiguous
