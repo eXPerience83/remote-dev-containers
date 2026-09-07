@@ -289,6 +289,7 @@ ceiling_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$t
 expected_args=(
   --sandbox danger-full-access
   -c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$ceiling_json"
+  --cd "$test_project"
   --ask-for-approval never
   resume --last
 )
