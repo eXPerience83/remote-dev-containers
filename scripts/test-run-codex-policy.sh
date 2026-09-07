@@ -257,6 +257,20 @@ assert_args 'relative inline project canonicalization' \
   --cd="$project_a" resume --last
 assert_validator "$project_a"
 
+# A plain relative selector is eligible for Bash CDPATH lookup. The wrapper
+# must resolve it relative to the caller's cwd, not a matching external CDPATH
+# entry, and must not capture cd's informational stdout into active_project.
+cdpath_decoy="$workdir/cdpath-decoy"
+mkdir -p "$cdpath_decoy/project-a"
+CDPATH="$cdpath_decoy" \
+  run_launcher_at "$workspace" "$workspace" guarded --cd project-a resume --last
+assert_args 'relative project ignores inherited CDPATH' \
+  --sandbox danger-full-access \
+  -c "$ceiling_arg" \
+  -c "projects={\"$project_a\"={trust_level=\"untrusted\"}}" \
+  --cd "$project_a" resume --last
+assert_validator "$project_a"
+
 echo 'Codex explicit project selectors: canonicalized before vendor execution'
 
 # Swap the selected pathname only after run-codex has captured its identity and
