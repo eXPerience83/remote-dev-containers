@@ -77,7 +77,7 @@ remote_dev_assert_project_collection() {
   # Clear only repository-routing variables for this read-only inspection.
   # Authentication/configuration variables are intentionally preserved.
   if bare_state="$(
-    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR \
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
       GIT_CEILING_DIRECTORIES="$workspace" \
       git -C "$workspace" rev-parse --is-bare-repository 2>/dev/null
   )"; then
@@ -239,14 +239,14 @@ remote_dev_assert_project_git_boundary() {
   remote_dev_assert_safe_project_git_entry "$project" || return $?
 
   if inside_state="$(
-    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR \
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
       GIT_CEILING_DIRECTORIES="$workspace" \
       git -C "$project" rev-parse --is-inside-work-tree 2>/dev/null
   )"; then
     case "$inside_state" in
       true)
         top="$(
-          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR \
+          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
             GIT_CEILING_DIRECTORIES="$workspace" \
             git -C "$project" rev-parse --show-toplevel 2>/dev/null
         )" || {
@@ -265,7 +265,7 @@ remote_dev_assert_project_git_boundary() {
         ;;
       false)
         bare_state="$(
-          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR \
+          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
             GIT_CEILING_DIRECTORIES="$workspace" \
             git -C "$project" rev-parse --is-bare-repository 2>/dev/null
         )" || {
