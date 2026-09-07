@@ -378,7 +378,7 @@ if (( informational_only == 0 )); then
     if ! active_project="$(pwd -P 2>/dev/null)"; then
       fail_usage "managed Codex launch requires a valid current project directory"
     fi
-  elif ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
+  elif ! active_project="$(CDPATH= cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
     fail_usage "managed Codex launch requires an existing project directory"
   fi
 
