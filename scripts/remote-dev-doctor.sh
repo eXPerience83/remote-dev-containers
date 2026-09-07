@@ -120,6 +120,7 @@ check_project_collection_boundary() {
   local validated=""
   local project=""
   local selector="${REMOTE_DEV_PROJECT:-}"
+  local collection_status=0
 
   echo
   echo 'Project collection safety:'
@@ -133,9 +134,18 @@ check_project_collection_boundary() {
     return 0
   fi
 
-  if remote_dev_assert_project_collection "$validated" >/dev/null 2>&1; then
+  remote_dev_assert_project_collection "$validated" >/dev/null 2>&1 || collection_status=$?
+  if (( collection_status == 0 )); then
     echo "Workspace collection: OK"
     echo "Git collection root: not a repository"
+  elif (( collection_status == 1 )); then
+    echo "Workspace collection: BLOCKED (Git is unavailable; collection safety cannot be verified)"
+    echo "Workspace root layout: unavailable"
+    echo "Git collection root: unknown"
+    echo "Git discovery ceiling: unavailable"
+    echo "Selected project Git boundary: unavailable"
+    status=1
+    return 0
   else
     echo "Workspace collection: CRITICAL — collection root is Git-contaminated or ambiguous"
     echo "Workspace root layout: BLOCKED until Git contamination is inspected"
