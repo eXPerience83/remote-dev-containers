@@ -78,9 +78,13 @@ check_project_collection_layout() {
   local unexpected=0
   local project_count=0
   local scratch_seen=0
+  local restore_nullglob=0
+  local restore_dotglob=0
 
-  shopt -s nullglob
-  for entry in "$workspace"/* "$workspace"/.[!.]* "$workspace"/..?*; do
+  shopt -q nullglob || restore_nullglob=1
+  shopt -q dotglob || restore_dotglob=1
+  shopt -s nullglob dotglob
+  for entry in "$workspace"/*; do
     name="${entry##*/}"
     if [[ "$name" == .remote-dev-tmp ]]; then
       scratch_seen=1
@@ -96,7 +100,8 @@ check_project_collection_layout() {
     fi
     unexpected=$((unexpected + 1))
   done
-  shopt -u nullglob
+  (( restore_dotglob == 0 )) || shopt -u dotglob
+  (( restore_nullglob == 0 )) || shopt -u nullglob
 
   if (( unexpected == 0 )); then
     if (( scratch_seen == 1 )); then
@@ -107,7 +112,6 @@ check_project_collection_layout() {
   else
     echo "Workspace root layout: WARNING ($unexpected unexpected top-level entries; expected project directories and optional .remote-dev-tmp only)"
     echo 'Workspace root layout: inspect unexpected entries manually; Doctor does not delete or modify them.'
-    status=1
   fi
 }
 
