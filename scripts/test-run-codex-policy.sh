@@ -155,14 +155,26 @@ assert_identity() {
 
 assert_validator() {
   local project="$1"
+  local -a expected=(
+    --codex-binary "$test_runtime_codex"
+    --cwd "$project"
+    --ceiling "$workspace"
+    "ceiling=$workspace"
+  ) actual=()
   [[ -f "$validator_file" ]] || { echo "ERROR: boundary validator did not run" >&2; exit 1; }
-  grep -Fxq -- '--codex-binary' "$validator_file"
-  grep -Fxq -- "$test_runtime_codex" "$validator_file"
-  grep -Fxq -- '--cwd' "$validator_file"
-  grep -Fxq -- "$project" "$validator_file"
-  grep -Fxq -- '--ceiling' "$validator_file"
-  grep -Fxq -- "$workspace" "$validator_file"
-  grep -Fxq -- "ceiling=$workspace" "$validator_file"
+  mapfile -t actual <"$validator_file"
+  (( ${#actual[@]} == ${#expected[@]} )) || {
+    printf 'ERROR: validator argument count differs\nActual: %q\nExpected: %q\n' \
+      "${actual[*]}" "${expected[*]}" >&2
+    exit 1
+  }
+  for index in "${!expected[@]}"; do
+    [[ "${actual[$index]}" == "${expected[$index]}" ]] || {
+      printf 'ERROR: validator argument %d is %q, expected %q\n' \
+        "$index" "${actual[$index]}" "${expected[$index]}" >&2
+      exit 1
+    }
+  done
 }
 
 ceiling_arg="shell_environment_policy.set.GIT_CEILING_DIRECTORIES=\"$workspace\""
