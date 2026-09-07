@@ -111,7 +111,7 @@ remote_dev_prepare_project_git_boundary() {
     return 2
   fi
 
-  for variable in GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; do
+  for variable in GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; do
     if [[ -n "${!variable:-}" ]]; then
       remote_dev_runtime_error \
         "inherited $variable would bypass the selected-project Git boundary"
