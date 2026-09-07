@@ -61,6 +61,9 @@ fi
 git -C "$workspace/empty" init -q
 remote_dev_assert_project_git_boundary "$workspace" "$workspace/empty"
 assert_eq "$workspace/empty" "$(git -C "$workspace/empty" rev-parse --show-toplevel)" "child Git root"
+env GIT_OBJECT_DIRECTORY= bash -c \
+  'source "$1"; remote_dev_assert_project_git_boundary "$2" "$3"' \
+  _ "$runtime_lib" "$workspace" "$workspace/empty"
 
 # A legitimate linked worktree rooted at the selected child uses a .git file,
 # not a directory. Preserve that topology when its effective top-level is still
@@ -163,6 +166,10 @@ bare_root="$root/bare/workspace"
 mkdir -p "$(dirname "$bare_root")"
 git init --bare -q "$bare_root"
 assert_fails_with 2 "bare Git repository" remote_dev_assert_project_collection "$bare_root"
+assert_fails_with 2 "bare Git repository" \
+  env GIT_OBJECT_DIRECTORY= bash -c \
+    'source "$1"; remote_dev_assert_project_collection "$2"' \
+    _ "$runtime_lib" "$bare_root"
 
 # Malformed Git metadata at the selected child is not silently treated as a
 # newly-created non-repository project.
