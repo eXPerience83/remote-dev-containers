@@ -62,6 +62,8 @@ remote_dev_assert_project_collection() {
   local bare_probe=""
   local bare_status=0
   local bare_last_line=""
+  local bare_previous_line=""
+  local mount_failure_prefix='fatal: not a git repository (or any parent up to mount point '
   local top=""
   local physical_top=""
 
@@ -87,6 +89,10 @@ remote_dev_assert_project_collection() {
       git -C "$workspace" rev-parse --is-bare-repository 2>&1
   )" || bare_status=$?
   bare_last_line="${bare_probe##*$'\n'}"
+  if [[ "$bare_probe" == *$'\n'* ]]; then
+    bare_previous_line="${bare_probe%$'\n'*}"
+    bare_previous_line="${bare_previous_line##*$'\n'}"
+  fi
 
   if (( bare_status == 0 )); then
     case "$bare_last_line" in
@@ -126,9 +132,17 @@ remote_dev_assert_project_collection() {
         ;;
     esac
   else
-    # A clean collection is expected to fail Git discovery. Any other failure
-    # (for example malformed Git configuration) means safety cannot be proven.
-    if [[ "$bare_last_line" != 'fatal: not a git repository (or any of the parent directories): .git' ]]; then
+    # A clean collection is expected to fail Git discovery. A bind-mounted
+    # collection can report the same no-repository result as a two-line
+    # mount-boundary fatal. Accept only those canonical C-locale forms; any
+    # other failure (for example malformed Git configuration) remains blocked.
+    if [[ "$bare_last_line" == 'fatal: not a git repository (or any of the parent directories): .git' ]]; then
+      :
+    elif [[ "$bare_last_line" == 'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).' \
+         && "$bare_previous_line" == "$mount_failure_prefix"* \
+         && "$bare_previous_line" == *')' ]]; then
+      :
+    else
       remote_dev_runtime_error \
         "project collection Git state is ambiguous; agent project actions are blocked"
       return 2
