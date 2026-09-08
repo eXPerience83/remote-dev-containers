@@ -239,8 +239,15 @@ mkdir -p "$deleted_cwd"
 
 # Doctor must preserve the helper's distinction between an unavailable Git
 # binary (status 1) and actual/ambiguous collection contamination (status 2).
-doctor_source="${REMOTE_DEV_DOCTOR:-./scripts/remote-dev-doctor.sh}"
-[[ -f "$doctor_source" ]] || fail "Doctor source is unavailable: $doctor_source"
+doctor_source="${REMOTE_DEV_DOCTOR:-}"
+if [[ -z "$doctor_source" ]]; then
+  if [[ -f ./scripts/remote-dev-doctor.sh ]]; then
+    doctor_source=./scripts/remote-dev-doctor.sh
+  elif [[ -f /usr/local/bin/remote-dev-doctor ]]; then
+    doctor_source=/usr/local/bin/remote-dev-doctor
+  fi
+fi
+[[ -n "$doctor_source" && -f "$doctor_source" ]] || fail "Doctor source is unavailable: ${doctor_source:-<unset>}"
 doctor_runtime="$root/doctor-runtime.sh"
 doctor_fixture="$root/remote-dev-doctor"
 doctor_workspace="$root/doctor-workspace"
