@@ -65,6 +65,8 @@ Así se evita que un cwd eliminado convierta el camino de limpieza en un segundo
 
 La frontera de colección/Git es un contrato del runtime de Remote Dev compartido por Codex y Antigravity experimental. No introduce un nuevo sandbox anidado ni afirma aislamiento de filesystem frente a proyectos hermanos que sigan montados en el mismo contenedor de rol.
 
+Esta diferencia es operativa, no teórica: una vez lanzado un agente autónomo dentro del proyecto validado, todavía puede ejecutar `cd ..` o acceder a cualquier otra ruta que los permisos ordinarios del filesystem del contenedor hagan visible y escribible, incluida la raíz de la colección o los proyectos hermanos. `GIT_CEILING_DIRECTORIES` limita únicamente el descubrimiento de ancestros de Git; no es un mecanismo de control de acceso al filesystem. Confinar las escrituras al proyecto seleccionado es un problema de hardening independiente y queda explícitamente fuera del alcance de #213/#214.
+
 Codex conserva el modelo de contenedor exterior establecido por #36/#42 y su política autonomous/guarded actual. Antigravity conserva su comportamiento experimental de lanzamiento del proveedor; #213 no fuerza ni configura un sandbox del proveedor. Las futuras integraciones de agentes deberían reutilizar los helpers comunes de colección/proyecto en vez de reimplementar por separado la lógica de frontera Git.
 
 ## Expectativas de validación
