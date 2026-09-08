@@ -86,9 +86,10 @@ remote_dev_assert_project_collection() {
       LC_ALL=C GIT_CEILING_DIRECTORIES="$workspace" \
       git -C "$workspace" rev-parse --is-bare-repository 2>&1
   )" || bare_status=$?
+  bare_last_line="${bare_probe##*$'\n'}"
 
   if (( bare_status == 0 )); then
-    case "$bare_probe" in
+    case "$bare_last_line" in
       true)
         remote_dev_runtime_error \
           "CRITICAL: project collection root is a bare Git repository: $workspace; agent project actions are blocked"
@@ -127,7 +128,6 @@ remote_dev_assert_project_collection() {
   else
     # A clean collection is expected to fail Git discovery. Any other failure
     # (for example malformed Git configuration) means safety cannot be proven.
-    bare_last_line="${bare_probe##*$'\n'}"
     if [[ "$bare_last_line" != 'fatal: not a git repository (or any of the parent directories): .git' ]]; then
       remote_dev_runtime_error \
         "project collection Git state is ambiguous; agent project actions are blocked"
