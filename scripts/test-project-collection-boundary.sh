@@ -171,6 +171,30 @@ assert_fails_with 2 "bare Git repository" \
     'source "$1"; remote_dev_assert_project_collection "$2"' \
     _ "$runtime_lib" "$bare_root"
 
+# A failed collection probe is safe only when Git explicitly reports that no
+# repository exists. Malformed configuration must not turn a real bare root (or
+# an unverifiable clean-looking collection) into a false-safe result.
+bad_git_config="$root/bad-git-config"
+printf '[broken\n' >"$bad_git_config"
+assert_fails_with 2 "Git state is ambiguous" \
+  env GIT_CONFIG_GLOBAL="$bad_git_config" bash -c \
+    'source "$1"; remote_dev_assert_project_collection "$2"' \
+    _ "$runtime_lib" "$bare_root"
+assert_fails_with 2 "Git state is ambiguous" \
+  env GIT_CONFIG_GLOBAL="$bad_git_config" bash -c \
+    'source "$1"; remote_dev_assert_project_collection "$2"' \
+    _ "$runtime_lib" "$workspace"
+
+# A bare-layout repository can be configured to report core.bare=false. The
+# collection must still fail closed rather than treating that successful
+# `false` probe as proof that the root is not Git-owned.
+nonbare_bare_root="$root/nonbare-bare/workspace"
+mkdir -p "$(dirname "$nonbare_bare_root")"
+git init --bare -q "$nonbare_bare_root"
+git --git-dir="$nonbare_bare_root" config core.bare false
+assert_fails_with 2 "Git state is ambiguous" \
+  remote_dev_assert_project_collection "$nonbare_bare_root"
+
 # Malformed Git metadata at the selected child is not silently treated as a
 # newly-created non-repository project.
 invalid_child_root="$root/invalid-child/workspace"
