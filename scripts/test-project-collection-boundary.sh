@@ -56,6 +56,11 @@ remote_dev_assert_project_git_boundary "$ancestor_workspace" "$ancestor_workspac
 if git -C "$ancestor_workspace/empty" rev-parse --show-toplevel >/dev/null 2>&1; then
   fail "empty project inherited a Git repository above the managed collection ceiling"
 fi
+# Trace output is diagnostic, not repository routing. It must not turn the
+# allowed ancestor-repository probe into a false ambiguous state.
+env GIT_TRACE=1 bash -c \
+  'source "$1"; remote_dev_assert_project_collection "$2" >/dev/null' \
+  _ "$runtime_lib" "$ancestor_workspace"
 
 # A normal repository rooted at the selected child remains valid.
 git -C "$workspace/empty" init -q
