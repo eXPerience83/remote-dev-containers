@@ -59,7 +59,11 @@ remote_dev_workspace_root() {
 # recover a contaminated collection.
 remote_dev_assert_project_collection() {
   local workspace="$1"
-  local bare_state=""
+  local bare_probe=""
+  local bare_status=0
+  local bare_last_line=""
+  local top=""
+  local physical_top=""
 
   workspace="$(remote_dev_validate_workspace_root "$workspace")" || return $?
 
@@ -75,25 +79,60 @@ remote_dev_assert_project_collection() {
   fi
 
   # Clear only repository-routing variables for this read-only inspection.
-  # Authentication/configuration variables are intentionally preserved.
-  if bare_state="$(
+  # Authentication/configuration variables are intentionally preserved, but an
+  # unexpected Git/configuration failure is safety-ambiguous and must block.
+  bare_probe="$(
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
-      GIT_CEILING_DIRECTORIES="$workspace" \
-      git -C "$workspace" rev-parse --is-bare-repository 2>/dev/null
-  )"; then
-    case "$bare_state" in
+      LC_ALL=C GIT_CEILING_DIRECTORIES="$workspace" \
+      git -C "$workspace" rev-parse --is-bare-repository 2>&1
+  )" || bare_status=$?
+
+  if (( bare_status == 0 )); then
+    case "$bare_probe" in
       true)
         remote_dev_runtime_error \
           "CRITICAL: project collection root is a bare Git repository: $workspace; agent project actions are blocked"
         return 2
         ;;
-      false) ;;
+      false)
+        # `false` can mean an ordinary repository above the collection (which
+        # is allowed because child launches are bounded by the ceiling), or a
+        # non-bare worktree rooted at the collection itself. Distinguish them.
+        top="$(
+          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
+            LC_ALL=C GIT_CEILING_DIRECTORIES="$workspace" \
+            git -C "$workspace" rev-parse --show-toplevel 2>/dev/null
+        )" || {
+          remote_dev_runtime_error \
+            "project collection Git state is ambiguous; agent project actions are blocked"
+          return 2
+        }
+        physical_top="$(cd -P -- "$top" 2>/dev/null && pwd -P)" || {
+          remote_dev_runtime_error \
+            "project collection Git worktree root is unavailable; agent project actions are blocked"
+          return 2
+        }
+        if [[ "$physical_top" == "$workspace" ]]; then
+          remote_dev_runtime_error \
+            "CRITICAL: project collection root is a Git worktree: $workspace; agent project actions are blocked"
+          return 2
+        fi
+        ;;
       *)
         remote_dev_runtime_error \
           "project collection Git state is ambiguous; agent project actions are blocked"
         return 2
         ;;
     esac
+  else
+    # A clean collection is expected to fail Git discovery. Any other failure
+    # (for example malformed Git configuration) means safety cannot be proven.
+    bare_last_line="${bare_probe##*$'\n'}"
+    if [[ "$bare_last_line" != 'fatal: not a git repository (or any of the parent directories): .git' ]]; then
+      remote_dev_runtime_error \
+        "project collection Git state is ambiguous; agent project actions are blocked"
+      return 2
+    fi
   fi
 
   printf '%s\n' "$workspace"
