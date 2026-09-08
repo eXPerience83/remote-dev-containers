@@ -19,6 +19,48 @@ mkdir -p "$bin_dir" "$project"
 printf 'canary\n' >"$canary"
 git -C "$workspace" init -q
 
+assert_invocation_count() {
+  local file="$1"
+  local expected="$2"
+  local label="$3"
+  local actual=""
+
+  [[ -f "$file" ]] || {
+    echo "ERROR: $label recorded no invocations" >&2
+    exit 1
+  }
+  actual="$(wc -l <"$file")"
+  [[ "$actual" == "$expected" ]] || {
+    echo "ERROR: $label ran $actual times, expected $expected" >&2
+    exit 1
+  }
+}
+
+assert_output_contains() {
+  local file="$1"
+  local text="$2"
+
+  grep -Fq "$text" "$file" || {
+    echo "ERROR: menu output lacked: $text" >&2
+    exit 1
+  }
+}
+
+assert_canary_and_contamination_preserved() {
+  [[ -f "$canary" ]] || {
+    echo 'ERROR: sibling canary was removed' >&2
+    exit 1
+  }
+  [[ "$(<"$canary")" == canary ]] || {
+    echo 'ERROR: sibling canary was modified' >&2
+    exit 1
+  }
+  [[ -d "$workspace/.git" ]] || {
+    echo 'ERROR: contaminated collection .git was removed' >&2
+    exit 1
+  }
+}
+
 cat >"$bin_dir/run-codex" <<'CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -151,15 +193,14 @@ run_recovery_menu codex $'1\n\n2\n\n3\n1\n4\n10\n\n11\n\n12\n' "$codex_output"
   cat "$agent_invocations" >&2
   exit 1
 }
-[[ "$(wc -l <"$doctor_invocations")" == 1 ]]
-[[ "$(wc -l <"$shell_invocations")" == 1 ]]
-[[ "$(wc -l <"$hardening_invocations")" == 1 ]]
-grep -Fq 'Project: BLOCKED (collection safety check failed; run diagnostics)' "$codex_output"
-grep -Fq 'agent launch is blocked' "$codex_output"
-grep -Fq 'Safety block: project mutations are disabled until the collection is repaired.' "$codex_output"
-grep -Fq 'project selection is blocked' "$codex_output"
-[[ "$(<"$canary")" == canary ]]
-[[ -d "$workspace/.git" ]]
+assert_invocation_count "$doctor_invocations" 1 'Codex diagnostics'
+assert_invocation_count "$shell_invocations" 1 'Codex login shell'
+assert_invocation_count "$hardening_invocations" 1 'Codex persistent-state hardening'
+assert_output_contains "$codex_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
+assert_output_contains "$codex_output" 'agent launch is blocked'
+assert_output_contains "$codex_output" 'Safety block: project mutations are disabled until the collection is repaired.'
+assert_output_contains "$codex_output" 'project selection is blocked'
+assert_canary_and_contamination_preserved
 echo 'Codex contamination state keeps only recovery actions available: OK'
 
 agy_output="$workdir/antigravity-output"
@@ -169,11 +210,10 @@ run_recovery_menu antigravity $'1\n\n2\n\n10\n\n11\n\n12\n' "$agy_output"
   cat "$agent_invocations" >&2
   exit 1
 }
-[[ "$(wc -l <"$doctor_invocations")" == 1 ]]
-[[ "$(wc -l <"$shell_invocations")" == 1 ]]
-[[ "$(wc -l <"$hardening_invocations")" == 1 ]]
-grep -Fq 'Project: BLOCKED (collection safety check failed; run diagnostics)' "$agy_output"
-grep -Fq 'agent launch is blocked' "$agy_output"
-[[ "$(<"$canary")" == canary ]]
-[[ -d "$workspace/.git" ]]
+assert_invocation_count "$doctor_invocations" 1 'Antigravity diagnostics'
+assert_invocation_count "$shell_invocations" 1 'Antigravity login shell'
+assert_invocation_count "$hardening_invocations" 1 'Antigravity persistent-state hardening'
+assert_output_contains "$agy_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
+assert_output_contains "$agy_output" 'agent launch is blocked'
+assert_canary_and_contamination_preserved
 echo 'Antigravity contamination state keeps only recovery actions available: OK'
