@@ -29,7 +29,7 @@ GIT_CEILING_DIRECTORIES=/workspace
 
 using the validated collection path. This prevents an empty project such as `/workspace/new-project` from silently inheriting a Git repository above `/workspace`.
 
-Remote Dev also refuses inherited `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` values for managed agent launches because those variables can route Git outside the selected-project contract.
+Remote Dev also refuses inherited `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `GIT_OBJECT_DIRECTORY` assignments for managed agent launches, including variables that are present with an empty value, because those variables can route or alter Git outside the selected-project contract.
 
 For Codex, setting the variable in the parent process is not sufficient: Codex can apply its own shell-environment policy before model-reachable commands run. The pre-launch boundary probe therefore reads Codex's **effective** configuration through the bundled/runtime app-server and fails closed unless the managed `GIT_CEILING_DIRECTORIES` value survives that policy. The probe is read-only and does not replace the user's other shell-environment restrictions.
 
