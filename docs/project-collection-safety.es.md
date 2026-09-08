@@ -29,7 +29,7 @@ GIT_CEILING_DIRECTORIES=/workspace
 
 usando la ruta de colección validada. Así se evita que un proyecto vacío como `/workspace/new-project` herede silenciosamente un repositorio Git situado por encima de `/workspace`.
 
-Remote Dev también rechaza valores heredados de `GIT_DIR`, `GIT_WORK_TREE` y `GIT_COMMON_DIR` en lanzamientos gestionados del agente, porque esas variables pueden redirigir Git fuera del contrato del proyecto seleccionado.
+Remote Dev también rechaza asignaciones heredadas de `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` y `GIT_OBJECT_DIRECTORY` en lanzamientos gestionados del agente, incluso cuando la variable está presente con valor vacío, porque esas variables pueden redirigir o alterar Git fuera del contrato del proyecto seleccionado.
 
 En Codex no basta con establecer la variable en el proceso padre: Codex puede aplicar su propia política de entorno de shell antes de ejecutar comandos alcanzables por el modelo. Por eso, la comprobación previa al lanzamiento lee la configuración **efectiva** de Codex mediante el app-server del runtime bundled/opcional y falla de forma cerrada si la política no conserva el valor gestionado de `GIT_CEILING_DIRECTORIES`. La comprobación es de solo lectura y no sustituye otras restricciones de entorno configuradas por el usuario.
 
