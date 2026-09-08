@@ -65,6 +65,8 @@ This prevents a deleted cwd from turning the cleanup path into a secondary `getc
 
 The collection/Git boundary is a Remote Dev runtime contract shared by Codex and experimental Antigravity. It does not introduce a new nested sandbox and does not claim filesystem isolation from sibling projects that remain mounted in the same role container.
 
+This distinction is operational, not theoretical: after an autonomous agent has been launched inside the validated project, it can still run `cd ..` or access any other path that ordinary container filesystem permissions make visible and writable, including the collection root or sibling project directories. `GIT_CEILING_DIRECTORIES` constrains Git ancestor discovery only; it is not a filesystem access-control mechanism. Confining writes to the selected project is a separate hardening problem and is explicitly out of scope for #213/#214.
+
 Codex keeps the established #36/#42 outer-container model and its existing autonomous/guarded policy. Antigravity keeps its existing experimental vendor launch behavior; #213 does not force or configure a vendor sandbox. Future agent integrations should reuse the common collection/project helpers rather than reimplementing Git-boundary logic independently.
 
 ## Validation expectations
@@ -73,7 +75,7 @@ The repository regression suite covers at least:
 
 - clean collection + empty child;
 - repository rooted exactly at a child;
-- linked worktree rooted exactly at a child;
+- linked Git worktree rooted exactly at a child;
 - ancestor Git repository above the collection not being inherited;
 - collection-root `.git` directory, gitfile, symlink/special entry, malformed entry and bare repository;
 - selected-project invalid Git metadata;
