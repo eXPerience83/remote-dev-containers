@@ -121,6 +121,8 @@ check_project_collection_boundary() {
   local project=""
   local selector="${REMOTE_DEV_PROJECT:-}"
   local collection_status=0
+  local boundary_detail=""
+  local boundary_status=0
 
   echo
   echo 'Project collection safety:'
@@ -176,12 +178,22 @@ check_project_collection_boundary() {
     status=1
     return 0
   fi
-  if remote_dev_assert_project_git_boundary "$validated" "$project" >/dev/null 2>&1; then
+
+  boundary_detail="$(remote_dev_assert_project_git_boundary "$validated" "$project" 2>&1 >/dev/null)" \
+    || boundary_status=$?
+  if (( boundary_status == 0 )); then
     echo "Selected project: $selector"
     echo "Selected project Git boundary: OK"
   else
+    boundary_detail="${boundary_detail#ERROR: }"
+    boundary_detail="${boundary_detail//$'\r'/ }"
+    boundary_detail="${boundary_detail//$'\n'/ }"
     echo "Selected project: $selector"
     echo "Selected project Git boundary: BLOCKED"
+    if [[ -n "$boundary_detail" ]]; then
+      printf 'Selected project Git boundary: %s\n' "$boundary_detail"
+    fi
+    echo "Selected project Git boundary: inspect the project from Login shell; Doctor does not modify it."
     status=1
   fi
 }
