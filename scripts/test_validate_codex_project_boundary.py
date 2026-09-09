@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import textwrap
+import unittest
+
+
+ROOT = Path(__file__).resolve().parent.parent
+VALIDATOR = Path(
+    os.environ.get(
+        "REMOTE_DEV_CODEX_PROJECT_BOUNDARY_VALIDATOR",
+        str(ROOT / "scripts" / "validate-codex-project-boundary.py"),
+    )
+)
+
+
+FAKE_CODEX = r'''#!/usr/bin/env python3
+import json
+import os
+import sys
+
+policy_name = os.environ.get("REMOTE_DEV_TEST_POLICY", "safe")
+ceiling = os.environ.get("GIT_CEILING_DIRECTORIES", "")
+
+for raw in sys.stdin:
+    try:
+        message = json.loads(raw)
+    except json.JSONDecodeError:
+        continue
+    if message.get("method") == "initialize":
+        response = json.dumps({"id": message.get("id"), "result": {}})
+        if policy_name == "coalesced":
+            os.write(sys.stdout.fileno(), ("notice\n" + response + "\n").encode("utf-8"))
+        else:
+            print(response, flush=True)
+    elif message.get("method") == "initialized":
+        continue
+    elif message.get("method") == "config/read":
+        policy = {
+            "inherit": "all",
+            "ignore_default_excludes": True,
+            "exclude": [],
+            "set": {"GIT_CEILING_DIRECTORIES": ceiling},
+            "include_only": [],
+        }
+        if policy_name == "include_drop":
+            policy["include_only"] = ["PATH", "HOME"]
+        elif policy_name == "include_exact":
+            policy["include_only"] = ["GIT_CEILING_DIRECTORIES"]
+        elif policy_name == "include_wildcard":
+            policy["include_only"] = ["GIT_*", "PATH"]
+        elif policy_name == "include_question":
+            policy["include_only"] = ["GIT_CEILING_DIRECTOR?ES"]
+        elif policy_name == "include_bracket_class":
+            policy["include_only"] = ["GIT_[C]EILING_DIRECTORIES"]
+        elif policy_name == "wrong_set":
+            policy["set"]["GIT_CEILING_DIRECTORIES"] = "/wrong"
+        elif policy_name == "missing_policy":
+            policy = None
+        elif policy_name == "filter_drop":
+            policy["filters"] = {"PATH": "include", "GIT_*": "exclude"}
+        elif policy_name == "filter_include":
+            policy["filters"] = {"GIT_*": "include"}
+        elif policy_name == "unknown_filter":
+            policy["filters"] = {"GIT_*": "maybe"}
+        config = {} if policy is None else {"shell_environment_policy": policy}
+        print(json.dumps({"id": message.get("id"), "result": {"config": config, "origins": {}}}), flush=True)
+'''
+
+
+class CodexProjectBoundaryValidatorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="remote-dev-codex-boundary-")
+        self.root = Path(self.tmp.name)
+        self.workspace = self.root / "workspace"
+        self.project = self.workspace / "project"
+        self.project.mkdir(parents=True)
+        self.binary = self.root / "codex"
+        self.binary.write_text(textwrap.dedent(FAKE_CODEX), encoding="utf-8")
+        self.binary.chmod(0o755)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def validator_command(self) -> list[str]:
+        # Files created through GitHub's contents API are checked out as 0644.
+        # Production installs this helper as an executable in the image, while
+        # source-tree unit tests invoke it explicitly through the interpreter.
+        return [sys.executable, str(VALIDATOR)]
+
+    def run_validator(self, policy: str = "safe") -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["REMOTE_DEV_TEST_POLICY"] = policy
+        return subprocess.run(
+            [
+                *self.validator_command(),
+                "--codex-binary",
+                str(self.binary),
+                "--cwd",
+                str(self.project),
+                "--ceiling",
+                str(self.workspace),
+            ],
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+            check=False,
+        )
+
+    def assert_passes(self, policy: str) -> None:
+        result = self.run_validator(policy)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def assert_blocks(self, policy: str, text: str) -> None:
+        result = self.run_validator(policy)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(text, result.stderr)
+        self.assertNotIn(str(self.workspace / ".git"), result.stderr)
+
+    def test_default_policy_keeps_managed_set_value(self) -> None:
+        self.assert_passes("safe")
+
+    def test_coalesced_informational_and_response_lines_do_not_timeout(self) -> None:
+        self.assert_passes("coalesced")
+
+    def test_exact_star_and_question_wildcards_keep_ceiling(self) -> None:
+        self.assert_passes("include_exact")
+        self.assert_passes("include_wildcard")
+        self.assert_passes("include_question")
+
+    def test_non_codex_character_class_syntax_does_not_prove_survival(self) -> None:
+        self.assert_blocks("include_bracket_class", "filters out the required Git ceiling")
+
+    def test_include_only_without_ceiling_fails_closed(self) -> None:
+        self.assert_blocks("include_drop", "filters out the required Git ceiling")
+
+    def test_canonical_include_filter_is_supported(self) -> None:
+        self.assert_passes("filter_include")
+
+    def test_canonical_include_filter_without_ceiling_fails_closed(self) -> None:
+        self.assert_blocks("filter_drop", "filters out the required Git ceiling")
+
+    def test_wrong_or_missing_managed_value_fails_closed(self) -> None:
+        self.assert_blocks("wrong_set", "does not own the required Git ceiling")
+        self.assert_blocks("missing_policy", "effective shell environment policy is unavailable")
+
+    def test_unknown_filter_action_fails_closed(self) -> None:
+        self.assert_blocks("unknown_filter", "filter action is unknown")
+
+    def test_symlinked_binary_is_rejected(self) -> None:
+        link = self.root / "codex-link"
+        link.symlink_to(self.binary)
+        result = subprocess.run(
+            [
+                *self.validator_command(),
+                "--codex-binary",
+                str(link),
+                "--cwd",
+                str(self.project),
+                "--ceiling",
+                str(self.workspace),
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unavailable or unsafe", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

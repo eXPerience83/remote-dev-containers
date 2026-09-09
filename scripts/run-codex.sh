@@ -8,6 +8,8 @@ readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 readonly context7_manager=/usr/local/bin/remote-dev-context7
+readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary
 readonly sandbox_mode=danger-full-access
 readonly default_approval_mode=autonomous
 
@@ -32,7 +34,7 @@ validate_approval_mode() {
 
 reject_policy_override() {
   local argument="$1"
-  echo "ERROR: run-codex owns the sandbox and approval policy; refusing argument: $argument" >&2
+  echo "ERROR: run-codex owns the sandbox, approval and project-boundary policy; refusing argument: $argument" >&2
   exit 2
 }
 
@@ -41,7 +43,7 @@ is_policy_config_override() {
   local key="${normalized%%=*}"
 
   case "$key" in
-    sandbox_mode|approval_policy|ask_for_approval|sandbox|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*)
+    sandbox_mode|approval_policy|ask_for_approval|sandbox|profile|projects|projects.*|profiles.*.sandbox_mode|profiles.*.approval_policy|profiles.*.projects|profiles.*.projects.*|shell_environment_policy|shell_environment_policy.*)
       return 0
       ;;
     *)
@@ -151,6 +153,9 @@ for argument in "${forwarded[@]}"; do
     --ask-for-approval|--ask-for-approval=*|--approval-policy|--approval-policy=*|-a|-a=*|-a?*)
       reject_policy_override "$argument"
       ;;
+    --approve-for-me|--approve-for-me=*|--not-so-yolo|--not-so-yolo=*)
+      reject_policy_override "$argument"
+      ;;
     --dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-approvals-and-sandbox=*|--dangerously-auto-approve-everything|--yolo|--full-auto)
       reject_policy_override "$argument"
       ;;
@@ -174,6 +179,9 @@ for argument in "${forwarded[@]}"; do
       ;;
   esac
 done
+if (( expect_config_value == 1 )); then
+  fail_usage "--config requires a value"
+fi
 
 runtime_manager_command=("$runtime_manager" resolve)
 resolved_codex_binary=""
@@ -299,11 +307,31 @@ finally:
 
 configure_context7_environment
 
+# Keep top-level informational commands usable even when no project is selected.
+# They do not execute model-reachable shell commands and therefore do not need
+# the project collection boundary.
+informational_only=0
+if (( ${#forwarded[@]} == 1 )); then
+  case "${forwarded[0]}" in
+    --help|-h|--version|-V) informational_only=1 ;;
+  esac
+fi
+
 owned_policy_args=(--sandbox "$sandbox_mode")
-if [[ "$approval_mode" == autonomous ]]; then
-  owned_policy_args+=(--ask-for-approval never)
-else
+if (( informational_only == 0 )); then
+  [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
+    || { echo "ERROR: Remote Dev project-boundary definitions are unavailable" >&2; exit 1; }
+  # shellcheck source=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+  source "$runtime_lib"
+  [[ -x "$project_boundary_validator" && ! -L "$project_boundary_validator" ]] \
+    || { echo "ERROR: Codex project-boundary validator is unavailable" >&2; exit 1; }
+
+  workspace="$(remote_dev_workspace_root)" || exit $?
+  remote_dev_prepare_project_git_boundary "$workspace" || exit $?
+
   active_project=""
+  explicit_project_cd=0
+  project_selector_count=0
   expect_cd_value=0
   for argument in "${forwarded[@]}"; do
     if (( expect_cd_value == 1 )); then
@@ -313,24 +341,163 @@ else
     fi
     case "$argument" in
       --) break ;;
-      --cd|-C) expect_cd_value=1 ;;
-      --cd=*) active_project="${argument#*=}" ;;
-      -C?*) active_project="${argument#-C}" ;;
+      --cd|-C)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
+        explicit_project_cd=1
+        expect_cd_value=1
+        ;;
+      --cd=*)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
+        explicit_project_cd=1
+        active_project="${argument#*=}"
+        ;;
+      -C?*)
+        project_selector_count=$((project_selector_count + 1))
+        if (( project_selector_count > 1 )); then
+          fail_usage "--cd/-C may be specified only once"
+        fi
+        explicit_project_cd=1
+        active_project="${argument#-C}"
+        ;;
     esac
   done
   if (( expect_cd_value == 1 )); then
     fail_usage "--cd requires a project directory"
   fi
-  if [[ -z "$active_project" ]]; then
-    active_project="$PWD"
-  elif [[ "$active_project" != /* ]]; then
-    active_project="$PWD/$active_project"
+  if (( explicit_project_cd == 1 )) && [[ -z "$active_project" ]]; then
+    fail_usage "--cd requires a project directory"
   fi
-  if ! active_project="$(cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
-    fail_usage "guarded mode requires an existing project directory"
+
+  if (( explicit_project_cd == 0 )); then
+    if ! active_project="$(pwd -P 2>/dev/null)"; then
+      fail_usage "managed Codex launch requires a valid current project directory"
+    fi
+  elif ! active_project="$(CDPATH= cd -P -- "$active_project" 2>/dev/null && pwd -P)"; then
+    fail_usage "managed Codex launch requires an existing project directory"
   fi
-  project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
-  owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
+
+  if (( explicit_project_cd == 1 )); then
+    # Validate and execute against the same canonical pathname. In particular,
+    # never leave a symlink/relative alias in argv after validating the physical
+    # direct child it happened to resolve to: that alias could be retargeted
+    # between preflight and Codex resolving --cd itself.
+    expect_cd_value=0
+    for index in "${!forwarded[@]}"; do
+      argument="${forwarded[$index]}"
+      if (( expect_cd_value == 1 )); then
+        forwarded[$index]="$active_project"
+        break
+      fi
+      case "$argument" in
+        --) break ;;
+        --cd|-C)
+          expect_cd_value=1
+          ;;
+        --cd=*)
+          forwarded[$index]="--cd=$active_project"
+          break
+          ;;
+        -C?*)
+          forwarded[$index]="-C$active_project"
+          break
+          ;;
+      esac
+    done
+  fi
+
+  if (( explicit_project_cd == 0 )); then
+    # Codex will inherit this process's cwd. Re-enter the physical current
+    # direct child and bind subsequent validation to that inode. If the caller's
+    # directory was renamed before launch, the renamed direct child is the
+    # current project; a newly-created replacement pathname is not substituted.
+    remote_dev_enter_project "$workspace" "$active_project" || exit $?
+    project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex launch: $active_project"
+      exit 2
+    }
+  else
+    remote_dev_assert_project_git_boundary "$workspace" "$active_project" || exit $?
+    project_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex launch: $active_project"
+      exit 2
+    }
+  fi
+
+  assert_managed_codex_project_identity() {
+    local path_identity=""
+    local cwd_identity=""
+
+    path_identity="$(stat -Lc '%d:%i' -- "$active_project" 2>/dev/null)" || {
+      remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+      return 2
+    }
+    if [[ "$path_identity" != "$project_identity" ]]; then
+      remote_dev_runtime_error "project path changed during Codex configuration validation: $active_project"
+      return 2
+    fi
+    if (( explicit_project_cd == 0 )); then
+      cwd_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+        remote_dev_runtime_error "current project directory changed during Codex launch: $active_project"
+        return 2
+      }
+      if [[ "$cwd_identity" != "$project_identity" ]]; then
+        remote_dev_runtime_error "current project directory changed during Codex launch: $active_project"
+        return 2
+      fi
+    fi
+  }
+
+  assert_managed_codex_project_boundary() {
+    assert_managed_codex_project_identity || return $?
+    remote_dev_assert_project_git_boundary "$workspace" "$active_project" || return $?
+    # Repeat the identity check after path/Git validation so a concurrent swap
+    # during the probe cannot survive into the next launch stage.
+    assert_managed_codex_project_identity
+  }
+
+  assert_managed_codex_project_boundary || exit $?
+  if ! "$project_boundary_validator" \
+    --codex-binary "$resolved_codex_binary" \
+    --cwd "$active_project" \
+    --ceiling "$workspace"; then
+    echo "ERROR: Codex effective configuration cannot preserve the required project Git boundary" >&2
+    exit 2
+  fi
+  assert_managed_codex_project_boundary || exit $?
+
+  workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
+  owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
+
+  if (( explicit_project_cd == 0 )); then
+    # Codex 0.153.x may otherwise offer a resumed thread's historical cwd. An
+    # explicit managed --cd makes upstream resume semantics choose the current
+    # selected project, so a conversation cannot move the runtime into a sibling
+    # after Remote Dev has validated this project's boundary.
+    owned_policy_args+=(--cd "$active_project")
+  fi
+
+  if [[ "$approval_mode" == guarded ]]; then
+    project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
+    owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
+  fi
+fi
+
+if [[ "$approval_mode" == autonomous ]]; then
+  owned_policy_args+=(--ask-for-approval never)
+fi
+
+# Narrow the remaining pathname race immediately before vendor execution. This
+# cannot provide filesystem isolation from an explicitly malicious sibling
+# writer, but it prevents the managed launch from knowingly validating one
+# project inode/path and executing against another.
+if (( informational_only == 0 )); then
+  assert_managed_codex_project_boundary || exit $?
 fi
 
 exec "$resolved_codex_binary" "${owned_policy_args[@]}" "${forwarded[@]}"

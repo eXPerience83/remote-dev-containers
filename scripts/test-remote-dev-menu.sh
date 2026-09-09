@@ -54,6 +54,10 @@ remote_dev_validate_workspace_root() {
   printf '%s\n' "$1"
 }
 
+remote_dev_recover_safe_cwd() {
+  builtin cd -P -- /
+}
+
 remote_dev_validate_project_name() {
   (( ${#1} > 0 && ${#1} <= 128 )) || return 2
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 2

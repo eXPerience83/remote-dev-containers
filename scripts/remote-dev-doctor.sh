@@ -71,6 +71,133 @@ check_private_mount_mode() {
   fi
 }
 
+check_project_collection_layout() {
+  local workspace="$1"
+  local entry=""
+  local name=""
+  local unexpected=0
+  local project_count=0
+  local scratch_seen=0
+  local restore_nullglob=0
+  local restore_dotglob=0
+
+  shopt -q nullglob || restore_nullglob=1
+  shopt -q dotglob || restore_dotglob=1
+  shopt -s nullglob dotglob
+  for entry in "$workspace"/*; do
+    name="${entry##*/}"
+    if [[ "$name" == .remote-dev-tmp ]]; then
+      scratch_seen=1
+      if [[ ! -d "$entry" || -L "$entry" ]]; then
+        unexpected=$((unexpected + 1))
+      fi
+      continue
+    fi
+    if [[ -d "$entry" && ! -L "$entry" ]] \
+       && remote_dev_validate_project_name "$name" >/dev/null 2>&1; then
+      project_count=$((project_count + 1))
+      continue
+    fi
+    unexpected=$((unexpected + 1))
+  done
+  (( restore_dotglob == 0 )) || shopt -u dotglob
+  (( restore_nullglob == 0 )) || shopt -u nullglob
+
+  if (( unexpected == 0 )); then
+    if (( scratch_seen == 1 )); then
+      echo "Workspace root layout: OK ($project_count project directories + managed .remote-dev-tmp)"
+    else
+      echo "Workspace root layout: OK ($project_count project directories; managed scratch not present)"
+    fi
+  else
+    echo "Workspace root layout: WARNING ($unexpected unexpected top-level entries; expected project directories and optional .remote-dev-tmp only)"
+    echo 'Workspace root layout: inspect unexpected entries manually; Doctor does not delete or modify them.'
+  fi
+}
+
+check_project_collection_boundary() {
+  local workspace="${WORKSPACE:-/workspace}"
+  local validated=""
+  local project=""
+  local selector="${REMOTE_DEV_PROJECT:-}"
+  local collection_status=0
+  local boundary_detail=""
+  local boundary_status=0
+
+  echo
+  echo 'Project collection safety:'
+  if ! validated="$(remote_dev_validate_workspace_root "$workspace" 2>/dev/null)"; then
+    echo "Workspace collection: BLOCKED (invalid or unavailable path)"
+    echo "Workspace root layout: unavailable"
+    echo "Git collection root: unknown"
+    echo "Git discovery ceiling: unavailable"
+    echo "Selected project Git boundary: unavailable"
+    status=1
+    return 0
+  fi
+
+  remote_dev_assert_project_collection "$validated" >/dev/null 2>&1 || collection_status=$?
+  if (( collection_status == 0 )); then
+    echo "Workspace collection: OK"
+    echo "Git collection root: not a repository"
+  elif (( collection_status == 1 )); then
+    echo "Workspace collection: BLOCKED (Git is unavailable; collection safety cannot be verified)"
+    echo "Workspace root layout: unavailable"
+    echo "Git collection root: unknown"
+    echo "Git discovery ceiling: unavailable"
+    echo "Selected project Git boundary: unavailable"
+    status=1
+    return 0
+  else
+    echo "Workspace collection: CRITICAL — collection root is Git-contaminated or ambiguous"
+    echo "Workspace root layout: BLOCKED until Git contamination is inspected"
+    echo "Git collection root: BLOCKED"
+    echo "Git discovery ceiling: $validated (agent launch remains blocked until manual cleanup)"
+    echo "Selected project Git boundary: unavailable while collection is blocked"
+    echo "Recovery: stop affected agent sessions, preserve anything needed, then inspect the exact collection root from Login shell."
+    echo "Recovery: Remote Dev will not delete .git, reset Git, clean files or repair the collection automatically."
+    status=1
+    return 0
+  fi
+
+  check_project_collection_layout "$validated"
+
+  if [[ "$validated" == *:* ]]; then
+    echo "Git discovery ceiling: BLOCKED (collection path contains ':')"
+    status=1
+  else
+    echo "Git discovery ceiling: $validated"
+  fi
+
+  if [[ -z "$selector" ]]; then
+    echo "Selected project Git boundary: not selected"
+    return 0
+  fi
+  if ! project="$(remote_dev_project_path "$validated" "$selector" 2>/dev/null)"; then
+    echo "Selected project Git boundary: BLOCKED (selected project is unavailable)"
+    status=1
+    return 0
+  fi
+
+  boundary_detail="$(remote_dev_assert_project_git_boundary "$validated" "$project" 2>&1 >/dev/null)" \
+    || boundary_status=$?
+  if (( boundary_status == 0 )); then
+    echo "Selected project: $selector"
+    echo "Selected project Git boundary: OK"
+  else
+    boundary_detail="${boundary_detail#ERROR: }"
+    boundary_detail="${boundary_detail//$'\r'/ }"
+    boundary_detail="${boundary_detail//$'\n'/ }"
+    echo "Selected project: $selector"
+    echo "Selected project Git boundary: BLOCKED"
+    if [[ -n "$boundary_detail" ]]; then
+      printf 'Selected project Git boundary: %s\n' "$boundary_detail"
+    fi
+    echo "Selected project Git boundary: inspect the project from Login shell; Doctor does not modify it."
+    status=1
+  fi
+}
+
 cat <<EOF_HEADER
 Remote Dev diagnostics
 ======================
@@ -121,6 +248,10 @@ EOF_AGENT
   fi
 fi
 
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  check_project_collection_boundary
+fi
+
 echo
 if [[ "$role" == launcher ]]; then
   common_commands=(
@@ -150,6 +281,7 @@ if [[ "$role" == codex ]]; then
   check_cmd run-codex
   check_cmd /usr/local/bin/remote-dev-codex-runtime
   check_cmd /usr/local/bin/remote-dev-context7
+  check_cmd /usr/local/bin/validate-codex-project-boundary
 elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
@@ -257,6 +389,7 @@ elif [[ "$role" == antigravity ]]; then
   echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
   echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'
   echo 'Antigravity authentication: managed only by the official Google client.'
+  echo 'Antigravity project safety: Remote Dev applies the same collection/Git boundary used by Codex; no vendor sandbox is claimed by this fix.'
 fi
 
 if [[ "$role" != launcher ]]; then

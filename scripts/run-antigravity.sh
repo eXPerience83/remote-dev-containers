@@ -57,20 +57,20 @@ fi
 
 workspace="$(remote_dev_workspace_root)" || exit $?
 project="$(remote_dev_resolve_project "$workspace")" || exit $?
-project_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-}
-if ! cd -P -- "$project" || [[ "$PWD" != "$project" ]]; then
-  remote_dev_runtime_error "project path changed during launch: $project"
-  exit 2
-fi
+remote_dev_enter_project "$workspace" "$project" || exit $?
 entered_project_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
-  remote_dev_runtime_error "project path changed during launch: $project"
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
   exit 2
 }
-if [[ "$entered_project_identity" != "$project_identity" ]]; then
-  remote_dev_runtime_error "project path changed during launch: $project"
+entered_project_path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+  exit 2
+}
+if [[ "$entered_project_identity" != "$entered_project_path_identity" ]]; then
+  remote_dev_runtime_error "project path changed after entering Antigravity project: $project"
+  remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
   exit 2
 fi
 
@@ -186,6 +186,10 @@ start_picker_helper() {
 harden_on_exit() {
   local session_status=$?
   trap - EXIT INT TERM
+  if ! remote_dev_recover_safe_cwd; then
+    echo "ERROR: failed to recover a safe current directory after Antigravity exited" >&2
+    exit 1
+  fi
   stop_auxiliary_helpers
   if ! "$secure_state"; then
     echo "ERROR: failed to secure persistent state after Antigravity exited" >&2
@@ -206,6 +210,53 @@ forward_signal() {
   exit "$signal_status"
 }
 
+assert_entered_project_identity() {
+  local current_identity=""
+  local path_identity=""
+
+  current_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  if [[ "$current_identity" != "$entered_project_identity" \
+     || "$path_identity" != "$entered_project_identity" ]]; then
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
+
+  # Identity alone is insufficient because stat -L follows a replacement
+  # symlink back to the original inode. Re-apply the complete direct-child/Git
+  # boundary, then repeat the inode check so a swap during that validation also
+  # fails closed.
+  if ! remote_dev_assert_project_git_boundary "$workspace" "$project"; then
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
+  current_identity="$(stat -Lc '%d:%i' -- . 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  path_identity="$(stat -Lc '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  }
+  if [[ "$current_identity" != "$entered_project_identity" \
+     || "$path_identity" != "$entered_project_identity" ]]; then
+    remote_dev_runtime_error "project path changed before Antigravity vendor launch: $project"
+    remote_dev_recover_safe_cwd >/dev/null 2>&1 || true
+    return 2
+  fi
+}
+
 trap harden_on_exit EXIT
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
@@ -216,6 +267,11 @@ start_oauth_helper
 # Record the current visible pane before Antigravity starts. The picker helper
 # accepts its prompt only after the screen has changed from this baseline.
 capture_picker_baseline
+
+# Revalidate the selected project after the prelaunch helpers have finished. A
+# concurrent replacement must not make Remote Dev validate one directory while
+# the vendor process inherits another directory inode as its cwd.
+assert_entered_project_identity || exit $?
 
 # Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
 # when job control is disabled. Preserve fd 0 explicitly and reset those signal

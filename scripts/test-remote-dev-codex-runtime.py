@@ -878,7 +878,14 @@ class CodexRuntimeTests(unittest.TestCase):
             bin_dir.mkdir()
             runtime_lib = root / "remote-dev-runtime.sh"
             runtime_lib.write_text(
-                "remote_dev_resolve_role() { printf '%s\\n' codex; }\n",
+                "remote_dev_resolve_role() { printf '%s\\n' codex; }\n"
+                "remote_dev_validate_workspace_root() { "
+                "[ -d \"$1\" ] && [ ! -L \"$1\" ] || return 2; "
+                "printf '%s\\n' \"$1\"; }\n"
+                "remote_dev_assert_project_collection() { "
+                "remote_dev_validate_workspace_root \"$1\" >/dev/null || return $?; "
+                "[ ! -e \"$1/.git\" ] && [ ! -L \"$1/.git\" ] || return 2; "
+                "printf '%s\\n' \"$1\"; }\n",
                 encoding="utf-8",
             )
             log = root / "runtime.log"
