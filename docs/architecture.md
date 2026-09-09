@@ -72,11 +72,13 @@ Remote Dev does not redistribute Google's proprietary installer/CLI bytes. The `
 
 The current runtime contract includes review-pending admission, private manifest/provenance state, lightweight offline status, explicit full verification/Doctor checks, exactly one mandatory full integrity gate before execution, project-scoped Start/Resume and completed TrueNAS update/rollback/persistence/isolation evidence.
 
+Remote Dev does not force Antigravity's vendor terminal sandbox. A controlled TrueNAS test with Antigravity CLI 1.1.27 under the unchanged hardened service showed that `--sandbox` can start the vendor UI, but terminal execution requests sandbox bypass and, when that bypass is rejected, fails with `operation not permitted`. The supported isolation boundary therefore remains the hardened outer Antigravity container plus the selected-project/Git boundary. Approval/autonomous behavior tracked by #159 is a separate policy layer and must not depend on enabling the vendor sandbox or weakening the container.
+
 The #53 human terms/policy disposition is complete. The project deliberately keeps Antigravity experimental because the official-CLI container/wrapper model is a project interpretation of current vendor policy, not Google approval, certification or endorsement. Remote Dev must not implement an alternative Antigravity service client or reuse/export Antigravity/Google OAuth credentials for other coding agents/services.
 
 The scheduled #83 review path keeps detection and execution separate: scheduled discovery treats bounded vendor bytes as data and executes no vendor code; changed candidates require the explicit trusted review workflow before executable evidence is admitted.
 
-See `docs/antigravity-runtime-admission.md` / `.es.md` and `third_party/optional-agents.md`.
+See `docs/antigravity-runtime-admission.md` / `.es.md`, `docs/antigravity-sandbox-baseline.md` / `.es.md` and `third_party/optional-agents.md`.
 
 ### Shell
 
