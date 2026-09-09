@@ -63,6 +63,8 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 - Agent root is constrained by the outer role container and its mounts.
 - The default image does not install system Bubblewrap; supported Codex launches explicitly disable the unsupported inner sandbox.
+- Antigravity's vendor terminal sandbox is also outside the supported baseline: exact TrueNAS testing on CLI 1.1.27 showed `--sandbox` starts the UI but terminal execution requires sandbox bypass and otherwise fails with `operation not permitted`. Remote Dev does not weaken the outer container to enable it; see `docs/antigravity-sandbox-baseline.md` / `.es.md`.
+- Antigravity approval/autonomous behavior (#159) is a separate policy layer and must not depend on the vendor sandbox.
 - Launcher and agent services use read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded tmpfs/PID controls and exact role-specific capability restoration where required.
 - Cross-service isolation canaries and real TrueNAS validation for the current launcher/Codex/Antigravity topology are complete.
 - Browser/SSH ports must not be exposed directly to the public Internet. Trusted LAN/Tailscale/private mesh is the normal deployment context; stronger access-security work remains tracked by #181.
