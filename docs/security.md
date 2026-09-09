@@ -55,6 +55,14 @@ The supported TrueNAS security boundary is the outer agent container. The defaul
 
 Approval prompts are not a sandbox. Autonomous and guarded modes can access every path and credential mounted into Codex. Guarded mode adds confirmation friction only.
 
+### Antigravity vendor terminal sandbox
+
+Remote Dev also does not force or manage Antigravity's vendor terminal sandbox in the supported TrueNAS path. A controlled disposable TrueNAS test on Antigravity CLI 1.1.27 kept the existing hardened container unchanged: `unshare -Ur true` failed with `Operation not permitted`; `run-antigravity --sandbox` started the vendor UI, but terminal execution requested an explicit sandbox bypass, and after rejecting that bypass even `pwd` failed with `fork/exec /root/.local/bin/agy: operation not permitted`.
+
+That exact-version evidence means the vendor terminal sandbox is not usable for terminal tool execution under the current hardened baseline without leaving the sandbox. Remote Dev therefore keeps the outer role container as the supported isolation boundary and will not add `privileged`, `SYS_ADMIN`, unconfined profiles, host namespaces or similar weakening merely to make a nested vendor sandbox work. Antigravity approval/autonomous policy remains separate work under #159 and must not depend on sandbox bypass or `proceed-in-sandbox`.
+
+See `docs/antigravity-sandbox-baseline.md` / `.es.md` for the recorded test and version-specific scope.
+
 ## Enforced container hardening
 
 Both deployment files make the launcher, Codex and Antigravity root filesystems read-only and apply `cap_drop: [ALL]`. The launcher restores no capabilities and runs directly as UID/GID `65532`; Codex and Antigravity restore only their exact reviewed agent capability minimum. All roles retain `no-new-privileges`, configure no supplementary groups, and use PID ceilings of `64` for the launcher and `1024` for each agent.
