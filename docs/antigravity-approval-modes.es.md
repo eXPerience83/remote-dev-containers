@@ -27,7 +27,7 @@ El orden de resolución es:
 2. `REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE`;
 3. valor interno predeterminado `autonomous`.
 
-`run-antigravity --print-policy` informa del modo resuelto y de un estado sanitizado de compatibilidad con guarded sin ejecutar el CLI del proveedor, contactar con la red ni realizar la verificación completa de integridad del runtime.
+`run-antigravity --print-policy` informa del modo resuelto y de un estado resumido de compatibilidad con guarded sin ejecutar el CLI del proveedor, contactar con la red ni realizar la verificación completa de integridad del runtime.
 
 ## Autonomous
 
@@ -89,15 +89,9 @@ Guarded preset: request-review (recommended)
 Guarded preset: strict (more restrictive)
 ```
 
-Elegir un preset Guarded es una acción explícita de configuración. Modifica únicamente los ajustes de nivel superior revisados que sean necesarios para recuperar una semántica Guarded protegida:
+Elegir un preset Guarded es una acción explícita de configuración. Modifica únicamente `toolPermission`, estableciéndolo en `request-review` o `strict` según lo seleccionado. Los ajustes no relacionados y el objeto completo `permissions` con sus reglas finas se conservan.
 
-- `toolPermission` se establece en `request-review` o `strict`, según lo seleccionado;
-- un `artifactReviewPolicy` permisivo conocido se restablece a `asks-for-review`;
-- un `agentMode=accept-edits` conocido se restablece a `default`;
-- se conserva un `agentMode=plan` seguro;
-- se conservan los ajustes no relacionados y el objeto completo `permissions` con sus reglas finas.
-
-Los valores desconocidos o malformados de `artifactReviewPolicy` / `agentMode` no se adivinan ni se sobrescriben. La acción falla de forma segura y pide revisar la configuración del proveedor.
+El selector de preset no normaliza otros campos de aprobación de Antigravity. `artifactReviewPolicy` y `agentMode` deben ser ya compatibles con Guarded; si alguno es permisivo, desconocido o malformado, la acción se niega a escribir y pide al operador que ajuste primero la configuración del proveedor. Un `toolPermission` existente desconocido o malformado también se rechaza en lugar de sobrescribirse; los valores permisivos conocidos de `toolPermission` sí pueden sustituirse, porque seleccionar precisamente ese campo es el propósito de esta acción.
 
 La misma acción explícita está disponible desde la shell del contenedor:
 
@@ -106,11 +100,11 @@ remote-dev-antigravity-policy set-preset request-review
 remote-dev-antigravity-policy set-preset strict
 ```
 
-La escritura es privada y atómica dentro del mismo directorio. Justo antes de reemplazar el fichero, Remote Dev verifica que el snapshot de configuración leído no haya cambiado; si ha cambiado, la operación se cancela y puede repetirse. Start, Continue, status, `--print-policy` y Doctor no modifican nunca la política del proveedor.
+La escritura es privada y atómica dentro del mismo directorio. Justo antes de reemplazar el fichero, Remote Dev vuelve a comprobar el estado leído; si detecta un cambio, cancela la operación para que el operador pueda repetirla. Start, Continue, status, `--print-policy` y Doctor no modifican nunca la política del proveedor.
 
 ## Diagnóstico
 
-`remote-dev-doctor` sigue siendo de sólo lectura. En el rol Antigravity muestra el modo efectivo de Remote Dev, el preset Guarded activo y un estado sanitizado de compatibilidad con guarded.
+`remote-dev-doctor` sigue siendo de sólo lectura. En el rol Antigravity muestra el modo efectivo de Remote Dev, el preset Guarded activo y un estado resumido de compatibilidad con guarded.
 
 El helper offline específico es:
 
@@ -139,7 +133,7 @@ El menú de Antigravity ofrece:
 Approval settings...
 ```
 
-Desde ese submenú se puede seleccionar Autonomous o Guarded **sólo para el siguiente lanzamiento** y configurar explícitamente el preset persistente del proveedor para Guarded como se describe arriba.
+Desde ese submenú se puede seleccionar Autonomous o Guarded **sólo para el siguiente lanzamiento** y configurar explícitamente el preset persistente `toolPermission` del proveedor para Guarded como se describe arriba.
 
 La selección de modo para un solo lanzamiento se consume en la siguiente acción Start o Continue y después vuelve al modo configurado en el despliegue, igual que el contrato del menú de Codex. Start y Continue usan el mismo resolver; `Continue latest Antigravity conversation` sigue utilizando la ruta `--continue` soportada por el proveedor.
 
