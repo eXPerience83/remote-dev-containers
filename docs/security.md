@@ -183,7 +183,7 @@ Guarded supports two provider presets in the canonical private `~/.gemini/antigr
 
 Fine-grained `permissions.allow`, `permissions.ask` and `permissions.deny` remain user-managed and are not treated as conflicts merely because they exist. This lets advanced users keep deliberate exceptions while Remote Dev guarantees that it has not globally bypassed the provider's permission engine.
 
-Doctor, Start/Continue and normal policy status are read-only. The menu's explicit Guarded preset action may set `toolPermission` to `request-review` or `strict` and normalize only known permissive top-level artifact/agent-mode settings required for protected Guarded behavior. It preserves unrelated vendor state and the complete fine-grained `permissions` object; unknown relevant semantics are never guessed or overwritten.
+Doctor, Start/Continue and normal policy status are read-only. The menu's explicit Guarded preset action changes only `toolPermission`, setting it to `request-review` or `strict`. It preserves unrelated vendor state and the complete fine-grained `permissions` object; incompatible, unknown or malformed `artifactReviewPolicy` / `agentMode` state is reported and left untouched, and unknown/malformed existing `toolPermission` is never guessed or overwritten.
 
 See `docs/antigravity-approval-modes.md` / `.es.md` for the complete operational contract.
 
