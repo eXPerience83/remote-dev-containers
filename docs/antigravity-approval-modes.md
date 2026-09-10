@@ -89,15 +89,9 @@ Guarded preset: request-review (recommended)
 Guarded preset: strict (more restrictive)
 ```
 
-Selecting a Guarded preset is an explicit configuration action. It changes only the essential reviewed top-level settings needed to restore protected Guarded semantics:
+Selecting a Guarded preset is an explicit configuration action. It changes only `toolPermission`, setting it to the selected `request-review` or `strict` preset. Unrelated settings and the complete fine-grained `permissions` object are preserved.
 
-- `toolPermission` is set to the selected `request-review` or `strict` preset;
-- a known permissive `artifactReviewPolicy` is reset to `asks-for-review`;
-- a known `agentMode=accept-edits` is reset to `default`;
-- safe `agentMode=plan` is preserved;
-- unrelated settings and the complete fine-grained `permissions` object are preserved.
-
-Unknown or malformed `artifactReviewPolicy` / `agentMode` values are not guessed or overwritten. The preset action fails closed and asks the operator to inspect the vendor configuration.
+The preset selector does not normalize other Antigravity approval fields. `artifactReviewPolicy` and `agentMode` must already be compatible with Guarded; if either is permissive, unknown, or malformed, the preset action refuses to write and asks the operator to adjust the vendor configuration first. Unknown or malformed existing `toolPermission` values are also refused rather than overwritten; known reviewed permissive `toolPermission` values may be replaced because selecting that field is the purpose of this action.
 
 The same explicit action is available from the container shell:
 
@@ -106,7 +100,7 @@ remote-dev-antigravity-policy set-preset request-review
 remote-dev-antigravity-policy set-preset strict
 ```
 
-The write is private and same-directory atomic. Immediately before replacement, Remote Dev verifies that the settings snapshot it read has not changed; if it has, the operation aborts and can be retried. Normal Start, Continue, status, `--print-policy`, and Doctor never modify vendor policy.
+The write is private and same-directory atomic. Immediately before replacement, Remote Dev rechecks the settings snapshot it read; a detected change aborts the operation so the operator can retry. Normal Start, Continue, status, `--print-policy`, and Doctor never modify vendor policy.
 
 ## Diagnostics
 
@@ -139,7 +133,7 @@ The Antigravity menu offers:
 Approval settings...
 ```
 
-From that submenu the operator can select Autonomous or Guarded for the **next launch only**, and can explicitly configure the persistent Guarded provider preset as described above.
+From that submenu the operator can select Autonomous or Guarded for the **next launch only**, and can explicitly configure the persistent Guarded `toolPermission` preset as described above.
 
 The one-launch mode selection is consumed by the next Start or Continue action and then resets to the configured deployment mode, matching the Codex menu contract. Start and Continue use the same resolver; `Continue latest Antigravity conversation` still uses the vendor-supported `--continue` path.
 
