@@ -45,7 +45,9 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Antigravity is implemented as an **optional experimental** role using Google's official `agy` runtime installed only by explicit user action into private persisted state.
 - Vendor auto-update remains disabled in the supported session path.
 - Hardened review-pending admission, explicit full verification and mandatory pre-launch integrity checking are implemented.
-- Real project-scoped Start/Resume, useful conversation continuity, install/update, image rollback, persistence and isolation evidence are complete.
+- Real project-scoped Start/Continue, useful conversation continuity, install/update, image rollback, persistence and isolation evidence are complete.
+- Remote Dev exposes launch-scoped `autonomous|guarded` approval modes for Antigravity, defaulting to autonomous like Codex; Start and Continue share the same resolver and a one-launch menu override is consumed once.
+- Guarded compatibility is diagnosed offline without rewriting vendor state automatically, with an explicit bounded repair command for known conflicting top-level approval overrides.
 - The #53 human policy/terms disposition is recorded: Remote Dev may keep this official-CLI wrapper/container integration experimental, without claiming vendor approval or reusing Google/Antigravity OAuth in other agents/services.
 - Scheduled #83 review automation is shipped: read-only static discovery executes no vendor code, while executable inspection remains an explicit trusted action.
 
@@ -81,7 +83,6 @@ These are not shipped by the current core contract unless their own issue says o
 - #170 — deferred native TrueNAS Community App/ixVolumes research; current YAML remains supported.
 - #124 — optional role-scoped key-only inbound SSH/remote-client path.
 - #95 — Context7 for Antigravity.
-- #159 — optional Antigravity autonomous approval mode.
 - #71 — optional SMB access to selected project paths only.
 - #112 — ARM64.
 - #121 — broader/universal developer tooling.
