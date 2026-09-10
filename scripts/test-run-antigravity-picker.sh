@@ -7,6 +7,7 @@ trap 'rm -rf -- "$workdir"' EXIT
 
 runner="$workdir/run-antigravity"
 manager="$workdir/remote-dev-antigravity"
+policy="$workdir/remote-dev-antigravity-policy"
 picker="$workdir/remote-dev-antigravity-picker"
 secure_state="$workdir/secure-persistent-state"
 runtime_lib="$workdir/remote-dev-runtime.sh"
@@ -96,10 +97,21 @@ cat >"$manager" <<MANAGER
 set -euo pipefail
 case "\${1:-}" in
   path) printf '%s\\n' '$binary' ;;
-  verify) printf '%s\\n' 'Antigravity runtime full integrity: OK (1.1.27)' ;;
+  verify) printf '%s\\n' 'Antigravity runtime full integrity: OK (1.1.28)' ;;
   *) exit 2 ;;
 esac
 MANAGER
+
+cat >"$policy" <<'POLICY'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status|check-guarded)
+    echo 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)'
+    ;;
+  *) exit 2 ;;
+esac
+POLICY
 
 cat >"$binary" <<'BINARY'
 #!/usr/bin/env bash
@@ -158,18 +170,20 @@ if [[ "${REMOTE_DEV_TEST_DIRECTORY_SWAP:-0}" == 1 && ! -e "$REMOTE_DEV_TEST_DIRE
   mv -- "$REMOTE_DEV_TEST_REPLACEMENT_PROJECT" "$REMOTE_DEV_TEST_SWAP_PROJECT"
 fi
 STAT
-chmod 0755 "$manager" "$binary" "$picker" "$secure_state" "$tool_bin/stat"
+chmod 0755 "$manager" "$policy" "$binary" "$picker" "$secure_state" "$tool_bin/stat"
 
-python3 - "$source_file" "$runner" "$manager" "$picker" "$secure_state" "$runtime_lib" <<'PY'
+python3 - "$source_file" "$runner" "$manager" "$policy" "$picker" "$secure_state" "$runtime_lib" <<'PY'
 from pathlib import Path
 import shlex
 import sys
 
-source, destination, manager, picker, secure_state, runtime_lib = map(Path, sys.argv[1:])
+source, destination, manager, policy, picker, secure_state, runtime_lib = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 replacements = {
     "readonly manager=/usr/local/bin/remote-dev-antigravity":
         f"readonly manager={shlex.quote(str(manager))}",
+    "readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy":
+        f"readonly policy_helper={shlex.quote(str(policy))}",
     "readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker":
         f"readonly picker_helper={shlex.quote(str(picker))}",
     "readonly secure_state=/usr/local/bin/secure-persistent-state":
@@ -187,6 +201,7 @@ chmod 0755 "$runner"
 
 export REMOTE_DEV_ROLE=antigravity
 export REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER=0
+export REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded
 export REMOTE_DEV_PROJECT=project
 export WORKSPACE="$workspace"
 export TMUX_PANE=%4
