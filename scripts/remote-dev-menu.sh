@@ -522,7 +522,7 @@ run_codex_action() {
 
 antigravity_policy_summary() {
   /usr/local/bin/run-antigravity --print-policy \
-    | grep -E '^(Antigravity approval mode|Approval behavior|Mode source|Antigravity guarded compatibility|Antigravity guarded repair):'
+    | grep -E '^(Antigravity approval mode|Approval behavior|Mode source|Antigravity guarded compatibility|Antigravity guarded preset|Antigravity guarded policy source|Antigravity fine-grained permissions):'
 }
 
 configured_antigravity_mode=""
@@ -542,35 +542,75 @@ refresh_antigravity_policy() {
 }
 
 next_antigravity_mode=""
-choose_next_antigravity_mode() {
-  clear
-  cat <<MENU
-Approval mode for next launch
-=============================
-1) Use configured mode — ${configured_antigravity_mode}
-2) Autonomous — no confirmations
-3) Guarded — asks for confirmations
-4) Back
-MENU
-  read -r -p "> " choice
-  case "$choice" in
-    1) next_antigravity_mode="" ;;
-    2) next_antigravity_mode=autonomous ;;
-    3) next_antigravity_mode=guarded ;;
-    4) return 1 ;;
-    *)
-      sleep 1
-      return 1
-      ;;
-  esac
-}
-
 next_antigravity_mode_summary() {
   if [[ -n "$next_antigravity_mode" ]]; then
     printf 'Next launch mode: %s (one launch)\n' "$next_antigravity_mode"
   else
     printf 'Next launch mode: configured (%s)\n' "$configured_antigravity_mode"
   fi
+}
+
+set_antigravity_guarded_preset() {
+  local preset="$1"
+
+  run_interactive_and_harden_to \
+    "Press Enter to return to Antigravity approval settings..." \
+    "Antigravity guarded preset" \
+    /usr/local/bin/remote-dev-antigravity-policy set-preset "$preset"
+}
+
+show_antigravity_approval_menu() {
+  local next_mode_summary=""
+
+  while true; do
+    refresh_antigravity_policy
+    next_mode_summary="$(next_antigravity_mode_summary)"
+    clear
+    cat <<MENU
+Antigravity approval settings
+=============================
+${antigravity_policy_summary_text}
+${next_mode_summary}
+
+Remote Dev has two launch modes. Autonomous uses the managed vendor bypass.
+Guarded keeps Antigravity's permission engine active; choose one guarded preset
+below. Fine-grained allow/ask/deny rules remain user-managed and are preserved.
+
+1) Use configured mode for next launch — ${configured_antigravity_mode}
+2) Autonomous for next launch — no confirmations
+3) Guarded for next launch — provider permission engine active
+4) Set Guarded preset: request-review (recommended)
+5) Set Guarded preset: strict (more restrictive)
+6) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        next_antigravity_mode=""
+        return 0
+        ;;
+      2)
+        next_antigravity_mode=autonomous
+        return 0
+        ;;
+      3)
+        next_antigravity_mode=guarded
+        return 0
+        ;;
+      4)
+        if set_antigravity_guarded_preset request-review; then :; fi
+        ;;
+      5)
+        if set_antigravity_guarded_preset strict; then :; fi
+        ;;
+      6)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
 }
 
 run_antigravity_action() {
@@ -766,7 +806,7 @@ ${project_summary}
 1) Start Antigravity (use /resume to browse/resume older conversations)
 2) Continue latest Antigravity conversation (current project)
 3) Projects...
-4) Approval mode for next launch...
+4) Approval settings...
 5) Install Antigravity from Google
 6) Update Antigravity from Google
 7) Context7 integration [pending #95]
@@ -788,7 +828,7 @@ MENU
         show_projects_menu
         ;;
       4)
-        if choose_next_antigravity_mode; then :; fi
+        show_antigravity_approval_menu
         ;;
       5)
         if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
