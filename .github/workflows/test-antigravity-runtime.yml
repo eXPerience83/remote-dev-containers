@@ -75,7 +75,8 @@ jobs:
           python scripts/test-antigravity-approval-policy.py
           REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh \
             bash scripts/test-run-antigravity-policy.sh
-          bash scripts/test-antigravity-runtime.sh
+          REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded \
+            bash scripts/test-antigravity-runtime.sh
           bash scripts/test-antigravity-security-regressions.sh
           bash scripts/test-antigravity-redirects.sh
           bash scripts/test-antigravity-repair-download-hardening.sh
@@ -84,6 +85,7 @@ jobs:
 
       - name: Run fixture routing as root
         run: |
-          sudo bash scripts/test-antigravity-runtime.sh
+          sudo env REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded \
+            bash scripts/test-antigravity-runtime.sh
           sudo bash scripts/test-antigravity-security-regressions.sh
           sudo bash scripts/test-antigravity-repair-download-hardening.sh
