@@ -42,6 +42,7 @@ def assert_conflict(data: dict[str, object], repairable: bool = True) -> None:
 def main() -> None:
     assert_ok({})
     assert_ok({"toolPermission": "request-review"})
+    assert_ok({"toolPermission": "strict"})
     assert_ok({"artifactReviewPolicy": "asks-for-review"})
     assert_ok(
         {
@@ -51,7 +52,7 @@ def main() -> None:
         }
     )
 
-    for value in ("always-proceed", "proceed-in-sandbox", "strict"):
+    for value in ("always-proceed", "proceed-in-sandbox"):
         assert_conflict({"toolPermission": value})
     for value in ("agent-decides", "always-proceed"):
         assert_conflict({"artifactReviewPolicy": value})
@@ -118,6 +119,15 @@ def main() -> None:
             assert repaired[key] == original[key]
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
         assert policy.guarded_report(repaired).compatible
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        original = {"toolPermission": "strict", "theme": "dark"}
+        path = write_settings(root, original)
+        before = path.read_bytes()
+        removed = policy.repair_guarded(path)
+        assert removed == ()
+        assert path.read_bytes() == before
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
