@@ -19,8 +19,8 @@ from typing import Any
 SETTINGS_PATH = Path("/root/.gemini/antigravity-cli/settings.json")
 MAX_SETTINGS_SIZE = 1024 * 1024
 
-SAFE_TOOL_PERMISSION = {None, "request-review"}
-REPAIRABLE_TOOL_PERMISSION = {"always-proceed", "proceed-in-sandbox", "strict"}
+SAFE_TOOL_PERMISSION = {None, "request-review", "strict"}
+REPAIRABLE_TOOL_PERMISSION = {"always-proceed", "proceed-in-sandbox"}
 SAFE_ARTIFACT_REVIEW = {None, "asks-for-review"}
 REPAIRABLE_ARTIFACT_REVIEW = {"agent-decides", "always-proceed"}
 
