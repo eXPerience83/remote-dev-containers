@@ -3,8 +3,8 @@
 
 Remote Dev owns only its launch-scoped autonomous/guarded abstraction. Normal
 status, Doctor, and launch checks are read-only. The explicit ``set-preset``
-action changes only the small top-level vendor settings required to select a
-reviewed guarded preset; fine-grained permission rules remain user-managed.
+action changes only ``toolPermission`` to select a reviewed guarded preset;
+fine-grained permission rules and other vendor settings remain user-managed.
 """
 
 from __future__ import annotations
@@ -212,33 +212,42 @@ def inspect_guarded(path: Path = SETTINGS_PATH) -> tuple[SettingsSnapshot, Guard
 
 
 def _prepare_guarded_preset(data: dict[str, Any], preset: str) -> dict[str, Any]:
-    """Return the minimum top-level changes needed for a managed guarded preset."""
+    """Return the minimum change needed to select one managed guarded preset."""
 
     if preset not in GUARDED_PRESETS:
         raise PolicyError(f"unsupported guarded preset: {preset}")
 
+    tool_permission = data.get("toolPermission")
+    if "toolPermission" in data and (
+        not isinstance(tool_permission, str)
+        or tool_permission not in SAFE_TOOL_PERMISSION | BLOCKED_TOOL_PERMISSION
+    ):
+        raise PolicyError("toolPermission uses unknown or malformed semantics; refusing to overwrite it")
+
     artifact = data.get("artifactReviewPolicy")
     if "artifactReviewPolicy" in data and (
-        not isinstance(artifact, str)
-        or artifact not in SAFE_ARTIFACT_REVIEW | BLOCKED_ARTIFACT_REVIEW
+        not isinstance(artifact, str) or artifact not in SAFE_ARTIFACT_REVIEW
     ):
+        if isinstance(artifact, str) and artifact in BLOCKED_ARTIFACT_REVIEW:
+            raise PolicyError(
+                "artifactReviewPolicy is incompatible with guarded mode; change it in Antigravity first"
+            )
         raise PolicyError(
             "artifactReviewPolicy uses unknown or malformed semantics; refusing to overwrite it"
         )
 
     agent_mode = data.get("agentMode")
     if "agentMode" in data and (
-        not isinstance(agent_mode, str)
-        or agent_mode not in SAFE_AGENT_MODE | BLOCKED_AGENT_MODE
+        not isinstance(agent_mode, str) or agent_mode not in SAFE_AGENT_MODE
     ):
+        if isinstance(agent_mode, str) and agent_mode in BLOCKED_AGENT_MODE:
+            raise PolicyError(
+                "agentMode is incompatible with guarded mode; change it in Antigravity first"
+            )
         raise PolicyError("agentMode uses unknown or malformed semantics; refusing to overwrite it")
 
     updated = dict(data)
     updated["toolPermission"] = preset
-    if artifact in BLOCKED_ARTIFACT_REVIEW:
-        updated["artifactReviewPolicy"] = "asks-for-review"
-    if agent_mode in BLOCKED_AGENT_MODE:
-        updated["agentMode"] = "default"
     return updated
 
 
@@ -306,7 +315,7 @@ def _atomic_write_settings(snapshot: SettingsSnapshot, data: dict[str, Any]) -> 
 
 
 def set_guarded_preset(preset: str, path: Path = SETTINGS_PATH) -> GuardedReport:
-    """Explicitly select request-review or strict while preserving user rules."""
+    """Explicitly select request-review or strict while preserving other settings."""
 
     snapshot = load_settings(path)
     updated = _prepare_guarded_preset(snapshot.data, preset)
