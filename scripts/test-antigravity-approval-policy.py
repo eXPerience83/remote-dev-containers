@@ -4,7 +4,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -30,13 +29,11 @@ def write_settings(root: Path, data: object, mode: int = 0o600) -> Path:
 def assert_ok(data: dict[str, object]) -> None:
     report = policy.guarded_report(data)
     assert report.compatible, report
-    assert report.repairable, report
 
 
-def assert_conflict(data: dict[str, object], repairable: bool = True) -> None:
+def assert_blocked(data: dict[str, object]) -> None:
     report = policy.guarded_report(data)
     assert not report.compatible, report
-    assert report.repairable is repairable, report
 
 
 def main() -> None:
@@ -44,23 +41,33 @@ def main() -> None:
     assert_ok({"toolPermission": "request-review"})
     assert_ok({"toolPermission": "strict"})
     assert_ok({"artifactReviewPolicy": "asks-for-review"})
+    assert_ok({"agentMode": "default"})
+    assert_ok({"agentMode": "plan"})
     assert_ok(
         {
             "toolPermission": "request-review",
             "artifactReviewPolicy": "asks-for-review",
-            "permissions": {"allow": ["command(git status)"], "deny": ["command(rm)"]},
+            "agentMode": "default",
+            "permissions": {
+                "allow": ["command(git status)"],
+                "ask": ["command(curl)"],
+                "deny": ["command(rm)"],
+            },
         }
     )
 
     for value in ("always-proceed", "proceed-in-sandbox"):
-        assert_conflict({"toolPermission": value})
+        assert_blocked({"toolPermission": value})
     for value in ("agent-decides", "always-proceed"):
-        assert_conflict({"artifactReviewPolicy": value})
+        assert_blocked({"artifactReviewPolicy": value})
+    assert_blocked({"agentMode": "accept-edits"})
 
-    assert_conflict({"toolPermission": "future-mode"}, repairable=False)
-    assert_conflict({"artifactReviewPolicy": "future-policy"}, repairable=False)
-    assert_conflict({"toolPermission": True}, repairable=False)
-    assert_conflict({"artifactReviewPolicy": []}, repairable=False)
+    assert_blocked({"toolPermission": "future-mode"})
+    assert_blocked({"artifactReviewPolicy": "future-policy"})
+    assert_blocked({"agentMode": "future-mode"})
+    assert_blocked({"toolPermission": True})
+    assert_blocked({"artifactReviewPolicy": []})
+    assert_blocked({"agentMode": {}})
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -95,8 +102,9 @@ def main() -> None:
         original = {
             "theme": "dark",
             "allowNonWorkspaceAccess": True,
-            "toolPermission": "always-proceed",
-            "artifactReviewPolicy": "agent-decides",
+            "toolPermission": "request-review",
+            "artifactReviewPolicy": "asks-for-review",
+            "agentMode": "default",
             "permissions": {
                 "allow": ["command(git status)"],
                 "ask": ["command(curl)"],
@@ -105,41 +113,12 @@ def main() -> None:
             "unknownFutureSetting": {"nested": [1, 2, 3]},
         }
         path = write_settings(root, original)
-        removed = policy.repair_guarded(path)
-        assert set(removed) == {"toolPermission", "artifactReviewPolicy"}
-        repaired = json.loads(path.read_text(encoding="utf-8"))
-        assert "toolPermission" not in repaired
-        assert "artifactReviewPolicy" not in repaired
-        for key in (
-            "theme",
-            "allowNonWorkspaceAccess",
-            "permissions",
-            "unknownFutureSetting",
-        ):
-            assert repaired[key] == original[key]
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
-        assert policy.guarded_report(repaired).compatible
-
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        original = {"toolPermission": "strict", "theme": "dark"}
-        path = write_settings(root, original)
         before = path.read_bytes()
-        removed = policy.repair_guarded(path)
-        assert removed == ()
-        assert path.read_bytes() == before
-
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        path = write_settings(root, {"toolPermission": "future-mode", "theme": "dark"})
-        before = path.read_bytes()
-        try:
-            policy.repair_guarded(path)
-        except policy.PolicyError:
-            pass
-        else:
-            raise AssertionError("unknown approval semantics must not be repaired")
-        assert path.read_bytes() == before
+        snapshot, report = policy.inspect_guarded(path)
+        assert snapshot.data == original
+        assert report.compatible
+        assert path.read_bytes() == before, "policy inspection must remain read-only"
+        assert "user-managed" in report.summary
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -159,7 +138,7 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        path = write_settings(root, {"toolPermission": "always-proceed"}, mode=0o644)
+        path = write_settings(root, {"toolPermission": "request-review"}, mode=0o644)
         try:
             policy.inspect_guarded(path)
         except policy.PolicyError:
@@ -181,7 +160,8 @@ def main() -> None:
         else:
             raise AssertionError("malformed JSON must fail closed")
 
-    print("Antigravity guarded approval policy diagnostics/repair: OK")
+    assert not hasattr(policy, "repair_guarded"), "policy helper must not mutate vendor settings"
+    print("Antigravity guarded approval policy read-only diagnostics: OK")
 
 
 if __name__ == "__main__":
