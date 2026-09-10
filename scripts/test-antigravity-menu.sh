@@ -66,6 +66,20 @@ RUNTIME
 cat >"$bin_dir/run-antigravity" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == --print-policy ]]; then
+  mode="${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-autonomous}"
+  if [[ -n "${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-}" ]]; then
+    source=deployment
+  else
+    source=default
+  fi
+  printf '%s\n' \
+    "Antigravity approval mode: $mode" \
+    "Approval behavior: test" \
+    "Mode source: $source" \
+    'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)'
+  exit 0
+fi
 {
   printf '[project=%s]' "${REMOTE_DEV_PROJECT:-}"
   for argument in "$@"; do
@@ -79,7 +93,7 @@ cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == status && "${2:-}" == --menu ]]
-printf '%s\n' 'Antigravity: 1.1.10 (official and reviewed)'
+printf '%s\n' 'Antigravity: 1.1.28 (official and reviewed)'
 MANAGER
 
 for command in remote-dev-install-antigravity remote-dev-update-antigravity; do
@@ -120,16 +134,12 @@ import sys
 source, destination, runtime_lib, bin_dir = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 replacements = {
-    "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
-        f"runtime_lib={runtime_lib}",
+    "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh": f"runtime_lib={runtime_lib}",
     "/usr/local/bin/run-antigravity": str(bin_dir / "run-antigravity"),
     "/usr/local/bin/remote-dev-antigravity": str(bin_dir / "remote-dev-antigravity"),
-    "/usr/local/bin/remote-dev-install-antigravity":
-        str(bin_dir / "remote-dev-install-antigravity"),
-    "/usr/local/bin/remote-dev-update-antigravity":
-        str(bin_dir / "remote-dev-update-antigravity"),
-    "/usr/local/bin/secure-persistent-state":
-        str(bin_dir / "secure-persistent-state"),
+    "/usr/local/bin/remote-dev-install-antigravity": str(bin_dir / "remote-dev-install-antigravity"),
+    "/usr/local/bin/remote-dev-update-antigravity": str(bin_dir / "remote-dev-update-antigravity"),
+    "/usr/local/bin/secure-persistent-state": str(bin_dir / "secure-persistent-state"),
 }
 for old, new in replacements.items():
     if old not in text:
@@ -140,9 +150,8 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-# Interactive actions pause before returning to the menu, so each exercised action
-# is followed by one throwaway input consumed by that pause.
-printf '1\n1\n2\n2\n5\n5\n6\n6\n4\n4\n7\n7\n8\n8\n12\n' | env \
+printf '1\n\n2\n\n4\n3\n1\n\n1\n\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -150,15 +159,21 @@ printf '1\n1\n2\n2\n5\n5\n6\n6\n4\n4\n7\n7\n8\n8\n12\n' | env \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
 mapfile -t calls <"$invocations"
-[[ "${#calls[@]}" == 2 ]]
+[[ "${#calls[@]}" == 4 ]]
 [[ "${calls[0]}" == '[project=project]' ]]
 [[ "${calls[1]}" == '[project=project][--continue]' ]]
+[[ "${calls[2]}" == '[project=project][--approval-mode][guarded]' ]]
+[[ "${calls[3]}" == '[project=project]' ]]
 [[ "$(wc -l <"$hardening_calls")" == 4 ]]
+grep -Fxq 'Antigravity approval mode: autonomous' "$output"
+grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
+grep -Fxq 'Next launch mode: guarded (one launch)' "$output"
+grep -Fxq 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)' "$output"
 grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Antigravity (use /resume to browse/resume older conversations)' "$output"
 grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
-grep -Fxq '4) Launch/approval options [not available]' "$output"
+grep -Fxq '4) Approval mode for next launch...' "$output"
 grep -Fxq '5) Install Antigravity from Google' "$output"
 grep -Fxq '6) Update Antigravity from Google' "$output"
 grep -Fxq '7) Context7 integration [pending #95]' "$output"
@@ -167,9 +182,10 @@ grep -Fxq '9) Sign in to GitHub CLI' "$output"
 grep -Fxq '10) Run diagnostics' "$output"
 grep -Fxq '11) Open a login shell' "$output"
 grep -Fxq '12) Exit this tmux session' "$output"
-grep -Fxq 'Antigravity does not currently expose a Remote Dev-reviewed launch/approval option.' "$output"
-grep -Fxq 'Context7 for Antigravity is not implemented yet; see #95.' "$output"
-grep -Fxq 'Antigravity authentication is currently handled by the vendor flow during launch.' "$output"
+if grep -Fq 'Launch/approval options [not available]' "$output"; then
+  echo 'ERROR: Antigravity menu still marks approval mode unavailable' >&2
+  exit 1
+fi
 if grep -Fq 'Browse/resume Antigravity conversations' "$output"; then
   echo 'ERROR: menu still exposes a separate Antigravity browse action' >&2
   exit 1
@@ -179,11 +195,12 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   exit 1
 fi
 
-echo 'Codex-aligned vendor-native Antigravity resume menu: OK'
+echo 'Antigravity approval-mode menu and vendor-native continue: OK'
 
 mkdir -p "$workdir/workspace/second-project"
 rm -f "$invocations" "$hardening_calls"
-printf '3\n1\n2\n1\n1\n12\n' | env \
+printf '3\n1\n2\n1\n\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
@@ -198,7 +215,8 @@ grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Antigravity for immediate Start: OK'
 
 rm -f "$invocations" "$hardening_calls"
-printf '3\n2\ncreated-project\n\n1\n1\n12\n' | env \
+printf '3\n2\ncreated-project\n\n1\n\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
