@@ -49,7 +49,7 @@ agent-contract-tests:
 	REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh bash scripts/test-run-antigravity-policy.sh
 	REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh bash scripts/test-run-antigravity-picker.sh
 	REMOTE_DEV_ATTACH_TMUX=./scripts/attach-remote-dev-tmux.sh bash scripts/test-direct-codex-project-entry.sh
-	REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded bash scripts/test-antigravity-runtime.sh
+	bash scripts/test-antigravity-runtime-policy-neutral.sh
 	python3 scripts/test-remote-dev-context7-device-login.py
 	python3 scripts/test-remote-dev-context7-adoption.py
 	python3 scripts/test-remote-dev-context7-runtime-isolation.py
