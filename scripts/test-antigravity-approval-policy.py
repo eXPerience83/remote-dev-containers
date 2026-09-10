@@ -37,6 +37,17 @@ def assert_blocked(data: dict[str, object]) -> None:
     assert not report.compatible, report
 
 
+def assert_preset_refused(path: Path, preset: str, expected: str) -> None:
+    before = path.read_bytes()
+    try:
+        policy.set_guarded_preset(preset, path)
+    except policy.PolicyError as exc:
+        assert expected in str(exc)
+    else:
+        raise AssertionError(f"preset update should refuse incompatible {expected} state")
+    assert path.read_bytes() == before
+
+
 def main() -> None:
     assert_ok({})
     assert_ok({"toolPermission": "request-review"})
@@ -131,8 +142,8 @@ def main() -> None:
             "allowNonWorkspaceAccess": True,
             "enableTerminalSandbox": False,
             "toolPermission": "always-proceed",
-            "artifactReviewPolicy": "always-proceed",
-            "agentMode": "accept-edits",
+            "artifactReviewPolicy": "asks-for-review",
+            "agentMode": "default",
             "permissions": {
                 "allow": ["command(git status)"],
                 "ask": ["command(curl)"],
@@ -146,16 +157,9 @@ def main() -> None:
         assert report.compatible
         assert report.preset == "request-review"
         assert updated["toolPermission"] == "request-review"
-        assert updated["artifactReviewPolicy"] == "asks-for-review"
-        assert updated["agentMode"] == "default"
-        for key in (
-            "theme",
-            "allowNonWorkspaceAccess",
-            "enableTerminalSandbox",
-            "permissions",
-            "unknownFutureSetting",
-        ):
-            assert updated[key] == original[key], key
+        for key in original:
+            if key != "toolPermission":
+                assert updated[key] == original[key], key
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     with tempfile.TemporaryDirectory() as td:
@@ -173,8 +177,8 @@ def main() -> None:
         assert report.compatible
         assert report.preset == "strict"
         assert updated["toolPermission"] == "strict"
-        assert updated["artifactReviewPolicy"] == "asks-for-review"
-        assert updated["agentMode"] == "plan", "safe plan mode must be preserved"
+        assert updated["artifactReviewPolicy"] == original["artifactReviewPolicy"]
+        assert updated["agentMode"] == "plan"
         assert updated["permissions"] == original["permissions"]
         assert updated["theme"] == "dark"
 
@@ -192,27 +196,38 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        path = write_settings(root, {"artifactReviewPolicy": "future-policy", "theme": "dark"})
-        before = path.read_bytes()
-        try:
-            policy.set_guarded_preset("request-review", path)
-        except policy.PolicyError as exc:
-            assert "artifactReviewPolicy" in str(exc)
-        else:
-            raise AssertionError("unknown artifact review semantics must not be overwritten")
-        assert path.read_bytes() == before
+        path = write_settings(root, {"toolPermission": "future-mode", "theme": "dark"})
+        assert_preset_refused(path, "request-review", "toolPermission")
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        path = write_settings(root, {"agentMode": "future-mode", "theme": "dark"})
-        before = path.read_bytes()
-        try:
-            policy.set_guarded_preset("strict", path)
-        except policy.PolicyError as exc:
-            assert "agentMode" in str(exc)
-        else:
-            raise AssertionError("unknown agent mode semantics must not be overwritten")
-        assert path.read_bytes() == before
+        path = write_settings(root, {"toolPermission": True, "theme": "dark"})
+        assert_preset_refused(path, "strict", "toolPermission")
+
+    for artifact_value in ("always-proceed", "agent-decides", "future-policy"):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            path = write_settings(
+                root,
+                {"artifactReviewPolicy": artifact_value, "theme": "dark"},
+            )
+            assert_preset_refused(path, "request-review", "artifactReviewPolicy")
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        path = write_settings(root, {"artifactReviewPolicy": [], "theme": "dark"})
+        assert_preset_refused(path, "request-review", "artifactReviewPolicy")
+
+    for agent_value in ("accept-edits", "future-mode"):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            path = write_settings(root, {"agentMode": agent_value, "theme": "dark"})
+            assert_preset_refused(path, "strict", "agentMode")
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        path = write_settings(root, {"agentMode": {}, "theme": "dark"})
+        assert_preset_refused(path, "strict", "agentMode")
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
