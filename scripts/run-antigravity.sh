@@ -88,10 +88,29 @@ else
 fi
 readonly approval_mode mode_source
 
+expect_vendor_mode=0
 for argument in "${forwarded[@]}"; do
+  if [[ "$argument" == -- ]] && (( expect_vendor_mode == 0 )); then
+    break
+  fi
+  if (( expect_vendor_mode == 1 )); then
+    if [[ "$approval_mode" == guarded && "$argument" == accept-edits ]]; then
+      reject_policy_override "--mode accept-edits (incompatible with guarded)"
+    fi
+    expect_vendor_mode=0
+    continue
+  fi
   case "$argument" in
     --dangerously-skip-permissions|--dangerously-skip-permissions=*)
       reject_policy_override "$argument"
+      ;;
+    --mode)
+      expect_vendor_mode=1
+      ;;
+    --mode=accept-edits)
+      if [[ "$approval_mode" == guarded ]]; then
+        reject_policy_override "$argument (incompatible with guarded)"
+      fi
       ;;
   esac
 done
@@ -119,17 +138,19 @@ if (( print_policy == 1 )); then
   if [[ "$approval_mode" == autonomous ]]; then
     echo 'Approval behavior: vendor permission/review bypass for this launch'
   else
-    echo 'Approval behavior: vendor request/review semantics'
+    echo 'Approval behavior: vendor permission/review engine active'
   fi
   echo "Mode source: $mode_source"
   if [[ -x "$policy_helper" && ! -L "$policy_helper" ]]; then
     policy_output=""
     policy_status=0
     policy_output="$("$policy_helper" status 2>&1)" || policy_status=$?
-    if [[ -n "$policy_output" ]]; then
+    if [[ -n "$policy_output" && "$policy_output" == Antigravity\ guarded\ compatibility:* ]]; then
       printf '%s\n' "$policy_output"
+    elif (( policy_status != 0 )); then
+      echo 'Antigravity guarded compatibility: BLOCKED (settings inspection unavailable; run diagnostics)'
     else
-      echo "Antigravity guarded compatibility: unavailable (exit $policy_status)"
+      echo 'Antigravity guarded compatibility: unavailable'
     fi
   else
     echo 'Antigravity guarded compatibility: unavailable (policy helper missing)'
@@ -155,9 +176,7 @@ if [[ "$approval_mode" == guarded ]]; then
   if (( guarded_status != 0 )); then
     echo "ERROR: Remote Dev cannot guarantee guarded Antigravity semantics with the current vendor settings." >&2
     [[ -z "$guarded_output" ]] || printf '%s\n' "$guarded_output" >&2
-    if (( guarded_status == 3 )); then
-      echo "Run 'remote-dev-antigravity-policy repair-guarded --yes' explicitly, or change the vendor approval settings manually." >&2
-    fi
+    echo "Adjust Antigravity's vendor permission settings, then retry guarded mode." >&2
     exit 2
   fi
 fi
