@@ -55,7 +55,7 @@ Guarded mode omits the approval-bypass argument and uses normal vendor request/r
 
 Remote Dev does not silently rewrite Antigravity's settings merely because guarded was selected. Before a guarded real launch, it performs a bounded offline compatibility check of only the reviewed top-level approval settings needed to guarantee that behavior.
 
-Safe guarded states are the vendor defaults/absent values and the documented request/review values. Known persistent autonomous/incompatible values block the managed guarded launch instead of being silently ignored.
+Safe guarded states include the vendor defaults/absent values, `toolPermission=request-review`, the more restrictive `toolPermission=strict`, and `artifactReviewPolicy=asks-for-review`. `strict` is preserved rather than repaired because it prompts for all non-read tools and therefore does not weaken guarded behavior. Known persistent autonomous/incompatible values block the managed guarded launch instead of being silently ignored.
 
 Fine-grained `permissions.allow`, `permissions.ask` and `permissions.deny` remain user-owned and are not rewritten by this compatibility check.
 
