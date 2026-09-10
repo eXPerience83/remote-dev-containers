@@ -9,6 +9,7 @@ on:
       - "scripts/remote-dev-install-antigravity.sh"
       - "scripts/remote-dev-update-antigravity.sh"
       - "scripts/remote-dev-antigravity-oauth.py"
+      - "scripts/remote-dev-antigravity-policy.py"
       - "scripts/run-antigravity.sh"
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
@@ -17,6 +18,8 @@ on:
       - "scripts/test-antigravity-repair-download-hardening.sh"
       - "scripts/test-antigravity-staging-wrappers.sh"
       - "scripts/test-antigravity-oauth.py"
+      - "scripts/test-antigravity-approval-policy.py"
+      - "scripts/test-run-antigravity-policy.sh"
   workflow_dispatch:
 
 permissions:
@@ -51,17 +54,27 @@ jobs:
             scripts/test-antigravity-security-regressions.sh \
             scripts/test-antigravity-redirects.sh \
             scripts/test-antigravity-repair-download-hardening.sh \
-            scripts/test-antigravity-staging-wrappers.sh
+            scripts/test-antigravity-staging-wrappers.sh \
+            scripts/test-run-antigravity-policy.sh
           python -m py_compile \
             scripts/remote-dev-antigravity-oauth.py \
-            scripts/test-antigravity-oauth.py
+            scripts/remote-dev-antigravity-policy.py \
+            scripts/test-antigravity-oauth.py \
+            scripts/test-antigravity-approval-policy.py
 
       - name: Run controlled fixture lifecycle
         run: |
           chmod 0755 \
             scripts/remote-dev-antigravity.sh \
             scripts/remote-dev-antigravity-oauth.py \
+            scripts/remote-dev-antigravity-policy.py \
             scripts/run-antigravity.sh
+          sudo install -m 0755 \
+            scripts/remote-dev-antigravity-policy.py \
+            /usr/local/bin/remote-dev-antigravity-policy
+          python scripts/test-antigravity-approval-policy.py
+          REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh \
+            bash scripts/test-run-antigravity-policy.sh
           bash scripts/test-antigravity-runtime.sh
           bash scripts/test-antigravity-security-regressions.sh
           bash scripts/test-antigravity-redirects.sh
