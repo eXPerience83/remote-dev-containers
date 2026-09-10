@@ -9,6 +9,8 @@ fixture_menu="$workdir/remote-dev-menu"
 runtime_lib="$workdir/remote-dev-runtime.sh"
 bin_dir="$workdir/bin"
 invocations="$workdir/invocations"
+policy_calls="$workdir/policy-calls"
+preset_state="$workdir/guarded-preset"
 hardening_calls="$workdir/hardening-calls"
 mkdir -p "$bin_dir" "$workdir/workspace/project"
 
@@ -73,11 +75,21 @@ if [[ "${1:-}" == --print-policy ]]; then
   else
     source=default
   fi
+  if [[ -s "$REMOTE_DEV_MENU_PRESET_STATE" ]]; then
+    preset="$(cat "$REMOTE_DEV_MENU_PRESET_STATE")"
+    tool="$preset"
+  else
+    preset='request-review (vendor default)'
+    tool=default
+  fi
   printf '%s\n' \
     "Antigravity approval mode: $mode" \
     "Approval behavior: test" \
     "Mode source: $source" \
-    'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)'
+    "Antigravity guarded compatibility: OK (toolPermission=$tool, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)" \
+    "Antigravity guarded preset: $preset" \
+    'Antigravity guarded policy source: settings.json' \
+    'Antigravity fine-grained permissions: user-managed and preserved'
   exit 0
 fi
 {
@@ -88,6 +100,31 @@ fi
   printf '\n'
 } >>"$REMOTE_DEV_MENU_INVOCATIONS"
 RUNNER
+
+cat >"$bin_dir/remote-dev-antigravity-policy" <<'POLICY'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  set-preset)
+    case "${2:-}" in
+      request-review|strict) ;;
+      *) exit 2 ;;
+    esac
+    printf '%s\n' "$2" >"$REMOTE_DEV_MENU_PRESET_STATE"
+    printf '[set-preset][%s]\n' "$2" >>"$REMOTE_DEV_MENU_POLICY_CALLS"
+    printf '%s\n' \
+      "Antigravity guarded preset updated: $2" \
+      "Antigravity guarded compatibility: OK (toolPermission=$2, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)" \
+      "Antigravity guarded preset: $2" \
+      'Antigravity guarded policy source: settings.json' \
+      'Antigravity fine-grained permissions: user-managed and preserved'
+    ;;
+  status|check-guarded)
+    exit 0
+    ;;
+  *) exit 2 ;;
+esac
+POLICY
 
 cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
@@ -136,6 +173,7 @@ text = source.read_text(encoding="utf-8")
 replacements = {
     "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh": f"runtime_lib={runtime_lib}",
     "/usr/local/bin/run-antigravity": str(bin_dir / "run-antigravity"),
+    "/usr/local/bin/remote-dev-antigravity-policy": str(bin_dir / "remote-dev-antigravity-policy"),
     "/usr/local/bin/remote-dev-antigravity": str(bin_dir / "remote-dev-antigravity"),
     "/usr/local/bin/remote-dev-install-antigravity": str(bin_dir / "remote-dev-install-antigravity"),
     "/usr/local/bin/remote-dev-update-antigravity": str(bin_dir / "remote-dev-update-antigravity"),
@@ -150,11 +188,13 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-printf '1\n\n2\n\n4\n3\n1\n\n1\n\n12\n' | env \
+printf '1\n\n2\n\n4\n3\n1\n\n4\n4\n\n5\n\n6\n1\n\n12\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
@@ -164,16 +204,26 @@ mapfile -t calls <"$invocations"
 [[ "${calls[1]}" == '[project=project][--continue]' ]]
 [[ "${calls[2]}" == '[project=project][--approval-mode][guarded]' ]]
 [[ "${calls[3]}" == '[project=project]' ]]
-[[ "$(wc -l <"$hardening_calls")" == 4 ]]
+mapfile -t preset_calls <"$policy_calls"
+[[ "${#preset_calls[@]}" == 2 ]]
+[[ "${preset_calls[0]}" == '[set-preset][request-review]' ]]
+[[ "${preset_calls[1]}" == '[set-preset][strict]' ]]
+[[ "$(cat "$preset_state")" == strict ]]
+[[ "$(wc -l <"$hardening_calls")" == 6 ]]
 grep -Fxq 'Antigravity approval mode: autonomous' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 grep -Fxq 'Next launch mode: guarded (one launch)' "$output"
-grep -Fxq 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)' "$output"
+grep -Fxq 'Antigravity guarded preset: request-review (vendor default)' "$output"
+grep -Fxq 'Antigravity guarded preset: request-review' "$output"
+grep -Fxq 'Antigravity guarded preset: strict' "$output"
+grep -Fxq 'Antigravity fine-grained permissions: user-managed and preserved' "$output"
 grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Antigravity (use /resume to browse/resume older conversations)' "$output"
 grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
-grep -Fxq '4) Approval mode for next launch...' "$output"
+grep -Fxq '4) Approval settings...' "$output"
+grep -Fxq '4) Set Guarded preset: request-review (recommended)' "$output"
+grep -Fxq '5) Set Guarded preset: strict (more restrictive)' "$output"
 grep -Fxq '5) Install Antigravity from Google' "$output"
 grep -Fxq '6) Update Antigravity from Google' "$output"
 grep -Fxq '7) Context7 integration [pending #95]' "$output"
@@ -195,7 +245,7 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   exit 1
 fi
 
-echo 'Antigravity approval-mode menu and vendor-native continue: OK'
+echo 'Antigravity approval settings, guarded presets and vendor-native continue: OK'
 
 mkdir -p "$workdir/workspace/second-project"
 rm -f "$invocations" "$hardening_calls"
@@ -204,6 +254,8 @@ printf '3\n1\n2\n1\n\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
@@ -220,6 +272,8 @@ printf '3\n2\ncreated-project\n\n1\n\n12\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 
