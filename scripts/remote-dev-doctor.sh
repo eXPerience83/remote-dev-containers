@@ -407,7 +407,7 @@ elif [[ "$role" == antigravity ]]; then
   echo 'Antigravity authentication: managed only by the official Google client.'
   echo 'Antigravity project safety: Remote Dev applies the same collection/Git boundary used by Codex; approval mode does not create a filesystem sandbox.'
   echo 'INFO: autonomous approval uses a launch-scoped vendor bypass; it does not enable the unsupported nested sandbox.'
-  echo 'INFO: guarded compatibility diagnostics are read-only; repair is an explicit separate command.'
+  echo 'INFO: guarded compatibility diagnostics are read-only; vendor permission settings remain user-managed.'
 fi
 
 if [[ "$role" != launcher ]]; then
