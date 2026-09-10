@@ -54,10 +54,10 @@ printf '%s\n' "$*" >>"$REMOTE_DEV_TEST_POLICY_CALLS"
 case "${1:-}" in
   status|check-guarded)
     if [[ "${REMOTE_DEV_TEST_GUARDED_CONFLICT:-0}" == 1 ]]; then
-      echo 'Antigravity guarded compatibility: CONFLICT (toolPermission=always-proceed, artifactReviewPolicy=default)'
-      exit 3
+      echo 'Antigravity guarded compatibility: BLOCKED (toolPermission=always-proceed, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)'
+      exit 4
     fi
-    echo 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)'
+    echo 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)'
     ;;
   *) exit 2 ;;
 esac
@@ -116,7 +116,7 @@ output="$(run_fixture __unset__ --print-policy)"
 grep -Fxq 'Antigravity approval mode: autonomous' <<<"$output"
 grep -Fxq 'Mode source: default' <<<"$output"
 grep -Fxq 'Approval behavior: vendor permission/review bypass for this launch' <<<"$output"
-grep -Fxq 'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)' <<<"$output"
+grep -Fq 'Antigravity guarded compatibility: OK (' <<<"$output"
 [[ ! -e "$manager_calls" ]]
 [[ "$(cat "$policy_calls")" == status ]]
 
@@ -176,7 +176,11 @@ conflict_status=$?
 set -e
 [[ "$conflict_status" == 2 ]]
 grep -Fq 'cannot guarantee guarded Antigravity semantics' <<<"$conflict_output"
-grep -Fq 'repair-guarded --yes' <<<"$conflict_output"
+grep -Fq 'BLOCKED' <<<"$conflict_output"
+if grep -Fq 'repair-guarded' <<<"$conflict_output"; then
+  echo 'ERROR: guarded conflict still suggests Remote Dev settings mutation' >&2
+  exit 1
+fi
 [[ ! -e "$invocations" ]]
 [[ ! -e "$manager_calls" ]]
 
