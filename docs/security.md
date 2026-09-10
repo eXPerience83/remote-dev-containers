@@ -165,8 +165,8 @@ The command launcher rejects raw sandbox/approval flags, profiles and project-tr
 
 The project-owned Antigravity wrapper uses the same Remote Dev mode abstraction:
 
-- `autonomous` is the default and adds the reviewed launch-scoped vendor `--dangerously-skip-permissions` argument;
-- `guarded` omits that argument and requires compatible vendor request/review settings.
+- `autonomous` is the default and adds the validated launch-scoped vendor `--dangerously-skip-permissions` argument;
+- `guarded` omits that argument and leaves Antigravity's own permission/review engine active.
 
 Configure the service value with:
 
@@ -177,17 +177,13 @@ REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=autonomous
 
 The menu can select another mode for one Start or Continue; the override is consumed once and does not rewrite the deployment setting. Start and the vendor-supported `--continue` path use the same resolver.
 
-Remote Dev owns the direct bypass argument and rejects a caller-supplied `--dangerously-skip-permissions` through `run-antigravity`. It does not force `--mode=accept-edits`, `--sandbox` or persistent vendor approval values.
+Remote Dev owns the direct bypass argument and rejects a caller-supplied `--dangerously-skip-permissions` through `run-antigravity`. It does not enable the vendor terminal sandbox or persist Remote Dev-owned approval values.
 
-Before a guarded real launch, the offline `remote-dev-antigravity-policy` helper inspects only the reviewed top-level approval keys in the canonical private vendor settings. Known persistent values that would make guarded semantics impossible fail closed; malformed, unsafe or unknown relevant state also blocks rather than being guessed. Doctor reports this state read-only.
+Before a guarded real launch, the offline `remote-dev-antigravity-policy` helper reads only the reviewed top-level approval/mode fields in the canonical private `~/.gemini/antigravity-cli/settings.json`. `request-review`, `strict`, normal artifact review and `default`/`plan` agent modes are compatible. Known globally permissive values such as `always-proceed`, `proceed-in-sandbox`, permissive artifact review, or `agentMode=accept-edits` block the managed guarded launch. Malformed, unsafe or unknown relevant state also fails closed.
 
-Known repairable conflicts can be removed only by the explicit command:
+Fine-grained `permissions.allow`, `permissions.ask` and `permissions.deny` remain user-managed and are not treated as conflicts merely because they exist. This lets advanced users keep deliberate exceptions while Remote Dev guarantees that it has not globally bypassed the provider's permission engine.
 
-```bash
-remote-dev-antigravity-policy repair-guarded --yes
-```
-
-Repair removes only reviewed conflicting top-level `toolPermission` / `artifactReviewPolicy` overrides, preserves unrelated/unknown settings and the fine-grained `permissions` object, and writes atomically with private permissions. Launch, status and Doctor never perform that repair automatically.
+Doctor reports this state read-only. Remote Dev never repairs or rewrites Antigravity's vendor policy file; policy changes remain an explicit user/vendor action through Antigravity's own settings/permissions UI or deliberate file editing.
 
 See `docs/antigravity-approval-modes.md` / `.es.md` for the complete operational contract.
 
