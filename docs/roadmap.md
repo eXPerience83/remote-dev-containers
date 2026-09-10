@@ -47,7 +47,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Hardened review-pending admission, explicit full verification and mandatory pre-launch integrity checking are implemented.
 - Real project-scoped Start/Continue, useful conversation continuity, install/update, image rollback, persistence and isolation evidence are complete.
 - Remote Dev exposes launch-scoped `autonomous|guarded` approval modes for Antigravity, defaulting to autonomous like Codex; Start and Continue share the same resolver and a one-launch menu override is consumed once.
-- Guarded compatibility is diagnosed offline without rewriting vendor state automatically, with an explicit bounded repair command for known conflicting top-level approval overrides.
+- Guarded compatibility is diagnosed offline from Antigravity's own `settings.json`; known globally permissive or unknown relevant values fail closed, fine-grained permission rules remain user-managed, and Remote Dev does not rewrite vendor policy state.
 - The #53 human policy/terms disposition is recorded: Remote Dev may keep this official-CLI wrapper/container integration experimental, without claiming vendor approval or reusing Google/Antigravity OAuth in other agents/services.
 - Scheduled #83 review automation is shipped: read-only static discovery executes no vendor code, while executable inspection remains an explicit trusted action.
 
