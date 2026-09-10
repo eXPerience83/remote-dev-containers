@@ -13,6 +13,7 @@ on:
       - "scripts/run-antigravity.sh"
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
+      - "scripts/test-antigravity-runtime-policy-neutral.sh"
       - "scripts/test-antigravity-security-regressions.sh"
       - "scripts/test-antigravity-redirects.sh"
       - "scripts/test-antigravity-repair-download-hardening.sh"
@@ -51,6 +52,7 @@ jobs:
             scripts/run-antigravity.sh \
             scripts/secure-persistent-state.sh \
             scripts/test-antigravity-runtime.sh \
+            scripts/test-antigravity-runtime-policy-neutral.sh \
             scripts/test-antigravity-security-regressions.sh \
             scripts/test-antigravity-redirects.sh \
             scripts/test-antigravity-repair-download-hardening.sh \
@@ -68,15 +70,12 @@ jobs:
             scripts/remote-dev-antigravity.sh \
             scripts/remote-dev-antigravity-oauth.py \
             scripts/remote-dev-antigravity-policy.py \
-            scripts/run-antigravity.sh
-          sudo install -m 0755 \
-            scripts/remote-dev-antigravity-policy.py \
-            /usr/local/bin/remote-dev-antigravity-policy
+            scripts/run-antigravity.sh \
+            scripts/test-antigravity-runtime-policy-neutral.sh
           python scripts/test-antigravity-approval-policy.py
           REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh \
             bash scripts/test-run-antigravity-policy.sh
-          REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded \
-            bash scripts/test-antigravity-runtime.sh
+          bash scripts/test-antigravity-runtime-policy-neutral.sh
           bash scripts/test-antigravity-security-regressions.sh
           bash scripts/test-antigravity-redirects.sh
           bash scripts/test-antigravity-repair-download-hardening.sh
@@ -85,7 +84,6 @@ jobs:
 
       - name: Run fixture routing as root
         run: |
-          sudo env REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded \
-            bash scripts/test-antigravity-runtime.sh
+          sudo bash scripts/test-antigravity-runtime-policy-neutral.sh
           sudo bash scripts/test-antigravity-security-regressions.sh
           sudo bash scripts/test-antigravity-repair-download-hardening.sh
