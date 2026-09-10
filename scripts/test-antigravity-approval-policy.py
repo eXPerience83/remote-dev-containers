@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,7 @@ MODULE_PATH = ROOT / "remote-dev-antigravity-policy.py"
 SPEC = importlib.util.spec_from_file_location("remote_dev_antigravity_policy", MODULE_PATH)
 assert SPEC and SPEC.loader
 policy = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = policy
 SPEC.loader.exec_module(policy)
 
 
