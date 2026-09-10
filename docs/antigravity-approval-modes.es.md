@@ -31,23 +31,23 @@ El orden de resolución es:
 
 ## Autonomous
 
-En un lanzamiento gestionado autónomo, Remote Dev añade el bypass de aprobación por lanzamiento validado con Antigravity CLI 1.1.28:
+En un lanzamiento gestionado autonomous, Remote Dev añade el bypass de aprobación por lanzamiento validado con Antigravity CLI 1.1.28:
 
 ```text
 --dangerously-skip-permissions
 ```
 
-La validación real en TrueNAS de #159 demostró que elimina las paradas normales por aprobación de herramientas y revisión de artefactos durante ese lanzamiento, funciona igual en Start y `--continue` y no deja estado de autonomía persistente al salir. Un lanzamiento posterior sin el bypass vuelve al comportamiento normal de permisos del proveedor.
+La validación real en TrueNAS de #159 demostró que elimina las paradas normales por aprobación de herramientas y revisión de artefactos durante ese lanzamiento, funciona igual en Start y `--continue` y no deja estado de autonomía persistente al salir. Un lanzamiento posterior sin el bypass vuelve al motor de permisos del proveedor.
 
 El wrapper es propietario de este argumento. Pasar `--dangerously-skip-permissions` directamente a través de `run-antigravity` se rechaza para impedir que un llamador contradiga silenciosamente el resolver de Remote Dev.
 
-Remote Dev no habilita además `--sandbox`, no persiste sus propios valores de aprobación y no reescribe `settings.json`.
+Remote Dev no habilita además `--sandbox` ni persiste un preset autónomo en la configuración del proveedor.
 
 Las reglas finas de permisos del proveedor siguen siendo propiedad del usuario. En el comportamiento validado de 1.1.28, una regla explícita `permissions.deny` siguió bloqueando el comando correspondiente incluso durante un lanzamiento autonomous.
 
 ## Guarded
 
-Guarded significa que Remote Dev **no** añade el bypass global de aprobación. La configuración propia de permisos y revisión de Antigravity continúa activa.
+Guarded significa que Remote Dev **no** añade el bypass global de aprobación. El motor propio de permisos y revisión de Antigravity continúa activo.
 
 El fichero persistente relevante del CLI es:
 
@@ -55,13 +55,18 @@ El fichero persistente relevante del CLI es:
 ~/.gemini/antigravity-cli/settings.json
 ```
 
-Antes de un lanzamiento real en guarded, Remote Dev lee ese fichero de forma offline y comprueba únicamente el pequeño conjunto de valores de nivel superior que pueden eliminar el comportamiento protegido esperado:
+Remote Dev admite los dos presets protegidos de permisos de herramientas de Antigravity:
 
-- `toolPermission` puede estar ausente/predeterminado, ser `request-review` o el más restrictivo `strict`;
+- `request-review` — preset guarded recomendado/predeterminado;
+- `strict` — más restrictivo y pide aprobación para todas las herramientas que no sean de lectura.
+
+Son **presets del proveedor dentro de Guarded**, no modos adicionales de Remote Dev. La elección de alto nivel sigue siendo únicamente `autonomous|guarded`.
+
+Antes de un lanzamiento real en guarded, Remote Dev lee `settings.json` de forma offline y comprueba únicamente el pequeño conjunto de valores de nivel superior que pueden eliminar el comportamiento protegido esperado:
+
+- `toolPermission` puede estar ausente/predeterminado, ser `request-review` o `strict`;
 - `artifactReviewPolicy` puede estar ausente/predeterminado o ser `asks-for-review`;
 - `agentMode` puede estar ausente/predeterminado, ser `default` o `plan`.
-
-`strict` es compatible y se conserva: es más restrictivo que `request-review` y pide aprobación para todas las herramientas que no sean de lectura.
 
 Estados globalmente permisivos conocidos como `toolPermission=always-proceed`, `toolPermission=proceed-in-sandbox`, `artifactReviewPolicy=agent-decides`, `artifactReviewPolicy=always-proceed` o `agentMode=accept-edits` son incompatibles con la promesa guarded gestionada y bloquean el lanzamiento en lugar de ignorarse silenciosamente.
 
@@ -69,15 +74,43 @@ Los valores desconocidos o malformados en esos campos revisados también bloquea
 
 ### Reglas finas avanzadas
 
-`permissions.allow`, `permissions.ask` y `permissions.deny` siguen siendo completamente gestionadas por el usuario. Su presencia **no** se considera un conflicto con guarded y Remote Dev no inspecciona ni reescribe su contenido.
+`permissions.allow`, `permissions.ask` y `permissions.deny` siguen siendo completamente gestionadas por el usuario. Su presencia **no** se considera un conflicto con guarded y Remote Dev no interpreta ni reescribe su contenido.
 
-Esto permite que un usuario avanzado autorice expresamente operaciones concretas y mantenga confirmación para el resto. Guarded significa que el motor de permisos del proveedor está activo y que Remote Dev no lo ha deshabilitado globalmente; no significa que Remote Dev elimine las excepciones que haya configurado el usuario.
+Un usuario avanzado puede, por tanto, autorizar lecturas, comandos u operaciones concretas y seguir exigiendo confirmación o denegando otras. Guarded significa que el motor de permisos del proveedor está activo y que Remote Dev no lo ha deshabilitado globalmente; no significa que Remote Dev elimine las excepciones configuradas expresamente por el usuario.
 
 Es el mismo principio que en el modo guarded de Codex, donde una regla explícita del usuario también puede evitar prompts concretos.
 
+## Configuración del preset Guarded
+
+El menú de Antigravity incluye el submenú **Approval settings...**. Mantiene el selector de modo de Remote Dev para un solo lanzamiento y permite elegir también:
+
+```text
+Guarded preset: request-review (recommended)
+Guarded preset: strict (more restrictive)
+```
+
+Elegir un preset Guarded es una acción explícita de configuración. Modifica únicamente los ajustes de nivel superior revisados que sean necesarios para recuperar una semántica Guarded protegida:
+
+- `toolPermission` se establece en `request-review` o `strict`, según lo seleccionado;
+- un `artifactReviewPolicy` permisivo conocido se restablece a `asks-for-review`;
+- un `agentMode=accept-edits` conocido se restablece a `default`;
+- se conserva un `agentMode=plan` seguro;
+- se conservan los ajustes no relacionados y el objeto completo `permissions` con sus reglas finas.
+
+Los valores desconocidos o malformados de `artifactReviewPolicy` / `agentMode` no se adivinan ni se sobrescriben. La acción falla de forma segura y pide revisar la configuración del proveedor.
+
+La misma acción explícita está disponible desde la shell del contenedor:
+
+```bash
+remote-dev-antigravity-policy set-preset request-review
+remote-dev-antigravity-policy set-preset strict
+```
+
+La escritura es privada y atómica dentro del mismo directorio. Justo antes de reemplazar el fichero, Remote Dev verifica que el snapshot de configuración leído no haya cambiado; si ha cambiado, la operación se cancela y puede repetirse. Start, Continue, status, `--print-policy` y Doctor no modifican nunca la política del proveedor.
+
 ## Diagnóstico
 
-`remote-dev-doctor` sigue siendo de sólo lectura. En el rol Antigravity muestra el modo efectivo de Remote Dev y un estado sanitizado de compatibilidad con guarded.
+`remote-dev-doctor` sigue siendo de sólo lectura. En el rol Antigravity muestra el modo efectivo de Remote Dev, el preset Guarded activo y un estado sanitizado de compatibilidad con guarded.
 
 El helper offline específico es:
 
@@ -91,25 +124,24 @@ Un resultado correcto se parece a:
 
 ```text
 Antigravity guarded compatibility: OK (...)
-Antigravity guarded policy source: settings.json (read-only)
+Antigravity guarded preset: request-review
+Antigravity guarded policy source: settings.json
 Antigravity fine-grained permissions: user-managed and preserved
 ```
 
-Un estado relevante incompatible, malformado, inseguro o desconocido se muestra como `BLOCKED`. Remote Dev no repara ni reescribe el fichero automáticamente ni desde Doctor.
-
-Para cambiar esa política se utilizan las interfaces propias de Antigravity `/settings` o `/permissions`, o se edita deliberadamente el fichero del proveedor.
+Si `toolPermission` está ausente, se muestra `request-review (vendor default)`. Un estado relevante incompatible, malformado, inseguro o desconocido se muestra como `BLOCKED` y un lanzamiento gestionado en guarded se rechaza.
 
 ## Comportamiento del menú
 
-El menú de Antigravity muestra el modo de aprobación de Remote Dev configurado/efectivo y ofrece:
+El menú de Antigravity ofrece:
 
 ```text
-Approval mode for next launch...
+Approval settings...
 ```
 
-La selección para un solo lanzamiento se consume en la siguiente acción Start o Continue y después vuelve al modo configurado en el despliegue, igual que el contrato del menú de Codex.
+Desde ese submenú se puede seleccionar Autonomous o Guarded **sólo para el siguiente lanzamiento** y configurar explícitamente el preset persistente del proveedor para Guarded como se describe arriba.
 
-Start y Continue usan el mismo resolver; `Continue latest Antigravity conversation` sigue utilizando la ruta `--continue` soportada por el proveedor.
+La selección de modo para un solo lanzamiento se consume en la siguiente acción Start o Continue y después vuelve al modo configurado en el despliegue, igual que el contrato del menú de Codex. Start y Continue usan el mismo resolver; `Continue latest Antigravity conversation` sigue utilizando la ruta `--continue` soportada por el proveedor.
 
 ## Diferencia respecto al sandbox
 
