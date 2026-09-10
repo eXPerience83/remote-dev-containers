@@ -49,7 +49,7 @@ agent-contract-tests:
 	REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh bash scripts/test-run-antigravity-policy.sh
 	REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh bash scripts/test-run-antigravity-picker.sh
 	REMOTE_DEV_ATTACH_TMUX=./scripts/attach-remote-dev-tmux.sh bash scripts/test-direct-codex-project-entry.sh
-	bash scripts/test-antigravity-runtime.sh
+	REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded bash scripts/test-antigravity-runtime.sh
 	python3 scripts/test-remote-dev-context7-device-login.py
 	python3 scripts/test-remote-dev-context7-adoption.py
 	python3 scripts/test-remote-dev-context7-runtime-isolation.py
@@ -65,7 +65,7 @@ validate: agent-contract-tests ttyd-osc52-check
 	python3 scripts/test_antigravity_download.py
 	python3 scripts/test_run_antigravity_inspection.py
 	python3 scripts/test_detect_antigravity_installer.py
-	python3 scripts/test_discover_antigravity_payload.py
+	python3 scripts/test_discover-antigravity-payload.py
 	python3 scripts/test_reconcile_antigravity_review_state.py
 	python3 scripts/test_update_antigravity_review_evidence.py
 	python3 scripts/test_update_antigravity_review_doc.py
