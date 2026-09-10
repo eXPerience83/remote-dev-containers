@@ -169,6 +169,21 @@ set -e
 [[ "$bypass_eq_status" == 2 ]]
 grep -Fq 'refusing argument: --dangerously-skip-permissions=true' <<<"$bypass_eq_output"
 
+for accept_edits_form in equals separate; do
+  rm -f "$invocations" "$manager_calls" "$policy_calls"
+  set +e
+  if [[ "$accept_edits_form" == equals ]]; then
+    accept_edits_output="$(run_fixture guarded --mode=accept-edits 2>&1)"
+  else
+    accept_edits_output="$(run_fixture guarded --mode accept-edits 2>&1)"
+  fi
+  accept_edits_status=$?
+  set -e
+  [[ "$accept_edits_status" == 2 ]]
+  grep -Fq 'incompatible with guarded' <<<"$accept_edits_output"
+  [[ ! -e "$invocations" ]]
+done
+
 rm -f "$invocations" "$manager_calls" "$policy_calls"
 set +e
 conflict_output="$(env REMOTE_DEV_TEST_GUARDED_CONFLICT=1 REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=guarded "${common_env[@]}" "$fixture" --continue 2>&1)"
