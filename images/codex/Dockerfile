@@ -95,6 +95,7 @@ COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
 COPY scripts/remote-dev-antigravity-oauth.py /usr/local/bin/remote-dev-antigravity-oauth
 COPY scripts/remote-dev-antigravity-picker.py /usr/local/bin/remote-dev-antigravity-picker
+COPY scripts/remote-dev-antigravity-policy.py /usr/local/bin/remote-dev-antigravity-policy
 COPY scripts/run-antigravity.sh /usr/local/bin/run-antigravity
 COPY scripts/remote-dev-launcher.py /usr/local/bin/remote-dev-launcher
 COPY scripts/remote-dev-menu.sh /usr/local/bin/remote-dev-menu
@@ -124,6 +125,9 @@ RUN --network=none \
     --mount=type=bind,source=scripts/remote-dev-codex-runtime.py,target=/tmp/remote-dev-codex-runtime.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-codex-runtime.py,target=/tmp/test-remote-dev-codex-runtime.py,ro \
     --mount=type=bind,source=scripts/test-codex-code-mode-host.py,target=/tmp/test-codex-code-mode-host.py,ro \
+    --mount=type=bind,source=scripts/remote-dev-antigravity-policy.py,target=/tmp/remote-dev-antigravity-policy.py,ro \
+    --mount=type=bind,source=scripts/test-antigravity-approval-policy.py,target=/tmp/test-antigravity-approval-policy.py,ro \
+    --mount=type=bind,source=scripts/test-run-antigravity-policy.sh,target=/tmp/test-run-antigravity-policy.sh,ro \
     --mount=type=bind,source=scripts/test-antigravity-oauth.py,target=/tmp/test-antigravity-oauth.py,ro \
     --mount=type=bind,source=scripts/test-antigravity-picker.py,target=/tmp/test-antigravity-picker.py,ro \
     --mount=type=bind,source=scripts/test-run-antigravity-picker.sh,target=/tmp/test-run-antigravity-picker.sh,ro \
@@ -145,6 +149,7 @@ RUN --network=none \
       /usr/local/bin/remote-dev-update-antigravity \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
+      /usr/local/bin/remote-dev-antigravity-policy \
       /usr/local/bin/run-antigravity \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-menu \
@@ -172,6 +177,8 @@ RUN --network=none \
       /usr/local/bin/remote-dev-context7-device-login \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
+      /usr/local/bin/remote-dev-antigravity-policy \
+      /tmp/test-antigravity-approval-policy.py \
       /tmp/test_validate_codex_project_boundary.py \
       /tmp/test-codex-code-mode-host.py \
       /tmp/test-development-scratch.py \
@@ -189,6 +196,8 @@ RUN --network=none \
     && python -c 'import sys,tomllib; d=tomllib.load(open(sys.argv[1],"rb")); t=d.get("mcp_servers",{}).get("context7"); assert t == {"url":"https://mcp.context7.com/mcp","env_http_headers":{"CONTEXT7_API_KEY":"CONTEXT7_API_KEY"},"enabled":True,"required":False}' "$context7_smoke_home/config.toml" \
     && rm -rf "$context7_smoke_home" \
     && bash /tmp/test-run-codex-context7 \
+    && python /tmp/test-antigravity-approval-policy.py \
+    && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-policy.sh \
     && python /tmp/test-antigravity-oauth.py \
     && REMOTE_DEV_ANTIGRAVITY_PICKER=/usr/local/bin/remote-dev-antigravity-picker python /tmp/test-antigravity-picker.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-picker.sh \
@@ -212,6 +221,7 @@ RUN --network=none \
     && grep -Fx 'export REMOTE_DEV_ROLE=codex' /usr/local/bin/codex-doctor \
     && grep -Fx 'exec /usr/local/bin/remote-dev-doctor "$@"' /usr/local/bin/codex-doctor \
     && grep -Fx 'readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh' /usr/local/bin/run-antigravity \
+    && grep -Fx 'readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth' /usr/local/bin/run-antigravity \
     && grep -Fx 'readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker' /usr/local/bin/run-antigravity \
     && run-codex --print-policy | grep -Fx 'Inner sandbox: disabled explicitly' \
@@ -219,6 +229,8 @@ RUN --network=none \
     && run-codex --print-policy | grep -Fx 'Codex approval mode: autonomous' \
     && run-codex --print-policy | grep -Fx 'Codex approval policy: never' \
     && run-codex --print-policy | grep -Fx 'Mode source: default' \
+    && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 run-antigravity --print-policy | grep -Fx 'Antigravity approval mode: autonomous' \
+    && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 run-antigravity --print-policy | grep -Fx 'Mode source: default' \
     && REMOTE_DEV_ROLE=antigravity REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 remote-dev-antigravity status --menu | grep -Fx 'Antigravity: not installed' \
     && printf '%s\n' 'exit 91' > /tmp/antigravity-bash-env \
     && printf '%s\n' '#!/bin/sh' 'exit 92' > /tmp/curl \
