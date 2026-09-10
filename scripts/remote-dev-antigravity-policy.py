@@ -51,6 +51,8 @@ def _validate_parent(path: Path) -> os.stat_result:
         st = os.lstat(path.parent)
     except FileNotFoundError as exc:
         raise PolicyError(f"settings directory is missing: {path.parent}") from exc
+    except OSError as exc:
+        raise PolicyError(f"cannot inspect settings directory metadata: {path.parent}") from exc
     if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
         raise PolicyError(f"settings directory is not a normal directory: {path.parent}")
     if st.st_uid != os.geteuid():
@@ -72,6 +74,8 @@ def load_settings(path: Path = SETTINGS_PATH) -> SettingsSnapshot:
         # An absent settings file means the vendor defaults apply. The parent is
         # intentionally not required merely to report the safe default state.
         return SettingsSnapshot(path=path, data={}, exists=False)
+    except OSError as exc:
+        raise PolicyError(f"cannot inspect settings file metadata: {path}") from exc
 
     if stat.S_ISLNK(lst.st_mode) or not stat.S_ISREG(lst.st_mode):
         raise PolicyError(f"settings file is not a normal regular file: {path}")
@@ -85,26 +89,32 @@ def load_settings(path: Path = SETTINGS_PATH) -> SettingsSnapshot:
     flags = os.O_RDONLY | os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    fd = os.open(path, flags)
     try:
-        fst = os.fstat(fd)
-        if not stat.S_ISREG(fst.st_mode):
-            raise PolicyError(f"settings file changed type during inspection: {path}")
-        if (fst.st_dev, fst.st_ino) != (lst.st_dev, lst.st_ino):
-            raise PolicyError(f"settings file changed during inspection: {path}")
-        if fst.st_uid != os.geteuid() or stat.S_IMODE(fst.st_mode) & 0o077:
-            raise PolicyError(f"settings file ownership/mode changed during inspection: {path}")
-        if fst.st_size < 0 or fst.st_size > MAX_SETTINGS_SIZE:
-            raise PolicyError(f"settings file size changed outside the reviewed limit: {path}")
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise PolicyError(f"cannot open settings file safely: {path}") from exc
+    try:
+        try:
+            fst = os.fstat(fd)
+            if not stat.S_ISREG(fst.st_mode):
+                raise PolicyError(f"settings file changed type during inspection: {path}")
+            if (fst.st_dev, fst.st_ino) != (lst.st_dev, lst.st_ino):
+                raise PolicyError(f"settings file changed during inspection: {path}")
+            if fst.st_uid != os.geteuid() or stat.S_IMODE(fst.st_mode) & 0o077:
+                raise PolicyError(f"settings file ownership/mode changed during inspection: {path}")
+            if fst.st_size < 0 or fst.st_size > MAX_SETTINGS_SIZE:
+                raise PolicyError(f"settings file size changed outside the reviewed limit: {path}")
 
-        raw = bytearray()
-        while len(raw) <= MAX_SETTINGS_SIZE:
-            chunk = os.read(fd, min(65536, MAX_SETTINGS_SIZE + 1 - len(raw)))
-            if not chunk:
-                break
-            raw.extend(chunk)
-        if len(raw) > MAX_SETTINGS_SIZE:
-            raise PolicyError(f"settings file exceeded the reviewed limit while reading: {path}")
+            raw = bytearray()
+            while len(raw) <= MAX_SETTINGS_SIZE:
+                chunk = os.read(fd, min(65536, MAX_SETTINGS_SIZE + 1 - len(raw)))
+                if not chunk:
+                    break
+                raw.extend(chunk)
+            if len(raw) > MAX_SETTINGS_SIZE:
+                raise PolicyError(f"settings file exceeded the reviewed limit while reading: {path}")
+        except OSError as exc:
+            raise PolicyError(f"cannot read settings file safely: {path}") from exc
     finally:
         os.close(fd)
 
@@ -262,7 +272,10 @@ def repair_guarded(path: Path = SETTINGS_PATH) -> tuple[str, ...]:
     for key in report.conflicting_keys:
         repaired.pop(key, None)
         removed.append(key)
-    _atomic_write_repaired(snapshot, repaired)
+    try:
+        _atomic_write_repaired(snapshot, repaired)
+    except OSError as exc:
+        raise PolicyError("unable to write repaired settings safely") from exc
     return tuple(removed)
 
 
