@@ -70,6 +70,27 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
+        denied = root / "vendor" / "settings.json"
+        original_lstat = policy.os.lstat
+
+        def denied_lstat(path: object) -> os.stat_result:
+            if Path(path) == denied:
+                raise PermissionError(13, "permission denied")
+            return original_lstat(path)
+
+        policy.os.lstat = denied_lstat
+        try:
+            try:
+                policy.inspect_guarded(denied)
+            except policy.PolicyError as exc:
+                assert "cannot inspect settings file metadata" in str(exc)
+            else:
+                raise AssertionError("inaccessible settings must fail closed as PolicyError")
+        finally:
+            policy.os.lstat = original_lstat
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
         original = {
             "theme": "dark",
             "allowNonWorkspaceAccess": True,
