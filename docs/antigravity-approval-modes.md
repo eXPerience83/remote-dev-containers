@@ -37,17 +37,17 @@ For an autonomous managed launch, Remote Dev adds the Antigravity CLI launch-sco
 --dangerously-skip-permissions
 ```
 
-Live TrueNAS validation for #159 established that this removes the normal tool and artifact-review stops for that launch, works the same for Start and `--continue`, and leaves no autonomous approval state persisted afterward. A later launch without the bypass returns to normal vendor prompting.
+Live TrueNAS validation for #159 established that this removes the normal tool and artifact-review stops for that launch, works the same for Start and `--continue`, and leaves no autonomous approval state persisted afterward. A later launch without the bypass returns to the vendor permission engine.
 
 The wrapper owns this bypass argument. Passing `--dangerously-skip-permissions` directly through `run-antigravity` is rejected so callers cannot silently contradict the Remote Dev mode resolver.
 
-Remote Dev does not additionally enable `--sandbox`, persist approval defaults, or rewrite `settings.json`.
+Remote Dev does not additionally enable `--sandbox` or persist an autonomous approval preset into vendor settings.
 
 Fine-grained vendor permission rules remain user-owned. In the validated 1.1.28 behavior, an explicit `permissions.deny` rule still blocked its matching command even during an autonomous launch.
 
 ## Guarded
 
-Guarded means Remote Dev does **not** add the global approval bypass. Antigravity's own permission and review configuration remains active.
+Guarded means Remote Dev does **not** add the global approval bypass. Antigravity's own permission and review engine remains active.
 
 The relevant persistent CLI file is:
 
@@ -55,9 +55,16 @@ The relevant persistent CLI file is:
 ~/.gemini/antigravity-cli/settings.json
 ```
 
-Before a real guarded launch, Remote Dev reads that file offline and checks only the small set of top-level values that can remove the expected protected behavior:
+Remote Dev supports the two protected Antigravity tool-permission presets:
 
-- `toolPermission` may be absent/default, `request-review`, or the more restrictive `strict`;
+- `request-review` — recommended/default guarded preset;
+- `strict` — more restrictive and prompts for all non-read tools.
+
+These are **provider presets inside Guarded**, not additional Remote Dev launch modes. The high-level choice remains only `autonomous|guarded`.
+
+Before a real guarded launch, Remote Dev reads `settings.json` offline and checks only the small set of top-level values that can remove the expected protected behavior:
+
+- `toolPermission` may be absent/default, `request-review`, or `strict`;
 - `artifactReviewPolicy` may be absent/default or `asks-for-review`;
 - `agentMode` may be absent/default, `default`, or `plan`.
 
@@ -67,15 +74,43 @@ Unknown or malformed values in those reviewed fields also fail closed because Re
 
 ### Advanced fine-grained rules
 
-`permissions.allow`, `permissions.ask`, and `permissions.deny` remain entirely user-managed. Their presence is **not** treated as a guarded conflict and Remote Dev does not inspect or rewrite their contents.
+`permissions.allow`, `permissions.ask`, and `permissions.deny` remain entirely user-managed. Their presence is **not** treated as a guarded conflict, and Remote Dev does not interpret or rewrite their contents.
 
-That means an advanced user may intentionally allow specific safe operations while continuing to require confirmation for other operations. Guarded means the vendor permission engine is active and Remote Dev has not globally bypassed it; it does not mean Remote Dev erases explicit user permission exceptions.
+An advanced user may therefore allow selected reads, commands, or other operations while still requiring confirmation or denying other operations. Guarded means the vendor permission engine is active and Remote Dev has not globally bypassed it; it does not mean Remote Dev erases explicit user permission exceptions.
 
 This mirrors the Codex guarded contract, where explicit user policy allows may also avoid individual prompts.
 
+## Configuring the Guarded preset
+
+The Antigravity menu exposes an **Approval settings...** submenu. It keeps the one-launch Remote Dev mode selector and also allows the operator to select:
+
+```text
+Guarded preset: request-review (recommended)
+Guarded preset: strict (more restrictive)
+```
+
+Selecting a Guarded preset is an explicit configuration action. It changes only the essential reviewed top-level settings needed to restore protected Guarded semantics:
+
+- `toolPermission` is set to the selected `request-review` or `strict` preset;
+- a known permissive `artifactReviewPolicy` is reset to `asks-for-review`;
+- a known `agentMode=accept-edits` is reset to `default`;
+- safe `agentMode=plan` is preserved;
+- unrelated settings and the complete fine-grained `permissions` object are preserved.
+
+Unknown or malformed `artifactReviewPolicy` / `agentMode` values are not guessed or overwritten. The preset action fails closed and asks the operator to inspect the vendor configuration.
+
+The same explicit action is available from the container shell:
+
+```bash
+remote-dev-antigravity-policy set-preset request-review
+remote-dev-antigravity-policy set-preset strict
+```
+
+The write is private and same-directory atomic. Immediately before replacement, Remote Dev verifies that the settings snapshot it read has not changed; if it has, the operation aborts and can be retried. Normal Start, Continue, status, `--print-policy`, and Doctor never modify vendor policy.
+
 ## Diagnostics
 
-`remote-dev-doctor` remains read-only. For the Antigravity role it reports the effective Remote Dev approval mode plus sanitized guarded compatibility.
+`remote-dev-doctor` remains read-only. For the Antigravity role it reports the effective Remote Dev approval mode, the active Guarded preset, and sanitized guarded compatibility.
 
 The dedicated offline helper is:
 
@@ -89,25 +124,24 @@ A healthy result resembles:
 
 ```text
 Antigravity guarded compatibility: OK (...)
-Antigravity guarded policy source: settings.json (read-only)
+Antigravity guarded preset: request-review
+Antigravity guarded policy source: settings.json
 Antigravity fine-grained permissions: user-managed and preserved
 ```
 
-An incompatible, malformed, unsafe, or unknown relevant state is reported as `BLOCKED`. Remote Dev does not repair or rewrite the file automatically or from Doctor.
-
-Use Antigravity's own `/settings` or `/permissions` interfaces, or edit the vendor file deliberately, if you want to change that policy.
+If `toolPermission` is absent, the preset is reported as `request-review (vendor default)`. An incompatible, malformed, unsafe, or unknown relevant state is reported as `BLOCKED` and a managed guarded launch is refused.
 
 ## Menu behavior
 
-The Antigravity menu shows the configured/effective Remote Dev approval mode and offers:
+The Antigravity menu offers:
 
 ```text
-Approval mode for next launch...
+Approval settings...
 ```
 
-The one-launch selection is consumed by the next Start or Continue action and then resets to the configured deployment mode, matching the Codex menu contract.
+From that submenu the operator can select Autonomous or Guarded for the **next launch only**, and can explicitly configure the persistent Guarded provider preset as described above.
 
-Start and Continue use the same resolver; `Continue latest Antigravity conversation` still uses the vendor-supported `--continue` path.
+The one-launch mode selection is consumed by the next Start or Continue action and then resets to the configured deployment mode, matching the Codex menu contract. Start and Continue use the same resolver; `Continue latest Antigravity conversation` still uses the vendor-supported `--continue` path.
 
 ## Sandbox distinction
 
