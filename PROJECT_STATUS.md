@@ -28,7 +28,9 @@ Remote Dev stack
 - The launcher has no agent workspace/state/password, no Docker/Podman socket and no host-control credential. It navigates to agent endpoints rather than proxying terminal traffic and is deliberately password-free in the current supported private-network model.
 - Codex is the bundled reference agent. The immutable image copy remains the fallback even when an explicitly admitted newer official Codex runtime exists in Codex-private state.
 - Antigravity is implemented as an **optional experimental integration**. Google's `agy` runtime is not bundled or redistributed; installation/update is explicit, uses the reviewed official-source path, persists only in Antigravity-private state and keeps vendor automatic update disabled for supported sessions.
-- The #29/#106/#131 Antigravity lifecycle, conversation continuity, project-scoped Start/Resume, update/rollback and isolation evidence is complete.
+- The #29/#106/#131 Antigravity lifecycle, conversation continuity, project-scoped Start/Continue, update/rollback and isolation evidence is complete.
+- Antigravity now uses the same high-level Remote Dev `autonomous|guarded` launch-policy abstraction as Codex. The default is autonomous; the managed autonomous path injects only the reviewed launch-scoped vendor approval bypass, Start/Continue share one resolver, and a one-launch menu override is consumed once.
+- Guarded compatibility is diagnosed offline without silently taking ownership of the vendor settings file. Known conflicts fail closed; Doctor is read-only; an explicit bounded repair command can remove only reviewed conflicting top-level approval overrides while preserving unrelated settings and fine-grained rules.
 - The #96 technical admission model and #53 human terms/policy reconciliation are complete. The recorded project decision is to keep Antigravity experimental; this is a project risk/support interpretation, not Google approval, certification or endorsement.
 - #83 scheduled Antigravity review automation is shipped. Scheduled discovery hashes/validates bounded vendor bytes as data without executing vendor code; a changed candidate requires the explicit trusted review workflow before executable evidence is admitted.
 - Context7 for Codex and device-code onboarding are shipped as an optional hosted integration. The transient `ctx7` CLI used for explicit device login is not retained in the image or normal persistent runtime.
@@ -64,7 +66,7 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 - Agent root is constrained by the outer role container and its mounts.
 - The default image does not install system Bubblewrap; supported Codex launches explicitly disable the unsupported inner sandbox.
 - Antigravity's vendor terminal sandbox is also outside the supported baseline: exact TrueNAS testing on CLI 1.1.27 showed `--sandbox` starts the UI but terminal execution requires sandbox bypass and otherwise fails with `operation not permitted`. Remote Dev does not weaken the outer container to enable it; see `docs/antigravity-sandbox-baseline.md` / `.es.md`.
-- Antigravity approval/autonomous behavior (#159) is a separate policy layer and must not depend on the vendor sandbox.
+- Antigravity autonomous/guarded approval is a launch-policy layer only; it changes confirmation behavior without enabling the vendor sandbox or widening the outer-container boundary. See `docs/antigravity-approval-modes.md` / `.es.md`.
 - Launcher and agent services use read-only root filesystems, `no-new-privileges`, `cap_drop: [ALL]`, bounded tmpfs/PID controls and exact role-specific capability restoration where required.
 - Cross-service isolation canaries and real TrueNAS validation for the current launcher/Codex/Antigravity topology are complete.
 - Browser/SSH ports must not be exposed directly to the public Internet. Trusted LAN/Tailscale/private mesh is the normal deployment context; stronger access-security work remains tracked by #181.
@@ -101,7 +103,7 @@ The main implementation foundations are already present. Before the first stable
 - complete any open maintenance/security item that #31 identifies as blocking the claimed stable support level;
 - create the dated stable changelog section and publish an exact SemVer release only after those gates pass.
 
-Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #159 Antigravity autonomous mode, #71 SMB, #112 ARM64, #121 universal tooling, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because the core YAML deployment works.
+Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #121 universal tooling, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because the core YAML deployment works.
 
 ## Upstream pin policy
 
