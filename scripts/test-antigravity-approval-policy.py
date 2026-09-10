@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -43,6 +44,9 @@ def main() -> None:
     assert_ok({"artifactReviewPolicy": "asks-for-review"})
     assert_ok({"agentMode": "default"})
     assert_ok({"agentMode": "plan"})
+    assert policy.guarded_report({}).preset == "request-review (vendor default)"
+    assert policy.guarded_report({"toolPermission": "request-review"}).preset == "request-review"
+    assert policy.guarded_report({"toolPermission": "strict"}).preset == "strict"
     assert_ok(
         {
             "toolPermission": "request-review",
@@ -122,6 +126,114 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
+        original = {
+            "theme": "dark",
+            "allowNonWorkspaceAccess": True,
+            "enableTerminalSandbox": False,
+            "toolPermission": "always-proceed",
+            "artifactReviewPolicy": "always-proceed",
+            "agentMode": "accept-edits",
+            "permissions": {
+                "allow": ["command(git status)"],
+                "ask": ["command(curl)"],
+                "deny": ["command(rm)"],
+            },
+            "unknownFutureSetting": {"nested": [1, 2, 3]},
+        }
+        path = write_settings(root, original)
+        report = policy.set_guarded_preset("request-review", path)
+        updated = json.loads(path.read_text(encoding="utf-8"))
+        assert report.compatible
+        assert report.preset == "request-review"
+        assert updated["toolPermission"] == "request-review"
+        assert updated["artifactReviewPolicy"] == "asks-for-review"
+        assert updated["agentMode"] == "default"
+        for key in (
+            "theme",
+            "allowNonWorkspaceAccess",
+            "enableTerminalSandbox",
+            "permissions",
+            "unknownFutureSetting",
+        ):
+            assert updated[key] == original[key], key
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        original = {
+            "toolPermission": "request-review",
+            "artifactReviewPolicy": "asks-for-review",
+            "agentMode": "plan",
+            "permissions": {"allow": ["read_file"]},
+            "theme": "dark",
+        }
+        path = write_settings(root, original)
+        report = policy.set_guarded_preset("strict", path)
+        updated = json.loads(path.read_text(encoding="utf-8"))
+        assert report.compatible
+        assert report.preset == "strict"
+        assert updated["toolPermission"] == "strict"
+        assert updated["artifactReviewPolicy"] == "asks-for-review"
+        assert updated["agentMode"] == "plan", "safe plan mode must be preserved"
+        assert updated["permissions"] == original["permissions"]
+        assert updated["theme"] == "dark"
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        vendor = root / "vendor"
+        vendor.mkdir(mode=0o700)
+        path = vendor / "settings.json"
+        report = policy.set_guarded_preset("request-review", path)
+        assert report.compatible
+        assert json.loads(path.read_text(encoding="utf-8")) == {
+            "toolPermission": "request-review"
+        }
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        path = write_settings(root, {"artifactReviewPolicy": "future-policy", "theme": "dark"})
+        before = path.read_bytes()
+        try:
+            policy.set_guarded_preset("request-review", path)
+        except policy.PolicyError as exc:
+            assert "artifactReviewPolicy" in str(exc)
+        else:
+            raise AssertionError("unknown artifact review semantics must not be overwritten")
+        assert path.read_bytes() == before
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        path = write_settings(root, {"agentMode": "future-mode", "theme": "dark"})
+        before = path.read_bytes()
+        try:
+            policy.set_guarded_preset("strict", path)
+        except policy.PolicyError as exc:
+            assert "agentMode" in str(exc)
+        else:
+            raise AssertionError("unknown agent mode semantics must not be overwritten")
+        assert path.read_bytes() == before
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        path = write_settings(root, {"toolPermission": "always-proceed", "theme": "old"})
+        snapshot = policy.load_settings(path)
+        desired = policy._prepare_guarded_preset(snapshot.data, "request-review")
+        path.write_text(
+            json.dumps({"toolPermission": "always-proceed", "theme": "new"}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o600)
+        try:
+            policy._atomic_write_settings(snapshot, desired)
+        except policy.PolicyError as exc:
+            assert "settings changed" in str(exc)
+        else:
+            raise AssertionError("concurrent settings update must abort the preset write")
+        assert json.loads(path.read_text(encoding="utf-8"))["theme"] == "new"
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
         vendor = root / "vendor"
         vendor.mkdir(mode=0o700)
         real = vendor / "real.json"
@@ -135,6 +247,12 @@ def main() -> None:
             pass
         else:
             raise AssertionError("symlink settings must fail closed")
+        try:
+            policy.set_guarded_preset("request-review", link)
+        except policy.PolicyError:
+            pass
+        else:
+            raise AssertionError("symlink settings must not be rewritten")
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -160,8 +278,14 @@ def main() -> None:
         else:
             raise AssertionError("malformed JSON must fail closed")
 
-    assert not hasattr(policy, "repair_guarded"), "policy helper must not mutate vendor settings"
-    print("Antigravity guarded approval policy read-only diagnostics: OK")
+    try:
+        policy.set_guarded_preset("not-a-preset", Path("/tmp/not-used"))
+    except policy.PolicyError:
+        pass
+    else:
+        raise AssertionError("unknown guarded preset must fail closed")
+
+    print("Antigravity guarded approval policy diagnostics/presets: OK")
 
 
 if __name__ == "__main__":
