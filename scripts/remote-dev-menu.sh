@@ -528,7 +528,13 @@ antigravity_policy_summary() {
 configured_antigravity_mode=""
 antigravity_policy_summary_text=""
 refresh_antigravity_policy() {
-  antigravity_policy_summary_text="$(antigravity_policy_summary)"
+  local summary_status=0
+
+  antigravity_policy_summary_text="$(antigravity_policy_summary)" || summary_status=$?
+  if (( summary_status != 0 )); then
+    echo "ERROR: unable to inspect the configured Antigravity approval policy" >&2
+    exit 1
+  fi
   configured_antigravity_mode="$(
     sed -n 's/^Antigravity approval mode: //p' <<<"$antigravity_policy_summary_text"
   )"
