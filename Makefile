@@ -65,7 +65,7 @@ validate: agent-contract-tests ttyd-osc52-check
 	python3 scripts/test_antigravity_download.py
 	python3 scripts/test_run_antigravity_inspection.py
 	python3 scripts/test_detect_antigravity_installer.py
-	python3 scripts/test_discover-antigravity-payload.py
+	python3 scripts/test_discover_antigravity_payload.py
 	python3 scripts/test_reconcile_antigravity_review_state.py
 	python3 scripts/test_update_antigravity_review_evidence.py
 	python3 scripts/test_update_antigravity_review_doc.py
