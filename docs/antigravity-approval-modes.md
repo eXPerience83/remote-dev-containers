@@ -39,6 +39,8 @@ For an autonomous managed launch, Remote Dev adds the Antigravity CLI launch-sco
 
 Live TrueNAS validation for #159 established that this removes the normal tool and artifact-review stops for that launch, works the same for Start and `--continue`, and leaves no autonomous approval state persisted afterward. A later launch without the bypass returns to the vendor permission engine.
 
+That behavioral evidence is exact-version evidence for Antigravity CLI 1.1.28. Under the separate #96 runtime-admission contract, a newer compatible official runtime may be runnable while its Remote Dev review is pending; that status does not extend the 1.1.28 behavioral claim. If a later vendor release changes approval semantics, the mapping must be revalidated rather than silently redefining these modes.
+
 The wrapper owns this bypass argument. Passing `--dangerously-skip-permissions` directly through `run-antigravity` is rejected so callers cannot silently contradict the Remote Dev mode resolver.
 
 Remote Dev does not additionally enable `--sandbox` or persist an autonomous approval preset into vendor settings.
@@ -64,9 +66,9 @@ These are **provider presets inside Guarded**, not additional Remote Dev launch 
 
 Before a real guarded launch, Remote Dev reads `settings.json` offline and checks only the small set of top-level values that can remove the expected protected behavior:
 
-- `toolPermission` may be absent/default, `request-review`, or `strict`;
-- `artifactReviewPolicy` may be absent/default or `asks-for-review`;
-- `agentMode` may be absent/default, `default`, or `plan`.
+- `toolPermission` may be absent (vendor default), `request-review`, or `strict`;
+- `artifactReviewPolicy` may be absent (vendor default) or `asks-for-review`;
+- `agentMode` may be absent (vendor default), `default`, or `plan`.
 
 Known globally permissive states such as `toolPermission=always-proceed`, `toolPermission=proceed-in-sandbox`, `artifactReviewPolicy=agent-decides`, `artifactReviewPolicy=always-proceed`, or `agentMode=accept-edits` are incompatible with the managed guarded promise and block the launch instead of being silently ignored.
 
