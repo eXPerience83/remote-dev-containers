@@ -91,7 +91,7 @@ Antes de guardar la Custom App, revisa como mínimo:
 - cada IP bind de ejemplo y sustitúyela por la IP LAN/Tailscale/malla privada del host;
 - cada bind source `/mnt/Pool1/remote-dev` si tu pool/ruta es distinto;
 - los valores `WEB_PASSWORD` configurados para Codex y Antigravity opcional; son entradas separadas, pero actualmente pueden contener el mismo valor;
-- zona horaria, identidad Git y modo de aprobación de Codex;
+- zona horaria, identidad Git y modos de aprobación de Codex y Antigravity;
 - `REMOTE_DEV_PROJECT`: vacío para menú normal o un proyecto validado para modo directo.
 
 Remote Dev exige actualmente únicamente un valor no vacío de una sola línea para un endpoint de agente protegido. No impone longitud mínima, composición ni unicidad entre agentes; esas reglas quedan deliberadamente aplazadas a una futura decisión sobre acceso/autenticación web.
@@ -171,7 +171,16 @@ Un runtime más nuevo puede aparecer como **official source; Remote Dev review p
 
 Antigravity está implementado, no reservado, pero sigue deliberadamente **experimental**.
 
-Start/Resume por proyecto, continuidad útil de conversación, instalación/actualización explícitas, rollback de imagen, persistencia y validación amplia de ciclo de vida/aislamiento en TrueNAS están completados. También lo están el modelo de admisión #96 y la reconciliación humana #53 de términos/política.
+Start/Continue por proyecto, continuidad útil de conversación, instalación/actualización explícitas, rollback de imagen, persistencia y validación amplia de ciclo de vida/aislamiento en TrueNAS están completados. También lo están el modelo de admisión #96 y la reconciliación humana #53 de términos/política.
+
+Antigravity ofrece además la misma elección de aprobación de alto nivel que Codex:
+
+```dotenv
+REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=autonomous
+# o: guarded
+```
+
+`autonomous` es el valor predeterminado y añade el bypass por lanzamiento `--dangerously-skip-permissions` validado con Antigravity CLI 1.1.28. `guarded` omite ese bypass y mantiene activo el motor de permisos de Antigravity, con `request-review` y `strict` como presets soportados del proveedor. Las reglas finas `permissions.allow/ask/deny` siguen siendo gestionadas por el usuario. El menú puede aplicar un override Autonomous/Guarded al siguiente Start o Continue sin reescribir la configuración del despliegue.
 
 La interpretación de soporte es estrecha:
 
@@ -189,7 +198,7 @@ Es una interpretación humana de riesgo/soporte, no aprobación legal del provee
 
 La automatización #83 ya está enviada. El descubrimiento programado valida bytes acotados del proveedor como **datos** y no ejecuta código del proveedor. Los cambios se representan como metadata y la inspección ejecutable requiere el workflow explícito de revisión confiable.
 
-Consulta [`docs/antigravity-runtime-admission.es.md`](docs/antigravity-runtime-admission.es.md) y [`third_party/optional-agents.md`](third_party/optional-agents.md).
+Consulta [`docs/antigravity-approval-modes.es.md`](docs/antigravity-approval-modes.es.md), [`docs/antigravity-runtime-admission.es.md`](docs/antigravity-runtime-admission.es.md) y [`third_party/optional-agents.md`](third_party/optional-agents.md).
 
 ## Context7 para Codex
 
@@ -309,6 +318,7 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 - [`docs/user-guide.md`](docs/user-guide.md) / [`docs/user-guide.es.md`](docs/user-guide.es.md)
 - [`docs/codex-runtime-updates.es.md`](docs/codex-runtime-updates.es.md)
 - [`docs/context7-codex.es.md`](docs/context7-codex.es.md)
+- [`docs/antigravity-approval-modes.es.md`](docs/antigravity-approval-modes.es.md)
 - [`docs/antigravity-runtime-admission.es.md`](docs/antigravity-runtime-admission.es.md)
 - [`docs/truenas-acl-contract.es.md`](docs/truenas-acl-contract.es.md)
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)
