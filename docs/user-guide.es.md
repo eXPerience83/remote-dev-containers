@@ -2,7 +2,7 @@
 
 Esta guía cubre el uso diario normal **después de instalar Remote Dev**. Para la entrada de instalación en TrueNAS SCALE, empieza por el [README en español](../README.es.md#instalar-en-truenas-scale).
 
-Remote Dev sigue siendo experimental. Codex es el agente de referencia. Antigravity continúa como rol experimental habilitado de forma explícita y su validación real de proyectos/sesiones en TrueNAS se sigue por separado en [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131).
+Remote Dev sigue siendo experimental. Codex es el agente de referencia. Antigravity continúa como rol experimental habilitado de forma explícita; su comportamiento de proyectos/sesiones, ciclo de vida y modos de aprobación se ha validado en TrueNAS real para las versiones registradas en la evidencia de los issues correspondientes.
 
 ## 1. Modelo mental
 
@@ -179,7 +179,7 @@ Recrear el contenedor con los mismos mounts revisados debería conservar los dir
 
 ## 8. Antigravity: límite documental actual
 
-Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev es el contrato de selección del sistema de archivos junto con los puntos de entrada de conversación documentados por el proveedor:
+Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev incluye el contrato de proyecto/conversación y el contrato de modos de aprobación de Remote Dev:
 
 - el rol Antigravity tiene su propio `/workspace` y estado privados;
 - selecciona un proyecto concreto de Remote Dev antes de Start/Continue;
@@ -187,11 +187,16 @@ Antigravity continúa siendo experimental. El comportamiento común que es segur
 - **Start Antigravity** abre la TUI normal; usa `/resume` dentro de ella para explorar/reanudar conversaciones anteriores mediante el selector nativo de Google;
 - **Continue latest Antigravity conversation** pasa el flag `--continue` soportado por el proveedor y pide a Antigravity cargar la conversación más reciente asociada a ese workspace;
 - Remote Dev no expone una acción separada para explorar conversaciones ni interpreta el almacenamiento/caché de Antigravity para construir un selector alternativo;
-- las rutas de reanudación del menú ya no dependen del texto renderizado del prompt para decidir cuándo inyectar `/resume`, porque la apariencia de la TUI del proveedor puede cambiar de forma independiente al contrato CLI.
+- `autonomous` es el modo de aprobación predeterminado de Remote Dev y añade el bypass por lanzamiento `--dangerously-skip-permissions` validado con Antigravity CLI 1.1.28;
+- `guarded` omite ese bypass y mantiene activo el motor de permisos del proveedor; `request-review` y `strict` son los presets soportados y las reglas finas `allow/ask/deny` siguen siendo gestionadas por el usuario;
+- **Approval settings...** permite elegir Autonomous/Guarded para el siguiente Start o Continue y seleccionar explícitamente el preset persistente `toolPermission` de Guarded;
+- el modo de aprobación modifica únicamente el comportamiento de confirmación; no habilita el sandbox de terminal anidado de Antigravity ni amplía el contenedor exterior endurecido.
 
 Google documenta que `--continue` puede caer en una sesión nueva cuando la caché del workspace no contiene una conversación previa válida. El selector `/resume` dentro de la TUI sigue siendo la vía correcta cuando necesitas elegir entre varias conversaciones o conversaciones anteriores.
 
-**No** extrapoles a Antigravity el filtrado de sesiones, visibilidad de previews, reasociación hilo/ruta ni semántica de persistencia de Codex. La validación real de proyectos/sesiones en TrueNAS sigue en [#131](https://github.com/eXPerience83/remote-dev-containers/issues/131), dentro del ciclo experimental más amplio de #29/#106.
+La evidencia real del comportamiento de aprobación corresponde exactamente a Antigravity CLI 1.1.28. Un runtime oficial compatible más nuevo puede admitirse como review-pending según #96 sin ampliar esa afirmación exacta de comportamiento; los cambios materiales del proveedor deben revalidarse.
+
+**No** extrapoles a Antigravity el filtrado de sesiones, visibilidad de previews, reasociación hilo/ruta ni semántica de persistencia de Codex. La evidencia real de proyectos/sesiones y ciclo de vida en TrueNAS está registrada en #131/#29/#106, mientras que la evidencia y el contrato de aceptación de los modos de aprobación están registrados en #159.
 
 ## 9. Resolución rápida de problemas
 
@@ -228,6 +233,8 @@ Usa la guía provisional anterior y [#87](https://github.com/eXPerience83/remote
 - [README en español](../README.es.md) — instalación, resumen de arquitectura y advertencias.
 - [Actualizaciones del runtime de Codex](codex-runtime-updates.es.md) — admisión y fallback del runtime oficial opcional.
 - [Context7 para Codex](context7-codex.es.md) — integración MCP alojada opcional.
+- [Modos de aprobación de Antigravity](antigravity-approval-modes.es.md) — comportamiento autonomous/guarded, presets del proveedor y diagnósticos.
+- [Admisión del runtime de Antigravity](antigravity-runtime-admission.es.md) — instalación/actualización explícitas y modelo de integridad review-pending.
 - [Seguridad](security.md) — límite de aislamiento soportado en el contenedor exterior.
 - [Canales de release](releases.es.md) — `dev`, `edge`, `stable` y rollback.
 - [Matriz de herramientas](tool-matrix.md) — herramientas incluidas en la imagen frente a tooling que pertenece al proyecto.
