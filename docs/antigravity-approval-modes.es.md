@@ -39,6 +39,8 @@ En un lanzamiento gestionado autonomous, Remote Dev añade el bypass de aprobaci
 
 La validación real en TrueNAS de #159 demostró que elimina las paradas normales por aprobación de herramientas y revisión de artefactos durante ese lanzamiento, funciona igual en Start y `--continue` y no deja estado de autonomía persistente al salir. Un lanzamiento posterior sin el bypass vuelve al motor de permisos del proveedor.
 
+Esa evidencia de comportamiento corresponde exactamente a Antigravity CLI 1.1.28. Según el contrato independiente de admisión de runtime de #96, un runtime oficial compatible más nuevo puede seguir siendo ejecutable mientras su revisión de Remote Dev está pendiente; ese estado no amplía la afirmación de comportamiento validada en 1.1.28. Si una versión posterior del proveedor cambia la semántica de aprobación, habrá que revalidar este mapeo en lugar de redefinir silenciosamente los modos.
+
 El wrapper es propietario de este argumento. Pasar `--dangerously-skip-permissions` directamente a través de `run-antigravity` se rechaza para impedir que un llamador contradiga silenciosamente el resolver de Remote Dev.
 
 Remote Dev no habilita además `--sandbox` ni persiste un preset autónomo en la configuración del proveedor.
@@ -64,9 +66,9 @@ Son **presets del proveedor dentro de Guarded**, no modos adicionales de Remote 
 
 Antes de un lanzamiento real en guarded, Remote Dev lee `settings.json` de forma offline y comprueba únicamente el pequeño conjunto de valores de nivel superior que pueden eliminar el comportamiento protegido esperado:
 
-- `toolPermission` puede estar ausente/predeterminado, ser `request-review` o `strict`;
-- `artifactReviewPolicy` puede estar ausente/predeterminado o ser `asks-for-review`;
-- `agentMode` puede estar ausente/predeterminado, ser `default` o `plan`.
+- `toolPermission` puede estar ausente (valor predeterminado del proveedor), ser `request-review` o `strict`;
+- `artifactReviewPolicy` puede estar ausente (valor predeterminado del proveedor) o ser `asks-for-review`;
+- `agentMode` puede estar ausente (valor predeterminado del proveedor), ser `default` o `plan`.
 
 Estados globalmente permisivos conocidos como `toolPermission=always-proceed`, `toolPermission=proceed-in-sandbox`, `artifactReviewPolicy=agent-decides`, `artifactReviewPolicy=always-proceed` o `agentMode=accept-edits` son incompatibles con la promesa guarded gestionada y bloquean el lanzamiento en lugar de ignorarse silenciosamente.
 
