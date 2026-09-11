@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-09-10 — Codex CLI 0.153.4 → 0.154.0; mise 2026.9.3 → 2026.9.4; uv 0.12.11 → 0.12.12.
+
 - 2026-09-09 — mise 2026.9.1 → 2026.9.3; Node.js 24.20.0 → 24.21.0; uv 0.12.10 → 0.12.11; Context7 CLI (transient) 0.5.10 → 0.5.11.
 
 - 2026-09-05 — Codex CLI 0.153.2 → 0.153.4; uv 0.12.9 → 0.12.10; Context7 CLI (transient) 0.5.9 → 0.5.10.

@@ -47,7 +47,7 @@
     },
     {
       "id": "codex-cli",
-      "version": "rust-v0.153.4",
+      "version": "rust-v0.154.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -64,16 +64,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "f479424eca092484dc40d87ae28c44f4cc40234a60045d6131e493800d814a30",
-          "asset_size": 98582872,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "d7e18b2597ae8f242f5f31ee9e90deef48dbc9edd634d9868fb6435d08c07f02",
+          "asset_size": 98981886,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "5cda6182bd94c3a30f2eb63a495489ebf7f691fddb14d70f48c6c1a5071b6cde",
-          "asset_size": 90899740,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "583b48df32804213bdcd338c2e5adb06b34340821fa757a726cc0a524fa33c27",
+          "asset_size": 91768360,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -81,7 +81,7 @@
     },
     {
       "id": "codex-code-mode-host",
-      "version": "rust-v0.153.4",
+      "version": "rust-v0.154.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -98,16 +98,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "f95830a869590957664bbfc67bccb08773806b693670baf15908176f89b4cd31",
-          "asset_size": 25733165,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "a68df7cca23c6da7cde175677df7de61c73a234add1333a1254b86d641af01f7",
+          "asset_size": 25729904,
           "archive_member_count": 1,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
-          "asset_sha256": "d8047b8d33370d6090e729d27eb76de60a2686baa1c143c138c9b05dc70d813b",
-          "asset_size": 24358441,
+          "asset_url": "https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz",
+          "asset_sha256": "20aefa302c2022b496e32911bf954a5f76c7fd749c6bdb9fbd711e32b66dcbfa",
+          "asset_size": 24347420,
           "archive_member_count": 1,
           "legal_members": []
         }
@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.9.3",
+      "version": "2026.9.4",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.3/mise-v2026.9.3-linux-x64",
-          "asset_sha256": "981bd9179cc089114a87b491fce2c4007ab05b5445dee7ad08e87e5dffcc154d",
-          "asset_size": 125780000,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.4/mise-v2026.9.4-linux-x64",
+          "asset_sha256": "175e85492247586b8bcc428caf9f6bbe79b18edaa28e9a084086fd1b40cc8a0d",
+          "asset_size": 130224896,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.3/mise-v2026.9.3-linux-arm64",
-          "asset_sha256": "d8fa3d3fa2a21979c54c548967325a9db72f2a157996e8c536f62947b25592b7",
-          "asset_size": 108147960,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.4/mise-v2026.9.4-linux-arm64",
+          "asset_sha256": "858911883188ab4f0c10ba0d4e401f3af47737d3035c1820cd3c8aa400d09478",
+          "asset_size": 112015344,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.11",
+      "version": "0.12.12",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.11/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e",
-          "asset_size": 19422570,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.12/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "ab9b309d4586403f024e100abaceb396616e178a553e2500c36087d180f09509",
+          "asset_size": 19401972,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.11/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "e9933d907fb9cd27d606d819bbded419f2844c0e2efc98225ecfa409288eb28d",
-          "asset_size": 18589830,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.12/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "fe08db50cc1b56cd1da7801065ed1103d27ed3f9571cd122386cfc7faf1b8df5",
+          "asset_size": 18605224,
           "archive_member_count": 3,
           "legal_members": []
         }
