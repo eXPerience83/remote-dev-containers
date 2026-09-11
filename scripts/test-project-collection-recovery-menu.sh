@@ -98,6 +98,14 @@ AGY_STATUS
 cat >"$bin_dir/run-antigravity" <<'AGY'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == --print-policy ]]; then
+  printf '%s\n' \
+    'Antigravity approval mode: autonomous' \
+    'Approval behavior: vendor permission/review bypass for this launch' \
+    'Mode source: default' \
+    'Antigravity guarded compatibility: OK (toolPermission=default, artifactReviewPolicy=default)'
+  exit 0
+fi
 printf 'antigravity' >>"$REMOTE_DEV_TEST_AGENT_INVOCATIONS"
 AGY
 

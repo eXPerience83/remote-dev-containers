@@ -2,15 +2,121 @@
 set -euo pipefail
 
 readonly manager=/usr/local/bin/remote-dev-antigravity
+readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy
 readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth
 readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker
 readonly secure_state=/usr/local/bin/secure-persistent-state
 readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
+readonly default_approval_mode=autonomous
+
+fail_usage() {
+  printf 'ERROR: %s\n' "$1" >&2
+  printf 'Usage: run-antigravity [--approval-mode autonomous|guarded] [--print-policy] [--] [agy arguments...]\n' >&2
+  exit 2
+}
+
+validate_approval_mode() {
+  local mode="$1"
+  local source="$2"
+  case "$mode" in
+    autonomous|guarded) ;;
+    *) fail_usage "unsupported $source approval mode: $mode (autonomous|guarded)" ;;
+  esac
+}
+
+reject_policy_override() {
+  local argument="$1"
+  echo "ERROR: run-antigravity owns the approval policy; refusing argument: $argument" >&2
+  exit 2
+}
 
 open_resume_picker=0
-if [[ "${1:-}" == --remote-dev-open-resume-picker ]]; then
-  open_resume_picker=1
+explicit_mode=""
+explicit_mode_set=0
+print_policy=0
+forwarded=()
+
+while (( $# > 0 )); do
+  argument="$1"
   shift
+  case "$argument" in
+    --remote-dev-open-resume-picker)
+      (( open_resume_picker == 0 )) || fail_usage "--remote-dev-open-resume-picker may be specified only once"
+      open_resume_picker=1
+      ;;
+    --approval-mode)
+      (( explicit_mode_set == 0 )) || fail_usage "--approval-mode may be specified only once"
+      (( $# > 0 )) || fail_usage "--approval-mode requires autonomous or guarded"
+      [[ "$1" != -- ]] || fail_usage "--approval-mode requires autonomous or guarded"
+      explicit_mode="$1"
+      explicit_mode_set=1
+      shift
+      ;;
+    --approval-mode=*)
+      (( explicit_mode_set == 0 )) || fail_usage "--approval-mode may be specified only once"
+      explicit_mode="${argument#*=}"
+      [[ -n "$explicit_mode" ]] || fail_usage "--approval-mode requires autonomous or guarded"
+      explicit_mode_set=1
+      ;;
+    --print-policy)
+      (( print_policy == 0 )) || fail_usage "--print-policy may be specified only once"
+      print_policy=1
+      ;;
+    --)
+      forwarded+=(-- "$@")
+      break
+      ;;
+    *)
+      forwarded+=("$argument")
+      ;;
+  esac
+done
+
+approval_mode=""
+mode_source=""
+if (( explicit_mode_set == 1 )); then
+  validate_approval_mode "$explicit_mode" per-launch
+  approval_mode="$explicit_mode"
+  mode_source=per-launch
+elif [[ -n "${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-}" ]]; then
+  validate_approval_mode "$REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE" deployment
+  approval_mode="$REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE"
+  mode_source=deployment
+else
+  approval_mode="$default_approval_mode"
+  mode_source=default
+fi
+readonly approval_mode mode_source
+
+expect_vendor_mode=0
+for argument in "${forwarded[@]}"; do
+  if [[ "$argument" == -- ]] && (( expect_vendor_mode == 0 )); then
+    break
+  fi
+  if (( expect_vendor_mode == 1 )); then
+    if [[ "$approval_mode" == guarded && "$argument" == accept-edits ]]; then
+      reject_policy_override "--mode accept-edits (incompatible with guarded)"
+    fi
+    expect_vendor_mode=0
+    continue
+  fi
+  case "$argument" in
+    --dangerously-skip-permissions|--dangerously-skip-permissions=*)
+      reject_policy_override "$argument"
+      ;;
+    --mode)
+      expect_vendor_mode=1
+      ;;
+    --mode=accept-edits)
+      if [[ "$approval_mode" == guarded ]]; then
+        reject_policy_override "$argument (incompatible with guarded)"
+      fi
+      ;;
+  esac
+done
+
+if (( print_policy == 1 )) && (( ${#forwarded[@]} > 0 || open_resume_picker == 1 )); then
+  fail_usage "--print-policy cannot be combined with Antigravity arguments or picker actions"
 fi
 
 [[ -f "$runtime_lib" && -r "$runtime_lib" && ! -L "$runtime_lib" ]] \
@@ -24,13 +130,55 @@ if [[ "$resolved_role" != antigravity ]]; then
 fi
 export REMOTE_DEV_ROLE="$resolved_role"
 
+if (( print_policy == 1 )); then
+  printf '%s\n' \
+    'Inner sandbox: not managed by approval mode' \
+    'Isolation boundary: outer container' \
+    "Antigravity approval mode: $approval_mode"
+  if [[ "$approval_mode" == autonomous ]]; then
+    echo 'Approval behavior: vendor permission/review bypass for this launch'
+  else
+    echo 'Approval behavior: vendor permission/review engine active'
+  fi
+  echo "Mode source: $mode_source"
+  if [[ -x "$policy_helper" && ! -L "$policy_helper" ]]; then
+    policy_output=""
+    policy_status=0
+    policy_output="$("$policy_helper" status 2>&1)" || policy_status=$?
+    if [[ -n "$policy_output" && "$policy_output" == Antigravity\ guarded\ compatibility:* ]]; then
+      printf '%s\n' "$policy_output"
+    elif (( policy_status != 0 )); then
+      echo 'Antigravity guarded compatibility: BLOCKED (settings inspection unavailable; run diagnostics)'
+    else
+      echo 'Antigravity guarded compatibility: unavailable'
+    fi
+  else
+    echo 'Antigravity guarded compatibility: unavailable (policy helper missing)'
+  fi
+  exit 0
+fi
+
 [[ -x "$manager" ]] || { echo "ERROR: Antigravity runtime manager is unavailable" >&2; exit 1; }
 [[ -x "$secure_state" ]] || { echo "ERROR: persistent-state hardening command is unavailable" >&2; exit 1; }
+[[ -x "$policy_helper" && ! -L "$policy_helper" ]] \
+  || { echo "ERROR: Antigravity approval-policy helper is unavailable" >&2; exit 1; }
 if (( open_resume_picker )); then
   [[ "${TMUX_PANE:-}" =~ ^%[0-9]+$ ]] \
     || { echo "ERROR: the Antigravity conversation picker requires a tmux pane" >&2; exit 2; }
   [[ -x "$picker_helper" ]] \
     || { echo "ERROR: Antigravity conversation-picker helper is unavailable" >&2; exit 1; }
+fi
+
+if [[ "$approval_mode" == guarded ]]; then
+  guarded_output=""
+  guarded_status=0
+  guarded_output="$("$policy_helper" check-guarded 2>&1)" || guarded_status=$?
+  if (( guarded_status != 0 )); then
+    echo "ERROR: Remote Dev cannot guarantee guarded Antigravity semantics with the current vendor settings." >&2
+    [[ -z "$guarded_output" ]] || printf '%s\n' "$guarded_output" >&2
+    echo "Adjust Antigravity's vendor permission settings, then retry guarded mode." >&2
+    exit 2
+  fi
 fi
 
 binary="$("$manager" path)"
@@ -75,6 +223,11 @@ if [[ "$entered_project_identity" != "$entered_project_path_identity" ]]; then
 fi
 
 export AGY_CLI_DISABLE_AUTO_UPDATE=true
+
+owned_policy_args=()
+if [[ "$approval_mode" == autonomous ]]; then
+  owned_policy_args+=(--dangerously-skip-permissions)
+fi
 
 child_pid=""
 oauth_helper_pid=""
@@ -276,7 +429,7 @@ assert_entered_project_identity || exit $?
 # Bash redirects stdin for asynchronous commands and makes them ignore INT/QUIT
 # when job control is disabled. Preserve fd 0 explicitly and reset those signal
 # dispositions before execing the interactive vendor CLI.
-env --default-signal=INT,TERM,QUIT -- "$binary" "$@" <&0 &
+env --default-signal=INT,TERM,QUIT -- "$binary" "${owned_policy_args[@]}" "${forwarded[@]}" <&0 &
 child_pid=$!
 start_picker_helper
 session_status=0

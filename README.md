@@ -91,7 +91,7 @@ Before saving the Custom App, review at least:
 - every example bind IP and replace it with the LAN/Tailscale/private-mesh IP of the TrueNAS host;
 - every `/mnt/Pool1/remote-dev` bind source if your pool/path differs;
 - the configured Codex and optional Antigravity `WEB_PASSWORD` values; they are separate configuration entries but may currently contain the same value;
-- timezone, Git identity and Codex approval mode where needed;
+- timezone, Git identity and Codex/Antigravity approval modes where needed;
 - `REMOTE_DEV_PROJECT`: leave the YAML value empty for normal menu mode or set a validated fixed project for direct-agent use.
 
 Remote Dev currently requires only a non-empty single-line value for a protected agent endpoint. It does not enforce minimum length, composition or cross-service uniqueness yet; those choices are intentionally deferred to a future browser-access/security decision.
@@ -175,7 +175,16 @@ A newer admitted runtime can be shown as **official source; Remote Dev review pe
 
 Antigravity is implemented, not reserved, but remains deliberately **experimental**.
 
-Its project-scoped Start/Resume, useful conversation continuity, explicit install/update, image rollback, persistence and broader TrueNAS lifecycle/isolation validation are complete. The #96 hardened runtime-admission model and the human #53 current-terms/policy reconciliation are also complete.
+Its project-scoped Start/Continue, useful conversation continuity, explicit install/update, image rollback, persistence and broader TrueNAS lifecycle/isolation validation are complete. The #96 hardened runtime-admission model and the human #53 current-terms/policy reconciliation are also complete.
+
+Antigravity also exposes the same high-level approval choice as Codex:
+
+```dotenv
+REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=autonomous
+# or: guarded
+```
+
+`autonomous` is the default and adds the launch-scoped vendor `--dangerously-skip-permissions` bypass validated on Antigravity CLI 1.1.28. `guarded` omits that bypass and keeps Antigravity's own permission engine active, with `request-review` and `strict` as the supported provider presets. Fine-grained `permissions.allow/ask/deny` rules remain user-managed. The menu can override Autonomous/Guarded for the next Start or Continue without rewriting the deployment setting.
 
 Remote Dev's accepted support interpretation is narrow:
 
@@ -193,7 +202,7 @@ The project records this as a human risk/support interpretation, not vendor lega
 
 Scheduled #83 review automation is shipped. Daily discovery validates/downloads bounded installer/manifest/archive bytes as **data**, computes installer/payload identities and executes no vendor code. Changed candidates cross that boundary as metadata; executable inspection requires the explicit trusted review workflow.
 
-See [`docs/antigravity-runtime-admission.md`](docs/antigravity-runtime-admission.md) and [`third_party/optional-agents.md`](third_party/optional-agents.md).
+See [`docs/antigravity-approval-modes.md`](docs/antigravity-approval-modes.md), [`docs/antigravity-runtime-admission.md`](docs/antigravity-runtime-admission.md) and [`third_party/optional-agents.md`](third_party/optional-agents.md).
 
 ## Context7 for Codex
 
@@ -317,6 +326,7 @@ See [`docs/releases.md`](docs/releases.md).
 - [`docs/user-guide.md`](docs/user-guide.md) / [`docs/user-guide.es.md`](docs/user-guide.es.md)
 - [`docs/codex-runtime-updates.md`](docs/codex-runtime-updates.md) / [`docs/codex-runtime-updates.es.md`](docs/codex-runtime-updates.es.md)
 - [`docs/context7-codex.md`](docs/context7-codex.md) / [`docs/context7-codex.es.md`](docs/context7-codex.es.md)
+- [`docs/antigravity-approval-modes.md`](docs/antigravity-approval-modes.md) / [`docs/antigravity-approval-modes.es.md`](docs/antigravity-approval-modes.es.md)
 - [`docs/antigravity-runtime-admission.md`](docs/antigravity-runtime-admission.md) / [`docs/antigravity-runtime-admission.es.md`](docs/antigravity-runtime-admission.es.md)
 - [`docs/truenas-acl-contract.md`](docs/truenas-acl-contract.md) / [`docs/truenas-acl-contract.es.md`](docs/truenas-acl-contract.es.md)
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)

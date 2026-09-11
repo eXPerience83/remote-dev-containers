@@ -286,6 +286,7 @@ elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
   check_cmd remote-dev-update-antigravity
+  check_cmd remote-dev-antigravity-policy
   check_cmd run-antigravity
 fi
 
@@ -385,11 +386,28 @@ elif [[ "$role" == antigravity ]]; then
   if (( antigravity_status_code != 0 && antigravity_status_code != 3 )); then
     status=1
   fi
+
+  echo
+  antigravity_policy_output=""
+  if antigravity_policy_output="$(run-antigravity --print-policy 2>&1)"; then
+    printf '%s\n' "$antigravity_policy_output"
+  else
+    echo 'Antigravity launch policy: unavailable'
+    status=1
+  fi
+  antigravity_guarded_status=0
+  remote-dev-antigravity-policy status >/dev/null 2>&1 || antigravity_guarded_status=$?
+  if (( antigravity_guarded_status != 0 )); then
+    status=1
+  fi
+
   echo 'Antigravity support status: experimental validation only; not yet a supported integration.'
   echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
   echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'
   echo 'Antigravity authentication: managed only by the official Google client.'
-  echo 'Antigravity project safety: Remote Dev applies the same collection/Git boundary used by Codex; no vendor sandbox is claimed by this fix.'
+  echo 'Antigravity project safety: Remote Dev applies the same collection/Git boundary used by Codex; approval mode does not create a filesystem sandbox.'
+  echo 'INFO: autonomous approval uses a launch-scoped vendor bypass; it does not enable the unsupported nested sandbox.'
+  echo 'INFO: guarded compatibility diagnostics are read-only; vendor permission settings remain user-managed.'
 fi
 
 if [[ "$role" != launcher ]]; then

@@ -519,9 +519,110 @@ run_codex_action() {
 
   run_interactive_and_harden "$label" "${command[@]}"
 }
+
+antigravity_policy_summary() {
+  /usr/local/bin/run-antigravity --print-policy \
+    | grep -E '^(Antigravity approval mode|Approval behavior|Mode source|Antigravity guarded compatibility|Antigravity guarded preset|Antigravity guarded policy source|Antigravity fine-grained permissions):'
+}
+
+configured_antigravity_mode=""
+antigravity_policy_summary_text=""
+refresh_antigravity_policy() {
+  local summary_status=0
+
+  antigravity_policy_summary_text="$(antigravity_policy_summary)" || summary_status=$?
+  if (( summary_status != 0 )); then
+    echo "ERROR: unable to inspect the configured Antigravity approval policy" >&2
+    exit 1
+  fi
+  configured_antigravity_mode="$(
+    sed -n 's/^Antigravity approval mode: //p' <<<"$antigravity_policy_summary_text"
+  )"
+  case "$configured_antigravity_mode" in
+    autonomous|guarded) ;;
+    *)
+      echo "ERROR: unable to resolve the configured Antigravity approval mode" >&2
+      exit 1
+      ;;
+  esac
+}
+
+next_antigravity_mode=""
+next_antigravity_mode_summary() {
+  if [[ -n "$next_antigravity_mode" ]]; then
+    printf 'Next launch mode: %s (one launch)\n' "$next_antigravity_mode"
+  else
+    printf 'Next launch mode: configured (%s)\n' "$configured_antigravity_mode"
+  fi
+}
+
+set_antigravity_guarded_preset() {
+  local preset="$1"
+
+  run_interactive_and_harden_to \
+    "Press Enter to return to Antigravity approval settings..." \
+    "Antigravity guarded preset" \
+    /usr/local/bin/remote-dev-antigravity-policy set-preset "$preset"
+}
+
+show_antigravity_approval_menu() {
+  local next_mode_summary=""
+
+  while true; do
+    refresh_antigravity_policy
+    next_mode_summary="$(next_antigravity_mode_summary)"
+    clear
+    cat <<MENU
+Antigravity approval settings
+=============================
+${antigravity_policy_summary_text}
+${next_mode_summary}
+
+Remote Dev has two launch modes. Autonomous uses the managed vendor bypass.
+Guarded keeps Antigravity's permission engine active; choose one guarded preset
+below. Fine-grained allow/ask/deny rules remain user-managed and are preserved.
+
+1) Use configured mode for next launch — ${configured_antigravity_mode}
+2) Autonomous for next launch — no confirmations
+3) Guarded for next launch — provider permission engine active
+4) Set Guarded preset: request-review (recommended)
+5) Set Guarded preset: strict (more restrictive)
+6) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        next_antigravity_mode=""
+        return 0
+        ;;
+      2)
+        next_antigravity_mode=autonomous
+        return 0
+        ;;
+      3)
+        next_antigravity_mode=guarded
+        return 0
+        ;;
+      4)
+        if set_antigravity_guarded_preset request-review; then :; fi
+        ;;
+      5)
+        if set_antigravity_guarded_preset strict; then :; fi
+        ;;
+      6)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
 run_antigravity_action() {
   local label="$1"
   shift
+  local launch_mode=""
   local project_status=0
   local -a command=()
 
@@ -531,7 +632,13 @@ run_antigravity_action() {
     return "$project_status"
   fi
 
+  launch_mode="$next_antigravity_mode"
+  next_antigravity_mode=""
   command=(env "REMOTE_DEV_PROJECT=$active_project_name" /usr/local/bin/run-antigravity)
+  if [[ -n "$launch_mode" ]]; then
+    command+=(--approval-mode "$launch_mode")
+    label+=" ($launch_mode)"
+  fi
   command+=("$@")
   run_interactive_and_harden "$label" "${command[@]}"
 }
@@ -685,9 +792,11 @@ MENU
 }
 
 show_antigravity_menu() {
-  local status_summary="" project_summary=""
+  local status_summary="" next_mode_summary="" project_summary=""
 
   while true; do
+    refresh_antigravity_policy
+    next_mode_summary="$(next_antigravity_mode_summary)"
     status_summary="$(antigravity_status_summary)"
     refresh_project_selection
     project_summary="$(project_status_summary)"
@@ -696,12 +805,14 @@ show_antigravity_menu() {
 Remote Dev — Antigravity
 ${version_summary}
 ${status_summary}
+${antigravity_policy_summary_text}
+${next_mode_summary}
 ${project_summary}
 ========================
 1) Start Antigravity (use /resume to browse/resume older conversations)
 2) Continue latest Antigravity conversation (current project)
 3) Projects...
-4) Launch/approval options [not available]
+4) Approval settings...
 5) Install Antigravity from Google
 6) Update Antigravity from Google
 7) Context7 integration [pending #95]
@@ -723,7 +834,7 @@ MENU
         show_projects_menu
         ;;
       4)
-        show_unavailable_action "Antigravity does not currently expose a Remote Dev-reviewed launch/approval option."
+        show_antigravity_approval_menu
         ;;
       5)
         if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi

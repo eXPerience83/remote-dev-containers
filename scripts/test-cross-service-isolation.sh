@@ -1161,7 +1161,7 @@ assert_hardened_antigravity_host_fixtures() {
     || fail "Antigravity copied fixture sources could not be made readable"
 
   run_hardened_antigravity_fixture "Antigravity runtime/admission fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-runtime.sh"
+    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-runtime-policy-neutral.sh"
   run_hardened_antigravity_fixture "Antigravity security fixture failed under hardening" \
     "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-security-regressions.sh"
   run_hardened_antigravity_fixture "Antigravity repair fixture failed under hardening" \

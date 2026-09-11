@@ -41,6 +41,8 @@ jobs:
             scripts/test-remote-dev-context7-ownership.py \
             scripts/preflight-data-layout.py \
             scripts/inspect-antigravity-cli.py \
+            scripts/remote-dev-antigravity-policy.py \
+            scripts/test-antigravity-approval-policy.py \
             scripts/test_single_stack_compose.py \
             scripts/test_canonical_data_layout.py \
             scripts/test_preflight_data_layout.py \
@@ -66,6 +68,9 @@ jobs:
             web/ttyd-osc52/generate.py \
             web/ttyd-osc52/validate.py \
             web/ttyd-osc52/test_generate.py
+          sudo install -m 0755 \
+            scripts/remote-dev-antigravity-policy.py \
+            /usr/local/bin/remote-dev-antigravity-policy
           python3 web/ttyd-osc52/validate.py
           python3 web/ttyd-osc52/generate.py --check
           node web/ttyd-osc52/test_osc52.js

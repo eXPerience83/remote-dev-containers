@@ -53,15 +53,15 @@ The supported TrueNAS security boundary is the outer agent container. The defaul
 
 `danger-full-access` describes only the Codex inner sandbox. It does not add Docker privileges, capabilities, host mounts, unconfined profiles or a container-engine socket.
 
-Approval prompts are not a sandbox. Autonomous and guarded modes can access every path and credential mounted into Codex. Guarded mode adds confirmation friction only.
+Approval prompts are not a sandbox. Autonomous and guarded modes can access every path and credential mounted into the relevant agent container. Guarded mode adds confirmation friction only.
 
 ### Antigravity vendor terminal sandbox
 
 Remote Dev also does not force or manage Antigravity's vendor terminal sandbox in the supported TrueNAS path. A controlled disposable TrueNAS test on Antigravity CLI 1.1.27 kept the existing hardened container unchanged: `unshare -Ur true` failed with `Operation not permitted`; `run-antigravity --sandbox` started the vendor UI, but terminal execution requested an explicit sandbox bypass, and after rejecting that bypass even `pwd` failed with `fork/exec /root/.local/bin/agy: operation not permitted`.
 
-That exact-version evidence means the vendor terminal sandbox is not usable for terminal tool execution under the current hardened baseline without leaving the sandbox. Remote Dev therefore keeps the outer role container as the supported isolation boundary and will not add `privileged`, `SYS_ADMIN`, unconfined profiles, host namespaces or similar weakening merely to make a nested vendor sandbox work. Antigravity approval/autonomous policy remains separate work under #159 and must not depend on sandbox bypass or `proceed-in-sandbox`.
+That exact-version evidence means the vendor terminal sandbox is not usable for terminal tool execution under the current hardened baseline without leaving the sandbox. Remote Dev therefore keeps the outer role container as the supported isolation boundary and will not add `privileged`, `SYS_ADMIN`, unconfined profiles, host namespaces or similar weakening merely to make a nested vendor sandbox work. Antigravity autonomous/guarded approval is a separate launch-policy layer and does not depend on sandbox bypass, `proceed-in-sandbox`, `--sandbox` or weakening the container.
 
-See `docs/antigravity-sandbox-baseline.md` / `.es.md` for the recorded test and version-specific scope.
+See `docs/antigravity-sandbox-baseline.md` / `.es.md` for the recorded test and version-specific scope, and `docs/antigravity-approval-modes.md` / `.es.md` for the approval contract.
 
 ## Enforced container hardening
 
@@ -161,11 +161,37 @@ The menu can select another mode for one start or resume. That override is consu
 
 The command launcher rejects raw sandbox/approval flags, profiles and project-trust configuration overrides before Codex starts. The guarded override is not written to the user's `config.toml`, so another project or a later autonomous launch cannot inherit it. Users may invoke the raw Codex binary manually from a shell, but that is outside the supported launcher contract. Approval prompts do not change the outer-container isolation boundary.
 
+## Antigravity approval modes
+
+The project-owned Antigravity wrapper uses the same Remote Dev mode abstraction:
+
+- `autonomous` is the default and adds the validated launch-scoped vendor `--dangerously-skip-permissions` argument;
+- `guarded` omits that argument and leaves Antigravity's own permission/review engine active.
+
+Configure the service value with:
+
+```dotenv
+REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE=autonomous
+# or: guarded
+```
+
+The menu can select another mode for one Start or Continue; the override is consumed once and does not rewrite the deployment setting. Start and the vendor-supported `--continue` path use the same resolver.
+
+Remote Dev owns the direct bypass argument and rejects a caller-supplied `--dangerously-skip-permissions` through `run-antigravity`. It does not enable the vendor terminal sandbox or persist an autonomous approval preset.
+
+Guarded supports two provider presets in the canonical private `~/.gemini/antigravity-cli/settings.json`: recommended/default `request-review` and the more restrictive `strict`. Before a guarded real launch, the offline policy helper checks those plus normal artifact review and `default`/`plan` agent modes. Known globally permissive values such as `always-proceed`, `proceed-in-sandbox`, permissive artifact review, or `agentMode=accept-edits` block the managed guarded launch. Malformed, unsafe or unknown relevant state also fails closed.
+
+Fine-grained `permissions.allow`, `permissions.ask` and `permissions.deny` remain user-managed and are not treated as conflicts merely because they exist. This lets advanced users keep deliberate exceptions while Remote Dev guarantees that it has not globally bypassed the provider's permission engine.
+
+Doctor, Start/Continue and normal policy status are read-only. The menu's explicit Guarded preset action changes only `toolPermission`, setting it to `request-review` or `strict`. It preserves unrelated vendor state and the complete fine-grained `permissions` object; incompatible, unknown or malformed `artifactReviewPolicy` / `agentMode` state is reported and left untouched, and unknown/malformed existing `toolPermission` is never guessed or overwritten.
+
+See `docs/antigravity-approval-modes.md` / `.es.md` for the complete operational contract.
+
 ## Optional vendor agents
 
-Antigravity, Claude Code and other proprietary agents are not bundled or downloaded by the current image. An optional integration must:
+Antigravity, Claude Code and other proprietary agents are not bundled into the current image. An optional integration must:
 
-- use an explicit user action;
+- use an explicit user action for vendor runtime installation/update;
 - download from an official vendor-controlled source;
 - pass dedicated legal/package inspection;
 - keep credentials and state inside that agent's private mounts;

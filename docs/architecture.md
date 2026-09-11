@@ -24,11 +24,11 @@ Implemented foundations include:
 - hardened outer-container boundaries and cross-service isolation canaries validated on TrueNAS;
 - deterministic TrueNAS bootstrap plus Generic/POSIX ACL audit/migration guidance;
 - Codex as the bundled reference agent with immutable fallback plus explicit optional runtime admission;
-- Antigravity as an optional **experimental** official-CLI integration with explicit install/update, private persistence and reviewed admission/integrity controls;
+- Antigravity as an optional **experimental** official-CLI integration with explicit install/update, private persistence, reviewed admission/integrity controls and launch-scoped autonomous/guarded approval modes;
 - Context7 for Codex plus reviewed transient device-code onboarding;
 - `dev -> edge -> stable = latest` channel semantics with dated edge build identity separate from channel/provenance.
 
-Still optional/future rather than part of the current core architecture: #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #71 SMB, #95 Context7 for Antigravity, #159 Antigravity autonomous mode, #112 ARM64, #121 broader tooling, #148 concurrent sessions/worktrees, #151 isolated container build/test tooling and separate frontend/mobile work.
+Still optional/future rather than part of the current core architecture: #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #71 SMB, #95 Context7 for Antigravity, #112 ARM64, #121 broader tooling, #148 concurrent sessions/worktrees, #151 isolated container build/test tooling and separate frontend/mobile work.
 
 Claude remains reserved and unimplemented until a dedicated implementation, licensing and isolation path is reviewed.
 
@@ -70,15 +70,19 @@ Antigravity is an **optional experimental** role with its own workspace, configu
 
 Remote Dev does not redistribute Google's proprietary installer/CLI bytes. The `agy` runtime is installed or updated only by explicit user action through the reviewed official-source path into private persisted state; normal startup does not download it and supported sessions keep vendor automatic update disabled.
 
-The current runtime contract includes review-pending admission, private manifest/provenance state, lightweight offline status, explicit full verification/Doctor checks, exactly one mandatory full integrity gate before execution, project-scoped Start/Resume and completed TrueNAS update/rollback/persistence/isolation evidence.
+The current runtime contract includes review-pending admission, private manifest/provenance state, lightweight offline status, explicit full verification/Doctor checks, exactly one mandatory full integrity gate before execution, project-scoped Start/Continue and completed TrueNAS update/rollback/persistence/isolation evidence.
 
-Remote Dev does not force Antigravity's vendor terminal sandbox. A controlled TrueNAS test with Antigravity CLI 1.1.27 under the unchanged hardened service showed that `--sandbox` can start the vendor UI, but terminal execution requests sandbox bypass and, when that bypass is rejected, fails with `operation not permitted`. The supported isolation boundary therefore remains the hardened outer Antigravity container plus the selected-project/Git boundary. Approval/autonomous behavior tracked by #159 is a separate policy layer and must not depend on enabling the vendor sandbox or weakening the container.
+Remote Dev exposes the same high-level `autonomous|guarded` approval abstraction used for Codex while retaining provider-specific mechanics. The Antigravity default is `autonomous`; managed autonomous launches add the validated launch-scoped vendor `--dangerously-skip-permissions` override, while managed guarded launches omit it and leave the vendor permission/review engine active. Start and `--continue` share the same resolver, and the menu supports a one-launch override that is consumed once.
+
+Guarded compatibility is checked offline from the small reviewed set of top-level fields in `~/.gemini/antigravity-cli/settings.json` that can disable protected behavior. The supported provider presets are `request-review` and the more restrictive `strict`; known globally permissive or unknown relevant values fail closed, while fine-grained `permissions.allow/ask/deny` rules remain user-managed and are not treated as conflicts merely because they exist. `remote-dev-doctor`, Start/Continue and policy status are read-only. Only an explicit Guarded preset selection from the menu or `remote-dev-antigravity-policy set-preset` changes vendor policy, and that action changes only `toolPermission`; incompatible or unknown `artifactReviewPolicy` / `agentMode` state is reported and left untouched.
+
+Remote Dev does not force Antigravity's vendor terminal sandbox. A controlled TrueNAS test with Antigravity CLI 1.1.27 under the unchanged hardened service showed that `--sandbox` can start the vendor UI, but terminal execution requests sandbox bypass and, when that bypass is rejected, fails with `operation not permitted`. The supported isolation boundary therefore remains the hardened outer Antigravity container plus the selected-project/Git boundary. Autonomous approval changes confirmation behavior only and does not depend on enabling the vendor sandbox or weakening the container.
 
 The #53 human terms/policy disposition is complete. The project deliberately keeps Antigravity experimental because the official-CLI container/wrapper model is a project interpretation of current vendor policy, not Google approval, certification or endorsement. Remote Dev must not implement an alternative Antigravity service client or reuse/export Antigravity/Google OAuth credentials for other coding agents/services.
 
 The scheduled #83 review path keeps detection and execution separate: scheduled discovery treats bounded vendor bytes as data and executes no vendor code; changed candidates require the explicit trusted review workflow before executable evidence is admitted.
 
-See `docs/antigravity-runtime-admission.md` / `.es.md`, `docs/antigravity-sandbox-baseline.md` / `.es.md` and `third_party/optional-agents.md`.
+See `docs/antigravity-runtime-admission.md` / `.es.md`, `docs/antigravity-sandbox-baseline.md` / `.es.md`, `docs/antigravity-approval-modes.md` / `.es.md` and `third_party/optional-agents.md`.
 
 ### Shell
 
@@ -168,7 +172,7 @@ The full source revision and OCI digest remain stronger provenance. `latest` is 
 
 ## Validation contract
 
-Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, password-free launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, protected agent authentication without an undocumented password-complexity/uniqueness gate, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
+Automated and real-system validation together cover, where relevant, role/start-mode validation, project safety, Codex/Antigravity project-scoped launch, autonomous/guarded approval-mode resolution, password-free launcher fixed navigation and isolation, intended common image identity, exact role-private mounts, deterministic bootstrap/preflight/ACL audit, protected agent authentication without an undocumented password-complexity/uniqueness gate, outer-container hardening, Codex optional-runtime fallback, Antigravity admission/integrity/review automation, Context7 credential/device-login boundaries, notices/SBOM/vulnerability gates and publication identity.
 
 Manual TrueNAS validation remains required when a change affects real deployment behavior; completed lifecycle evidence should not be relisted as future work merely because the repository remains pre-stable.
 

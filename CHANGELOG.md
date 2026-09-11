@@ -57,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Canonical `start-remote-dev-web`, `remote-dev-menu`, `remote-dev-doctor` and role-aware healthcheck commands.
 - Implemented fixed `REMOTE_DEV_ROLE=launcher|codex|antigravity|shell` resolution; Antigravity is optional/experimental and `claude` remains reserved/unimplemented.
 - Validated `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous|guarded`, one-launch menu/CLI overrides and diagnostics that report the effective upstream policy and its source.
+- Added first-class Antigravity `autonomous|guarded` approval modes with one-launch Start/Continue overrides, offline Guarded compatibility diagnostics, and explicit `request-review|strict` provider preset selection that changes only `toolPermission` while leaving the outer container and vendor sandbox boundaries unchanged.
 - Canonical local image tags `remote-dev-base:local` and `remote-dev:local`, plus compatibility tags that are verified to share the same image IDs.
 - Canonical GHCR package `ghcr.io/experience83/remote-dev`; edge, stable and PR-candidate publication use only this runtime package after exact-digest scanning.
 - Compose regression tests for canonical defaults, legacy fallback, canonical precedence and empty-value handling across generic and TrueNAS files.

@@ -195,6 +195,7 @@ services:
       ALLOW_INSECURE_WEB: "0"
       START_MODE: menu
       TMUX_SESSION: antigravity
+      REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE: autonomous
       AGY_CLI_DISABLE_AUTO_UPDATE: "true"
 
       GH_HOST: github.com
