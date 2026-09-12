@@ -8,8 +8,8 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 | codex-cli | `rust-v0.154.0` | tar.gz | None | LICENSE, NOTICE |
 | codex-code-mode-host | `rust-v0.154.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
-| mise | `2026.9.4` | raw-binary | None | LICENSE |
-| uv | `0.12.12` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
+| mise | `2026.9.5` | raw-binary | None | LICENSE |
+| uv | `0.12.13` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
 
 ## Interpretation
 
