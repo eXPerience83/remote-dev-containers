@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.9.4",
+      "version": "2026.9.5",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.4/mise-v2026.9.4-linux-x64",
-          "asset_sha256": "175e85492247586b8bcc428caf9f6bbe79b18edaa28e9a084086fd1b40cc8a0d",
-          "asset_size": 130224896,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.5/mise-v2026.9.5-linux-x64",
+          "asset_sha256": "32f644d8c291bb182f702c6d2b0dda9f8b01441e940d74d328aad5f08446b2fd",
+          "asset_size": 130221200,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.4/mise-v2026.9.4-linux-arm64",
-          "asset_sha256": "858911883188ab4f0c10ba0d4e401f3af47737d3035c1820cd3c8aa400d09478",
-          "asset_size": 112015344,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.5/mise-v2026.9.5-linux-arm64",
+          "asset_sha256": "3721d44253d0a014545eb1fe13258333da270b98d8c7523e07e7619e74e2f77f",
+          "asset_size": 113012144,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.12",
+      "version": "0.12.13",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.12/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "ab9b309d4586403f024e100abaceb396616e178a553e2500c36087d180f09509",
-          "asset_size": 19401972,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd",
+          "asset_size": 19391575,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.12/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "fe08db50cc1b56cd1da7801065ed1103d27ed3f9571cd122386cfc7faf1b8df5",
-          "asset_size": 18605224,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9",
+          "asset_size": 18581057,
           "archive_member_count": 3,
           "legal_members": []
         }
