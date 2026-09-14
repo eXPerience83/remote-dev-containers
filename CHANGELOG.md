@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-09-13 — mise 2026.9.5 → 2026.9.6.
+
 - 2026-09-12 — mise 2026.9.4 → 2026.9.5; uv 0.12.12 → 0.12.13.
 
 - 2026-09-10 — Codex CLI 0.153.4 → 0.154.0; mise 2026.9.3 → 2026.9.4; uv 0.12.11 → 0.12.12.
