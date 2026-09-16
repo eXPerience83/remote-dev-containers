@@ -4,7 +4,7 @@
   "components": [
     {
       "id": "github-cli",
-      "version": "2.100.0",
+      "version": "2.101.0",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -16,13 +16,13 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_amd64.tar.gz",
-          "asset_sha256": "e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be",
-          "asset_size": 15152253,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz",
+          "asset_sha256": "9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8",
+          "asset_size": 15282175,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.100.0_linux_amd64/LICENSE",
+              "path": "gh_2.101.0_linux_amd64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -30,13 +30,13 @@
           ]
         },
         "arm64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_arm64.tar.gz",
-          "asset_sha256": "ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961",
-          "asset_size": 13783869,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_arm64.tar.gz",
+          "asset_sha256": "b57e8063f18862647c9d22727c32e9da1b963f8bf9db648fe123a6975695640f",
+          "asset_size": 13885041,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.100.0_linux_arm64/LICENSE",
+              "path": "gh_2.101.0_linux_arm64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.9.6",
+      "version": "2026.9.9",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.6/mise-v2026.9.6-linux-x64",
-          "asset_sha256": "04260a49d2cb7f46c91d3f90547f8486ba6c6c9e545b98e69b685cdcf0db8576",
-          "asset_size": 130200864,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.9/mise-v2026.9.9-linux-x64",
+          "asset_sha256": "bd481434a65ede6b2ec6162b88f129e5c6b94cf9de808b8ee7c6f027b13b4589",
+          "asset_size": 132534496,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.6/mise-v2026.9.6-linux-arm64",
-          "asset_sha256": "7892401c3a3b8166e8be3a3bbd564f48b36946e580e031f2df94a4935edfd907",
-          "asset_size": 113242384,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.9.9/mise-v2026.9.9-linux-arm64",
+          "asset_sha256": "e98b7644f8fe908c7b6b9086de215eaa422736d44f8a72d8bb39cb73f7477720",
+          "asset_size": 113767192,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -173,7 +173,7 @@
     },
     {
       "id": "uv",
-      "version": "0.12.13",
+      "version": "0.12.15",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -190,16 +190,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd",
-          "asset_size": 19391575,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.15/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "f97935763c04be3e692460a7aaeaaab8fc3b78fcf8b389da820b38ae7423a638",
+          "asset_size": 19443011,
           "archive_member_count": 3,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-aarch64-unknown-linux-gnu.tar.gz",
-          "asset_sha256": "2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9",
-          "asset_size": 18581057,
+          "asset_url": "https://github.com/astral-sh/uv/releases/download/0.12.15/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "asset_sha256": "0e9a3499b0587d449c9ff684c0160da607826e4af1cee220bc87f378702d3e08",
+          "asset_size": 18654404,
           "archive_member_count": 3,
           "legal_members": []
         }

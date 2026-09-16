@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-09-16 — GitHub CLI 2.100.0 → 2.101.0; mise 2026.9.6 → 2026.9.9; uv 0.12.13 → 0.12.15.
+
 - 2026-09-13 — mise 2026.9.5 → 2026.9.6.
 
 - 2026-09-12 — mise 2026.9.4 → 2026.9.5; uv 0.12.12 → 0.12.13.
