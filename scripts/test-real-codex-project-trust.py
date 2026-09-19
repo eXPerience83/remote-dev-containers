@@ -92,8 +92,20 @@ def start_thread(project: Path, trust: str) -> str:
             assert "result" in started, started
             return started["result"]["approvalPolicy"]
         finally:
-            process.terminate()
-            process.wait(timeout=5)
+            # In stdio mode, EOF is the app-server's normal graceful shutdown
+            # signal. Drain both output pipes while waiting so final
+            # notifications or diagnostics cannot block process exit.
+            process.stdin.close()
+            process.stdin = None
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=5)
             assert config.read_bytes() == before, "launch-scoped trust modified config.toml"
 
 
