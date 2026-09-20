@@ -254,7 +254,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: write
+      actions: read
       contents: read
       packages: write
       pull-requests: write
@@ -377,6 +377,14 @@ jobs:
           )"
           gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
 
+  cleanup:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+
+    steps:
       - name: Delete transfer artifact after successful publication
         env:
           GH_TOKEN: ${{ github.token }}
