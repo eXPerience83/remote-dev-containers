@@ -145,7 +145,7 @@ jobs:
           name: ${{ steps.pr.outputs.artifact_name }}
           path: candidate-images.tar.gz
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
 
   verify:
     needs: build
@@ -254,7 +254,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: read
+      actions: write
       contents: read
       packages: write
       pull-requests: write
@@ -376,3 +376,19 @@ jobs:
           EOF
           )"
           gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
+
+      - name: Delete transfer artifact after successful publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          artifact_id="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | .id"
+          )"
+          if [[ ! "$artifact_id" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: expected exactly one transfer artifact named $ARTIFACT_NAME; got: $artifact_id" >&2
+            exit 1
+          fi
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
