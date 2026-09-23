@@ -53,24 +53,23 @@ def reject(block: str, forbidden: tuple[str, ...], label: str) -> None:
 
 
 def validate(root: Path) -> None:
-    candidate = read(root, ".github/workflows/publish-pr-candidate-amd64.yml")
+    candidate_gate = read(root, ".github/workflows/publish-pr-candidate-amd64.yml")
+    candidate_worker = read(
+        root, ".github/workflows/publish-pr-candidate-worker-amd64.yml"
+    )
     edge = read(root, ".github/workflows/publish-edge-amd64.yml")
     stable = read(root, ".github/workflows/publish-amd64.yml")
     releases = read(root, "docs/releases.md")
     releases_es = read(root, "docs/releases.es.md")
     env_example = read(root, ".env.example")
 
-    candidate_concurrency = active(
-        bounded(candidate, "concurrency:\n", "\njobs:\n", "candidate concurrency")
-    )
-    require(
-        candidate_concurrency,
-        ("group: publish-pr-candidate-dev-amd64", "cancel-in-progress: false"),
-        "candidate concurrency",
-    )
-
     candidate_job_gate = active(
-        bounded(candidate, "    if: >-\n", "    runs-on:", "candidate job gate")
+        bounded(
+            candidate_gate,
+            "    if: >-\n",
+            "    runs-on:",
+            "candidate request job gate",
+        )
     )
     require(
         candidate_job_gate,
@@ -79,53 +78,206 @@ def validate(root: Path) -> None:
             "startsWith(github.event.comment.body, '/publish-candidate ') &&",
             "github.event.comment.user.login == github.repository_owner",
         ),
-        "candidate job gate",
+        "candidate request job gate",
     )
 
-    candidate_authorization = active(
-        bounded(
-            candidate,
-            "      - name: Resolve and authorize the pull request\n",
-            "      - name: Checkout the exact pull-request head\n",
-            "candidate authorization",
-        )
+    candidate_request_job = active(
+        bounded(candidate_gate, "  dispatch:\n", None, "candidate request job")
     )
     require(
-        candidate_authorization,
+        candidate_request_job,
         (
+            "cache-mode: none",
+            "actions: write",
+            "pull-requests: read",
+            "- name: Resolve and authorize the pull request",
             'if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]]',
             'if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]',
             'if [[ "$base_ref" != main ]]',
             'if [[ "$state" != open ]]',
             'if [[ "$requested_sha" != "$head_sha" ]]',
+            "- name: Dispatch trusted candidate worker",
+            "--arg ref main",
+            "publish-pr-candidate-worker-amd64.yml/dispatches",
         ),
-        "candidate authorization",
+        "candidate request job",
+    )
+    reject(
+        candidate_request_job,
+        (
+            "actions/checkout@",
+            "packages: write",
+            "actions/cache/save@",
+            "actions/upload-artifact@",
+        ),
+        "candidate request job",
+    )
+
+    worker_trigger = active(
+        bounded(
+            candidate_worker,
+            "on:\n",
+            "\npermissions:",
+            "candidate worker trigger",
+        )
+    )
+    require(
+        worker_trigger,
+        (
+            "workflow_dispatch:",
+            "pr_number:",
+            "head_sha:",
+            "authorization_comment_id:",
+        ),
+        "candidate worker trigger",
+    )
+
+    candidate_concurrency = active(
+        bounded(
+            candidate_worker,
+            "concurrency:\n",
+            "\njobs:\n",
+            "candidate worker concurrency",
+        )
+    )
+    require(
+        candidate_concurrency,
+        ("group: publish-pr-candidate-dev-amd64", "cancel-in-progress: false"),
+        "candidate worker concurrency",
+    )
+
+    candidate_build = active(
+        bounded(
+            candidate_worker,
+            "  build:\n",
+            "\n  verify:\n",
+            "candidate worker build",
+        )
+    )
+    require(
+        candidate_build,
+        (
+            "cache-mode: write-only",
+            "contents: read",
+            "issues: read",
+            "pull-requests: read",
+            "- name: Revalidate owner authorization and pull-request head",
+            'if [[ "$GITHUB_REF" != "refs/heads/main" ]]',
+            'comment_user="$(jq -r \' .user.login\' <<<"$comment_json")"'.replace("\' ", "\'"),
+            'expected_body="/publish-candidate ${INPUT_HEAD_SHA}"',
+            'if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]',
+            'if [[ "$base_ref" != main ]]',
+            'if [[ "$state" != open ]]',
+            'if [[ "$head_sha" != "$INPUT_HEAD_SHA" ]]',
+            "candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}",
+            "- name: Checkout the exact pull-request head",
+            "persist-credentials: false",
+            "- name: Export canonical candidate images",
+            'archive_dir="${RUNNER_TEMP}/candidate-transfer"',
+            'test ! -L "$archive"',
+            "- name: Save verified candidate transfer cache",
+            "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+        ),
+        "candidate worker build",
+    )
+    reject(
+        candidate_build,
+        ("packages: write", "actions/upload-artifact@", "restore-keys:"),
+        "candidate worker build",
+    )
+
+    candidate_verify = active(
+        bounded(
+            candidate_worker,
+            "  verify:\n",
+            "\n  publish:\n",
+            "candidate worker verification",
+        )
+    )
+    require(
+        candidate_verify,
+        (
+            "cache-mode: read",
+            "- name: Restore exact candidate transfer cache",
+            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            "fail-on-cache-miss: true",
+            "EXPECTED_SHA256: ${{ needs.build.outputs.archive_sha256 }}",
+            'if [[ "$sha256" != "$EXPECTED_SHA256" ]]',
+            "- name: Verify embedded candidate identity",
+            "- name: Scan base image for critical vulnerabilities",
+            "- name: Scan final image for critical vulnerabilities",
+            "- name: Enforce no fixable critical vulnerabilities",
+            "- name: Upload candidate vulnerability reports on failure",
+            "if: failure()",
+            "retention-days: 3",
+        ),
+        "candidate worker verification",
+    )
+    reject(
+        candidate_verify,
+        ("packages: write", "restore-keys:"),
+        "candidate worker verification",
     )
 
     candidate_publish = active(
         bounded(
-            candidate,
-            "      - name: Publish the candidate and promote the dev channel\n",
-            "      - name: Comment the exact candidate on the pull request\n",
-            "candidate publication",
+            candidate_worker,
+            "  publish:\n",
+            "\n  cleanup:\n",
+            "candidate worker publication",
         )
     )
     require(
         candidate_publish,
         (
+            "cache-mode: read",
+            "actions: read",
+            "issues: read",
+            "packages: write",
+            "pull-requests: write",
+            "- name: Restore exact verified candidate transfer cache",
+            "fail-on-cache-miss: true",
+            "- name: Revalidate authorization before registry publication",
+            'if [[ "$current_state" != open || "$current_base" != main || "$current_head_repo" != "$GITHUB_REPOSITORY" || "$current_head_sha" != "$AUTHORIZED_SHA" ]]',
+            "- name: Publish the exact candidate tag",
             'tag="candidate-pr-${PR_NUMBER}-${SHORT_SHA}"',
             'docker push "$ref"',
+            "- name: Revalidate authorization immediately before dev promotion",
+            "- name: Promote exact candidate digest to dev aliases",
             '--tag "${image}:dev"',
             '--tag "${image}:dev-amd64"',
             'for published_tag in "$tag" dev dev-amd64; do',
-            'if [[ "$actual_digest" != "$digest" ]]',
+            'if [[ "$actual_digest" != "$IMAGE_DIGEST" ]]',
         ),
-        "candidate publication",
+        "candidate worker publication",
     )
     reject(
         candidate_publish,
-        ('--tag "${image}:edge', '--tag "${image}:stable', '--tag "${image}:latest"'),
-        "candidate publication",
+        (
+            "actions/checkout@",
+            "restore-keys:",
+            '--tag "${image}:edge',
+            '--tag "${image}:stable',
+            '--tag "${image}:latest"',
+        ),
+        "candidate worker publication",
+    )
+
+    candidate_cleanup = active(
+        bounded(candidate_worker, "  cleanup:\n", None, "candidate worker cleanup")
+    )
+    require(
+        candidate_cleanup,
+        (
+            "needs: [build, verify, publish]",
+            "if: always() && needs.build.result == 'success'",
+            "cache-mode: none",
+            "actions: write",
+            "Delete transfer cache after build handoff",
+            "actions/caches?key=${CACHE_KEY}&ref=refs/heads/main",
+            'if [[ "$deleted_count" != "1" ]]',
+        ),
+        "candidate worker cleanup",
     )
 
     edge_trigger = active(bounded(edge, "on:\n", "\npermissions:", "edge trigger"))
