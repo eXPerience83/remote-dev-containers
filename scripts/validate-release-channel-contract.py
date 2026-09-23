@@ -54,6 +54,14 @@ def validate_candidate(root: Path) -> None:
     gate = read(root, ".github/workflows/publish-pr-candidate-amd64.yml")
     worker = read(root, ".github/workflows/publish-pr-candidate-worker-amd64.yml")
 
+    gate_trigger = active(bounded(gate, "on:\n", "\npermissions:", "candidate request trigger"))
+    require(gate_trigger, ("issue_comment:\n    types: [created]",), "candidate request trigger")
+    reject(
+        gate_trigger,
+        ("pull_request_target:", "workflow_run:", "push:", "workflow_dispatch:"),
+        "candidate request trigger",
+    )
+
     gate_job = active(bounded(gate, "  dispatch:\n", None, "candidate request job"))
     require(
         gate_job,
@@ -86,6 +94,19 @@ def validate_candidate(root: Path) -> None:
     require(
         trigger,
         ("workflow_dispatch:", "pr_number:", "head_sha:", "authorization_comment_id:"),
+        "candidate worker trigger",
+    )
+    reject(
+        trigger,
+        (
+            "push:",
+            "pull_request:",
+            "pull_request_target:",
+            "issue_comment:",
+            "workflow_run:",
+            "workflow_call:",
+            "schedule:",
+        ),
         "candidate worker trigger",
     )
 
