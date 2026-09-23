@@ -12,9 +12,8 @@ class ContractError(RuntimeError):
 
 
 def read(root: Path, relative: str) -> str:
-    path = root / relative
     try:
-        return path.read_text(encoding="utf-8")
+        return (root / relative).read_text(encoding="utf-8")
     except OSError as exc:
         raise ContractError(f"unable to read {relative}: {exc}") from exc
 
@@ -34,7 +33,6 @@ def bounded(text: str, start: str, end: str | None, label: str) -> str:
 
 
 def active(block: str) -> str:
-    """Return non-comment workflow lines so comments cannot satisfy the contract."""
     return "\n".join(
         line for line in block.splitlines() if not line.lstrip().startswith("#")
     )
@@ -49,44 +47,20 @@ def require(block: str, expected: tuple[str, ...], label: str) -> None:
 def reject(block: str, forbidden: tuple[str, ...], label: str) -> None:
     for token in forbidden:
         if token in block:
-            raise ContractError(f"{label}: forbidden cross-channel token {token!r}")
+            raise ContractError(f"{label}: forbidden token {token!r}")
 
 
-def validate(root: Path) -> None:
-    candidate_gate = read(root, ".github/workflows/publish-pr-candidate-amd64.yml")
-    candidate_worker = read(
-        root, ".github/workflows/publish-pr-candidate-worker-amd64.yml"
-    )
-    edge = read(root, ".github/workflows/publish-edge-amd64.yml")
-    stable = read(root, ".github/workflows/publish-amd64.yml")
-    releases = read(root, "docs/releases.md")
-    releases_es = read(root, "docs/releases.es.md")
-    env_example = read(root, ".env.example")
+def validate_candidate(root: Path) -> None:
+    gate = read(root, ".github/workflows/publish-pr-candidate-amd64.yml")
+    worker = read(root, ".github/workflows/publish-pr-candidate-worker-amd64.yml")
 
-    candidate_job_gate = active(
-        bounded(
-            candidate_gate,
-            "    if: >-\n",
-            "    runs-on:",
-            "candidate request job gate",
-        )
-    )
+    gate_job = active(bounded(gate, "  dispatch:\n", None, "candidate request job"))
     require(
-        candidate_job_gate,
+        gate_job,
         (
             "github.event.issue.pull_request &&",
             "startsWith(github.event.comment.body, '/publish-candidate ') &&",
             "github.event.comment.user.login == github.repository_owner",
-        ),
-        "candidate request job gate",
-    )
-
-    candidate_request_job = active(
-        bounded(candidate_gate, "  dispatch:\n", None, "candidate request job")
-    )
-    require(
-        candidate_request_job,
-        (
             "cache-mode: none",
             "actions: write",
             "pull-requests: read",
@@ -103,59 +77,30 @@ def validate(root: Path) -> None:
         "candidate request job",
     )
     reject(
-        candidate_request_job,
-        (
-            "actions/checkout@",
-            "packages: write",
-            "actions/cache/save@",
-            "actions/upload-artifact@",
-        ),
+        gate_job,
+        ("actions/checkout@", "packages: write", "actions/cache/", "actions/upload-artifact@"),
         "candidate request job",
     )
 
-    worker_trigger = active(
-        bounded(
-            candidate_worker,
-            "on:\n",
-            "\npermissions:",
-            "candidate worker trigger",
-        )
-    )
+    trigger = active(bounded(worker, "on:\n", "\npermissions:", "candidate worker trigger"))
     require(
-        worker_trigger,
-        (
-            "workflow_dispatch:",
-            "pr_number:",
-            "head_sha:",
-            "authorization_comment_id:",
-        ),
+        trigger,
+        ("workflow_dispatch:", "pr_number:", "head_sha:", "authorization_comment_id:"),
         "candidate worker trigger",
     )
 
-    candidate_concurrency = active(
-        bounded(
-            candidate_worker,
-            "concurrency:\n",
-            "\njobs:\n",
-            "candidate worker concurrency",
-        )
+    concurrency = active(
+        bounded(worker, "concurrency:\n", "\njobs:\n", "candidate worker concurrency")
     )
     require(
-        candidate_concurrency,
+        concurrency,
         ("group: publish-pr-candidate-dev-amd64", "cancel-in-progress: false"),
         "candidate worker concurrency",
     )
 
-    candidate_build = active(
-        bounded(
-            candidate_worker,
-            "  build:\n",
-            "\n  verify:\n",
-            "candidate worker build",
-        )
-    )
+    build = active(bounded(worker, "  build:\n", "\n  verify:\n", "candidate build"))
     require(
-        candidate_build,
+        build,
         (
             "cache-mode: write-only",
             "contents: read",
@@ -163,7 +108,7 @@ def validate(root: Path) -> None:
             "pull-requests: read",
             "- name: Revalidate owner authorization and pull-request head",
             'if [[ "$GITHUB_REF" != "refs/heads/main" ]]',
-            'comment_user="$(jq -r \' .user.login\' <<<"$comment_json")"'.replace("\' ", "\'"),
+            "comment_user=\"$(jq -r '.user.login' <<<\"$comment_json\")\"",
             'expected_body="/publish-candidate ${INPUT_HEAD_SHA}"',
             'if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]',
             'if [[ "$base_ref" != main ]]',
@@ -172,33 +117,19 @@ def validate(root: Path) -> None:
             "candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}",
             "- name: Checkout the exact pull-request head",
             "persist-credentials: false",
-            "- name: Export canonical candidate images",
             'archive_dir="${RUNNER_TEMP}/candidate-transfer"',
             'test ! -L "$archive"',
-            "- name: Save verified candidate transfer cache",
             "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
         ),
-        "candidate worker build",
+        "candidate build",
     )
-    reject(
-        candidate_build,
-        ("packages: write", "actions/upload-artifact@", "restore-keys:"),
-        "candidate worker build",
-    )
+    reject(build, ("packages: write", "actions/upload-artifact@", "restore-keys:"), "candidate build")
 
-    candidate_verify = active(
-        bounded(
-            candidate_worker,
-            "  verify:\n",
-            "\n  publish:\n",
-            "candidate worker verification",
-        )
-    )
+    verify = active(bounded(worker, "  verify:\n", "\n  publish:\n", "candidate verify"))
     require(
-        candidate_verify,
+        verify,
         (
             "cache-mode: read",
-            "- name: Restore exact candidate transfer cache",
             "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
             "fail-on-cache-miss: true",
             "EXPECTED_SHA256: ${{ needs.build.outputs.archive_sha256 }}",
@@ -211,31 +142,21 @@ def validate(root: Path) -> None:
             "if: failure()",
             "retention-days: 3",
         ),
-        "candidate worker verification",
+        "candidate verify",
     )
-    reject(
-        candidate_verify,
-        ("packages: write", "restore-keys:"),
-        "candidate worker verification",
-    )
+    reject(verify, ("packages: write", "restore-keys:"), "candidate verify")
 
-    candidate_publish = active(
-        bounded(
-            candidate_worker,
-            "  publish:\n",
-            "\n  cleanup:\n",
-            "candidate worker publication",
-        )
+    publish = active(
+        bounded(worker, "  publish:\n", "\n  cleanup:\n", "candidate publication")
     )
     require(
-        candidate_publish,
+        publish,
         (
             "cache-mode: read",
             "actions: read",
             "issues: read",
             "packages: write",
             "pull-requests: write",
-            "- name: Restore exact verified candidate transfer cache",
             "fail-on-cache-miss: true",
             "- name: Revalidate authorization before registry publication",
             'if [[ "$current_state" != open || "$current_base" != main || "$current_head_repo" != "$GITHUB_REPOSITORY" || "$current_head_sha" != "$AUTHORIZED_SHA" ]]',
@@ -249,10 +170,10 @@ def validate(root: Path) -> None:
             'for published_tag in "$tag" dev dev-amd64; do',
             'if [[ "$actual_digest" != "$IMAGE_DIGEST" ]]',
         ),
-        "candidate worker publication",
+        "candidate publication",
     )
     reject(
-        candidate_publish,
+        publish,
         (
             "actions/checkout@",
             "restore-keys:",
@@ -260,32 +181,30 @@ def validate(root: Path) -> None:
             '--tag "${image}:stable',
             '--tag "${image}:latest"',
         ),
-        "candidate worker publication",
+        "candidate publication",
     )
 
-    candidate_cleanup = active(
-        bounded(candidate_worker, "  cleanup:\n", None, "candidate worker cleanup")
-    )
+    cleanup = active(bounded(worker, "  cleanup:\n", None, "candidate cleanup"))
     require(
-        candidate_cleanup,
+        cleanup,
         (
             "needs: [build, verify, publish]",
             "if: always() && needs.build.result == 'success'",
             "cache-mode: none",
             "actions: write",
-            "Delete transfer cache after build handoff",
             "actions/caches?key=${CACHE_KEY}&ref=refs/heads/main",
             'if [[ "$deleted_count" != "1" ]]',
         ),
-        "candidate worker cleanup",
+        "candidate cleanup",
     )
 
+
+def validate_other_channels(root: Path) -> None:
+    edge = read(root, ".github/workflows/publish-edge-amd64.yml")
+    stable = read(root, ".github/workflows/publish-amd64.yml")
+
     edge_trigger = active(bounded(edge, "on:\n", "\npermissions:", "edge trigger"))
-    require(
-        edge_trigger,
-        ("push:\n    branches:\n      - main",),
-        "edge trigger",
-    )
+    require(edge_trigger, ("push:\n    branches:\n      - main",), "edge trigger")
     edge_guard = active(
         bounded(
             edge,
@@ -294,11 +213,7 @@ def validate(root: Path) -> None:
             "edge main guard",
         )
     )
-    require(
-        edge_guard,
-        ('if [[ "$GITHUB_REF" != "refs/heads/main" ]]',),
-        "edge main guard",
-    )
+    require(edge_guard, ('if [[ "$GITHUB_REF" != "refs/heads/main" ]]',), "edge main guard")
     edge_publish = active(
         bounded(
             edge,
@@ -323,9 +238,7 @@ def validate(root: Path) -> None:
         "edge publication",
     )
 
-    stable_trigger = active(
-        bounded(stable, "on:\n", "\npermissions:", "stable trigger")
-    )
+    stable_trigger = active(bounded(stable, "on:\n", "\npermissions:", "stable trigger"))
     require(stable_trigger, ('tags:\n      - "v*"',), "stable trigger")
     stable_tag_validation = active(
         bounded(
@@ -378,6 +291,12 @@ def validate(root: Path) -> None:
         "stable publication",
     )
 
+
+def validate_docs(root: Path) -> None:
+    releases = read(root, "docs/releases.md")
+    releases_es = read(root, "docs/releases.es.md")
+    env_example = read(root, ".env.example")
+
     require(
         releases,
         (
@@ -418,6 +337,12 @@ def validate(root: Path) -> None:
         ("REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:dev",),
         "Compose environment default",
     )
+
+
+def validate(root: Path) -> None:
+    validate_candidate(root)
+    validate_other_channels(root)
+    validate_docs(root)
 
 
 def main() -> int:
