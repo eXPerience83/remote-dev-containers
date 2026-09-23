@@ -372,7 +372,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-      - name: Publish the exact candidate tag
+      - name: Publish or reuse immutable candidate tag
         id: image
         env:
           PR_NUMBER: ${{ needs.build.outputs.pr_number }}
@@ -384,14 +384,49 @@ jobs:
           image="ghcr.io/${namespace}/remote-dev"
           tag="candidate-pr-${PR_NUMBER}-${SHORT_SHA}"
           ref="${image}:${tag}"
+          expected_version="candidate-pr-${PR_NUMBER}"
+          local_id="$(docker image inspect remote-dev:local --format '{{.Id}}')"
+          existing=false
 
-          docker tag remote-dev:local "$ref"
-          docker push "$ref"
+          inspect_error="$(mktemp)"
+          trap 'rm -f "$inspect_error"' EXIT
+          if digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' 2>"$inspect_error" | tr -d '"')"; then
+            existing=true
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: existing candidate tag returned invalid digest: $digest" >&2
+              exit 1
+            fi
+          else
+            if ! grep -Fqi 'manifest unknown' "$inspect_error" && ! grep -Fqi "${ref}: not found" "$inspect_error"; then
+              cat "$inspect_error" >&2
+              echo "ERROR: could not safely determine whether immutable candidate tag exists" >&2
+              exit 1
+            fi
+            docker tag remote-dev:local "$ref"
+            docker push "$ref"
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: could not resolve the published candidate digest: $digest" >&2
+              exit 1
+            fi
+          fi
 
-          digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
-          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "ERROR: could not resolve the published candidate digest: $digest" >&2
+          resolved_ref="${image}@${digest}"
+          docker pull "$resolved_ref"
+          resolved_revision="$(docker image inspect "$resolved_ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          resolved_version="$(docker image inspect "$resolved_ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
+          if [[ "$resolved_revision" != "$HEAD_SHA" || "$resolved_version" != "$expected_version" ]]; then
+            echo "ERROR: immutable candidate tag provenance does not match the authorized PR/SHA" >&2
+            echo "revision=$resolved_revision version=$resolved_version" >&2
             exit 1
+          fi
+
+          if [[ "$existing" == false ]]; then
+            resolved_id="$(docker image inspect "$resolved_ref" --format '{{.Id}}')"
+            if [[ "$resolved_id" != "$local_id" ]]; then
+              echo "ERROR: newly published candidate digest does not match the tested image" >&2
+              exit 1
+            fi
           fi
 
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
@@ -456,6 +491,12 @@ jobs:
               exit 1
             fi
           done
+
+          candidate_digest="$(docker buildx imagetools inspect "$IMAGE_REF" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ "$candidate_digest" != "$IMAGE_DIGEST" ]]; then
+            echo "ERROR: immutable candidate tag changed during dev promotion" >&2
+            exit 1
+          fi
 
       - name: Comment the exact candidate on the pull request
         env:
