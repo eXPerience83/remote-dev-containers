@@ -145,6 +145,12 @@ Do not copy private `AGENTS.md` contents into diagnostics merely to prove loadin
 
 Remote Dev supplies the general development substrate: for example Python, Node.js, `uv`, `mise`, Git and GitHub CLI. It intentionally does **not** globally bundle every repository-specific linter, test runner or package.
 
+The immutable image provides the default Python/Node/uv toolchain through mise shims. A repository's normal version declarations select an installed version; an unavailable version fails clearly. Image-owned `MISE_NOT_FOUND_AUTO_INSTALL=false` and `MISE_NOT_FOUND_SYSTEM_FALLBACK=false` prevent not-found installation and silent fallback to another executable. Project `[settings]` cannot override these environment defaults.
+
+Explicit mise actions remain available: `auto_install` and `exec_auto_install` keep their upstream defaults. A trusted declaration such as `python = { version = "3.12.1", lazy = true }` explicitly opts into installation on first use; this is outside the disabled not-found behavior and does not make the immutable store writable or provide additional supported toolchains. Remote Dev does not auto-activate project `.venv` environments.
+
+To inspect the current project's selection, use `mise config`, `mise ls --current` and `mise which python` (or `node`/`uv`); executable project configuration remains subject to mise trust. `remote-dev-base-verify` checks the image baseline from `/`, independently of the caller's project directory.
+
 The project owns its dependency lock and environment. A Python `.venv` created below `/workspace/<project>` lives in that persistent project workspace. Whether `.venv` is ignored by Git is repository-specific and should be defined by that repository.
 
 `uv sync` performs an exact synchronization by default. If a repository keeps tools in separate dependency groups, syncing only one group can remove packages that belong only to another group. That is project-environment behavior, not evidence that Remote Dev lost packages during container recreation.

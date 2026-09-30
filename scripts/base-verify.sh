@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Verify the immutable image baseline, never the caller's project mise config.
+cd /
+
 required=(bash git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck)
 missing=0
 for cmd in "${required[@]}"; do
@@ -47,6 +50,13 @@ if [[ "${ID:-}" != "ubuntu" || -z "$expected_ubuntu" || "${VERSION_ID:-}" != "$e
   echo "ERROR: unexpected base operating system" >&2
   exit 1
 fi
+
+for setting in not_found_auto_install not_found_system_fallback; do
+  if [[ "$(mise settings get "$setting")" != false ]]; then
+    echo "ERROR: immutable image mise setting $setting must be false" >&2
+    exit 1
+  fi
+done
 
 python --version
 node --version
