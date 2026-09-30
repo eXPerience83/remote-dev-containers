@@ -156,6 +156,7 @@ codex_noexec_smoke_command=(
   "$remote_dev_image" /tmp/test-codex-runtime-noexec-staging.py
 )
 timeout --foreground 60s "${codex_noexec_smoke_command[@]}"
+bash "$ROOT/scripts/test-mise-project-resolution.sh" "$remote_dev_image"
 bash "$ROOT/scripts/runtime-smoke-test.sh" "$remote_dev_image"
 bash "$ROOT/scripts/test-web-password-runtime.sh" "$remote_dev_image"
 bash "$ROOT/scripts/test-cross-service-isolation.sh" "$remote_dev_image"

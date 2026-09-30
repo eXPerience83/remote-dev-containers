@@ -145,6 +145,12 @@ No copies el contenido privado de `AGENTS.md` a diagnósticos solo para demostra
 
 Remote Dev proporciona el sustrato general de desarrollo: por ejemplo Python, Node.js, `uv`, `mise`, Git y GitHub CLI. Intencionadamente **no** instala globalmente todos los linters, runners de tests o paquetes específicos de cada repositorio.
 
+La imagen inmutable proporciona la toolchain predeterminada de Python/Node/uv mediante los shims de mise. Las declaraciones normales de versiones del repositorio seleccionan una versión instalada; si falta, fallan claramente. Los defaults de imagen `MISE_NOT_FOUND_AUTO_INSTALL=false` y `MISE_NOT_FOUND_SYSTEM_FALLBACK=false` impiden la instalación por not-found y el fallback silencioso a otro ejecutable. Los `[settings]` del proyecto no pueden sobrescribir estos defaults de entorno.
+
+Las acciones explícitas de mise siguen disponibles: `auto_install` y `exec_auto_install` conservan sus defaults upstream. Una declaración confiada como `python = { version = "3.12.1", lazy = true }` solicita explícitamente la instalación al primer uso; queda fuera del comportamiento not-found desactivado y no hace escribible el store inmutable ni proporciona toolchains adicionales soportadas. Remote Dev no autoactiva los entornos `.venv` del proyecto.
+
+Para inspeccionar la selección del proyecto actual, usa `mise config`, `mise ls --current` y `mise which python` (o `node`/`uv`); la configuración ejecutable del proyecto sigue sujeta al trust de mise. `remote-dev-base-verify` comprueba la base de la imagen desde `/`, independientemente del directorio de proyecto desde el que se invoque.
+
 El proyecto es dueño de su lock de dependencias y de su entorno. Un `.venv` de Python creado debajo de `/workspace/<proyecto>` vive en ese workspace persistente. Que `.venv` esté ignorado por Git depende del propio repositorio y debe definirlo ese proyecto.
 
 `uv sync` realiza por defecto una sincronización exacta. Si un repositorio separa herramientas en grupos de dependencias, sincronizar solo un grupo puede eliminar paquetes que pertenezcan únicamente a otro grupo. Es comportamiento normal del entorno del proyecto, no una señal de que Remote Dev haya perdido paquetes al recrear el contenedor.

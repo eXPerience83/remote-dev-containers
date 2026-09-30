@@ -29,6 +29,7 @@ smoke: agent-contract-tests
 		-v "$(CURDIR)/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro" \
 		-e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
 		remote-dev:local /tmp/test-codex-runtime-noexec-staging.py
+	bash scripts/test-mise-project-resolution.sh remote-dev:local
 	bash scripts/runtime-smoke-test.sh remote-dev:local
 
 preflight:

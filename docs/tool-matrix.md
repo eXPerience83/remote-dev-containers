@@ -32,6 +32,14 @@ The launcher is not an agent container and is not a control plane: it has no age
 
 The system Bubblewrap package/executable is deliberately absent. Supported Codex launches disable the unsupported inner sandbox explicitly; autonomous/guarded approval behavior does not replace the outer-container security boundary.
 
+## Project toolchain resolution
+
+The immutable image provides the default Python/Node/uv toolchain through mise shims. A repository's normal version declarations select an installed version; an unavailable version fails clearly. Image-owned `MISE_NOT_FOUND_AUTO_INSTALL=false` and `MISE_NOT_FOUND_SYSTEM_FALLBACK=false` prevent not-found installation and silent fallback to another executable. Project `[settings]` cannot override these environment defaults.
+
+Explicit mise actions remain available: `auto_install` and `exec_auto_install` keep their upstream defaults. A trusted declaration such as `python = { version = "3.12.1", lazy = true }` explicitly opts into installation on first use; this is outside the disabled not-found behavior and does not make the immutable store writable or provide additional supported toolchains. Remote Dev does not auto-activate project `.venv` environments.
+
+To inspect the current project's selection, use `mise config`, `mise ls --current` and `mise which python` (or `node`/`uv`); executable project configuration remains subject to mise trust. `remote-dev-base-verify` checks the image baseline from `/`, independently of the caller's project directory.
+
 ## Service-private state
 
 | State | Launcher | Codex | Antigravity |
