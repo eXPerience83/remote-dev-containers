@@ -47,16 +47,19 @@ class DevelopmentScratchTests(unittest.TestCase):
             scratch.prepare(workspace)
             self.assert_private_tree(workspace)
 
-            cache = workspace / scratch.SCRATCH_ROOT / "npm-cache"
-            marker = cache / "preserved"
-            marker.write_text("keep\n", encoding="utf-8")
-            os.chmod(cache, 0o755)
-            original_inode = cache.stat().st_ino
+            original_inodes = {}
+            for child in scratch.SCRATCH_CHILDREN:
+                cache = workspace / scratch.SCRATCH_ROOT / child
+                (cache / "preserved").write_text("keep\n", encoding="utf-8")
+                os.chmod(cache, 0o755)
+                original_inodes[child] = cache.stat().st_ino
 
             scratch.prepare(workspace)
             self.assert_private_tree(workspace)
-            self.assertEqual(cache.stat().st_ino, original_inode)
-            self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
+            for child in scratch.SCRATCH_CHILDREN:
+                cache = workspace / scratch.SCRATCH_ROOT / child
+                self.assertEqual(cache.stat().st_ino, original_inodes[child])
+                self.assertEqual((cache / "preserved").read_text(encoding="utf-8"), "keep\n")
 
     def test_workspace_symlink_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -86,19 +89,20 @@ class DevelopmentScratchTests(unittest.TestCase):
             self.assertEqual({path.name for path in target.iterdir()}, {"marker"})
 
     def test_child_symlink_is_rejected_without_touching_target(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
-            workspace = parent / "workspace"
-            target = parent / "outside"
-            workspace.mkdir()
-            target.mkdir()
-            root = workspace / scratch.SCRATCH_ROOT
-            root.mkdir(mode=0o700)
-            (root / "tmp").symlink_to(target, target_is_directory=True)
+        for child in scratch.SCRATCH_CHILDREN:
+            with tempfile.TemporaryDirectory() as temporary:
+                parent = Path(temporary)
+                workspace = parent / "workspace"
+                target = parent / "outside"
+                workspace.mkdir()
+                target.mkdir()
+                root = workspace / scratch.SCRATCH_ROOT
+                root.mkdir(mode=0o700)
+                (root / child).symlink_to(target, target_is_directory=True)
 
-            with self.assertRaisesRegex(scratch.ScratchError, "real directory"):
-                scratch.prepare(workspace)
-            self.assertEqual(list(target.iterdir()), [])
+                with self.assertRaisesRegex(scratch.ScratchError, "real directory"):
+                    scratch.prepare(workspace)
+                self.assertEqual(list(target.iterdir()), [])
 
     def test_non_directory_root_and_children_are_rejected(self) -> None:
         for name in (scratch.SCRATCH_ROOT, *scratch.SCRATCH_CHILDREN):
@@ -117,16 +121,17 @@ class DevelopmentScratchTests(unittest.TestCase):
                 self.assertEqual(unsafe.read_text(encoding="utf-8"), "not a directory\n")
 
     def test_fifo_child_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary) / "workspace"
-            workspace.mkdir()
-            root = workspace / scratch.SCRATCH_ROOT
-            root.mkdir(mode=0o700)
-            fifo = root / "tmp"
-            os.mkfifo(fifo)
-            with self.assertRaisesRegex(scratch.ScratchError, "real directory"):
-                scratch.prepare(workspace)
-            self.assertTrue(stat.S_ISFIFO(fifo.lstat().st_mode))
+        for child in scratch.SCRATCH_CHILDREN:
+            with tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary) / "workspace"
+                workspace.mkdir()
+                root = workspace / scratch.SCRATCH_ROOT
+                root.mkdir(mode=0o700)
+                fifo = root / child
+                os.mkfifo(fifo)
+                with self.assertRaisesRegex(scratch.ScratchError, "real directory"):
+                    scratch.prepare(workspace)
+                self.assertTrue(stat.S_ISFIFO(fifo.lstat().st_mode))
 
     def test_unexpected_ownership_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -141,20 +146,21 @@ class DevelopmentScratchTests(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "requires root to create foreign ownership")
     def test_unexpected_child_ownership_fails_without_touching_contents(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary) / "workspace"
-            workspace.mkdir()
-            scratch.prepare(workspace)
-            cache = workspace / scratch.SCRATCH_ROOT / "uv-cache"
-            marker = cache / "preserved"
-            marker.write_text("keep\n", encoding="utf-8")
-            os.chown(cache, 65534, 65534)
-            try:
-                with self.assertRaisesRegex(scratch.ScratchError, "unexpected ownership"):
-                    scratch.prepare(workspace)
-                self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
-            finally:
-                os.chown(cache, os.geteuid(), os.getegid())
+        for child in scratch.SCRATCH_CHILDREN:
+            with tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary) / "workspace"
+                workspace.mkdir()
+                scratch.prepare(workspace)
+                cache = workspace / scratch.SCRATCH_ROOT / child
+                marker = cache / "preserved"
+                marker.write_text("keep\n", encoding="utf-8")
+                os.chown(cache, 65534, 65534)
+                try:
+                    with self.assertRaisesRegex(scratch.ScratchError, "unexpected ownership"):
+                        scratch.prepare(workspace)
+                    self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
+                finally:
+                    os.chown(cache, os.geteuid(), os.getegid())
 
 
 if __name__ == "__main__":

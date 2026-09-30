@@ -95,6 +95,7 @@ def run_regression() -> int:
         "TMP",
         "TEMP",
         "UV_CACHE_DIR",
+        "UV_TOOL_DIR",
         "NPM_CONFIG_CACHE",
         "PIP_CACHE_DIR",
     )
@@ -116,6 +117,7 @@ def run_regression() -> int:
             archive_path = staging / "synthetic-candidate.tar.gz"
             candidate_content = (
                 "#!/bin/sh\n"
+                '[ "${UV_TOOL_DIR+x}" != x ] || exit 97\n'
                 "groups=$(sed -n 's/^Groups:[[:space:]]*//p' /proc/self/status)\n"
                 "printf '%s:%s:%s:%s:%s\\n' \"$(id -u)\" \"$(id -g)\" "
                 '"$groups" "$HOME" "$(pwd -P)"\n'

@@ -91,6 +91,7 @@ run_context7_action() {
 run_credential_command() {
   env \
     -u UV_CACHE_DIR \
+    -u UV_TOOL_DIR \
     -u NPM_CONFIG_CACHE \
     -u PIP_CACHE_DIR \
     TMPDIR=/tmp \

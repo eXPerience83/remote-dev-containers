@@ -87,6 +87,61 @@ assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root ../w
 assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$workspace/"
 assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root//workspace"
 assert_fails_with 2 "safe absolute path" remote_dev_validate_workspace_root "$test_root/"$'workspace\tcontrol'
+# Exercise the actual common environment export with the repository preparer.
+runtime_fixture="$test_root/scratch-runtime.sh"
+preparer="$test_root/remote-dev-prepare-development-scratch"
+preparer_source="$(dirname "${BASH_SOURCE[0]}")/remote-dev-prepare-development-scratch.py"
+[[ -f "$preparer_source" ]] || preparer_source=/usr/local/bin/remote-dev-prepare-development-scratch
+cp "$preparer_source" "$preparer"
+chmod 0700 "$preparer"
+python3 - "$runtime_lib" "$runtime_fixture" "$preparer" <<'PYFIXTURE'
+from pathlib import Path
+import shlex
+import sys
+source, destination, preparer = sys.argv[1:]
+text = Path(source).read_text()
+anchor = 'local -r preparer=/usr/local/bin/remote-dev-prepare-development-scratch'
+assert text.count(anchor) == 1
+destination = Path(destination)
+destination.write_text(text.replace(anchor, 'local -r preparer=' + shlex.quote(preparer)))
+PYFIXTURE
+for role in codex antigravity; do
+  role_workspace="$test_root/$role-workspace"
+  mkdir "$role_workspace"
+  actual="$(env UV_TOOL_DIR=/hostile bash -c '
+    set -euo pipefail
+    source "$1"
+    remote_dev_prepare_development_environment "$2" "$3"
+    test -d "$UV_TOOL_DIR"
+    printf "%s\n" "$UV_TOOL_DIR"
+  ' _ "$runtime_fixture" "$role" "$role_workspace")"
+  assert_eq "$role_workspace/.remote-dev-tmp/uv-tools" "$actual" "$role uv tool state"
+done
+assert_fails_with 2 "development scratch is unavailable" \
+  bash -c 'source "$1"; remote_dev_prepare_development_environment launcher "$2"' \
+  _ "$runtime_fixture" "$workspace"
+
+# The real startup path clears scratch before dispatching the launcher.
+startup_source="$(dirname "${BASH_SOURCE[0]}")/start-remote-dev-web.sh"
+[[ -f "$startup_source" ]] || startup_source=/usr/local/bin/start-remote-dev-web
+startup_fixture="$test_root/start-remote-dev-web"
+launcher_fixture="$test_root/launcher"
+printf '#!/bin/bash\n[[ ! -v UV_TOOL_DIR ]]\n' >"$launcher_fixture"
+chmod 0700 "$launcher_fixture"
+python3 - "$startup_source" "$startup_fixture" "$runtime_lib" "$launcher_fixture" <<'PYFIXTURE'
+from pathlib import Path
+import shlex
+import sys
+source, destination, runtime, launcher = sys.argv[1:]
+text = Path(source).read_text()
+text = text.replace('runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh',
+                    'runtime_lib=' + shlex.quote(str(Path(runtime).resolve())))
+text = text.replace('exec /usr/local/bin/remote-dev-launcher', 'exec ' + shlex.quote(launcher))
+Path(destination).write_text(text)
+PYFIXTURE
+env REMOTE_DEV_ROLE=launcher REMOTE_DEV_START_MODE=menu UV_TOOL_DIR=/hostile \
+  bash "$startup_fixture"
+
 assert_fails_with 2 "too broad" remote_dev_validate_workspace_root /
 ln -s "$workspace" "$test_root/workspace-link"
 assert_fails_with 2 "symlinked path component" remote_dev_validate_workspace_root "$test_root/workspace-link"
@@ -117,6 +172,7 @@ mkdir -p \
   "$workspace/.hidden-manual" \
   "$workspace/.remote-dev-tmp/tmp" \
   "$workspace/.remote-dev-tmp/uv-cache" \
+  "$workspace/.remote-dev-tmp/uv-tools" \
   "$workspace/.remote-dev-tmp/npm-cache" \
   "$workspace/.remote-dev-tmp/pip-cache" \
   "$workspace/with space"

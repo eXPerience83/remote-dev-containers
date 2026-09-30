@@ -249,6 +249,13 @@ EOF_AGENT
 fi
 
 if [[ "$role" == codex || "$role" == antigravity ]]; then
+  echo
+  echo 'Development scratch (untrusted; expected session paths):'
+  scratch_root="${WORKSPACE:-/workspace}/.remote-dev-tmp"
+  printf 'TMPDIR       -> %s/tmp\n' "$scratch_root"
+  printf 'UV_CACHE_DIR -> %s/uv-cache\n' "$scratch_root"
+  printf 'UV_TOOL_DIR  -> %s/uv-tools\n' "$scratch_root"
+  echo '/tmp         -> bounded hardened tmpfs (512 MiB; noexec,nosuid,nodev in the supported agent stack)'
   check_project_collection_boundary
 fi
 

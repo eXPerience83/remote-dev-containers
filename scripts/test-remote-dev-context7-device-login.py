@@ -470,6 +470,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
             "TMP": "/workspace/.remote-dev-tmp/tmp",
             "TEMP": "/workspace/.remote-dev-tmp/tmp",
             "UV_CACHE_DIR": "/workspace/.remote-dev-tmp/uv-cache",
+            "UV_TOOL_DIR": "/workspace/.remote-dev-tmp/uv-tools",
             "NPM_CONFIG_CACHE": "/workspace/.remote-dev-tmp/npm-cache",
             "PIP_CACHE_DIR": "/workspace/.remote-dev-tmp/pip-cache",
         }
@@ -559,7 +560,7 @@ def assert_acquire_uses_isolated_environment(module) -> None:
                 )
         if environment.get("TMPDIR") == development["TMPDIR"]:
             raise AssertionError("Context7 login inherited development TMPDIR")
-        for name in ("TMP", "TEMP", "UV_CACHE_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR"):
+        for name in ("TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR"):
             if name in environment:
                 raise AssertionError(
                     f"Context7 login inherited development environment: {name}"

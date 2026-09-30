@@ -109,7 +109,10 @@ If you aren't automatically redirected, paste the authorization code below:
         development = "/workspace/.remote-dev-tmp/tmp"
         with mock.patch.dict(
             os.environ,
-            {"TMPDIR": development, "TMP": development, "TEMP": development},
+            {name: development for name in (
+                "TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR",
+                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR",
+            )},
         ):
             url_file = OAUTH.create_url_file(VALID_URL)
         try:
