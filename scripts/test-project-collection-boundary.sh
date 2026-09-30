@@ -283,7 +283,7 @@ doctor_workspace="$root/doctor-workspace"
 mkdir -p "$doctor_workspace"
 cat >"$doctor_runtime" <<'DOCTOR_RUNTIME'
 remote_dev_resolve_role() {
-  printf 'codex\n'
+  printf '%s\n' "${REMOTE_DEV_TEST_DOCTOR_ROLE:-codex}"
 }
 remote_dev_validate_workspace_root() {
   printf '%s\n' "$1"
@@ -328,5 +328,23 @@ grep -Fq 'Workspace collection: CRITICAL — collection root is Git-contaminated
   || fail "Doctor did not preserve the contamination diagnostic for status 2"
 grep -Fq 'Recovery: stop affected agent sessions' "$doctor_contaminated_output" \
   || fail "Doctor omitted contamination recovery guidance for status 2"
+
+# Doctor reports the fixed contract without preparing or scanning scratch.
+for role in codex antigravity launcher; do
+  doctor_output="$root/doctor-scratch-$role"
+  env WORKSPACE="$doctor_workspace" REMOTE_DEV_TEST_DOCTOR_ROLE="$role" \
+    REMOTE_DEV_TEST_COLLECTION_STATUS=1 UV_TOOL_DIR=/hostile \
+    "$doctor_fixture" >"$doctor_output" 2>&1 || true
+  if [[ "$role" == launcher ]]; then
+    ! grep -Fq 'Development scratch' "$doctor_output" || fail "launcher Doctor advertised scratch"
+    ! grep -Fq 'UV_TOOL_DIR' "$doctor_output" || fail "launcher Doctor advertised uv tool state"
+  else
+    grep -Fxq "TMPDIR       -> $doctor_workspace/.remote-dev-tmp/tmp" "$doctor_output"
+    grep -Fxq "UV_CACHE_DIR -> $doctor_workspace/.remote-dev-tmp/uv-cache" "$doctor_output"
+    grep -Fxq "UV_TOOL_DIR  -> $doctor_workspace/.remote-dev-tmp/uv-tools" "$doctor_output"
+    ! grep -Fq /hostile "$doctor_output" || fail "Doctor printed hostile inherited state"
+  fi
+  [[ ! -e "$doctor_workspace/.remote-dev-tmp" ]] || fail "Doctor created scratch"
+done
 
 echo "Project collection Git-boundary regressions: OK"

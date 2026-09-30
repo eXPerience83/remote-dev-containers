@@ -208,6 +208,7 @@ remote_dev_prepare_development_environment() {
   export TMP="$scratch_root/tmp"
   export TEMP="$scratch_root/tmp"
   export UV_CACHE_DIR="$scratch_root/uv-cache"
+  export UV_TOOL_DIR="$scratch_root/uv-tools"
   export NPM_CONFIG_CACHE="$scratch_root/npm-cache"
   export PIP_CACHE_DIR="$scratch_root/pip-cache"
 }

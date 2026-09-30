@@ -462,7 +462,7 @@ assert_no_broad_mounts_or_environment() {
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
     | (($environment | all(startswith("REMOTE_DEV_DATA_ROOT=") | not))
-       and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=") | not))
+       and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=") | not))
        and ($mounts | all(.Source != $test_root))
        and ($mounts | all(.Source != "/"))
        and ($mounts | all(.Source != "/root" and .Source != "/home"
@@ -688,10 +688,11 @@ assert_development_scratch_environment() {
     test "$(read_value TMP)" = "$scratch/tmp"
     test "$(read_value TEMP)" = "$scratch/tmp"
     test "$(read_value UV_CACHE_DIR)" = "$scratch/uv-cache"
+    test "$(read_value UV_TOOL_DIR)" = "$scratch/uv-tools"
     test "$(read_value NPM_CONFIG_CACHE)" = "$scratch/npm-cache"
     test "$(read_value PIP_CACHE_DIR)" = "$scratch/pip-cache"
 
-    for path in "$scratch" "$scratch/tmp" "$scratch/uv-cache" "$scratch/npm-cache" "$scratch/pip-cache"; do
+    for path in "$scratch" "$scratch/tmp" "$scratch/uv-cache" "$scratch/uv-tools" "$scratch/npm-cache" "$scratch/pip-cache"; do
       test -d "$path"
       test ! -L "$path"
       test "$(stat -c "%u:%g:%a" -- "$path")" = 0:0:700
@@ -703,17 +704,19 @@ assert_development_scratch_environment() {
     export TMP="$scratch/tmp"
     export TEMP="$scratch/tmp"
     export UV_CACHE_DIR="$scratch/uv-cache"
+    export UV_TOOL_DIR="$scratch/uv-tools"
     export NPM_CONFIG_CACHE="$scratch/npm-cache"
     export PIP_CACHE_DIR="$scratch/pip-cache"
     test "$(python -c "import tempfile; print(tempfile.gettempdir())")" = "$TMPDIR"
     test "$(uv cache dir)" = "$UV_CACHE_DIR"
+    test "$(uv tool dir)" = "$UV_TOOL_DIR"
     test "$(npm config get cache)" = "$NPM_CONFIG_CACHE"
     test "$(python -m pip cache dir)" = "$PIP_CACHE_DIR"
   ' >/dev/null 2>&1; then
     docker_exec "$name" sh -c '
       pid="$(pgrep -xo ttyd)"
       tr "\0" "\n" < "/proc/$pid/environ" \
-        | grep -E "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=" || true
+        | grep -E "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=" || true
       stat -c "%n %u:%g:%a device=%d" /workspace /workspace/.remote-dev-tmp /tmp 2>/dev/null || true
     ' >&2 || true
     fail "$role fixture development scratch/session environment is invalid"
@@ -725,7 +728,7 @@ assert_launcher_has_no_development_scratch() {
     set -eu
     pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
     ! tr "\0" "\n" < "/proc/$pid/environ" \
-      | grep -Eq "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)="
+      | grep -Eq "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)="
     test ! -e /workspace/.remote-dev-tmp
   ' >/dev/null 2>&1 || fail "launcher received development scratch state"
 }
@@ -1057,6 +1060,7 @@ assert_codex_toolchain_workflow() {
     export TMP="$(read_value TMP)"
     export TEMP="$(read_value TEMP)"
     export UV_CACHE_DIR="$(read_value UV_CACHE_DIR)"
+    export UV_TOOL_DIR="$(read_value UV_TOOL_DIR)"
     export NPM_CONFIG_CACHE="$(read_value NPM_CONFIG_CACHE)"
     export PIP_CACHE_DIR="$(read_value PIP_CACHE_DIR)"
 
@@ -1123,6 +1127,7 @@ run_hardened_antigravity_fixture() {
     TMP="$fixture_tmp" \
     TEMP="$fixture_tmp" \
     UV_CACHE_DIR="$fixture_tmp" \
+    UV_TOOL_DIR="$fixture_tmp" \
     NPM_CONFIG_CACHE="$fixture_tmp" \
     PIP_CACHE_DIR="$fixture_tmp" \
     "$@" 2>&1)" || status=$?

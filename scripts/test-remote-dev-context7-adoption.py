@@ -100,9 +100,12 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
     original_acquire = module.acquire_api_key
     previous_home = os.environ.get("CODEX_HOME")
     previous_role = os.environ.get("REMOTE_DEV_ROLE")
+    previous_tool_dir = os.environ.get("UV_TOOL_DIR")
 
     with tempfile.TemporaryDirectory(prefix="remote-dev-context7-adoption-test-") as temp:
         root = Path(temp)
+        hostile_tools = root / "untrusted-uv-tools"
+        os.environ["UV_TOOL_DIR"] = str(hostile_tools)
         device_home = root / "device-home"
         manual_home = root / "manual-home"
         for home in (device_home, manual_home):
@@ -169,6 +172,9 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
                     "failed device login changed the previously working managed API-key state"
                 )
         finally:
+            os.environ.pop("UV_TOOL_DIR", None)
+            if previous_tool_dir is not None:
+                os.environ["UV_TOOL_DIR"] = previous_tool_dir
             module.PYTHON = original_python
             module.MANAGER = original_manager
             module.acquire_api_key = original_acquire
@@ -180,6 +186,8 @@ def assert_device_adoption_matches_manual_api_key_path(module) -> None:
                 os.environ.pop("REMOTE_DEV_ROLE", None)
             else:
                 os.environ["REMOTE_DEV_ROLE"] = previous_role
+            if hostile_tools.exists():
+                raise AssertionError("Context7 configuration mutation used development uv tool state")
 
 
 def main() -> int:

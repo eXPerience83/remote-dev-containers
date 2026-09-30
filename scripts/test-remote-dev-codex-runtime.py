@@ -448,7 +448,10 @@ class CodexRuntimeTests(unittest.TestCase):
             self.assertFalse(self.m.STAGING_ROOT.is_relative_to(Path("/tmp")))
             with mock.patch.object(self.m, "STAGING_ROOT", fixed), mock.patch.object(
                 self.m, "probe_staging_execution"
-            ), mock.patch.dict(os.environ, {"TMPDIR": str(caller_tmp)}):
+            ), mock.patch.dict(os.environ, {name: str(caller_tmp) for name in (
+                "TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR",
+                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR",
+            )}):
                 with self.m.update_staging() as staging:
                     created = staging
                     self.assertEqual(staging.parent, fixed)
