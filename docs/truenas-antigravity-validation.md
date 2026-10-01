@@ -204,12 +204,14 @@ A normal reference tree is:
     ├── codex/
     │   ├── agent/
     │   ├── runtime/
+    │   ├── mise/
     │   ├── gh/
     │   ├── git/
     │   └── ssh/
     └── antigravity/
         ├── bin/
         ├── runtime/
+        ├── mise/
         ├── vendor/
         ├── config/
         ├── gh/

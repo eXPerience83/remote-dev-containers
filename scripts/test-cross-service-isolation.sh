@@ -24,6 +24,7 @@ require_command docker
 require_command jq
 require_command sha256sum
 require_command timeout
+require_command python3
 
 case "$image" in
   ''|*$'\n'*|*$'\r'*) fail "image reference is invalid" ;;
@@ -462,15 +463,18 @@ assert_no_broad_mounts_or_environment() {
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
     | (($environment | all(startswith("REMOTE_DEV_DATA_ROOT=") | not))
+       and ($environment | all(startswith("MISE_STATE_DIR=") | not))
        and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR|PRE_COMMIT_HOME)=") | not))
        and ($mounts | all(.Source != $test_root))
        and ($mounts | all(.Source != "/"))
        and ($mounts | all(.Source != "/root" and .Source != "/home"
-                           and .Source != "/opt" and .Source != "/usr/local"))
+                           and .Source != "/opt" and .Source != "/usr/local"
+                           and .Source != "/root/.local" and .Source != "/root/.local/state"))
        and ($mounts | all((.Source // "" | ascii_downcase | contains("docker.sock") | not)
                            and (.Source // "" | ascii_downcase | contains("podman.sock") | not)))
        and ($mounts | all(.Destination != "/" and .Destination != "/root" and .Destination != "/home"
-                           and .Destination != "/opt" and .Destination != "/usr/local"))
+                           and .Destination != "/opt" and .Destination != "/usr/local"
+                           and .Destination != "/root/.local" and .Destination != "/root/.local/state"))
        and ($mounts | all((.Destination // "" | ascii_downcase | contains("docker.sock") | not)
                            and (.Destination // "" | ascii_downcase | contains("podman.sock") | not)))
        and ($mounts | all((.Destination | test("(^|/)tmux|control"; "i")) | not))
@@ -495,8 +499,16 @@ assert_mount_contract() {
     | ($mounts | map(select(.Type == "bind"))) as $binds
     | if $role == "launcher" then
         ($binds | length == 0)
+        and ($mounts | all(.Destination != "/root/.local/state/mise"
+                          and ((.Source // "") | endswith("/mise") | not)))
       else
         (($binds | length > 0)
+         and (($binds | map(select(.Destination == "/root/.local/state/mise"
+                                   or (.Source | endswith("/mise"))))) as $mise
+              | ($mise | length == 1)
+                and $mise[0].Source == ($root + "/state/" + $role + "/mise")
+                and $mise[0].Destination == "/root/.local/state/mise"
+                and $mise[0].RW == true)
          and ($binds | all(.Source | startswith($root + "/")))
          and (($binds | map(.Source) | unique | length) == ($binds | length))
          and ($binds | all(.Destination != "/tmp" and .Destination != "/run"))
@@ -1066,6 +1078,77 @@ assert_agent_ttyd_security() {
     || fail "$role ttyd did not retain its hardened authentication/origin/client-limit/index arguments"
 }
 
+# Use native mise state and a template requiring trust, as in Phase 0.
+# Both roles see byte-identical config at the same in-container path.
+assert_mise_trust_state() {
+  local name="$1"
+  local action="$2"
+  local expected="$3"
+  local rootfs_before output
+  rootfs_before="$(docker diff "$name")"
+  if ! output="$(docker_exec "$name" bash -c '
+    set -euo pipefail
+    test "${MISE_STATE_DIR+x}" != x
+    test "$HOME" = /root
+    test -d /root/.local/state/mise
+    test ! -L /root/.local/state/mise
+    test -w /root/.local/state/mise
+    test "$(stat -c %a /root/.local/state/mise)" = 700
+    awk '\''$2 == "/root/.local/state/mise" { found=1 } END { exit !found }'\'' /proc/mounts
+    test "$MISE_DATA_DIR" = /opt/remote-dev/mise
+    test "$MISE_CACHE_DIR" = /opt/remote-dev/mise-cache
+    test "$MISE_NOT_FOUND_AUTO_INSTALL" = false
+    test "$MISE_NOT_FOUND_SYSTEM_FALLBACK" = false
+    project=/workspace/mise-trust-fixture
+    version="$(sed -n "s/^python = \"\([^\"]*\)\"$/\1/p" /etc/mise/config.toml)"
+    test -n "$version"
+    if test "$1" = prepare; then
+      test ! -e "$project"
+      mkdir "$project"
+      cat > "$project/mise.toml" <<EOF
+[tools]
+python = "$version"
+[env]
+PROBE = "{{ exec(command='\''touch /workspace/mise-trust-fixture/executed'\'') }}"
+EOF
+    fi
+    cd "$project"
+    snapshot_state() {
+      find /root/.local/state/mise -mindepth 1 -printf "%P %y %s %T@ %C@ %l\n" | LC_ALL=C sort
+    }
+    case "$1" in
+      prepare|observe) ;;
+      trust|untrust)
+        before="$(snapshot_state)"
+        # Checked against the pinned binary help; never trust a parent or real repo.
+        if test "$1" = trust; then
+          mise trust "$project/mise.toml" > action-output 2>&1 || { cat action-output; exit 1; }
+        else
+          mise trust --untrust "$project/mise.toml" > action-output 2>&1 || { cat action-output; exit 1; }
+        fi
+        test "$before" != "$(snapshot_state)"
+        ! grep -Fq "Read-only file system" action-output
+        ;;
+      *) exit 2 ;;
+    esac
+    rm -f executed
+    if test "$2" = trusted; then
+      python --version > resolution-output 2>&1 || { cat resolution-output; exit 1; }
+      grep -Fxq "Python $version" resolution-output
+      test -f executed
+    else
+      if python --version > resolution-output 2>&1; then exit 1; fi
+      grep -Fq "not trusted" resolution-output
+      test ! -e executed
+    fi
+    ! grep -Fq "Read-only file system" resolution-output
+  ' bash "$action" "$expected" 2>&1)"; then
+    printf '%s\n' "$output" >&2  # Only synthetic fixture output.
+    fail "native mise state $action/$expected failed"
+  fi
+  assert_equal "mise action rootfs changes" "$rootfs_before" "$(docker diff "$name")"
+}
+
 assert_codex_toolchain_workflow() {
   local output=""
   local status=0
@@ -1391,6 +1474,7 @@ declare -a codex_targets=(
   /root/.codex
   /root/.codex/.remote-dev-context7
   /root/.local/share/remote-dev/codex-runtime
+  /root/.local/state/mise
   /root/.config/gh
   /root/.config/git
   /root/.ssh
@@ -1401,22 +1485,27 @@ declare -a antigravity_targets=(
   /root/.local/share/remote-dev/antigravity
   /root/.gemini/antigravity-cli
   /root/.gemini/config
+  /root/.local/state/mise
   /root/.config/gh
   /root/.config/git
   /root/.ssh
 )
-declare -a codex_categories=(workspace agent context7 runtime gh git ssh)
-declare -a antigravity_categories=(workspace bin runtime vendor config gh git ssh)
+declare -a codex_categories=(workspace agent context7 runtime mise gh git ssh)
+declare -a antigravity_categories=(workspace bin runtime vendor config mise gh git ssh)
 declare -a codex_markers=()
 declare -a antigravity_markers=()
 declare -a codex_invariants=()
 declare -a antigravity_invariants=()
 
+python3 "$source_root/scripts/init-data-layout.py" --root "$test_root" --include-antigravity >/dev/null
+
 for index in "${!codex_categories[@]}"; do
   category="${codex_categories[$index]}"
   marker="$(marker_name "codex-$category")"
   codex_markers[index]="$marker"
-  if [[ "$category" == context7 ]]; then
+  if [[ "$category" == mise ]]; then
+    make_marker "$test_root/state/codex/mise" "$marker"
+  elif [[ "$category" == context7 ]]; then
     make_marker "$test_root/codex/agent/.remote-dev-context7" "$marker"
   else
     make_marker "$test_root/codex/$category" "$marker"
@@ -1426,7 +1515,11 @@ for index in "${!antigravity_categories[@]}"; do
   category="${antigravity_categories[$index]}"
   marker="$(marker_name "antigravity-$category")"
   antigravity_markers[index]="$marker"
-  make_marker "$test_root/antigravity/$category" "$marker"
+  if [[ "$category" == mise ]]; then
+    make_marker "$test_root/state/antigravity/mise" "$marker"
+  else
+    make_marker "$test_root/antigravity/$category" "$marker"
+  fi
 done
 prepare_synthetic_codex_runtime_source
 printf 'capability-probe\n' >"$test_root/codex/workspace/.hardening-capability-probe"
@@ -1523,6 +1616,7 @@ start_codex() {
     --mount "type=bind,src=$test_root/codex/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/codex/agent,dst=/root/.codex" \
     --mount "type=bind,src=$test_root/codex/runtime,dst=/root/.local/share/remote-dev/codex-runtime" \
+    --mount "type=bind,src=$test_root/state/codex/mise,dst=/root/.local/state/mise" \
     --mount "type=bind,src=$test_root/codex/gh,dst=/root/.config/gh" \
     --mount "type=bind,src=$test_root/codex/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/codex/ssh,dst=/root/.ssh" \
@@ -1569,6 +1663,7 @@ start_antigravity() {
     --mount "type=bind,src=$test_root/antigravity/runtime,dst=/root/.local/share/remote-dev/antigravity" \
     --mount "type=bind,src=$test_root/antigravity/vendor,dst=/root/.gemini/antigravity-cli" \
     --mount "type=bind,src=$test_root/antigravity/config,dst=/root/.gemini/config" \
+    --mount "type=bind,src=$test_root/state/antigravity/mise,dst=/root/.local/state/mise" \
     --mount "type=bind,src=$test_root/antigravity/gh,dst=/root/.config/gh" \
     --mount "type=bind,src=$test_root/antigravity/git,dst=/root/.config/git" \
     --mount "type=bind,src=$test_root/antigravity/ssh,dst=/root/.ssh" \
@@ -1617,6 +1712,10 @@ assert_hardened_codex_policy_and_doctor
 assert_codex_toolchain_workflow
 assert_hardened_codex_runtime_regressions
 assert_hardened_antigravity_host_fixtures
+assert_mise_trust_state "$codex_name" prepare untrusted
+assert_mise_trust_state "$antigravity_name" prepare untrusted
+assert_mise_trust_state "$codex_name" trust trusted
+assert_mise_trust_state "$antigravity_name" observe untrusted
 
 remove_owned_container "$launcher_name" "$launcher_id" \
   || fail "failed to remove the owned passwordless launcher fixture for authentication coverage"
@@ -1685,6 +1784,11 @@ assert_agent_runtime_identity "$codex_name" Codex
 assert_development_scratch_environment "$codex_name" Codex
 assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
 assert_read_only_rootfs "$codex_name" Codex
+assert_mise_trust_state "$codex_name" observe trusted
+assert_mise_trust_state "$antigravity_name" observe untrusted
+assert_mise_trust_state "$codex_name" untrust untrusted
+assert_mise_trust_state "$antigravity_name" trust trusted
+assert_mise_trust_state "$codex_name" observe untrusted
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 verify_canaries antigravity_invariants "$antigravity_name"
@@ -1704,6 +1808,8 @@ assert_agent_runtime_identity "$antigravity_name" Antigravity
 assert_development_scratch_environment "$antigravity_name" Antigravity
 assert_agent_ttyd_security "$antigravity_name" Antigravity antigravity 7682 "$antigravity_password" "$codex_password"
 assert_read_only_rootfs "$antigravity_name" Antigravity
+assert_mise_trust_state "$antigravity_name" observe trusted
+assert_mise_trust_state "$antigravity_name" untrust untrusted
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 verify_canaries antigravity_invariants "$antigravity_name"
@@ -1724,5 +1830,12 @@ assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$an
 assert_equal "Antigravity scratch during Codex recreation" "$antigravity_scratch_measurement" \
   "$(measure_canary \
     "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
+
+assert_mise_trust_state "$codex_name" observe untrusted
+assert_mise_trust_state "$antigravity_name" observe untrusted
+for name in "$codex_name" "$antigravity_name"; do
+  docker_exec "$name" rm -rf -- /workspace/mise-trust-fixture \
+    || fail "failed to clean up synthetic mise project"
+done
 
 echo "Hardened cross-service isolation and offline toolchain canaries: OK"

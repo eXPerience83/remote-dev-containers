@@ -127,6 +127,11 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/mise
+        target: /root/.local/state/mise
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/codex/gh
         target: /root/.config/gh
         bind:
@@ -233,6 +238,11 @@ services:
       - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/config
         target: /root/.gemini/config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REMOTE_DEV_DATA_ROOT:-../data}/state/antigravity/mise
+        target: /root/.local/state/mise
         bind:
           create_host_path: false
       - type: bind

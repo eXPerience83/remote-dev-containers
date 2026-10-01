@@ -108,6 +108,7 @@ The Codex service receives narrow children such as:
 workspaces/codex    -> /workspace
 state/codex/agent   -> /root/.codex
 state/codex/runtime -> /root/.local/share/remote-dev/codex-runtime
+state/codex/mise    -> /root/.local/state/mise
 state/codex/gh      -> /root/.config/gh
 state/codex/git     -> /root/.config/git
 state/codex/ssh     -> /root/.ssh
@@ -116,6 +117,8 @@ state/codex/ssh     -> /root/.ssh
 Antigravity receives its own disjoint corresponding children. Browser-terminal passwords are deployment configuration, not persisted data files. The former file-backed browser-authentication path is not part of the canonical layout.
 
 `scripts/lib/data_layout.py` is the canonical host-side directory contract. Both `scripts/init-data-layout.py` and `scripts/preflight-data-layout.py` consume it. The initializer requires the administrative root to exist, rejects symlink ancestry, creates only missing canonical descendants and preserves existing content/mountpoints. Preflight validates the same layout before deployment.
+
+Mise trust/state uses only `state/codex/mise` or `state/antigravity/mise` at the native `/root/.local/state/mise` target, initially `0700` for new host leaves. The sources are disjoint, persist with role state and are absent from launcher. Existing deployments must rerun the initializer before recreation to create the new required leaves; existing operator-owned paths retain their permissions/content. See [the user guide](user-guide.md#7-what-persists) for the data/cache/state separation.
 
 ## TrueNAS dataset and ACL contract
 

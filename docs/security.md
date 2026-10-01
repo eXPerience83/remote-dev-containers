@@ -103,10 +103,13 @@ The Codex service receives only:
 workspaces/codex    -> /workspace
 state/codex/agent   -> /root/.codex
 state/codex/runtime -> /root/.local/share/remote-dev/codex-runtime
+state/codex/mise    -> /root/.local/state/mise
 state/codex/gh      -> /root/.config/gh
 state/codex/git     -> /root/.config/git
 state/codex/ssh     -> /root/.ssh
 ```
+
+Mise state/trust has independent `state/codex/mise` and `state/antigravity/mise` sources, each mounted only at `/root/.local/state/mise` in its role. Launcher receives neither. No parent home/local tree becomes writable, and Remote Dev never auto-trusts projects. New host leaves start at `0700`; runtime credential hardening does not recursively mutate mise contents.
 
 The experimental Antigravity service uses only its own corresponding private children. Its project configuration mount is narrowly scoped as `state/antigravity/config -> /root/.gemini/config` and remains separate from `state/antigravity/vendor -> /root/.gemini/antigravity-cli`. Codex and the launcher receive neither source nor target, and the stack never makes all of `/root/.gemini` writable.
 

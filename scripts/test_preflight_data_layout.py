@@ -111,38 +111,39 @@ def validate_bootstrap(root: Path) -> None:
         "complete layout unexpectedly created secrets",
     )
 
-    existing_state = root / "state/codex/agent/existing-state.txt"
-    existing_state.write_text("preserve", encoding="utf-8")
+    specs = CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS
+    for spec in specs:
+        directory = root / spec.suffix
+        (directory / "existing-state.txt").write_text("preserve", encoding="utf-8")
+        directory.chmod(0o750)  # Existing operator policy must survive reruns.
     rerun = run_script(BOOTSTRAP, root, include_antigravity=True)
     require(rerun.returncode == 0, rerun.stderr)
-    require(
-        existing_state.read_text(encoding="utf-8") == "preserve",
-        "bootstrap changed existing state contents",
-    )
+    for spec in specs:
+        directory = root / spec.suffix
+        require(
+            (directory / "existing-state.txt").read_text(encoding="utf-8") == "preserve",
+            f"bootstrap changed existing contents of {spec.suffix}",
+        )
+        require(
+            directory.stat().st_mode & 0o777 == 0o750,
+            f"bootstrap changed existing mode of {spec.suffix}",
+        )
 
 
 def validate_invalid_existing_component(base: Path) -> None:
     """Reject malformed existing layout before creating any missing paths."""
-    root = base / "invalid-object-root"
-    (root / "state/codex").mkdir(parents=True)
-    invalid_runtime = root / "state/codex/runtime"
-    invalid_runtime.write_text("not-a-directory", encoding="utf-8")
-
-    result = run_script(BOOTSTRAP, root)
-    require(result.returncode == 1, "existing non-directory component must fail")
-    require("is not a directory" in result.stderr, result.stderr)
-    require(
-        not (root / "workspaces").exists(),
-        "bootstrap mutated layout before rejecting an existing invalid component",
-    )
-    require(
-        not (root / "state/codex/agent").exists(),
-        "bootstrap created earlier role state before rejecting invalid runtime state",
-    )
-    require(
-        invalid_runtime.read_text(encoding="utf-8") == "not-a-directory",
-        "bootstrap modified the invalid existing object",
-    )
+    for index, spec in enumerate(CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS):
+        root = base / f"invalid-object-root-{index}"
+        invalid = root / spec.suffix
+        invalid.parent.mkdir(parents=True)
+        invalid.write_text("not-a-directory", encoding="utf-8")
+        before = set(root.rglob("*"))
+        for script in (BOOTSTRAP, PREFLIGHT):
+            result = run_script(script, root, include_antigravity=True)
+            require(result.returncode == 1, f"{script.name}: {spec.suffix} must fail")
+            require("not a directory" in result.stderr, result.stderr)
+            require(set(root.rglob("*")) == before, "invalid layout was mutated")
+            require(invalid.read_text(encoding="utf-8") == "not-a-directory", "invalid object changed")
 
 
 def validate_symlinks(base: Path) -> None:
@@ -194,6 +195,43 @@ def validate_symlinks(base: Path) -> None:
         list(outside.iterdir()) == [],
         "symlinked external target was unexpectedly modified",
     )
+
+    for index, spec in enumerate(CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS):
+        root = base / f"leaf-symlink-root-{index}"
+        linked = root / spec.suffix
+        linked.parent.mkdir(parents=True)
+        linked.symlink_to(outside, target_is_directory=True)
+        before = set(root.rglob("*"))
+        for script in (BOOTSTRAP, PREFLIGHT):
+            result = run_script(script, root, include_antigravity=True)
+            require(result.returncode == 1, f"{script.name}: symlink {spec.suffix} must fail")
+            require("must not be a symlink" in result.stderr, result.stderr)
+            require(set(root.rglob("*")) == before, "symlink layout was mutated")
+            require(list(outside.iterdir()) == [], "symlink target was mutated")
+
+
+def validate_required_leaves(root: Path) -> None:
+    """Preflight must require every canonical leaf, including private mise state."""
+    root.mkdir()
+    initialize_layout(root, include_antigravity=True)
+    for spec in CODEX_DIRECTORY_SPECS + ANTIGRAVITY_DIRECTORY_SPECS:
+        directory = root / spec.suffix
+        directory.rmdir()
+        result = run_script(PREFLIGHT, root, include_antigravity=True)
+        require(result.returncode == 1, f"preflight accepted missing {spec.suffix}")
+        require(str(directory) in result.stderr, result.stderr)
+        directory.mkdir(mode=spec.mode)
+
+
+def validate_mise_specs() -> None:
+    """Pin the two reviewed mise leaves without introducing shared state."""
+    for role, specs in (("codex", CODEX_DIRECTORY_SPECS), ("antigravity", ANTIGRAVITY_DIRECTORY_SPECS)):
+        mise = [spec for spec in specs if spec.target == "/root/.local/state/mise"]
+        require(len(mise) == 1, f"{role} must have exactly one mise state leaf")
+        require(mise[0].suffix == f"state/{role}/mise", f"{role} mise suffix")
+        require(mise[0].mode == 0o700, f"{role} mise initial mode")
+    suffixes = expected_suffixes(include_antigravity=True)
+    require("state/mise" not in suffixes, "shared mise state was introduced")
 
 
 def validate_compose_contract() -> None:
@@ -257,6 +295,8 @@ def main() -> int:
         validate_invalid_existing_component(base)
         validate_symlinks(base)
         validate_initial_modes(base / "mode-root")
+        validate_required_leaves(base / "required-root")
+    validate_mise_specs()
     validate_compose_contract()
 
     print("Host data-layout bootstrap/preflight regressions: OK")

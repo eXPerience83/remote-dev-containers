@@ -229,6 +229,7 @@ REMOTE_DEV_DATA_ROOT/
     └── codex/
         ├── agent/
         ├── runtime/
+        ├── mise/
         ├── gh/
         ├── git/
         └── ssh/
@@ -256,7 +257,7 @@ chmod 600 .env
 mkdir -p \
   data/workspaces/codex/example-project \
   data/state/codex/{agent,gh,git,ssh}
-sudo install -d -o root -g root -m 0700 data/state/codex/runtime
+sudo install -d -o root -g root -m 0700 data/state/codex/runtime data/state/codex/mise
 # Configura un WEB_PASSWORD no vacío para Codex.
 make preflight
 ./scripts/build-local.sh

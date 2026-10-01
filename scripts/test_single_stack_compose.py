@@ -17,7 +17,8 @@ COMPOSE_FILES = (GENERIC_COMPOSE, TRUENAS_COMPOSE)
 AUTH_COMPOSE_FILES = (GENERIC_COMPOSE, LAUNCHER_AUTH_OVERRIDE)
 CANONICAL_IMAGE = "ghcr.io/experience83/remote-dev:edge-amd64"
 SOCKET_MARKERS = ("docker.sock", "podman.sock")
-BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local"))
+BROAD_MOUNT_PATHS = frozenset(("/", "/root", "/home", "/opt", "/usr/local", "/root/.local", "/root/.local/state"))
+MISE_STATE_TARGET = "/root/.local/state/mise"
 ANTIGRAVITY_CONFIG_TARGET = "/root/.gemini/config"
 ANTIGRAVITY_VENDOR_TARGET = "/root/.gemini/antigravity-cli"
 AGENT_CAPABILITIES = frozenset(
@@ -245,6 +246,10 @@ def validate(path: Path, config: dict[str, object]) -> None:
         ("Antigravity", antigravity_env),
     ):
         require(
+            "MISE_STATE_DIR" not in environment,
+            f"{path}: {name} overrides native mise state",
+        )
+        require(
             DEVELOPMENT_ENVIRONMENT.isdisjoint(environment),
             f"{path}: {name} received Compose-scoped development scratch",
         )
@@ -284,6 +289,8 @@ def validate(path: Path, config: dict[str, object]) -> None:
         "/root/.config/git",
         "/root/.ssh",
         "/root/.local/bin",
+        MISE_STATE_TARGET,
+        "/mise",
         "/root/.gemini",
         "docker.sock",
         "podman.sock",
@@ -305,6 +312,29 @@ def validate(path: Path, config: dict[str, object]) -> None:
     codex_sources = set(mount_sources(codex))
     antigravity_sources = set(mount_sources(antigravity))
     require(codex_sources.isdisjoint(antigravity_sources), f"{path}: agents share host paths")
+
+    for role, service in (("codex", codex), ("antigravity", antigravity)):
+        mise_mounts = [
+            mount for mount in rendered_volumes(service)
+            if mount.get("target") == MISE_STATE_TARGET
+            or str(mount.get("source", "")).endswith("/mise")
+        ]
+        require(len(mise_mounts) == 1, f"{path}: {role} needs exactly one mise mount")
+        mount = mise_mounts[0]
+        require(mount.get("target") == MISE_STATE_TARGET, f"{path}: {role} mise target")
+        require(mount.get("type") == "bind", f"{path}: {role} mise must be a bind")
+        require(
+            str(mount.get("source", "")).endswith(f"/state/{role}/mise"),
+            f"{path}: {role} mise source must be role-private",
+        )
+        bind = mount.get("bind")
+        require(isinstance(bind, dict), f"{path}: {role} mise bind options missing")
+        require(bind.get("create_host_path") is not True, f"{path}: {role} mise auto-creation")
+        require(mount.get("read_only") is not True, f"{path}: {role} mise must be writable")
+    require(
+        mount_sources(codex, MISE_STATE_TARGET) != mount_sources(antigravity, MISE_STATE_TARGET),
+        f"{path}: mise state is shared between roles",
+    )
 
     config_mounts = [
         mount
