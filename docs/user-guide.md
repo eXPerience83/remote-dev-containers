@@ -175,6 +175,7 @@ Remote Dev separates persistent state by purpose:
 - project directories persist through the role-private workspace bind mount;
 - Codex authentication, configuration and session history persist through the Codex-private agent-state mount;
 - GitHub CLI, Git and SSH state have separate role-private persistent mounts;
+- mise trust/ignore decisions persist in a separate role-private mise-state mount;
 - an admitted optional Codex runtime has its own Codex-private runtime state;
 - normal temporary files and uv/npm/pip caches persist below the role-private `/workspace/.remote-dev-tmp` tree;
 - the active project selection itself is only current menu/tmux process state.
@@ -191,7 +192,15 @@ mktemp -d "$TMPDIR/remote-dev-XXXXXX"
 
 `/workspace/.remote-dev-tmp` is backed by disk and can survive normal container recreation, including temporary files left by interrupted sessions. Remote Dev does not automatically clean its contents recursively. Remove only your own temporary paths after use; use the stopped-service cleanup procedure above to clear the whole tree.
 
-Normal Codex and Antigravity sessions also set `PRE_COMMIT_HOME=/workspace/.remote-dev-tmp/pre-commit-cache` for project-owned pre-commit hook caches and environments. This change does not bundle or install `pre-commit`. Launcher receives no development scratch defaults. Remote Dev sets no global `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME`, and does not redirect `HOME` globally. mise trust/ignore state is separate security-relevant state owned by [#250](https://github.com/eXPerience83/remote-dev-containers/issues/250); it does not belong in scratch. The bundled mise data/cache paths remain unchanged.
+Normal Codex and Antigravity sessions also set `PRE_COMMIT_HOME=/workspace/.remote-dev-tmp/pre-commit-cache` for project-owned pre-commit hook caches and environments. This change does not bundle or install `pre-commit`. Launcher receives no development scratch defaults. Remote Dev sets no global `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME`, and does not redirect `HOME` globally. Mise storage is separate by purpose:
+
+- immutable image data/cache: `MISE_DATA_DIR=/opt/remote-dev/mise` and `MISE_CACHE_DIR=/opt/remote-dev/mise-cache`;
+- role-private persistent state/trust: host `state/codex/mise` or `state/antigravity/mise` bound to the native `/root/.local/state/mise`;
+- development temporary files/package caches: `/workspace/.remote-dev-tmp/...`.
+
+Mise trust state survives recreation with the same role state. Codex and Antigravity never share it; launcher receives none. It is not scratch and the scratch cleanup procedure does not remove it. Remote Dev does not auto-trust projects: `mise trust` remains an explicit action. No `MISE_STATE_DIR` override is needed.
+
+Before recreating an existing deployment with the new binds, rerun `scripts/init-data-layout.py` against its host data root (with `--include-antigravity` when enabled). New mise leaves start at `0700`; the initializer preserves existing operator-owned directories and their permissions/content.
 
 Recreating the container with the same reviewed mounts should therefore preserve the project directories and agent state while starting a fresh process. If a project is deleted, Codex history can still contain old-path sessions because that history is not stored in the deleted checkout.
 

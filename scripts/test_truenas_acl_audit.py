@@ -109,7 +109,8 @@ class TrueNasAclAuditTests(unittest.TestCase):
             info, findings = MODULE.audit(root, include_antigravity=False)
         self.assertEqual(findings, [])
         self.assertIn("Dataset Pool1/remote-dev: acltype=posix aclmode=discard", info)
-        self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 5)
+        expected = sum(spec.mode == 0o700 for spec in MODULE.directory_specs(include_antigravity=False))
+        self.assertEqual(sum(line.startswith("Private state OK:") for line in info), expected)
         self.assertTrue(
             all("root-owned" in line for line in info if line.startswith("Private state OK:"))
         )
@@ -121,7 +122,8 @@ class TrueNasAclAuditTests(unittest.TestCase):
         with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
             info, findings = MODULE.audit(root, include_antigravity=True)
         self.assertEqual(findings, [])
-        self.assertEqual(sum(line.startswith("Private state OK:") for line in info), 12)
+        expected = sum(spec.mode == 0o700 for spec in MODULE.directory_specs(include_antigravity=True))
+        self.assertEqual(sum(line.startswith("Private state OK:") for line in info), expected)
         self.assertTrue(
             any("state/antigravity/config" in line for line in info),
             msg="Antigravity config must be included in the private ACL audit",

@@ -275,6 +275,7 @@ RUN --network=none \
       /root/.config/git \
       /root/.ssh \
       /root/.local/bin \
+      /root/.local/state/mise \
       /root/.local/share/remote-dev/codex-runtime \
       /root/.local/share/remote-dev/antigravity \
       /root/.gemini/antigravity-cli \
