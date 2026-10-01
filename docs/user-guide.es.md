@@ -183,6 +183,16 @@ El sistema de archivos raíz del contenedor es de solo lectura. `/tmp` y `/run` 
 
 Usa `$TMPDIR` heredado para temporales ejecutables de desarrollo. `UV_CACHE_DIR=/workspace/.remote-dev-tmp/uv-cache` aloja la caché desechable de uv, incluidos los entornos de `uvx`; `UV_TOOL_DIR=/workspace/.remote-dev-tmp/uv-tools` aloja el estado de herramientas gestionadas por uv. El uso normal de `uvx` no requiere `UV_TOOL_DIR` y no hace falta inventar `UV_TOOL_DIR=/tmp/...`. `TMPDIR`, `TMP` y `TEMP` apuntan a `/workspace/.remote-dev-tmp/tmp`; las cachés de npm y pip usan los directorios hermanos `npm-cache` y `pip-cache`. Estas rutas pertenecen al workspace privado de cada rol, respaldado por disco. `/tmp` sigue limitado a 512 MiB con `noexec,nosuid,nodev`. Este scratch no es el futuro store de toolchains bajo demanda (#180); las rutas de ejecutables y `PATH` no cambian.
 
+Para crear un directorio temporal de desarrollo ad-hoc y único, usa:
+
+```bash
+mktemp -d "$TMPDIR/remote-dev-XXXXXX"
+```
+
+`/workspace/.remote-dev-tmp` está respaldado por disco y puede sobrevivir a recreaciones normales del contenedor, incluidos los temporales dejados por sesiones interrumpidas. Remote Dev no limpia automáticamente su contenido de forma recursiva. Elimina únicamente tus propias rutas temporales tras usarlas; para limpiar todo el árbol, sigue el procedimiento anterior con el servicio detenido.
+
+Las sesiones normales de Codex y Antigravity también fijan `PRE_COMMIT_HOME=/workspace/.remote-dev-tmp/pre-commit-cache` para las cachés y entornos de hooks de pre-commit usados por el proyecto. Este cambio no incluye ni instala `pre-commit` en la imagen. Launcher no recibe defaults de scratch de desarrollo. Remote Dev no fija globalmente `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` ni `XDG_DATA_HOME`, ni redirige `HOME` globalmente. El estado trust/ignore de mise es estado separado relevante para la seguridad y pertenece a [#250](https://github.com/eXPerience83/remote-dev-containers/issues/250); no corresponde al scratch. Las rutas de datos/caché del mise incluido en la imagen no cambian.
+
 Recrear el contenedor con los mismos mounts revisados debería conservar los directorios de proyecto y el estado del agente aunque arranque un proceso nuevo. Si se borra un proyecto, el historial de Codex puede seguir conteniendo sesiones de la ruta antigua porque ese historial no estaba almacenado en el checkout eliminado.
 
 ## 8. Antigravity: límite documental actual

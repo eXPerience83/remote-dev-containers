@@ -183,6 +183,16 @@ The container root filesystem is read-only. `/tmp` and `/run` remain private bou
 
 Use inherited `$TMPDIR` for executable development temporaries. `UV_CACHE_DIR=/workspace/.remote-dev-tmp/uv-cache` holds disposable uv cache state, including `uvx` environments; `UV_TOOL_DIR=/workspace/.remote-dev-tmp/uv-tools` holds managed uv tool state. Ordinary `uvx` use does not require `UV_TOOL_DIR`, and there is no need to invent `UV_TOOL_DIR=/tmp/...`. `TMPDIR`, `TMP` and `TEMP` point to `/workspace/.remote-dev-tmp/tmp`; npm and pip caches use the sibling `npm-cache` and `pip-cache` directories. These paths belong to each role's private disk-backed workspace. `/tmp` remains limited to 512 MiB with `noexec,nosuid,nodev`. This scratch tree is not the future on-demand toolchain store (#180); tool executable paths and `PATH` are unchanged.
 
+For a unique ad-hoc temporary development directory, use:
+
+```bash
+mktemp -d "$TMPDIR/remote-dev-XXXXXX"
+```
+
+`/workspace/.remote-dev-tmp` is backed by disk and can survive normal container recreation, including temporary files left by interrupted sessions. Remote Dev does not automatically clean its contents recursively. Remove only your own temporary paths after use; use the stopped-service cleanup procedure above to clear the whole tree.
+
+Normal Codex and Antigravity sessions also set `PRE_COMMIT_HOME=/workspace/.remote-dev-tmp/pre-commit-cache` for project-owned pre-commit hook caches and environments. This change does not bundle or install `pre-commit`. Launcher receives no development scratch defaults. Remote Dev sets no global `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME`, and does not redirect `HOME` globally. mise trust/ignore state is separate security-relevant state owned by [#250](https://github.com/eXPerience83/remote-dev-containers/issues/250); it does not belong in scratch. The bundled mise data/cache paths remain unchanged.
+
 Recreating the container with the same reviewed mounts should therefore preserve the project directories and agent state while starting a fresh process. If a project is deleted, Codex history can still contain old-path sessions because that history is not stored in the deleted checkout.
 
 ## 8. Antigravity: current documented boundary

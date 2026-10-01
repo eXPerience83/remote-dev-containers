@@ -111,7 +111,7 @@ If you aren't automatically redirected, paste the authorization code below:
             os.environ,
             {name: development for name in (
                 "TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR",
-                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR",
+                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR", "PRE_COMMIT_HOME",
             )},
         ):
             url_file = OAUTH.create_url_file(VALID_URL)

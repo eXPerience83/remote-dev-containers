@@ -211,6 +211,7 @@ remote_dev_prepare_development_environment() {
   export UV_TOOL_DIR="$scratch_root/uv-tools"
   export NPM_CONFIG_CACHE="$scratch_root/npm-cache"
   export PIP_CACHE_DIR="$scratch_root/pip-cache"
+  export PRE_COMMIT_HOME="$scratch_root/pre-commit-cache"
 }
 
 remote_dev_validate_project_name() {

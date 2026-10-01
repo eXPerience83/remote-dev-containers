@@ -462,7 +462,7 @@ assert_no_broad_mounts_or_environment() {
     | ($container.Config.Env // []) as $environment
     | ($container.Mounts // []) as $mounts
     | (($environment | all(startswith("REMOTE_DEV_DATA_ROOT=") | not))
-       and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=") | not))
+       and ($environment | all(test("^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR|PRE_COMMIT_HOME)=") | not))
        and ($mounts | all(.Source != $test_root))
        and ($mounts | all(.Source != "/"))
        and ($mounts | all(.Source != "/root" and .Source != "/home"
@@ -691,8 +691,9 @@ assert_development_scratch_environment() {
     test "$(read_value UV_TOOL_DIR)" = "$scratch/uv-tools"
     test "$(read_value NPM_CONFIG_CACHE)" = "$scratch/npm-cache"
     test "$(read_value PIP_CACHE_DIR)" = "$scratch/pip-cache"
+    test "$(read_value PRE_COMMIT_HOME)" = "$scratch/pre-commit-cache"
 
-    for path in "$scratch" "$scratch/tmp" "$scratch/uv-cache" "$scratch/uv-tools" "$scratch/npm-cache" "$scratch/pip-cache"; do
+    for path in "$scratch" "$scratch/tmp" "$scratch/uv-cache" "$scratch/uv-tools" "$scratch/npm-cache" "$scratch/pip-cache" "$scratch/pre-commit-cache"; do
       test -d "$path"
       test ! -L "$path"
       test "$(stat -c "%u:%g:%a" -- "$path")" = 0:0:700
@@ -707,16 +708,35 @@ assert_development_scratch_environment() {
     export UV_TOOL_DIR="$scratch/uv-tools"
     export NPM_CONFIG_CACHE="$scratch/npm-cache"
     export PIP_CACHE_DIR="$scratch/pip-cache"
+    export PRE_COMMIT_HOME="$scratch/pre-commit-cache"
     test "$(python -c "import tempfile; print(tempfile.gettempdir())")" = "$TMPDIR"
     test "$(uv cache dir)" = "$UV_CACHE_DIR"
     test "$(uv tool dir)" = "$UV_TOOL_DIR"
     test "$(npm config get cache)" = "$NPM_CONFIG_CACHE"
     test "$(python -m pip cache dir)" = "$PIP_CACHE_DIR"
+
+    # Exercise physical executable bytes; venv Python may symlink outside /tmp.
+    development_probe=""
+    noexec_probe=""
+    trap '\''rm -rf -- "$development_probe" "$noexec_probe"'\'' EXIT
+    development_probe="$(mktemp -d "$TMPDIR/remote-dev-exec-XXXXXX")"
+    noexec_probe="$(mktemp -d /tmp/remote-dev-noexec-XXXXXX)"
+    python -m venv "$development_probe/venv"
+    "$development_probe/venv/bin/python" -c "import sys; assert sys.prefix == sys.argv[1]" "$development_probe/venv"
+    cp -- /bin/echo "$development_probe/echo"
+    cp -- /bin/echo "$noexec_probe/echo"
+    test -f "$development_probe/echo" && test ! -L "$development_probe/echo"
+    test -f "$noexec_probe/echo" && test ! -L "$noexec_probe/echo"
+    chmod 0700 "$development_probe/echo" "$noexec_probe/echo"
+    test "$("$development_probe/echo" development-exec-ok)" = development-exec-ok
+    noexec_status=0
+    "$noexec_probe/echo" noexec-must-fail >/dev/null 2>&1 || noexec_status=$?
+    test "$noexec_status" = 126
   ' >/dev/null 2>&1; then
     docker_exec "$name" sh -c '
       pid="$(pgrep -xo ttyd)"
       tr "\0" "\n" < "/proc/$pid/environ" \
-        | grep -E "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)=" || true
+        | grep -E "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR|PRE_COMMIT_HOME)=" || true
       stat -c "%n %u:%g:%a device=%d" /workspace /workspace/.remote-dev-tmp /tmp 2>/dev/null || true
     ' >&2 || true
     fail "$role fixture development scratch/session environment is invalid"
@@ -728,7 +748,7 @@ assert_launcher_has_no_development_scratch() {
     set -eu
     pid="$(pgrep -f "[/]usr/local/bin/remote-dev-launcher" | head -n 1)"
     ! tr "\0" "\n" < "/proc/$pid/environ" \
-      | grep -Eq "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR)="
+      | grep -Eq "^(TMPDIR|TMP|TEMP|UV_CACHE_DIR|UV_TOOL_DIR|NPM_CONFIG_CACHE|PIP_CACHE_DIR|PRE_COMMIT_HOME)="
     test ! -e /workspace/.remote-dev-tmp
   ' >/dev/null 2>&1 || fail "launcher received development scratch state"
 }
@@ -1063,6 +1083,7 @@ assert_codex_toolchain_workflow() {
     export UV_TOOL_DIR="$(read_value UV_TOOL_DIR)"
     export NPM_CONFIG_CACHE="$(read_value NPM_CONFIG_CACHE)"
     export PIP_CACHE_DIR="$(read_value PIP_CACHE_DIR)"
+    export PRE_COMMIT_HOME="$(read_value PRE_COMMIT_HOME)"
 
     project="/workspace/hardening-toolchain"
     rm -rf -- "$project"
@@ -1130,6 +1151,7 @@ run_hardened_antigravity_fixture() {
     UV_TOOL_DIR="$fixture_tmp" \
     NPM_CONFIG_CACHE="$fixture_tmp" \
     PIP_CACHE_DIR="$fixture_tmp" \
+    PRE_COMMIT_HOME="$fixture_tmp" \
     "$@" 2>&1)" || status=$?
   if (( status != 0 )); then
     if docker_exec_infrastructure_failure "$status"; then

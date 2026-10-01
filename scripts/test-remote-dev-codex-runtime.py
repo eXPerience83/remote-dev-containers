@@ -450,7 +450,7 @@ class CodexRuntimeTests(unittest.TestCase):
                 self.m, "probe_staging_execution"
             ), mock.patch.dict(os.environ, {name: str(caller_tmp) for name in (
                 "TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR",
-                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR",
+                "NPM_CONFIG_CACHE", "PIP_CACHE_DIR", "PRE_COMMIT_HOME",
             )}):
                 with self.m.update_staging() as staging:
                     created = staging
@@ -598,6 +598,7 @@ class CodexRuntimeTests(unittest.TestCase):
                     "CODEX_HOME": str(real_home),
                     "OPENAI_API_KEY": "synthetic-secret",
                     "GH_TOKEN": "synthetic-gh-secret",
+                    "PRE_COMMIT_HOME": "/hostile/pre-commit-cache",
                 },
             ):
                 with self.m.update_staging() as staging:
@@ -609,6 +610,7 @@ class CodexRuntimeTests(unittest.TestCase):
                     candidate.write_text(
                         "#!/bin/sh\n"
                         "set -eu\n"
+                        '[ "${PRE_COMMIT_HOME+x}" != x ] || exit 97\n'
                         "printf 'uid=%s\\n' \"$(id -u)\"\n"
                         "printf 'gid=%s\\n' \"$(id -g)\"\n"
                         "printf 'groups=%s\\n' \"$(sed -n "
