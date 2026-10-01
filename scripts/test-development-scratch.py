@@ -40,6 +40,12 @@ class DevelopmentScratchTests(unittest.TestCase):
             self.assertEqual((info.st_uid, info.st_gid), (os.geteuid(), os.getegid()))
             self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
 
+    def test_fixed_children_contract(self) -> None:
+        self.assertEqual(
+            scratch.SCRATCH_CHILDREN,
+            ("tmp", "uv-cache", "uv-tools", "npm-cache", "pip-cache", "pre-commit-cache"),
+        )
+
     def test_create_and_reuse_preserves_contents(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary) / "workspace"

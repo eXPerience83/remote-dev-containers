@@ -31,7 +31,7 @@ ROLE_CAPABILITIES = {
 }
 ROLE_PIDS_LIMITS = {"launcher": 64, "codex": 1024, "antigravity": 1024}
 DEVELOPMENT_ENVIRONMENT = frozenset(
-    ("TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR")
+    ("TMPDIR", "TMP", "TEMP", "UV_CACHE_DIR", "UV_TOOL_DIR", "NPM_CONFIG_CACHE", "PIP_CACHE_DIR", "PRE_COMMIT_HOME")
 )
 ROLE_TMPFS = {
     "launcher": frozenset(

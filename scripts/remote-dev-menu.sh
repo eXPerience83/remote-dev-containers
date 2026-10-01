@@ -94,6 +94,7 @@ run_credential_command() {
     -u UV_TOOL_DIR \
     -u NPM_CONFIG_CACHE \
     -u PIP_CACHE_DIR \
+    -u PRE_COMMIT_HOME \
     TMPDIR=/tmp \
     TMP=/tmp \
     TEMP=/tmp \

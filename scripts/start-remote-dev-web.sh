@@ -12,7 +12,7 @@ export REMOTE_DEV_START_MODE="$start_mode"
 
 # Development scratch is a child-session default, never a startup or launcher
 # trust boundary. Discard caller values before touching persistent state.
-unset TMPDIR TMP TEMP UV_CACHE_DIR UV_TOOL_DIR NPM_CONFIG_CACHE PIP_CACHE_DIR
+unset TMPDIR TMP TEMP UV_CACHE_DIR UV_TOOL_DIR NPM_CONFIG_CACHE PIP_CACHE_DIR PRE_COMMIT_HOME
 
 if [[ "$role" == launcher ]]; then
   exec /usr/local/bin/remote-dev-launcher

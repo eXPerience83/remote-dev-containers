@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 SCRATCH_ROOT = ".remote-dev-tmp"
-SCRATCH_CHILDREN = ("tmp", "uv-cache", "uv-tools", "npm-cache", "pip-cache")
+SCRATCH_CHILDREN = ("tmp", "uv-cache", "uv-tools", "npm-cache", "pip-cache", "pre-commit-cache")
 PRIVATE_MODE = 0o700
 
 

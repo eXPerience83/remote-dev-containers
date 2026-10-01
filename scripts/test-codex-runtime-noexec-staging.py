@@ -98,6 +98,7 @@ def run_regression() -> int:
         "UV_TOOL_DIR",
         "NPM_CONFIG_CACHE",
         "PIP_CACHE_DIR",
+        "PRE_COMMIT_HOME",
     )
     old_development = {name: os.environ.get(name) for name in development_names}
     os.environ.update({name: str(caller_tmp) for name in development_names})
@@ -118,6 +119,7 @@ def run_regression() -> int:
             candidate_content = (
                 "#!/bin/sh\n"
                 '[ "${UV_TOOL_DIR+x}" != x ] || exit 97\n'
+                '[ "${PRE_COMMIT_HOME+x}" != x ] || exit 97\n'
                 "groups=$(sed -n 's/^Groups:[[:space:]]*//p' /proc/self/status)\n"
                 "printf '%s:%s:%s:%s:%s\\n' \"$(id -u)\" \"$(id -g)\" "
                 '"$groups" "$HOME" "$(pwd -P)"\n'

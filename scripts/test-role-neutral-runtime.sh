@@ -108,10 +108,18 @@ PYFIXTURE
 for role in codex antigravity; do
   role_workspace="$test_root/$role-workspace"
   mkdir "$role_workspace"
-  actual="$(env UV_TOOL_DIR=/hostile bash -c '
+  actual="$(env UV_TOOL_DIR=/hostile PRE_COMMIT_HOME=/hostile bash -c '
     set -euo pipefail
     source "$1"
     remote_dev_prepare_development_environment "$2" "$3"
+    scratch="$3/.remote-dev-tmp"
+    test "$TMPDIR" = "$scratch/tmp"
+    test "$TMP" = "$TMPDIR" && test "$TEMP" = "$TMPDIR"
+    test "$UV_CACHE_DIR" = "$scratch/uv-cache"
+    test "$NPM_CONFIG_CACHE" = "$scratch/npm-cache"
+    test "$PIP_CACHE_DIR" = "$scratch/pip-cache"
+    test "$PRE_COMMIT_HOME" = "$scratch/pre-commit-cache"
+    test -d "$PRE_COMMIT_HOME" && test ! -L "$PRE_COMMIT_HOME"
     test -d "$UV_TOOL_DIR"
     printf "%s\n" "$UV_TOOL_DIR"
   ' _ "$runtime_fixture" "$role" "$role_workspace")"
@@ -126,7 +134,7 @@ startup_source="$(dirname "${BASH_SOURCE[0]}")/start-remote-dev-web.sh"
 [[ -f "$startup_source" ]] || startup_source=/usr/local/bin/start-remote-dev-web
 startup_fixture="$test_root/start-remote-dev-web"
 launcher_fixture="$test_root/launcher"
-printf '#!/bin/bash\n[[ ! -v UV_TOOL_DIR ]]\n' >"$launcher_fixture"
+printf '#!/bin/bash\n[[ ! -v UV_TOOL_DIR && ! -v PRE_COMMIT_HOME ]]\n' >"$launcher_fixture"
 chmod 0700 "$launcher_fixture"
 python3 - "$startup_source" "$startup_fixture" "$runtime_lib" "$launcher_fixture" <<'PYFIXTURE'
 from pathlib import Path
@@ -139,7 +147,35 @@ text = text.replace('runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 text = text.replace('exec /usr/local/bin/remote-dev-launcher', 'exec ' + shlex.quote(launcher))
 Path(destination).write_text(text)
 PYFIXTURE
-env REMOTE_DEV_ROLE=launcher REMOTE_DEV_START_MODE=menu UV_TOOL_DIR=/hostile \
+env REMOTE_DEV_ROLE=launcher REMOTE_DEV_START_MODE=menu UV_TOOL_DIR=/hostile PRE_COMMIT_HOME=/hostile \
+  bash "$startup_fixture"
+
+# Stop at the first persistent-state helper, after checking startup discarded
+# all caller development variables. Stub mkdir to avoid creating host state.
+state_fixture="$test_root/secure-state"
+cat >"$state_fixture" <<'STATEFIXTURE'
+#!/bin/bash
+set -euo pipefail
+for name in TMPDIR TMP TEMP UV_CACHE_DIR UV_TOOL_DIR NPM_CONFIG_CACHE PIP_CACHE_DIR PRE_COMMIT_HOME; do
+  [[ ! -v "$name" ]] || exit 97
+done
+printf '%s\n' 'startup environment cleared before persistent state'
+exit 73
+STATEFIXTURE
+chmod 0700 "$state_fixture"
+python3 - "$startup_fixture" "$state_fixture" <<'PYFIXTURE'
+from pathlib import Path
+import shlex
+import sys
+path = Path(sys.argv[1])
+text = path.read_text().replace('/usr/local/bin/secure-persistent-state', shlex.quote(sys.argv[2]))
+text = text.replace('umask 077', 'mkdir() { :; }\numask 077')
+path.write_text(text)
+PYFIXTURE
+assert_fails_with 73 'startup environment cleared before persistent state' \
+  env REMOTE_DEV_ROLE=codex REMOTE_DEV_START_MODE=menu WORKSPACE="$workspace" \
+  TMPDIR=/hostile TMP=/hostile TEMP=/hostile UV_CACHE_DIR=/hostile \
+  UV_TOOL_DIR=/hostile NPM_CONFIG_CACHE=/hostile PIP_CACHE_DIR=/hostile PRE_COMMIT_HOME=/hostile \
   bash "$startup_fixture"
 
 assert_fails_with 2 "too broad" remote_dev_validate_workspace_root /

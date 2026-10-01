@@ -8,6 +8,7 @@ ANTIGRAVITY_LIB_SOURCE="$ROOT/scripts/lib/antigravity-runtime"
 temporary="$(mktemp -d)"
 trap 'rm -rf -- "$temporary"' EXIT
 export UV_TOOL_DIR="$temporary/untrusted-uv-tools"
+export PRE_COMMIT_HOME="$temporary/untrusted-pre-commit-cache"
 harness="$temporary/harness"
 test_bin="$temporary/test-bin"
 MANAGER="$harness/remote-dev-antigravity"
@@ -145,6 +146,7 @@ make_payload() {
 #!/usr/bin/env bash
 set -euo pipefail
 [[ ! -v UV_TOOL_DIR ]] || exit 97
+[[ ! -v PRE_COMMIT_HOME ]] || exit 97
 case "\${1:-}" in
   --version) printf '%s\\n' '$version' ;;
   --help) printf '%s\\n' 'Usage: agy' ;;
@@ -162,6 +164,7 @@ make_installer() {
 #!/usr/bin/env bash
 set -euo pipefail
 [[ ! -v UV_TOOL_DIR ]] || exit 97
+[[ ! -v PRE_COMMIT_HOME ]] || exit 97
 $prelude
 if [[ "\${1:-}" == --help ]]; then
   printf '%s\\n' 'Usage: install.sh --dir <path>'
