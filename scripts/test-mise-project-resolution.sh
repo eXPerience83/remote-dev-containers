@@ -36,6 +36,15 @@ export PATH="/opt/remote-dev/mise/shims:$scratch/fake:/usr/local/bin:/usr/bin:/b
 mkdir -p "$scratch"/{baseline,matching,missing,override,unsafe,fake}
 cd "$scratch/baseline"
 
+# The canonical public commands must resolve in the neutral built-image fixture.
+# shellcheck source=scripts/common-tool-baseline.sh
+source /usr/local/lib/remote-dev/common-tool-baseline.sh
+baseline="$(remote_dev_read_common_tool_baseline)"
+[[ "$(stat -c '%u:%g %a' /usr/share/remote-dev/common-tool-baseline.txt)" == '0:0 444' ]]
+while IFS= read -r cmd; do
+  command -v "$cmd" >/dev/null
+done <<< "$baseline"
+
 snapshot_store() {
   find /opt/remote-dev/mise -printf '%P %y %s %T@ %C@ %l\n' | LC_ALL=C sort
 }

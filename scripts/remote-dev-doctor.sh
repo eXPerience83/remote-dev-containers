@@ -261,7 +261,7 @@ fi
 
 echo
 if [[ "$role" == launcher ]]; then
-  common_commands=(
+  operational_commands=(
     start-remote-dev-web
     remote-dev-launcher
     remote-dev-healthcheck
@@ -270,26 +270,39 @@ if [[ "$role" == launcher ]]; then
     python curl
   )
 else
-  common_commands=(
+  echo 'Public common baseline:'
+  # shellcheck source=scripts/common-tool-baseline.sh
+  source /usr/local/lib/remote-dev/common-tool-baseline.sh || exit 1
+  if baseline="$(remote_dev_read_common_tool_baseline)"; then
+    while IFS= read -r cmd; do
+      check_cmd "$cmd"
+    done <<< "$baseline"
+  else
+    status=1
+  fi
+  echo
+  echo 'Remote Dev operational commands:'
+  operational_commands=(
     start-remote-dev-web
     attach-remote-dev-tmux
     remote-dev-menu
     remote-dev-healthcheck
     remote-dev-doctor
     remote-dev-version
-    gh git python node npm uv mise ttyd tmux ssh rg fd
   )
 fi
-for cmd in "${common_commands[@]}"; do
+for cmd in "${operational_commands[@]}"; do
   check_cmd "$cmd"
 done
 if [[ "$role" == codex ]]; then
+  echo 'Codex commands:'
   check_cmd codex
   check_cmd run-codex
   check_cmd /usr/local/bin/remote-dev-codex-runtime
   check_cmd /usr/local/bin/remote-dev-context7
   check_cmd /usr/local/bin/validate-codex-project-boundary
 elif [[ "$role" == antigravity ]]; then
+  echo 'Antigravity commands (vendor runtime availability is checked separately):'
   check_cmd remote-dev-antigravity
   check_cmd remote-dev-install-antigravity
   check_cmd remote-dev-update-antigravity

@@ -36,6 +36,7 @@ preflight:
 	python3 scripts/preflight-data-layout.py --root "$(DATA_ROOT)"
 
 agent-contract-tests:
+	python3 scripts/test-common-tool-baseline.py
 	python3 scripts/test-development-scratch.py
 	python3 scripts/test_truenas_acl_audit.py
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY=1 bash scripts/test-role-neutral-runtime.sh

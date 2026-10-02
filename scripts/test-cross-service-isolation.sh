@@ -1149,10 +1149,12 @@ EOF
   assert_equal "mise action rootfs changes" "$rootfs_before" "$(docker diff "$name")"
 }
 
-assert_codex_toolchain_workflow() {
+assert_project_toolchain_workflow() {
+  local name="$1"
+  local role="$2"
   local output=""
   local status=0
-  output="$(docker_exec "$codex_name" bash -c '
+  output="$(docker_exec "$name" bash -c '
     set -euo pipefail
     pid="$(pgrep -xo ttyd)"
     environment="$(tr "\0" "\n" < "/proc/$pid/environ")"
@@ -1177,17 +1179,43 @@ assert_codex_toolchain_workflow() {
     printf "from module import value\nassert value == 1\n" > test_module.py
     python -m py_compile module.py test_module.py
     python test_module.py
+    global_python="$(command -v python)"
+    global_prefix="$(python -c "import sys; print(sys.prefix)")"
     python -m venv .venv
+    test "$(command -v python)" = "$global_python"
+    test "$(python -c "import sys; print(sys.prefix)")" = "$global_prefix"
+    # Existing environments and project metadata do not activate themselves.
+    mkdir -p venv
+    printf "REMOTE_DEV_ENV_MUST_NOT_BE_SOURCED=1\n" > .env
+    printf "[project]\nname = \"synthetic\"\nversion = \"1.0.0\"\n" > pyproject.toml
+    bash --login -c '\''test "$(command -v python)" = "$1"; test -z "${REMOTE_DEV_ENV_MUST_NOT_BE_SOURCED:-}"'\'' _ "$global_python"
+    site_packages="$(.venv/bin/python -c "import sysconfig; print(sysconfig.get_path(\"purelib\"))")"
+    printf "print(42)\n" > "$site_packages/remote_dev_project_probe.py"
+    test "$(.venv/bin/python -m remote_dev_project_probe)" = 42
+    python -c "import importlib.util; assert importlib.util.find_spec(\"remote_dev_project_probe\") is None"
+    (
+      source .venv/bin/activate
+      test "$(command -v python)" = "$project/.venv/bin/python"
+      test "$(python -m remote_dev_project_probe)" = 42
+    )
+    test "$(command -v python)" = "$global_python"
+    test "$(python -c "import sys; print(sys.prefix)")" = "$global_prefix"
     .venv/bin/python -c "import sys; assert sys.prefix.endswith(\"/.venv\")"
     uv venv --offline .uv-venv >/dev/null
 
-    printf '\''{"name":"remote-dev-local-dependency","version":"1.0.0","main":"index.js"}\n'\'' \
+    printf '\''{"name":"remote-dev-local-dependency","version":"1.0.0","main":"index.js","bin":{"remote-dev-node-probe":"cli.js"}}\n'\'' \
       > local-dependency/package.json
     printf '\''module.exports = 42;\n'\'' > local-dependency/index.js
-    printf '\''{"name":"remote-dev-toolchain-smoke","version":"1.0.0","private":true}\n'\'' \
+    printf '\''#!/usr/bin/env node\nif (require("./index.js") !== 42) process.exit(1); console.log("node-local-ok");\n'\'' > local-dependency/cli.js
+    chmod 0755 local-dependency/cli.js
+    printf '\''{"name":"remote-dev-toolchain-smoke","version":"1.0.0","private":true,"scripts":{"test":"remote-dev-node-probe"}}\n'\'' \
       > package.json
     npm install --offline --ignore-scripts --no-audit --no-fund ./local-dependency >/dev/null
     node -e '\''if (require("remote-dev-local-dependency") !== 42) process.exit(1)'\''
+    ! command -v remote-dev-node-probe >/dev/null
+    test "$(npm test --silent)" = node-local-ok
+    ! command -v remote-dev-node-probe >/dev/null
+    test "$(command -v python)" = "$global_python"
     test -d "$NPM_CONFIG_CACHE"
     test -d "$UV_CACHE_DIR"
     test "$(python -m pip cache dir)" = "$PIP_CACHE_DIR"
@@ -1212,12 +1240,12 @@ assert_codex_toolchain_workflow() {
   ' 2>&1)" || status=$?
   if (( status != 0 )); then
     if docker_exec_infrastructure_failure "$status"; then
-      fail "hardened Codex fixture toolchain docker exec failed"
+      fail "hardened $role fixture toolchain docker exec failed"
     fi
     printf '%s\n' "${output:0:32768}" >&2
-    fail "hardened Codex fixture could not complete the offline development-toolchain workflow"
+    fail "hardened $role fixture could not complete the offline development-toolchain workflow"
   fi
-  wait_for_health_command "$codex_name"
+  wait_for_health_command "$name"
 }
 
 run_hardened_antigravity_fixture() {
@@ -1709,7 +1737,8 @@ assert_read_only_rootfs "$codex_name" Codex
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
-assert_codex_toolchain_workflow
+assert_project_toolchain_workflow "$codex_name" Codex
+assert_project_toolchain_workflow "$antigravity_name" Antigravity
 assert_hardened_codex_runtime_regressions
 assert_hardened_antigravity_host_fixtures
 assert_mise_trust_state "$codex_name" prepare untrusted

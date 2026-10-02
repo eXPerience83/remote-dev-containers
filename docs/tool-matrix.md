@@ -13,26 +13,45 @@ Remote Dev stack
 
 The launcher is not an agent container and is not a control plane: it has no agent mounts, credentials or container-engine socket. Mutable state remains private to each agent service even though executable image layers are shared.
 
-## Shared immutable image contents
+## Public common baseline
 
-| Area | Included |
+Remote Dev-provided tools are directly available through the normal role PATH. Project-declared environments/toolchains are used explicitly when required and take precedence for that project's correctness. Remote Dev does not auto-activate project environments or mutate the global toolchain to satisfy one repository.
+
+The canonical command inventory is [`config/common-tool-baseline.txt`](../config/common-tool-baseline.txt), installed once by the base image as root-owned mode `0444` at `/usr/share/remote-dev/common-tool-baseline.txt` and inherited by the final image. `remote-dev-base-verify` and Doctor for developer roles (Codex, Antigravity and shell) validate and read that same data file. Base Verify resolves every entry with `command -v` from `/`; Doctor reports command paths in the caller's environment. The file only defines availability checks; it does not select environments, modify PATH or install packages. Future accepted baseline additions must update this inventory and pass these checks.
+
+| Area | Public commands |
 |---|---|
-| Remote Dev runtime | role validation, launcher/menu, project resolver, diagnostics, version reporting, health checks and reviewed managers |
-| Terminal | bash, tmux, ttyd, tini, nano, less, fzf |
-| Git | git, git-lfs, openssh-client, GitHub CLI executable |
-| Search/files | ripgrep, fd, jq, rsync, zip/unzip, tar/gzip, patch |
-| Build | build-essential, make, pkg-config and common native libraries |
-| Python | selected Python 3.14 line and uv |
-| JavaScript | selected Node 24 LTS and npm 12 lines |
-| Tool manager | mise |
-| Checks | shellcheck plus repository validation scripts |
-| Browser entry point | project-owned navigation-only launcher runtime |
-| Built-in agent | immutable reviewed Codex CLI fallback |
-| Optional integrations | project-owned manager/admission code only; hosted services and proprietary runtime-installed binaries are not implied to be bundled |
+| Terminal | `bash`, `tmux`, `ttyd`, `nano`, `less`, `fzf` |
+| Git | `git`, `git-lfs`, `ssh`, `gh` |
+| Network | `curl`, `wget` |
+| Search/files | `rg`, `fd`, `jq`, `rsync`, `zip`, `unzip`, `tar`, `gzip`, `patch` |
+| Build | `make`, `pkg-config` |
+| Python | `python`, `uv` |
+| JavaScript | `node`, `npm` |
+| Tool manager | `mise` |
+| Checks | `shellcheck` |
+
+The image selects the Python 3.14, Node 24 LTS and npm 12 lines; exact versions remain pinned in the repository's build inputs.
+
+“Included” or “bundled” public tools means directly invokable from a normal developer/agent shell without activation or extra startup parameters. The navigation-only launcher is exempt from this baseline and keeps its independent reduced operational checks.
+
+## Role-specific commands
+
+Doctor checks these separately from the public common baseline. Codex provides `codex`, `run-codex` and its runtime/Context7/boundary managers. Antigravity provides `run-antigravity` and its admission/update/policy managers; vendor `agy` becomes directly invokable only after explicit successful admission into that role's private state. Missing optional runtimes remain unavailable without a silent download. These commands do not belong to the common inventory.
+
+## Internal/incidental components
+
+Remote Dev's operational commands (web startup, tmux attachment, menu, health, diagnostics and image identity) are checked separately. Image components such as `tini`, the `build-essential` package, native development libraries, CA certificates and incidental APT utilities are necessary for build/operation but are not automatically a public command API. Installing a package does not promote all its executables into the common baseline. The image also includes project-owned integration/admission code; that does not imply bundled hosted services or proprietary runtime-installed binaries.
 
 The system Bubblewrap package/executable is deliberately absent. Supported Codex launches disable the unsupported inner sandbox explicitly; autonomous/guarded approval behavior does not replace the outer-container security boundary.
 
 ## Project toolchain resolution
+
+Use global `python` for work that needs only the image default. For a repository's Python environment, use `.venv/bin/python -m pytest` (or its prescribed module), or explicitly run `source .venv/bin/activate` for that shell. Use `uv run ...` only when the repository declares that workflow; `pyproject.toml` alone does not establish uv ownership. For Node projects use `npm test` / `npm run ...` to reach local dependencies and executables.
+
+The mere presence of `.venv`, `venv`, `.env`, Python metadata or `package.json` does not activate an environment, source a file or inject local executable directories into PATH. `.env` normally contains environment variables; `.venv` is a Python environment. Remote Dev does not search upward for local executables or wrap language commands to detect projects.
+
+Project dependencies/tools such as pytest, Ruff, mypy, pre-commit, ESLint and TypeScript belong in the repository's selected environment. Global `pip install` and `npm install -g` are not fallbacks for project dependencies. `uv tool install` under the existing `UV_TOOL_DIR` remains writable development tooling state, outside the immutable baseline and outside the future trusted/persistent toolchain store (#180). Executable temporary environments use inherited `$TMPDIR`; `/tmp` remains `noexec`.
 
 The immutable image provides the default Python/Node/uv toolchain through mise shims. A repository's normal version declarations select an installed version; an unavailable version fails clearly. Image-owned `MISE_NOT_FOUND_AUTO_INSTALL=false` and `MISE_NOT_FOUND_SYSTEM_FALLBACK=false` prevent not-found installation and silent fallback to another executable. Project `[settings]` cannot override these environment defaults.
 
