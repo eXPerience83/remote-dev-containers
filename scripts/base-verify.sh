@@ -4,14 +4,16 @@ set -euo pipefail
 # Verify the immutable image baseline, never the caller's project mise config.
 cd /
 
-required=(bash git git-lfs gh ssh curl wget jq rg fd tmux ttyd mise python node npm uv shellcheck)
+# shellcheck source=scripts/common-tool-baseline.sh
+source /usr/local/lib/remote-dev/common-tool-baseline.sh
+baseline="$(remote_dev_read_common_tool_baseline)" || exit 1
 missing=0
-for cmd in "${required[@]}"; do
+while IFS= read -r cmd; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "MISSING: $cmd" >&2
     missing=1
   fi
-done
+done <<< "$baseline"
 
 if (( missing != 0 )); then
   exit 1

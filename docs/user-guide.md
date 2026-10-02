@@ -143,7 +143,13 @@ Do not copy private `AGENTS.md` contents into diagnostics merely to prove loadin
 
 ## 6. Project-local tools and virtual environments
 
-Remote Dev supplies the general development substrate: for example Python, Node.js, `uv`, `mise`, Git and GitHub CLI. It intentionally does **not** globally bundle every repository-specific linter, test runner or package.
+Remote Dev-provided tools are directly available through the normal role PATH. Project-declared environments/toolchains are used explicitly when required and take precedence for that project's correctness. Remote Dev does not auto-activate project environments or mutate the global toolchain to satisfy one repository.
+
+Use global `python` when the image default meets the task's needs. Use `.venv/bin/python -m pytest` (or the repository's prescribed module) when the project requires its own environment. Optional explicit activation with `source .venv/bin/activate` selects it for that shell and its children; other sessions keep their own selection. Use `uv run ...` only when that is the repository's workflow, and `npm test` / `npm run ...` for Node project dependencies and local executables.
+
+The presence of `.venv` or `venv` alone does not change global `python`. `.env` is normally an environment-variable file, not a Python environment, and Remote Dev does not source it automatically. Python metadata such as `pyproject.toml` does not imply uv ownership; `package.json` alone does not inject `node_modules/.bin` into PATH. There is no upward search for local tools or per-agent PATH rewriting.
+
+Keep project dependencies in the selected project environment: global `pip install` and `npm install -g` are not fallbacks for missing pytest, Ruff, mypy, pre-commit, ESLint, TypeScript or other repository dependencies. `uv tool install` under the existing `UV_TOOL_DIR` remains writable development tooling state, not part of the immutable baseline or a trusted/persistent project-toolchain store (#180). See the [tool matrix](tool-matrix.md) for the canonical public inventory, role-specific commands and internal components.
 
 The immutable image provides the default Python/Node/uv toolchain through mise shims. A repository's normal version declarations select an installed version; an unavailable version fails clearly. Image-owned `MISE_NOT_FOUND_AUTO_INSTALL=false` and `MISE_NOT_FOUND_SYSTEM_FALLBACK=false` prevent not-found installation and silent fallback to another executable. Project `[settings]` cannot override these environment defaults.
 

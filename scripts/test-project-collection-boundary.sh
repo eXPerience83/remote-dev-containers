@@ -302,6 +302,19 @@ anchor = "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh"
 if anchor not in text:
     raise SystemExit("missing Doctor runtime-lib anchor")
 text = text.replace(anchor, f"runtime_lib={runtime}", 1)
+# Keep the host Doctor fixture on the real common-baseline reader as well.
+baseline_reader = source.parent / "common-tool-baseline.sh"
+if baseline_reader.is_file():
+    baseline_fixture = destination.parent / "common-tool-baseline.sh"
+    baseline_manifest = source.resolve().parents[1] / "config/common-tool-baseline.txt"
+    baseline_fixture.write_text(
+        baseline_reader.read_text().replace(
+            "/usr/share/remote-dev/common-tool-baseline.txt", str(baseline_manifest)
+        ), encoding="utf-8"
+    )
+    text = text.replace(
+        "/usr/local/lib/remote-dev/common-tool-baseline.sh", str(baseline_fixture)
+    )
 destination.write_text(text, encoding="utf-8")
 PY
 chmod 0755 "$doctor_fixture"
