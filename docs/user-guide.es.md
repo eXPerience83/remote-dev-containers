@@ -24,6 +24,8 @@ La autenticación, configuración y el historial de sesiones del agente viven en
 
 ## 2. Seleccionar, crear o borrar un proyecto
 
+Las sesiones gestionadas de Codex/Antigravity reciben automáticamente una breve [guía global del entorno Remote Dev](agent-guidance.es.md). Los defaults mecánicos, la guía global, las instrucciones más específicas del repositorio y MCP/plugins tienen responsabilidades separadas. La guía no es una frontera de seguridad y no activa `.venv` ni instala dependencias. La reconciliación automática de `run-codex` / `run-antigravity` ocurre solo antes de sesiones reales elegibles del agente; también puede reconciliarse explícitamente mediante `remote-dev-agent-guidance reconcile codex` o `remote-dev-agent-guidance reconcile antigravity`. Status y Doctor siguen siendo pasivos: no escriben estado ni imprimen instrucciones privadas.
+
 El flujo normal de Codex es:
 
 1. Abre el launcher de Remote Dev y después el terminal de Codex.

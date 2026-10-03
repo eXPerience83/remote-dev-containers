@@ -932,6 +932,41 @@ assert_hardened_codex_policy_and_doctor() {
     || fail "hardened Codex policy fixture did not clean up"
 }
 
+assert_role_private_agent_guidance() {
+  local name="" role="" path="" records=""
+  local codex_path=/root/.codex/AGENTS.md
+  local antigravity_path=/root/.gemini/config/rules/remote-dev-development-environment.md
+  for role in codex antigravity; do
+    if [[ "$role" == codex ]]; then
+      name="$codex_name" path="$codex_path" records=codex_invariants
+    else
+      name="$antigravity_name" path="$antigravity_path" records=antigravity_invariants
+    fi
+    # Startup has not populated native instruction state. Status is passive.
+    assert_path_absent "$name" "$role prelaunch guidance" "$path"
+    docker_exec "$name" remote-dev-agent-guidance status "$role" \
+      | grep -Eq 'Remote Dev guidance: missing$' \
+      || fail "$role guidance status did not report missing"
+    assert_path_absent "$name" "$role passive guidance" "$path"
+    docker_exec "$name" bash -euc '
+      rule=/usr/share/remote-dev/agent-rules/development-environment.md
+      test "$(stat -c %a "$rule")" = 444
+      test "$(stat -c %u "$rule")" = 0
+      test "$(stat -c %a /usr/local/bin/remote-dev-agent-guidance)" = 555
+      remote-dev-agent-guidance reconcile "$1"
+      remote-dev-agent-guidance status "$1" | grep -Eq "Remote Dev guidance: current$"
+      before="$(sha256sum "$2")"
+      remote-dev-agent-guidance reconcile "$1"
+      test "$before" = "$(sha256sum "$2")"
+      test "$(stat -c %a "$2")" = 600
+    ' _ "$role" "$path" || fail "$role hardened guidance reconciliation failed"
+    record_canary "$records" "$name" "$role guidance" "$path"
+    assert_path_absent "$launcher_name" "$role guidance" "$path"
+  done
+  assert_path_absent "$antigravity_name" "Codex guidance" "$codex_path"
+  assert_path_absent "$codex_name" "Antigravity guidance" "$antigravity_path"
+}
+
 run_hardened_codex_regression() {
   local description="$1"
   shift
@@ -1737,6 +1772,7 @@ assert_read_only_rootfs "$codex_name" Codex
 assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
+assert_role_private_agent_guidance
 assert_project_toolchain_workflow "$codex_name" Codex
 assert_project_toolchain_workflow "$antigravity_name" Antigravity
 assert_hardened_codex_runtime_regressions

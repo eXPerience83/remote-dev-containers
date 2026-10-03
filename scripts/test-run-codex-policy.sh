@@ -93,6 +93,7 @@ FAKE_VALIDATOR
 chmod 0755 "$test_validator"
 
 sed \
+  -e "s|^readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance$|readonly guidance_manager=$(readlink -f /usr/bin/true)|" \
   -e "s|^readonly codex_binary=/usr/local/bin/codex$|readonly codex_binary=$test_bundled_codex|" \
   -e "s|^readonly bundled_codex_binary=/usr/local/bin/codex$|readonly bundled_codex_binary=$test_bundled_codex|" \
   -e "s|^readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime$|readonly runtime_manager=$test_runtime_manager|" \

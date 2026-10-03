@@ -259,6 +259,15 @@ if [[ "$role" == codex || "$role" == antigravity ]]; then
   check_project_collection_boundary
 fi
 
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  echo
+  if ! /usr/local/bin/remote-dev-agent-guidance status "$role"; then
+    echo 'WARNING: global Remote Dev guidance is degraded (agent launch remains available).'
+    status=1
+  fi
+  echo 'Missing/stale guidance is reconciled on the next agent session; diagnostics do not write state.'
+fi
+
 echo
 if [[ "$role" == launcher ]]; then
   operational_commands=(

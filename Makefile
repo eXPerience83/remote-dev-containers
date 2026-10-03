@@ -36,6 +36,8 @@ preflight:
 	python3 scripts/preflight-data-layout.py --root "$(DATA_ROOT)"
 
 agent-contract-tests:
+	python3 scripts/test-agent-guidance.py
+	python3 scripts/test-agent-guidance-lifecycle.py
 	python3 scripts/test-common-tool-baseline.py
 	python3 scripts/test-development-scratch.py
 	python3 scripts/test_truenas_acl_audit.py
@@ -58,6 +60,7 @@ agent-contract-tests:
 	bash scripts/test-remote-dev-context7-entrypoint.sh
 
 validate: agent-contract-tests ttyd-osc52-check
+	python3 -m py_compile scripts/remote-dev-agent-guidance.py scripts/test-agent-guidance.py scripts/test-agent-guidance-lifecycle.py
 	bash -n scripts/*.sh scripts/lib/*.sh scripts/fixtures/*.sh
 	python3 -m py_compile web/ttyd-osc52/generate.py web/ttyd-osc52/validate.py web/ttyd-osc52/test_generate.py scripts/remote-dev-launcher.py scripts/remote-dev-codex-runtime.py scripts/remote-dev-prepare-development-scratch.py scripts/validate-codex-project-boundary.py scripts/test_validate_codex_project_boundary.py scripts/test-development-scratch.py scripts/test-remote-dev-codex-runtime.py scripts/test-codex-runtime-code-mode-probe.py scripts/test-codex-runtime-noexec-staging.py scripts/init-data-layout.py scripts/preflight-data-layout.py scripts/truenas-acl-audit.py scripts/test_truenas_acl_audit.py scripts/lib/data_layout.py scripts/antigravity_download.py scripts/run-antigravity-inspection.py scripts/inspect-antigravity-cli.py scripts/detect-antigravity-installer.py scripts/discover-antigravity-payload.py scripts/reconcile-antigravity-review-state.py scripts/update-antigravity-review-evidence.py scripts/update-antigravity-review-doc.py scripts/validate-antigravity-review-artifact.py scripts/test_antigravity_download.py scripts/test_run_antigravity_inspection.py scripts/test_detect_antigravity_installer.py scripts/test_discover_antigravity_payload.py scripts/test_reconcile_antigravity_review_state.py scripts/test_update_antigravity_review_evidence.py scripts/test_update_antigravity_review_doc.py scripts/test_validate_antigravity_review_artifact.py scripts/test_optional_review_workflows.py scripts/remote-dev-context7-device-login.py scripts/update-context7-review.py scripts/test_update_context7_review.py scripts/test-remote-dev-context7-device-login.py scripts/test-remote-dev-context7-adoption.py scripts/test-remote-dev-context7-runtime-isolation.py scripts/test_single_stack_compose.py scripts/test_canonical_data_layout.py scripts/test_preflight_data_layout.py scripts/test_inspect_antigravity_cli.py scripts/remote-dev-antigravity-policy.py scripts/test-antigravity-approval-policy.py scripts/validate-renovate-ownership.py scripts/test_validate_renovate_ownership.py scripts/format-edge-build-identity.py scripts/test_edge_build_identity.py scripts/update-upstream-changelog.py scripts/test_update_upstream_changelog.py scripts/render-vulnerability-rescan-alert.py scripts/test_render_vulnerability_rescan_alert.py scripts/test_resolve_published_image_digest.py scripts/test_periodic_image_rescan_workflow.py scripts/test_publish_edge_security_cadence.py
 	python3 scripts/test-codex-runtime-code-mode-probe.py

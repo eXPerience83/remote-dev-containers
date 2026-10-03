@@ -84,6 +84,9 @@ COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev/agent-rules
+COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md
+COPY --chown=0:0 --chmod=0555 scripts/remote-dev-agent-guidance.py /usr/local/bin/remote-dev-agent-guidance
 COPY scripts/validate-codex-project-boundary.py /usr/local/bin/validate-codex-project-boundary
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
 COPY scripts/remote-dev-prepare-development-scratch.py /usr/local/bin/remote-dev-prepare-development-scratch
@@ -113,6 +116,7 @@ COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 RUN --network=none \
+    --mount=type=bind,source=scripts/test-agent-guidance.py,target=/tmp/test-agent-guidance.py,ro \
     --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
     --mount=type=bind,source=scripts/test-real-codex-project-trust.py,target=/tmp/test-real-codex-project-trust.py,ro \
     --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
@@ -169,6 +173,7 @@ RUN --network=none \
       /usr/local/lib/remote-dev/antigravity-paths.sh \
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && python -m py_compile \
+      /usr/local/bin/remote-dev-agent-guidance \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \
@@ -182,6 +187,9 @@ RUN --network=none \
       /tmp/test_validate_codex_project_boundary.py \
       /tmp/test-codex-code-mode-host.py \
       /tmp/test-development-scratch.py \
+    && REMOTE_DEV_GUIDANCE_SOURCE=/usr/local/bin/remote-dev-agent-guidance \
+      REMOTE_DEV_GUIDANCE_RULE=/usr/share/remote-dev/agent-rules/development-environment.md \
+      python /tmp/test-agent-guidance.py \
     && python /tmp/test-remote-dev-codex-runtime.py \
     && REMOTE_DEV_DEVELOPMENT_SCRATCH_SOURCE=/usr/local/bin/remote-dev-prepare-development-scratch \
       python /tmp/test-development-scratch.py \

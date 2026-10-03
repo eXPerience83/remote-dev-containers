@@ -50,6 +50,8 @@ import sys
 source, destination, manager, secure_state, runtime_lib = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
+    "readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance":
+        f"readonly guidance_manager={Path('/usr/bin/true').resolve()}",
     "readonly manager=/usr/local/bin/remote-dev-antigravity":
         f"readonly manager={shlex.quote(str(manager))}",
     "readonly secure_state=/usr/local/bin/secure-persistent-state":

@@ -78,6 +78,8 @@ import sys
 source, destination, runtime_lib, manager, policy, secure = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 replacements = {
+    "readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance":
+        f"readonly guidance_manager={Path('/usr/bin/true').resolve()}",
     "readonly manager=/usr/local/bin/remote-dev-antigravity": f"readonly manager={manager}",
     "readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy": f"readonly policy_helper={policy}",
     "readonly secure_state=/usr/local/bin/secure-persistent-state": f"readonly secure_state={secure}",

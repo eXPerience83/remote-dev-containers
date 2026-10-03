@@ -24,6 +24,8 @@ Agent authentication, configuration and session history live in the role-private
 
 ## 2. Select, create or delete a project
 
+Managed Codex/Antigravity sessions receive a brief [global Remote Dev environment guide](agent-guidance.md) automatically. Mechanical environment defaults, global guidance, more-specific repository instructions and MCP/plugins have separate responsibilities. This guidance is not a security boundary and does not activate `.venv` or install dependencies. Automatic reconciliation by `run-codex` / `run-antigravity` occurs only before eligible real agent sessions; explicit reconciliation is also available through `remote-dev-agent-guidance reconcile codex` or `remote-dev-agent-guidance reconcile antigravity`. Status and Doctor remain passive: they do not write state or print private instructions.
+
 The normal Codex flow is:
 
 1. Open the Remote Dev launcher and then the Codex terminal.
