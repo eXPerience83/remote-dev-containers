@@ -107,8 +107,8 @@ esac
             result = self.run_script('run-' + role, role, *args, EXPECT_GUIDANCE='1')
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_codex_0160_session_commands_reconcile(self):
-        # The pinned dispatcher sends these to the session TUI or exec engine.
+    def test_codex_session_commands_reconcile(self):
+        # The supported dispatcher sends these to the session TUI or exec engine.
         for args in ([], ['a prompt'], ['agents'], ['exec', 'a prompt'], ['e', 'a prompt'],
                      ['review'], ['resume'], ['fork'], ['--', 'doctor']):
             with self.subTest(args=args):
@@ -119,7 +119,7 @@ esac
                 self.assertTrue(target.is_file())
                 self.assertIn('Codex Remote Dev guidance: current', result.stdout)
 
-    def test_codex_0160_administrative_commands_do_not_reconcile(self):
+    def test_codex_administrative_commands_do_not_reconcile(self):
         # Include hidden commands and aliases, and service modes that may later
         # receive work but do not start an agent session at CLI dispatch.
         commands = ('login', 'logout', 'mcp', 'plugin', 'app-server', 'remote-control',
@@ -241,7 +241,6 @@ esac
         self.assertIn('COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md', dockerfile)
         self.assertIn('COPY --chown=0:0 --chmod=0555 scripts/remote-dev-agent-guidance.py /usr/local/bin/remote-dev-agent-guidance', dockerfile)
         self.assertEqual(list((ROOT / 'config/agent-rules').glob('*.md')), [self.rule])
-        self.assertIn('CODEX_RELEASE_TAG=rust-v0.160.0', (ROOT / 'versions.env').read_text())
         self.assertNotIn('urllib', self.manager.read_text())
         self.assertNotIn('subprocess', self.manager.read_text())
 

@@ -183,7 +183,7 @@ class GuidanceTests(unittest.TestCase):
             self.assertEqual(self.run_guidance(), 'unsafe')
         self.assertEqual(self.base.read_bytes(), self.block)
 
-    def test_rust_0160_trim_unicode_semantics(self):
+    def test_native_unicode_whitespace_contract(self):
         self.assertFalse(g.codex_nonempty('\u0085\u2003\u3000\t\r\n'.encode()))
         for c in range(0x1c, 0x20):
             self.override.write_bytes(bytes([c]))

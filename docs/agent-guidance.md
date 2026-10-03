@@ -28,7 +28,9 @@ Deleting an owned block/file restores the default on the next managed session; t
 
 ## Codex
 
-The adapter follows Codex `rust-v0.160.0` global discovery: `$CODEX_HOME/AGENTS.override.md`, then `$CODEX_HOME/AGENTS.md`, first non-empty contents after native Unicode whitespace trimming. Global instructions precede repository/directory instructions. See [official AGENTS documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [the pinned discovery implementation](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/codex-home/src/instructions/mod.rs).
+The adapter follows the native global discovery contract: `$CODEX_HOME/AGENTS.override.md`, then `$CODEX_HOME/AGENTS.md`, first non-empty contents after native Unicode whitespace trimming. Global instructions precede repository/directory instructions. See [official AGENTS documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [the implementation used for initial validation](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/codex-home/src/instructions/mod.rs).
+
+This contract and the session-versus-administrative CLI classification were initially validated against Codex `rust-v0.160.0`; that version is not a guidance runtime requirement. Tests check behavior rather than the release string, so a version update alone does not invalidate the adapter. Compatibility depends on these semantics remaining unchanged. Material changes to global AGENTS resolution, Unicode whitespace handling or the CLI require adapter revalidation; compatibility with all future releases is not guaranteed.
 
 Remote Dev owns only this bounded span, initially prepended before user-global content:
 

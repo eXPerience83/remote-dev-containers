@@ -28,7 +28,9 @@ Eliminar un bloque/archivo propio restaura el default en la siguiente sesión ge
 
 ## Codex
 
-El adaptador sigue la resolución global de Codex `rust-v0.160.0`: `$CODEX_HOME/AGENTS.override.md`, luego `$CODEX_HOME/AGENTS.md`, primer contenido no vacío tras recortar whitespace Unicode nativo. Las instrucciones globales preceden a las del repositorio/directorio. Consulta la [documentación oficial de AGENTS](https://learn.chatgpt.com/docs/agent-configuration/agents-md) y la [implementación fijada de resolución](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/codex-home/src/instructions/mod.rs).
+El adaptador sigue el contrato nativo de resolución global: `$CODEX_HOME/AGENTS.override.md`, luego `$CODEX_HOME/AGENTS.md`, primer contenido no vacío tras recortar whitespace Unicode nativo. Las instrucciones globales preceden a las del repositorio/directorio. Consulta la [documentación oficial de AGENTS](https://learn.chatgpt.com/docs/agent-configuration/agents-md) y la [implementación usada para la validación inicial](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/codex-home/src/instructions/mod.rs).
+
+Este contrato y la clasificación de sesiones frente a operaciones administrativas del CLI se validaron inicialmente contra Codex `rust-v0.160.0`; esa versión no es un requisito del runtime de guidance. Los tests comprueban comportamiento en lugar del string de release, de modo que actualizar únicamente la versión no invalida el adaptador. La compatibilidad depende de que estas semánticas se mantengan. Los cambios materiales en la resolución global de AGENTS, el tratamiento de whitespace Unicode o el CLI requieren revalidar el adaptador; no se garantiza compatibilidad con todas las versiones futuras.
 
 Remote Dev posee solo este segmento acotado, inicialmente antepuesto al contenido global del usuario:
 

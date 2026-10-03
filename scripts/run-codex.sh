@@ -495,7 +495,7 @@ fi
 
 # Guidance belongs only to agent sessions; forwarding and validation stay owned
 # by the existing wrapper. Passive vendor commands must not write guidance.
-# Classify the rust-v0.160.0 cli/src/main.rs Subcommand dispatch explicitly:
+# Classify the supported CLI dispatch (initially validated against rust-v0.160.0):
 # agents opens the session TUI (including new tasks); queue only enqueues input,
 # cloud operates on remote tasks, and servers/proxies only expose services.
 guidance_session=1

@@ -178,7 +178,8 @@ def unowned(data: bytes, span: tuple[int, int] | None) -> bytes:
 
 def codex_nonempty(data: bytes) -> bool:
     # Rust str::trim uses Unicode White_Space. Python str.strip additionally
-    # strips U+001C..001F, which must remain active user text for Codex 0.160.0.
+    # strips U+001C..001F, which remain active under the native whitespace
+    # contract (initially validated against Codex rust-v0.160.0).
     whitespace = '\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680' \
                  '\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a' \
                  '\u2028\u2029\u202f\u205f\u3000'
