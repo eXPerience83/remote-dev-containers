@@ -61,7 +61,7 @@ This adapter targets the [native modular rule contract](https://www.antigravity.
 
 Status and Doctor read only the matching role's state and never print private instruction/config contents. States are `current`, `missing`, `stale`, `unowned-conflict`, `unsafe`, `unsupported`. Missing/stale state is reconciled on the next managed agent session. Conflicts/unsafe state produce warnings and a degraded diagnostic exit status; they never block the provider solely because guidance could not be installed. Inspect such state manually; Remote Dev does not repair unowned/unsafe objects.
 
-The helper uses bounded UTF-8 reads, non-symlink regular-file and ancestor checks, expected ownership/safe permissions, exact markers, private in-directory temporary files, target-identity rechecks, atomic replacement and fsync. New state uses files `0600` and directories `0700`; safe existing file modes are preserved. These checks do not isolate guidance from a process already controlling the service user/container root.
+The helper uses bounded UTF-8 reads, non-symlink regular-file and ancestor checks, expected ownership/safe permissions, exact markers, private in-directory temporary files, target-identity rechecks, atomic replacement and fsync. New state uses files `0600` and directories `0700`; safe existing file modes are preserved. The fixed native private mount roots may retain the operator's host UID at `0700`, as required by bootstrap; that owner is accepted only at/below that root. Custom Codex homes do not gain this exception, and other owners remain unsafe. These checks do not isolate guidance from a process already controlling the service user/container root.
 
 ## Supplemental behavioral acceptance
 

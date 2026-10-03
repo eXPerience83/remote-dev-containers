@@ -84,6 +84,7 @@ COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev/agent-rules
 COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md
 COPY --chown=0:0 --chmod=0555 scripts/remote-dev-agent-guidance.py /usr/local/bin/remote-dev-agent-guidance
 COPY scripts/validate-codex-project-boundary.py /usr/local/bin/validate-codex-project-boundary

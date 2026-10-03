@@ -205,6 +205,30 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(self.run_guidance(), 'unsafe')
         self.assertEqual(self.base.read_bytes(), b'user')
 
+    def test_native_operator_owned_private_mount_roots(self):
+        if os.geteuid() != 0: self.skipTest('chown requires root')
+        os.chown(self.home, 1001, 1001)
+        self.base.write_bytes(b'operator user instructions')
+        self.base.chmod(0o600)
+        os.chown(self.base, 1001, 1001)
+        # Only the fixed native root admits this owner; custom homes do not.
+        self.assertEqual(self.run_guidance(), 'unsafe')
+        with patch.object(g, 'CODEX_NATIVE_HOME', self.home):
+            self.assertEqual(self.run_guidance(), 'current')
+            self.assertEqual(self.home.stat().st_uid, 1001)
+            self.assertEqual(self.base.read_bytes(), self.block + b'operator user instructions')
+            self.home.chmod(0o755)
+            self.assertEqual(self.run_guidance(), 'unsafe')
+        os.chown(self.agy, 1001, 1001)
+        self.assertEqual(self.run_guidance('antigravity'), 'current')
+        self.assertEqual(self.agy.stat().st_uid, 1001)
+        self.target.parent.chmod(0o700)
+        os.chown(self.target.parent, 1001, 1001)
+        os.chown(self.target, 1001, 1001)
+        self.assertEqual(self.run_guidance('antigravity'), 'current')
+        os.chown(self.target, 65534, 65534)
+        self.assertEqual(self.run_guidance('antigravity'), 'unsafe')
+
     def test_atomic_replacement_detects_changed_target(self):
         self.base.write_bytes(b'user')
         with g.directory(self.home) as fd:

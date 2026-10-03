@@ -171,6 +171,7 @@ esac
 
     def test_one_source_and_immutable_image_installation(self):
         dockerfile = (ROOT / 'images/codex/Dockerfile').read_text()
+        self.assertIn('RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev/agent-rules', dockerfile)
         self.assertIn('COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md', dockerfile)
         self.assertIn('COPY --chown=0:0 --chmod=0555 scripts/remote-dev-agent-guidance.py /usr/local/bin/remote-dev-agent-guidance', dockerfile)
         self.assertEqual(list((ROOT / 'config/agent-rules').glob('*.md')), [self.rule])

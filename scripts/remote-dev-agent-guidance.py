@@ -13,6 +13,7 @@ import stat
 import sys
 
 CANONICAL = Path('/usr/share/remote-dev/agent-rules/development-environment.md')
+CODEX_NATIVE_HOME = Path('/root/.codex')
 ANTIGRAVITY_CONFIG = Path('/root/.gemini/config')
 ANTIGRAVITY_NAME = 'remote-dev-development-environment.md'
 START = b'<!-- BEGIN REMOTE DEV MANAGED DEVELOPMENT ENVIRONMENT -->'
@@ -43,13 +44,16 @@ def identity(info: os.stat_result) -> tuple:
 
 
 @contextmanager
-def directory(path: Path, *, create: bool = False):
+def directory(path: Path, *, create: bool = False, private_root: Path | None = None):
     """Pin each ancestor without following links; never chmod existing state."""
     if not path.is_absolute() or '..' in path.parts:
         raise GuidanceError('unsafe')
     fd = os.open('/', DIRECTORY_FLAGS)
+    allowed_uids = {0, os.geteuid()}
+    current = Path('/')
     try:
         for index, part in enumerate(path.parts[1:]):
+            current = current / part
             try:
                 next_fd = os.open(part, DIRECTORY_FLAGS, dir_fd=fd)
             except FileNotFoundError:
@@ -60,14 +64,19 @@ def directory(path: Path, *, create: bool = False):
             os.close(fd)
             fd = next_fd
             info = os.fstat(fd)
+            # The native private bind root may retain an operator's host UID.
+            # Bootstrap deliberately preserves it. Trust that owner only at
+            # this fixed root, with private 0700 mode, and below it; do not chown.
+            if current == private_root and stat.S_IMODE(info.st_mode) == 0o700:
+                allowed_uids.add(info.st_uid)
             # Root-owned sticky /tmp is allowed as an ancestor for synthetic
             # fixtures, never as the managed provider directory itself.
             sticky_ancestor = (index < len(path.parts) - 2
                                and info.st_uid == 0 and info.st_mode & stat.S_ISVTX)
-            if info.st_uid not in {0, os.geteuid()} or (info.st_mode & 0o022 and not sticky_ancestor):
+            if info.st_uid not in allowed_uids or (info.st_mode & 0o022 and not sticky_ancestor):
                 raise GuidanceError('unsafe')
         info = os.fstat(fd)
-        if info.st_uid != os.geteuid():
+        if info.st_uid not in allowed_uids:
             raise GuidanceError('unsafe')
         yield fd
     finally:
@@ -82,7 +91,7 @@ def read_file(fd: int, name: str, *, limit: int = MAX_BYTES,
         return File(b'', None)
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
         raise GuidanceError('unsafe')
-    expected_uids = {0, os.geteuid()} if canonical else {os.geteuid()}
+    expected_uids = {0, os.geteuid()} if canonical else {os.geteuid(), os.fstat(fd).st_uid}
     if (before.st_uid not in expected_uids or before.st_mode & 0o7022
             or not before.st_mode & stat.S_IRUSR or before.st_size > limit):
         raise GuidanceError('unsafe')
@@ -255,14 +264,16 @@ def run(provider: str, *, reconcile: bool) -> str:
     if not rule or not codex_nonempty(rule) or IDENTITY in rule:
         raise GuidanceError('unsafe')
     block = START + b'\n' + rule + (b'' if rule.endswith(b'\n') else b'\n') + END + b'\n'
-    home = Path(os.environ.get('CODEX_HOME', '/root/.codex')) if provider == 'codex' else ANTIGRAVITY_CONFIG
+    home = Path(os.environ.get('CODEX_HOME', str(CODEX_NATIVE_HOME))) if provider == 'codex' else ANTIGRAVITY_CONFIG
     workspace = Path(os.environ.get('WORKSPACE', '/workspace'))
     if home.is_relative_to(Path('/workspace')) or home.is_relative_to(workspace):
         raise GuidanceError('unsafe')
+    private_root = ANTIGRAVITY_CONFIG if provider == 'antigravity' else (
+        CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None)
     if provider == 'antigravity':
         home = home / 'rules'
     try:
-        with directory(home, create=reconcile) as fd:
+        with directory(home, create=reconcile, private_root=private_root) as fd:
             return codex(fd, block, reconcile=reconcile) if provider == 'codex' else antigravity(fd, block, reconcile=reconcile)
     except FileNotFoundError:
         return 'missing'
