@@ -8,6 +8,7 @@ readonly codex_binary=/usr/local/bin/codex
 readonly bundled_codex_binary=/usr/local/bin/codex
 readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime
 readonly context7_manager=/usr/local/bin/remote-dev-context7
+readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance
 readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh
 readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary
 readonly sandbox_mode=danger-full-access
@@ -490,6 +491,40 @@ fi
 
 if [[ "$approval_mode" == autonomous ]]; then
   owned_policy_args+=(--ask-for-approval never)
+fi
+
+# Guidance belongs only to agent sessions; forwarding and validation stay owned
+# by the existing wrapper. Passive vendor commands must not write guidance.
+guidance_session=1
+guidance_skip_value=0
+guidance_command_seen=0
+for argument in "${forwarded[@]}"; do
+  [[ "$argument" != -- ]] || break
+  if (( guidance_skip_value == 1 )); then
+    guidance_skip_value=0
+    continue
+  fi
+  case "$argument" in
+    --help|-h|--version|-V) guidance_session=0 ;;
+    --config|-c|--cd|-C|--model|-m|--image|-i|--local-provider|--add-dir)
+      guidance_skip_value=1 ;;
+    -*) ;;
+    *)
+      if (( guidance_command_seen == 0 )); then
+        case "$argument" in
+          login|logout|mcp|completion|features|debug|help) guidance_session=0 ;;
+        esac
+        guidance_command_seen=1
+      fi
+      ;;
+  esac
+done
+if (( guidance_session == 1 )); then
+  if [[ ! -x "$guidance_manager" || -L "$guidance_manager" ]]; then
+    echo 'WARNING: Remote Dev guidance helper is unavailable; continuing the provider session' >&2
+  elif ! "$guidance_manager" reconcile codex; then
+    echo 'WARNING: Remote Dev guidance could not be reconciled; continuing the provider session' >&2
+  fi
 fi
 
 # Narrow the remaining pathname race immediately before vendor execution. This

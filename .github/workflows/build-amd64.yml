@@ -29,6 +29,9 @@ jobs:
             bash -n "$script"
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
+            scripts/remote-dev-agent-guidance.py \
+            scripts/test-agent-guidance.py \
+            scripts/test-agent-guidance-lifecycle.py \
             scripts/remote-dev-launcher.py \
             scripts/remote-dev-codex-runtime.py \
             scripts/remote-dev-prepare-development-scratch.py \

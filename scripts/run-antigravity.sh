@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly manager=/usr/local/bin/remote-dev-antigravity
+readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance
 readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy
 readonly oauth_helper=/usr/local/bin/remote-dev-antigravity-oauth
 readonly picker_helper=/usr/local/bin/remote-dev-antigravity-picker
@@ -420,6 +421,25 @@ start_oauth_helper
 # Record the current visible pane before Antigravity starts. The picker helper
 # accepts its prompt only after the screen has changed from this baseline.
 capture_picker_baseline
+
+# Guidance is cosmetic and belongs only to real provider sessions.
+guidance_session=1
+for argument in "${forwarded[@]}"; do
+  [[ "$argument" != -- ]] || break
+  case "$argument" in
+    --help|-h|--version|-V) guidance_session=0 ;;
+  esac
+done
+case "${forwarded[0]:-}" in
+  help) guidance_session=0 ;;
+esac
+if (( guidance_session == 1 )); then
+  if [[ ! -x "$guidance_manager" || -L "$guidance_manager" ]]; then
+    echo 'WARNING: Remote Dev guidance helper is unavailable; continuing the provider session' >&2
+  elif ! "$guidance_manager" reconcile antigravity; then
+    echo 'WARNING: Remote Dev guidance could not be reconciled; continuing the provider session' >&2
+  fi
+fi
 
 # Revalidate the selected project after the prelaunch helpers have finished. A
 # concurrent replacement must not make Remote Dev validate one directory while

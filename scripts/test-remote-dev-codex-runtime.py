@@ -932,6 +932,11 @@ class CodexRuntimeTests(unittest.TestCase):
             generic = "#!/bin/sh\nexit 0\n"
             context7.write_text(generic, encoding="utf-8")
             context7.chmod(0o755)
+            guidance = bin_dir / "remote-dev-agent-guidance"
+            guidance.write_text(
+                "#!/bin/sh\necho 'Codex Remote Dev guidance: current'\n", encoding="utf-8"
+            )
+            guidance.chmod(0o755)
             commands = (
                 "start-remote-dev-web",
                 "attach-remote-dev-tmux",
@@ -967,6 +972,8 @@ class CodexRuntimeTests(unittest.TestCase):
                 "/usr/local/bin/remote-dev-codex-runtime", str(manager)
             ).replace(
                 "/usr/local/bin/remote-dev-context7", str(context7)
+            ).replace(
+                "/usr/local/bin/remote-dev-agent-guidance", str(guidance)
             )
             doctor.write_text(source, encoding="utf-8")
             doctor.chmod(0o755)

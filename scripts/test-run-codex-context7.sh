@@ -84,6 +84,7 @@ BOUNDARY
 chmod 0755 "$test_boundary_validator"
 
 sed \
+  -e "s|^readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance$|readonly guidance_manager=$(readlink -f /usr/bin/true)|" \
   -e "s|^readonly runtime_manager=/usr/local/bin/remote-dev-codex-runtime$|readonly runtime_manager=$test_runtime_manager|" \
   -e "s|^readonly context7_manager=/usr/local/bin/remote-dev-context7$|readonly context7_manager=$test_context7_manager|" \
   -e "s|^readonly project_boundary_validator=/usr/local/bin/validate-codex-project-boundary$|readonly project_boundary_validator=$test_boundary_validator|" \
