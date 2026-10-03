@@ -129,6 +129,12 @@ def atomic_write(fd: int, name: str, old: File, data: bytes) -> None:
         with os.fdopen(temp_fd, 'wb') as stream:
             stream.write(data)
             stream.flush()
+            if old.info is not None:
+                temporary_info = os.fstat(stream.fileno())
+                if (temporary_info.st_uid, temporary_info.st_gid) != (old.info.st_uid, old.info.st_gid):
+                    # Atomic replacement must preserve the user file's owner,
+                    # not turn operator-owned global instructions into root state.
+                    os.fchown(stream.fileno(), old.info.st_uid, old.info.st_gid)
             os.fchmod(stream.fileno(), stat.S_IMODE(old.info.st_mode) if old.info else 0o600)
             os.fsync(stream.fileno())
         fresh = read_file(fd, name)

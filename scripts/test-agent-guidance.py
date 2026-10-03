@@ -216,6 +216,7 @@ class GuidanceTests(unittest.TestCase):
         with patch.object(g, 'CODEX_NATIVE_HOME', self.home):
             self.assertEqual(self.run_guidance(), 'current')
             self.assertEqual(self.home.stat().st_uid, 1001)
+            self.assertEqual((self.base.stat().st_uid, self.base.stat().st_gid), (1001, 1001))
             self.assertEqual(self.base.read_bytes(), self.block + b'operator user instructions')
             self.home.chmod(0o755)
             self.assertEqual(self.run_guidance(), 'unsafe')
