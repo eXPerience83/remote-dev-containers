@@ -65,6 +65,8 @@ Status y Doctor solo leen el estado del rol correspondiente y nunca imprimen ins
 
 El helper usa lecturas UTF-8 acotadas, validación de archivos regulares/ancestros sin symlinks, ownership esperado/permisos seguros, markers exactos, temporales privados en el directorio, revalidación de identidad del destino, reemplazo atómico y fsync. El estado nuevo usa archivos `0600` y directorios `0700`; conserva los propietarios y modos seguros existentes. Las raíces privadas nativas fijas pueden conservar el UID del operador del host con modo `0700`, según bootstrap; ese propietario se admite solo en esa raíz y por debajo. Los homes Codex personalizados no obtienen esta excepción y otros propietarios siguen siendo inseguros. Estas comprobaciones no aíslan la guía de un proceso que ya controla el usuario del servicio/root del contenedor.
 
+La reconciliación rechaza el reemplazo si sus comprobaciones detectan un cambio del destino antes del reemplazo, y el reemplazo es atómico. No se garantiza conservar ediciones externas no coordinadas en la ventana final entre la última comprobación y el reemplazo. Los operadores con acceso de escritura al estado privado deben evitar editar el mismo archivo de guía global mientras comienza una sesión gestionada o una reconciliación explícita. Es una limitación de concurrencia, no una frontera de seguridad.
+
 ## Aceptación conductual suplementaria
 
 CI prueba determinísticamente los adaptadores y el ciclo de vida sin red, con estado sintético y sin llamadas al modelo ni cuentas vendor. En un candidato exacto puede probarse opcionalmente ambos proveedores gestionados usando un runtime Antigravity ya instalado/admitido:

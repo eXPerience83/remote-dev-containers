@@ -65,6 +65,8 @@ Status and Doctor read only the matching role's state and never print private in
 
 The helper uses bounded UTF-8 reads, non-symlink regular-file and ancestor checks, expected ownership/safe permissions, exact markers, private in-directory temporary files, target-identity rechecks, atomic replacement and fsync. New state uses files `0600` and directories `0700`; safe existing file owners and modes are preserved. The fixed native private mount roots may retain the operator's host UID at `0700`, as required by bootstrap; that owner is accepted only at/below that root. Custom Codex homes do not gain this exception, and other owners remain unsafe. These checks do not isolate guidance from a process already controlling the service user/container root.
 
+Reconciliation refuses replacement when its checks detect a target change before replacement, and replacement is atomic. Preservation is not guaranteed for uncoordinated external edits in the final window between the last check and replacement. Operators with write access to the private state should avoid editing the same global guidance file while a managed session or explicit reconciliation starts. This is a concurrency limitation, not a security boundary.
+
 ## Supplemental behavioral acceptance
 
 Deterministic CI tests the adapters and lifecycle offline with synthetic state, without model calls or vendor accounts. On one exact candidate, optionally exercise both managed providers using an already installed/admitted Antigravity runtime:
