@@ -495,6 +495,9 @@ fi
 
 # Guidance belongs only to agent sessions; forwarding and validation stay owned
 # by the existing wrapper. Passive vendor commands must not write guidance.
+# Classify the rust-v0.160.0 cli/src/main.rs Subcommand dispatch explicitly:
+# agents opens the session TUI (including new tasks); queue only enqueues input,
+# cloud operates on remote tasks, and servers/proxies only expose services.
 guidance_session=1
 guidance_skip_value=0
 guidance_command_seen=0
@@ -506,13 +509,15 @@ for argument in "${forwarded[@]}"; do
   fi
   case "$argument" in
     --help|-h|--version|-V) guidance_session=0 ;;
-    --config|-c|--cd|-C|--model|-m|--image|-i|--local-provider|--add-dir)
+    --config|-c|--cd|-C|--model|-m|--image|-i|--local-provider|--add-dir|--enable|--disable|--remote|--remote-auth-token-env)
       guidance_skip_value=1 ;;
     -*) ;;
     *)
       if (( guidance_command_seen == 0 )); then
         case "$argument" in
-          login|logout|mcp|completion|features|debug|help) guidance_session=0 ;;
+          agents|exec|e|review|resume|fork) ;;
+          login|logout|mcp|plugin|app-server|remote-control|completion|update|doctor|sandbox|debug|execpolicy|apply|a|queue|archive|delete|migrate-rollouts|unarchive|cloud|cloud-tasks|responses-api-proxy|stdio-to-uds|exec-server|features|tcp-tunnel|help)
+            guidance_session=0 ;;
         esac
         guidance_command_seen=1
       fi

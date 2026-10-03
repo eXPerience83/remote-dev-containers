@@ -107,6 +107,72 @@ esac
             result = self.run_script('run-' + role, role, *args, EXPECT_GUIDANCE='1')
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_codex_0160_session_commands_reconcile(self):
+        # The pinned dispatcher sends these to the session TUI or exec engine.
+        for args in ([], ['a prompt'], ['agents'], ['exec', 'a prompt'], ['e', 'a prompt'],
+                     ['review'], ['resume'], ['fork'], ['--', 'doctor']):
+            with self.subTest(args=args):
+                target = self.home / 'AGENTS.md'
+                target.unlink(missing_ok=True)
+                result = self.run_script('run-codex', 'codex', *args, EXPECT_GUIDANCE='1')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(target.is_file())
+                self.assertIn('Codex Remote Dev guidance: current', result.stdout)
+
+    def test_codex_0160_administrative_commands_do_not_reconcile(self):
+        # Include hidden commands and aliases, and service modes that may later
+        # receive work but do not start an agent session at CLI dispatch.
+        commands = ('login', 'logout', 'mcp', 'plugin', 'app-server', 'remote-control',
+                    'completion', 'update', 'doctor', 'sandbox', 'debug', 'execpolicy',
+                    'apply', 'a', 'queue', 'archive', 'delete', 'migrate-rollouts',
+                    'unarchive', 'cloud', 'cloud-tasks', 'responses-api-proxy',
+                    'stdio-to-uds', 'exec-server', 'features', 'tcp-tunnel', 'help')
+        for command in commands:
+            with self.subTest(command=command):
+                before = self.snapshot()
+                result = self.run_script('run-codex', 'codex', command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.snapshot(), before)
+                self.assertNotIn('Remote Dev guidance:', result.stdout)
+
+    def test_codex_global_value_options_preserve_session_classification(self):
+        options = (('--config', 'model=fixture'), ('-c', 'model=fixture'),
+                   ('--cd', str(self.project)), ('-C', str(self.project)),
+                   ('--model', 'fixture'), ('-m', 'fixture'), ('--image', 'fixture'),
+                   ('-i', 'fixture'), ('--local-provider', 'ollama'),
+                   ('--add-dir', str(self.project)), ('--enable', 'unified_exec'),
+                   ('--disable', 'unified_exec'), ('--remote', 'unix://fixture'),
+                   ('--remote-auth-token-env', 'FIXTURE_TOKEN'))
+        for option, value in options:
+            for command, active in (('login', False), ('exec', True)):
+                with self.subTest(option=option, command=command):
+                    (self.home / 'AGENTS.md').unlink(missing_ok=True)
+                    before = self.snapshot()
+                    result = self.run_script('run-codex', 'codex', option, value, command)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if active:
+                        self.assertIn('Codex Remote Dev guidance: current', result.stdout)
+                    else:
+                        self.assertEqual(self.snapshot(), before)
+                        self.assertNotIn('Remote Dev guidance:', result.stdout)
+
+        for args in (['--disable', 'unified_exec', 'mcp', 'list'],
+                     ['plugin', 'list'], ['apply', 'fixture-task'],
+                     ['queue', '--thread', 'fixture-thread', '--message', 'fixture'],
+                     ['cloud', 'exec', '--env', 'fixture-env', 'fixture'],
+                     ['app-server', 'generate-json-schema'], ['remote-control', 'start'],
+                     ['exec-server', 'forward', 'fixture'],
+                     ['--enable', 'unified_exec', '--disable', 'fixture', 'plugin', 'list'],
+                     ['--enable=unified_exec', 'login'],
+                     ['--disable=unified_exec', 'mcp', 'list'],
+                     ['--help', 'exec'], ['fork', '--help'], ['review', '--version']):
+            with self.subTest(args=args):
+                before = self.snapshot()
+                result = self.run_script('run-codex', 'codex', *args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.snapshot(), before)
+                self.assertNotIn('Remote Dev guidance:', result.stdout)
+
     def test_cosmetic_conflict_warns_and_continues(self):
         (self.home / 'AGENTS.md').write_bytes(b'<!-- BEGIN REMOTE DEV MANAGED DEVELOPMENT ENVIRONMENT -->')
         (self.config / 'rules').mkdir()
