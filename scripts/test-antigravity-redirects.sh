@@ -19,8 +19,14 @@ fail() {
   exit 1
 }
 
+integrity_fixture="$temporary/integrity.sh"
+python3 - "$ROOT/scripts/lib/antigravity-runtime/integrity.sh" "$integrity_fixture" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[2]).write_text(Path(sys.argv[1]).read_text().replace("/usr/local/lib/remote-dev/python", sys.executable))
+PY
 # shellcheck source=scripts/lib/antigravity-runtime/integrity.sh
-source "$ROOT/scripts/lib/antigravity-runtime/integrity.sh"
+source "$integrity_fixture"
 # shellcheck source=scripts/lib/antigravity-runtime/installer.sh
 source "$ROOT/scripts/lib/antigravity-runtime/installer.sh"
 

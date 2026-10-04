@@ -1774,8 +1774,10 @@ assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
 assert_role_private_agent_guidance
 # Feed the regression into the existing hardened role containers. No new mounts.
+# docker exec does not inherit startup exports; supply the role scratch path
+# already verified by assert_development_scratch_environment above.
 for admin_role_container in "$codex_name" "$antigravity_name"; do
-  timeout --foreground --kill-after=5s 180s docker exec -i "$admin_role_container" /bin/bash -s \
+  timeout --foreground --kill-after=5s 180s docker exec -i -e TMPDIR=/workspace/.remote-dev-tmp/tmp "$admin_role_container" /bin/bash -s \
     < "$source_root/scripts/test-admin-python-isolation.sh" \
     || fail "administrative Python isolation failed"
 done
