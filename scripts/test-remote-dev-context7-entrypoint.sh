@@ -16,9 +16,13 @@ cp -- "$source_entrypoint" "$entrypoint"
 sed -i \
   -e "s|readonly manager=/usr/local/lib/remote-dev/remote-dev-context7.py|readonly manager=$manager|" \
   -e "s|readonly device_login=/usr/local/bin/remote-dev-context7-device-login|readonly device_login=$device_login|" \
-  -e 's|readonly python=/opt/remote-dev/mise/shims/python|readonly python=/bin/bash|' \
+  -e "s|readonly python=/usr/local/lib/remote-dev/python|readonly python=$temp_root/python|" \
   "$entrypoint"
 chmod 0755 "$entrypoint"
+# Child interpreter consumes its own argv.
+# shellcheck disable=SC2016
+printf '%s\n' '#!/bin/bash' '[[ "$1" == -I ]] || exit 90' 'shift' 'exec /bin/bash "$@"' > "$temp_root/python"
+chmod 0755 "$temp_root/python"
 
 cat >"$manager" <<'MANAGER'
 #!/usr/bin/env bash

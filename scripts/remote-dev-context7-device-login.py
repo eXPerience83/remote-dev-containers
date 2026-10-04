@@ -38,7 +38,7 @@ NPM_REGISTRY_HOST = "registry.npmjs.org"
 NPM = Path("/opt/remote-dev/mise/shims/npm")
 MISE_CONFIG = Path("/etc/mise/mise.toml")
 SETPRIV = Path("/usr/bin/setpriv")
-PYTHON = Path("/opt/remote-dev/mise/shims/python")
+PYTHON = Path("/usr/local/lib/remote-dev/python")
 MANAGER = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
 RUN_ROOT = Path("/run")
 MAX_CREDENTIAL_BYTES = 32 * 1024
@@ -915,7 +915,7 @@ def preflight_manager_state() -> None:
     validate_executable(PYTHON, label="Python")
     try:
         result = subprocess.run(
-            [str(PYTHON), str(MANAGER), "status", "--menu"],
+            [str(PYTHON), "-I", str(MANAGER), "status", "--menu"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -989,7 +989,7 @@ def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
     validate_executable(PYTHON, label="Python")
     try:
         result = subprocess.run(
-            [str(PYTHON), str(MANAGER), *arguments],
+            [str(PYTHON), "-I", str(MANAGER), *arguments],
             input=input_text,
             text=True,
             check=False,

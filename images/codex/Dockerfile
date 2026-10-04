@@ -115,6 +115,9 @@ COPY scripts/lib/remote-dev-image-identity.sh /usr/local/lib/remote-dev/remote-d
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
+# Only these installed administrative Python programs use the image interpreter.
+# Repository/build tooling retains its portable source shebang. Keep this bounded
+# list aligned with the COPY destinations (test-admin-python-contract.py).
 RUN --network=none \
     --mount=type=bind,source=scripts/test-agent-guidance.py,target=/tmp/test-agent-guidance.py,ro \
     --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
@@ -172,7 +175,18 @@ RUN --network=none \
     && chmod 0444 \
       /usr/local/lib/remote-dev/antigravity-paths.sh \
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
-    && python -m py_compile \
+    && sed -i '1c\#!/usr/local/lib/remote-dev/python -I' \
+      /usr/local/bin/remote-dev-agent-guidance \
+      /usr/local/bin/remote-dev-launcher \
+      /usr/local/bin/remote-dev-codex-runtime \
+      /usr/local/bin/remote-dev-prepare-development-scratch \
+      /usr/local/bin/validate-codex-project-boundary \
+      /usr/local/bin/remote-dev-context7-device-login \
+      /usr/local/bin/remote-dev-antigravity-oauth \
+      /usr/local/bin/remote-dev-antigravity-picker \
+      /usr/local/bin/remote-dev-antigravity-policy \
+      /usr/local/lib/remote-dev/remote-dev-context7.py \
+    && /usr/local/lib/remote-dev/python -I -m py_compile \
       /usr/local/bin/remote-dev-agent-guidance \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \

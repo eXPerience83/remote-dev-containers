@@ -36,6 +36,7 @@ preflight:
 	python3 scripts/preflight-data-layout.py --root "$(DATA_ROOT)"
 
 agent-contract-tests:
+	python3 scripts/test-admin-python-contract.py
 	python3 scripts/test-agent-guidance.py
 	python3 scripts/test-agent-guidance-lifecycle.py
 	python3 scripts/test-common-tool-baseline.py
