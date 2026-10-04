@@ -39,7 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Ubuntu LTS base 26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d → 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367.
 - Ubuntu LTS base 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367 → 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78.
 - Ubuntu LTS base 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 → 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e.
-<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e -->
+- Ubuntu LTS base 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e → 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7.
+<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
 
 ### Added
