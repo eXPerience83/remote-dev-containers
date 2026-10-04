@@ -61,6 +61,7 @@ esac
                         TEST_CONFIG=str(self.config), TEST_VENDOR=str(self.bin / 'vendor'),
                         REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY='1', REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER='0')
         replacements = {
+            "/usr/local/lib/remote-dev/python": sys.executable,
             '/usr/local/bin/remote-dev-agent-guidance': str(self.manager),
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/bin/codex': str(self.bin / 'vendor'),
@@ -88,6 +89,30 @@ esac
         return subprocess.run(['bash', str(self.bin / name), *args], cwd=self.project,
                               env=dict(self.env, REMOTE_DEV_ROLE=role, **env),
                               capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(Path('/opt/remote-dev/mise/shims/python3').exists(), 'real mise shims unavailable')
+    def test_doctor_from_real_untrusted_mise_project_for_both_roles(self):
+        self.stub('context7', 'exit 0\n')
+        for name in ('gh', '.local/bin', '.local/share/remote-dev/antigravity', '.gemini/antigravity-cli'):
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        (self.project / 'mise.toml').write_text('[env]\nPROBE = "{{ exec(command=\'false\') }}"\n')
+        context = dict(PATH=f'/opt/remote-dev/mise/shims:{self.bin}:/usr/local/bin:/usr/bin:/bin',
+                       MISE_STATE_DIR=str(self.root / 'mise-state'),
+                       MISE_CACHE_DIR=str(self.root / 'mise-cache'),
+                       MISE_GLOBAL_CONFIG_FILE=str(self.root / 'no-global.toml'))
+        env = dict(self.env, **context)
+        env.pop('MISE_TRUSTED_CONFIG_PATHS', None)
+        env.pop('MISE_TRUSTED_CONFIG_FILES', None)
+        ordinary = subprocess.run(['python3', '--version'], cwd=self.project, env=env,
+                                  capture_output=True, text=True)
+        self.assertNotEqual(ordinary.returncode, 0)
+        self.assertIn('not trusted', ordinary.stderr)
+        before = self.snapshot()
+        for role in ('codex', 'antigravity'):
+            result = self.run_script('remote-dev-doctor', role, **context)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn('guidance is degraded', result.stdout)
+        self.assertEqual(before, self.snapshot())
 
     def snapshot(self):
         return {str(p.relative_to(self.root)): p.read_bytes() for root in (self.home, self.config, self.workspace)

@@ -1,5 +1,7 @@
 # Global agent guidance
 
+Remote Dev administrative Python helpers use an immutable image-owned interpreter, bound during image build independently of project mise configuration, trust and CWD. Ordinary project `python`/`python3` commands still use mise selection; Doctor keeps the project context for its tool diagnostics.
+
 Remote Dev keeps four responsibilities separate:
 
 | Layer | Responsibility |

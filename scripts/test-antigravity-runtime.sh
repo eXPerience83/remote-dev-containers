@@ -18,7 +18,8 @@ PATHS_LIB="$harness/antigravity-paths.sh"
 ANTIGRAVITY_LIB_DIR="$harness/antigravity-runtime"
 SECURE_SCRIPT="$harness/secure-persistent-state"
 mkdir -p "$harness" "$test_bin"
-cp -R -- "$ANTIGRAVITY_LIB_SOURCE" "$ANTIGRAVITY_LIB_DIR"
+mkdir -p "$ANTIGRAVITY_LIB_DIR"
+cp -R -- "$ANTIGRAVITY_LIB_SOURCE/." "$ANTIGRAVITY_LIB_DIR"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 expect_failure() { if "$@"; then fail "command unexpectedly succeeded: $*"; fi; }
@@ -30,6 +31,8 @@ from pathlib import Path
 import shlex
 import sys
 source, destination, paths_lib, runtime_lib, antigravity_lib_dir, test_bin = map(Path, sys.argv[1:])
+integrity = antigravity_lib_dir / "integrity.sh"
+integrity.write_text(integrity.read_text().replace("/usr/local/lib/remote-dev/python", sys.executable))
 text = source.read_text(encoding="utf-8")
 for old, new in {
     "/usr/local/lib/remote-dev/antigravity-paths.sh": shlex.quote(str(paths_lib)),

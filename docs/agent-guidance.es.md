@@ -1,5 +1,7 @@
 # Guía global para agentes
 
+Los helpers administrativos Python de Remote Dev usan un intérprete inmutable de la imagen, enlazado durante el build e independiente de la configuración mise, la confianza y el CWD del proyecto. Los comandos ordinarios `python`/`python3` del proyecto siguen usando la selección de mise; Doctor conserva el contexto del proyecto para sus diagnósticos de herramientas.
+
 Remote Dev separa cuatro responsabilidades:
 
 | Capa | Responsabilidad |

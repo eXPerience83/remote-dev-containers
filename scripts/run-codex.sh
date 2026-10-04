@@ -203,7 +203,7 @@ configure_context7_environment() {
   local key_path="" manager_status=0 expected_key_path=""
   local codex_home="${CODEX_HOME:-/root/.codex}"
   local -a expected_key_path_command=(
-    python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]) / ".remote-dev-context7" / "api-key")' "$codex_home"
+    /usr/local/lib/remote-dev/python -I -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]) / ".remote-dev-context7" / "api-key")' "$codex_home"
   )
   local -a context7_key_command=("$context7_manager" key-file --active)
   local -a context7_read_key_command=()
@@ -222,7 +222,7 @@ configure_context7_environment() {
     fi
 
     context7_read_key_command=(
-      python3 -c '
+      /usr/local/lib/remote-dev/python -I -c '
 import os
 import stat
 import sys
@@ -472,7 +472,7 @@ if (( informational_only == 0 )); then
   fi
   assert_managed_codex_project_boundary || exit $?
 
-  workspace_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
+  workspace_key="$(/usr/local/lib/remote-dev/python -I -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$workspace")"
   owned_policy_args+=(-c "shell_environment_policy.set.GIT_CEILING_DIRECTORIES=$workspace_key")
 
   if (( explicit_project_cd == 0 )); then
@@ -484,7 +484,7 @@ if (( informational_only == 0 )); then
   fi
 
   if [[ "$approval_mode" == guarded ]]; then
-    project_key="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
+    project_key="$(/usr/local/lib/remote-dev/python -I -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$active_project")"
     owned_policy_args+=(-c "projects={$project_key={trust_level=\"untrusted\"}}")
   fi
 fi

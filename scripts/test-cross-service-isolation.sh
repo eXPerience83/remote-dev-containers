@@ -1773,6 +1773,12 @@ assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
 assert_role_private_agent_guidance
+# Feed the regression into the existing hardened role containers. No new mounts.
+for admin_role_container in "$codex_name" "$antigravity_name"; do
+  timeout --foreground --kill-after=5s 180s docker exec -i "$admin_role_container" /bin/bash -s \
+    < "$source_root/scripts/test-admin-python-isolation.sh" \
+    || fail "administrative Python isolation failed"
+done
 assert_project_toolchain_workflow "$codex_name" Codex
 assert_project_toolchain_workflow "$antigravity_name" Antigravity
 assert_hardened_codex_runtime_regressions

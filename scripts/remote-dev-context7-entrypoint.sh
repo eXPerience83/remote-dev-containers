@@ -3,10 +3,10 @@ set -euo pipefail
 
 readonly manager=/usr/local/lib/remote-dev/remote-dev-context7.py
 readonly device_login=/usr/local/bin/remote-dev-context7-device-login
-readonly python=/opt/remote-dev/mise/shims/python
+readonly python=/usr/local/lib/remote-dev/python
 
 delegate_manager() {
-  exec "$python" "$manager" "$@"
+  exec "$python" -I "$manager" "$@"
 }
 
 command="${1:-}"
