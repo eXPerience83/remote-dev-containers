@@ -23,15 +23,18 @@ The canonical command inventory is [`config/common-tool-baseline.txt`](../config
 |---|---|
 | Terminal | `bash`, `tmux`, `ttyd`, `nano`, `less`, `fzf` |
 | Git | `git`, `git-lfs`, `ssh`, `gh` |
-| Network | `curl`, `wget` |
-| Search/files | `rg`, `fd`, `jq`, `rsync`, `zip`, `unzip`, `tar`, `gzip`, `patch` |
-| Build | `make`, `pkg-config` |
-| Python | `python`, `uv` |
-| JavaScript | `node`, `npm` |
+| Network/TLS | `curl`, `wget`, `ip`, `ss`, `dig`, `nc`, `openssl` |
+| Search/files | `rg`, `fd`, `jq`, `rsync`, `file`, `tree`, `patch` |
+| Archives | `zip`, `unzip`, `tar`, `gzip`, `bzip2`, `xz`, `zstd` |
+| Processes | `ps`, `pgrep`, `lsof` |
+| Build | `make`, `pkg-config`, `gcc` |
+| Data/templates | `sqlite3`, `envsubst` |
+| Python | `python`, `python3`, `uv` |
+| JavaScript | `node`, `npm`, `npx` |
 | Tool manager | `mise` |
 | Checks | `shellcheck` |
 
-The image selects the Python 3.14, Node 24 LTS and npm 12 lines; exact versions remain pinned in the repository's build inputs.
+The image selects the Python 3.14, Node 24 LTS and npm 12 lines; exact versions remain pinned in the repository's build inputs. The existing `build-essential` package continues to provide additional native compiler/linker commands such as `g++`, but only `gcc` is part of the public command inventory in this phase; package membership alone does not promote every executable into the product API.
 
 “Included” or “bundled” public tools means directly invokable from a normal developer/agent shell without activation or extra startup parameters. The navigation-only launcher is exempt from this baseline and keeps its independent reduced operational checks.
 
