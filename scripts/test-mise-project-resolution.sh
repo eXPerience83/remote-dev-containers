@@ -73,6 +73,7 @@ done
 [[ "$(mise settings get safe)" == false ]]
 [[ "$(mise settings get paranoid)" == false ]]
 [[ "$(mise exec -- python --version)" == "${outputs[python]}" ]]
+[[ "$(python3 --version)" == "${outputs[python]}" ]]
 
 # Normal, exact missing declarations for each of the three image-managed tools.
 missing_versions=(3.12.1 22.0.0 0.6.0)
@@ -98,6 +99,18 @@ FAKE
   [[ ! -e "$MISE_STATE_DIR/fallback-marker" ]]
 done
 printf '[tools]\npython = "3.12.1"\n' > "$scratch/missing/mise.toml"
+cd "$scratch/missing"
+if python3 --version > "$scratch/error" 2>&1; then
+  echo "ERROR: missing project Python unexpectedly allowed python3" >&2
+  exit 1
+fi
+grep -Fq 'Tool not installed for shim' "$scratch/error"
+grep -Fq '3.12.1' "$scratch/error"
+if grep -Eq 'installing|UNEXPECTED-FALLBACK' "$scratch/error"; then
+  cat "$scratch/error" >&2
+  exit 1
+fi
+[[ ! -e "$MISE_STATE_DIR/fallback-marker" ]]
 printf '[tools]\npython = "3.12.1"\n[settings]\nnot_found_auto_install = true\nnot_found_system_fallback = true\n' > "$scratch/override/mise.toml"
 cd "$scratch/override"
 # Trust only this synthetic settings fixture, in the isolated state directory.
