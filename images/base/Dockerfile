@@ -62,14 +62,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
+        bind9-dnsutils \
         build-essential \
+        bzip2 \
         ca-certificates \
         curl \
         fd-find \
+        file \
         fzf \
+        gettext-base \
         git \
         git-lfs \
         gzip \
+        iproute2 \
         jq \
         less \
         libbz2-dev \
@@ -78,9 +83,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libreadline-dev \
         libsqlite3-dev \
         libssl-dev \
+        lsof \
         make \
         nano \
+        netcat-openbsd \
         openssh-client \
+        openssl \
         patch \
         pkg-config \
         procps \
@@ -91,12 +99,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         tar \
         tini \
         tmux \
+        tree \
         tzdata \
         unzip \
         wget \
         xz-utils \
         zip \
         zlib1g-dev \
+        zstd \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
@@ -192,8 +202,10 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && ln -s "$admin_python" /usr/local/lib/remote-dev/python \
     && /usr/local/lib/remote-dev/python -I --version \
     && python --version \
+    && test "$(python3 --version)" = "$(python --version)" \
     && node --version \
     && test "$(npm --version)" = "$NPM_VERSION" \
+    && test "$(npx --version)" = "$NPM_VERSION" \
     && uv --version \
     && rm -rf "${MISE_CACHE_DIR:?}"/*
 
