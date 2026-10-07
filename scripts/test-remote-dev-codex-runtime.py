@@ -21,6 +21,16 @@ DOCTOR = Path(__file__).with_name("remote-dev-doctor.sh")
 if not DOCTOR.is_file():
     DOCTOR = Path("/usr/local/bin/remote-dev-doctor")
 
+COMMON_TOOL_BASELINE = Path("/usr/share/remote-dev/common-tool-baseline.txt")
+if not COMMON_TOOL_BASELINE.is_file():
+    COMMON_TOOL_BASELINE = (
+        Path(__file__).resolve().parents[1] / "config" / "common-tool-baseline.txt"
+    )
+
+COMMON_TOOL_READER = Path("/usr/local/lib/remote-dev/common-tool-baseline.sh")
+if not COMMON_TOOL_READER.is_file():
+    COMMON_TOOL_READER = Path(__file__).with_name("common-tool-baseline.sh")
+
 
 def load_manager():
     spec = importlib.util.spec_from_file_location("codex_runtime_manager", SCRIPT)
@@ -893,6 +903,25 @@ class CodexRuntimeTests(unittest.TestCase):
                 "printf '%s\\n' \"$1\"; }\n",
                 encoding="utf-8",
             )
+            baseline_fixture = root / "common-tool-baseline.txt"
+            baseline_fixture.write_text(
+                COMMON_TOOL_BASELINE.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            reader_fixture = root / "common-tool-baseline.sh"
+            reader_source = COMMON_TOOL_READER.read_text(encoding="utf-8")
+            default_manifest = (
+                'local manifest="${1:-/usr/share/remote-dev/common-tool-baseline.txt}"'
+            )
+            fixture_manifest = (
+                f'local manifest="${{1:-{baseline_fixture}}}"'
+            )
+            if default_manifest not in reader_source:
+                self.fail("common tool reader default manifest contract changed")
+            reader_fixture.write_text(
+                reader_source.replace(default_manifest, fixture_manifest),
+                encoding="utf-8",
+            )
+
             log = root / "runtime.log"
             timeout_log = root / "timeout.log"
             timeout = bin_dir / "timeout"
@@ -937,29 +966,20 @@ class CodexRuntimeTests(unittest.TestCase):
                 "#!/bin/sh\necho 'Codex Remote Dev guidance: current'\n", encoding="utf-8"
             )
             guidance.chmod(0o755)
-            commands = (
+            commands = {
                 "start-remote-dev-web",
                 "attach-remote-dev-tmux",
                 "remote-dev-menu",
                 "remote-dev-healthcheck",
                 "remote-dev-doctor",
                 "remote-dev-version",
-                "gh",
-                "git",
-                "python",
-                "node",
-                "npm",
-                "uv",
-                "mise",
-                "ttyd",
-                "tmux",
-                "ssh",
-                "rg",
-                "fd",
                 "codex",
                 "run-codex",
+            }
+            commands.update(
+                COMMON_TOOL_BASELINE.read_text(encoding="utf-8").splitlines()
             )
-            for name in commands:
+            for name in sorted(commands):
                 path = bin_dir / name
                 path.write_text(generic, encoding="utf-8")
                 path.chmod(0o755)
@@ -968,6 +988,9 @@ class CodexRuntimeTests(unittest.TestCase):
             source = source.replace(
                 "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh",
                 f"runtime_lib={runtime_lib}",
+            ).replace(
+                "source /usr/local/lib/remote-dev/common-tool-baseline.sh || exit 1",
+                f"source {reader_fixture} || exit 1",
             ).replace(
                 "/usr/local/bin/remote-dev-codex-runtime", str(manager)
             ).replace(

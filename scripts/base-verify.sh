@@ -60,9 +60,24 @@ for setting in not_found_auto_install not_found_system_fallback; do
   fi
 done
 
-python --version
+python_version="$(python --version 2>&1)"
+python3_version="$(python3 --version 2>&1)"
+if [[ "$python3_version" != "$python_version" ]]; then
+  echo "ERROR: python and python3 must resolve the same immutable image runtime" >&2
+  printf 'python: %s\npython3: %s\n' "$python_version" "$python3_version" >&2
+  exit 1
+fi
+printf '%s\n' "$python_version"
+
 node --version
-npm --version
+npm_version="$(npm --version)"
+npx_version="$(npx --version)"
+if [[ "$npx_version" != "$npm_version" ]]; then
+  echo "ERROR: npx must come from the pinned npm installation" >&2
+  printf 'npm: %s\nnpx: %s\n' "$npm_version" "$npx_version" >&2
+  exit 1
+fi
+printf 'npm %s (npx %s)\n' "$npm_version" "$npx_version"
 uv --version
 gh --version | head -n 1
 ttyd --version
