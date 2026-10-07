@@ -21,6 +21,12 @@ DOCTOR = Path(__file__).with_name("remote-dev-doctor.sh")
 if not DOCTOR.is_file():
     DOCTOR = Path("/usr/local/bin/remote-dev-doctor")
 
+COMMON_TOOL_BASELINE = Path("/usr/share/remote-dev/common-tool-baseline.txt")
+if not COMMON_TOOL_BASELINE.is_file():
+    COMMON_TOOL_BASELINE = (
+        Path(__file__).resolve().parents[1] / "config" / "common-tool-baseline.txt"
+    )
+
 
 def load_manager():
     spec = importlib.util.spec_from_file_location("codex_runtime_manager", SCRIPT)
@@ -937,29 +943,20 @@ class CodexRuntimeTests(unittest.TestCase):
                 "#!/bin/sh\necho 'Codex Remote Dev guidance: current'\n", encoding="utf-8"
             )
             guidance.chmod(0o755)
-            commands = (
+            commands = {
                 "start-remote-dev-web",
                 "attach-remote-dev-tmux",
                 "remote-dev-menu",
                 "remote-dev-healthcheck",
                 "remote-dev-doctor",
                 "remote-dev-version",
-                "gh",
-                "git",
-                "python",
-                "node",
-                "npm",
-                "uv",
-                "mise",
-                "ttyd",
-                "tmux",
-                "ssh",
-                "rg",
-                "fd",
                 "codex",
                 "run-codex",
+            }
+            commands.update(
+                COMMON_TOOL_BASELINE.read_text(encoding="utf-8").splitlines()
             )
-            for name in commands:
+            for name in sorted(commands):
                 path = bin_dir / name
                 path.write_text(generic, encoding="utf-8")
                 path.chmod(0o755)
