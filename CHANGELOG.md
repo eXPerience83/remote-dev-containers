@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Bundle two independently locked CPython maintenance runtimes: Python 3.14.x remains the default/administrative interpreter, while compatible projects may explicitly select the parallel Python 3.15.x interpreter. Validate both versions on AMD64 and ARM64, preserve version-specific legal evidence and maintain both update lines without relaxing mise's fail-closed policy.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->
