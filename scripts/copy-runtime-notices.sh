@@ -54,7 +54,7 @@ copy_notice_files python "$python_root" optional
 # The secondary CPython build is a separate installed distribution. Keep any
 # runtime-carried notice files alongside the version-specific reviewed artifacts.
 python315_version="$(sed -n 's/^PYTHON_315_VERSION=//p' /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env)"
-if [[ ! "$python315_version" =~ ^3\\.15\\.[0-9]+$ ]]; then
+if [[ ! "$python315_version" =~ ^3\.15\.[0-9]+$ ]]; then
   echo "ERROR: missing reviewed Python 3.15 build identity" >&2
   exit 1
 fi
