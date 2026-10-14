@@ -89,34 +89,43 @@ def request_json(url: str, token: str | None = None) -> Any:
         fail(f"invalid JSON from {url}: {exc}")
 
 
-def parse_install_artifacts(lock_path: Path) -> list[dict[str, str]]:
-    """Read the two exact Python install-only artifact URLs from mise.lock."""
+def parse_install_artifacts(
+    lock_path: Path, python_version: str | None = None
+) -> list[dict[str, str]]:
+    """Read the two approved architecture artifacts for one exact Python line."""
     try:
         text = lock_path.read_text(encoding="utf-8")
     except OSError as exc:
         fail(f"cannot read {lock_path}: {exc}")
 
-    records: dict[str, dict[str, str]] = {}
+    candidates: dict[str, dict[str, dict[str, str]]] = {}
     for match in URL_PATTERN.finditer(text):
-        target = match.group("target")
-        arch = ARCH_NAMES[target]
+        arch = ARCH_NAMES[match.group("target")]
+        version = match.group("version")
         record = {
             "arch": arch,
-            "target": target,
-            "python_version": match.group("version"),
+            "target": match.group("target"),
+            "python_version": version,
             "release": match.group("release"),
             "install_asset_url": match.group("url"),
         }
-        if arch in records and records[arch] != record:
-            fail(f"mise.lock contains conflicting Python artifacts for {arch}")
-        records[arch] = record
+        per_version = candidates.setdefault(version, {})
+        if arch in per_version and per_version[arch] != record:
+            fail(f"mise.lock contains conflicting Python {version} artifacts for {arch}")
+        per_version[arch] = record
 
-    if set(records) != {"amd64", "arm64"}:
-        fail("mise.lock must contain exact amd64 and arm64 Python install-only artifacts")
-    versions = {record["python_version"] for record in records.values()}
+    if python_version is None:
+        legacy = sorted(version for version in candidates if version.startswith("3.14."))
+        if len(legacy) != 1:
+            fail("cannot identify exactly one reviewed default Python 3.14 version")
+        python_version = legacy[0]
+
+    records = candidates.get(python_version)
+    if records is None or set(records) != {"amd64", "arm64"}:
+        fail(f"mise.lock must contain exact amd64 and arm64 Python {python_version} artifacts")
     releases = {record["release"] for record in records.values()}
-    if len(versions) != 1 or len(releases) != 1:
-        fail("Python artifacts must use one version and one standalone release")
+    if len(releases) != 1:
+        fail(f"Python {python_version} artifacts must use one standalone release")
     return [records["amd64"], records["arm64"]]
 
 
@@ -296,9 +305,9 @@ def atomic_replace_directory(source: Path, destination: Path) -> None:
         shutil.rmtree(backup)
 
 
-def generate(root: Path, output: Path, token: str | None) -> None:
+def generate(root: Path, output: Path, token: str | None, python_version: str | None = None) -> None:
     """Download exact full distributions and preserve only their legal metadata."""
-    records = parse_install_artifacts(root / "mise.lock")
+    records = parse_install_artifacts(root / "mise.lock", python_version)
     release = records[0]["release"]
     assets = list_release_assets(release, token)
 
@@ -353,9 +362,9 @@ def generate(root: Path, output: Path, token: str | None) -> None:
         atomic_replace_directory(generated, output)
 
 
-def check(root: Path, output: Path) -> None:
+def check(root: Path, output: Path, python_version: str | None = None) -> None:
     """Validate committed legal metadata against the current mise.lock artifacts."""
-    expected_records = parse_install_artifacts(root / "mise.lock")
+    expected_records = parse_install_artifacts(root / "mise.lock", python_version)
     manifest_path = output / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -421,6 +430,7 @@ def main() -> None:
     mode.add_argument("--check", action="store_true")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--python-version", type=str)
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -430,10 +440,10 @@ def main() -> None:
         else root / "third_party" / "components" / "python-build-standalone"
     )
     if args.write:
-        generate(root, output, os.environ.get("GH_TOKEN"))
+        generate(root, output, os.environ.get("GH_TOKEN"), args.python_version)
         print(f"Python standalone runtime notices written to {output}")
     else:
-        check(root, output)
+        check(root, output, args.python_version)
 
 
 if __name__ == "__main__":
