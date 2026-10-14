@@ -38,6 +38,8 @@ The image bundles the latest reviewed Python **3.14.x** (default for bare `pytho
 
 “Included” or “bundled” public tools means directly invokable from a normal developer/agent shell without activation or extra startup parameters. The navigation-only launcher is exempt from this baseline and keeps its independent reduced operational checks.
 
+See the [dual-Python runtime contract](python-dual-runtime.md) ([español](python-dual-runtime.es.md)) for exact pins, trusted project selection, offline `uv` virtual environments, regression gates, maintenance, and the measured image-size trade-off.
+
 ## Role-specific commands
 
 Doctor checks these separately from the public common baseline. Codex provides `codex`, `run-codex` and its runtime/Context7/boundary managers. Antigravity provides `run-antigravity` and its admission/update/policy managers; vendor `agy` becomes directly invokable only after explicit successful admission into that role's private state. Missing optional runtimes remain unavailable without a silent download. These commands do not belong to the common inventory.
