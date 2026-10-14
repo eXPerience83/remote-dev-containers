@@ -90,6 +90,62 @@ def isolated_env(root: Path) -> dict[str, str]:
     return env
 
 
+def validate_lock_header(lock: dict) -> None:
+    """Accept only reviewed mise lock formats, including a legacy absent header."""
+    keys = set(lock)
+    if keys not in ({"tools"}, {"lockfile_version", "tools"}):
+        fail(f"probe produced unexpected top-level mise.lock keys: {sorted(keys)}")
+    if "lockfile_version" in lock:
+        version = lock["lockfile_version"]
+        if type(version) is not int or version not in (1, 2, 3):
+            fail(f"probe lockfile version is not supported: {version!r}")
+
+
+def seed_reviewed_python_lock(destination: Path, current: str) -> None:
+    """Seed the current valid Python platforms to trigger genuine mise regression errors.
+
+    A fresh first lock may skip missing artifacts without a fatal error. Carrying
+    forward the reviewed Python-only lock causes mise to fail rather than drop
+    a previously supported platform when the candidate is not yet available.
+    """
+    source = Path(__file__).resolve().parents[1] / "mise.lock"
+    try:
+        content = source.read_text(encoding="utf-8")
+        lock = tomllib.loads(content)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        fail(f"cannot read reviewed mise.lock for Python admission: {exc}")
+    validate_lock_header(lock)
+    tools = lock.get("tools")
+    if not isinstance(tools, dict) or not isinstance(tools.get("python"), list):
+        fail("reviewed mise.lock has no Python tool entries")
+
+    validator = load_lock_validator()
+    reviewed = [entry for entry in tools["python"] if entry.get("version") == current]
+    if len(reviewed) != 1:
+        fail(f"reviewed mise.lock must contain exactly one Python {current} entry")
+    validator.validate_tool_entry("python", current, reviewed)
+
+    sections = re.findall(
+        r"(?ms)^\[\[tools\.python\]\]\n.*?(?=^\[\[tools\.|\Z)",
+        content,
+    )
+    matching_sections = [
+        section for section in sections
+        if tomllib.loads(section)["tools"]["python"][0]["version"] == current
+    ]
+    if len(matching_sections) != 1:
+        fail(f"cannot select exactly one Python {current} lock section")
+    header = (
+        f"lockfile_version = {lock['lockfile_version']}\n\n"
+        if "lockfile_version" in lock else ""
+    )
+    destination.write_text(
+        "# Generated from the verified committed Python lock entry.\n"
+        + header + matching_sections[0],
+        encoding="utf-8",
+    )
+
+
 def validate_python_only_lock(path: Path, candidate: str) -> None:
     validator = load_lock_validator()
     try:
@@ -97,9 +153,8 @@ def validate_python_only_lock(path: Path, candidate: str) -> None:
             lock = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         fail(f"probe did not produce a valid mise.lock: {exc}")
-    if set(lock) != {"tools"} or not isinstance(lock["tools"], dict):
-        fail("probe produced an unexpected top-level mise.lock structure")
-    if set(lock["tools"]) != {"python"}:
+    validate_lock_header(lock)
+    if not isinstance(lock["tools"], dict) or set(lock["tools"]) != {"python"}:
         fail("probe lock unexpectedly contains tools other than Python")
     # Reuse the exact accepted backend, URL, SHA-256 and attestations policy.
     validator.validate_tool_entry("python", candidate, lock["tools"]["python"])
@@ -128,6 +183,7 @@ def select_python_version(current: str, candidate: str, mise_bin: Path) -> str:
             f'python = "{candidate}"\n'
         )
         (workspace / "mise.toml").write_text(config, encoding="utf-8")
+        seed_reviewed_python_lock(workspace / "mise.lock", current)
         try:
             result = subprocess.run(
                 [str(mise_bin.resolve()), "lock", "--platform", ",".join(PLATFORMS)],
