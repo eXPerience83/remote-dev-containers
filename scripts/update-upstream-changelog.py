@@ -18,6 +18,7 @@ _COMPONENTS = (
     ("TTYD_VERSION", "ttyd", lambda value: value),
     ("MISE_VERSION", "mise", lambda value: value),
     ("PYTHON_VERSION", "Python", lambda value: value),
+    ("PYTHON_315_VERSION", "Python 3.15", lambda value: value),
     ("NODE_VERSION", "Node.js", lambda value: value),
     ("NPM_VERSION", "npm", lambda value: value),
     ("UV_VERSION", "uv", lambda value: value),
