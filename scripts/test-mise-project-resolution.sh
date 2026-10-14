@@ -33,7 +33,7 @@ unset MISE_TRUSTED_CONFIG_PATHS MISE_TRUSTED_CONFIG_FILES
 # Parent processes entered through a shim may have real bin dirs prepended.
 # Exercise the actual shim boundary, with a detectable same-name fallback.
 export PATH="/opt/remote-dev/mise/shims:$scratch/fake:/usr/local/bin:/usr/bin:/bin"
-mkdir -p "$scratch"/{baseline,matching,missing,override,unsafe,fake}
+mkdir -p "$scratch"/{baseline,matching,alternate,missing,override,unsafe,fake}
 cd "$scratch/baseline"
 
 # The canonical public commands must resolve in the neutral built-image fixture.
@@ -52,7 +52,12 @@ snapshot_store > "$scratch/store-before"
 tools=(python node uv)
 declare -A versions binaries outputs
 for tool in "${tools[@]}"; do
-  versions[$tool]="$(sed -n "s/^$tool = \"\([^\"]*\)\"$/\1/p" /etc/mise/config.toml)"
+  if [[ "$tool" == python ]]; then
+    # The system exposes two exact Python versions; the first remains default.
+    versions[$tool]="$(sed -nE 's/^python = \\["([^"]+)", "[^"]+"\\]$/\\1/p' /etc/mise/config.toml)"
+  else
+    versions[$tool]="$(sed -n "s/^$tool = \"\\([^\"]*\\)\"$/\\1/p" /etc/mise/config.toml)"
+  fi
   [[ -n "${versions[$tool]}" ]]
   binaries[$tool]="$(mise which "$tool")"
   [[ "${binaries[$tool]}" == /opt/remote-dev/mise/installs/"$tool"/"${versions[$tool]}"/* ]]
@@ -74,6 +79,17 @@ done
 [[ "$(mise settings get paranoid)" == false ]]
 [[ "$(mise exec -- python --version)" == "${outputs[python]}" ]]
 [[ "$(python3 --version)" == "${outputs[python]}" ]]
+
+# Opting into Python 3.15 must not mutate the globally pinned 3.14 default.
+python315_version="$(sed -nE 's/^python = \\["[^"]+", "([^"]+)"\\]$/\\1/p' /etc/mise/config.toml)"
+[[ "$python315_version" =~ ^3[.]15[.][0-9]+$ ]]
+printf '[tools]\npython = "%s"\n' "$python315_version" > "$scratch/alternate/mise.toml"
+cd "$scratch/alternate"
+[[ "$(python --version)" == "Python $python315_version" ]]
+[[ "$(python3 --version)" == "Python $python315_version" ]]
+[[ "$(mise which python)" == /opt/remote-dev/mise/installs/python/"$python315_version"/* ]]
+cd "$scratch/matching"
+[[ "$(python --version)" == "${outputs[python]}" ]]
 
 # Normal, exact missing declarations for each of the three image-managed tools.
 missing_versions=(3.12.1 22.0.0 0.6.0)
