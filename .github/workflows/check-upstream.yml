@@ -264,6 +264,19 @@ jobs:
           mise_amd64_sha256="$(release_sha256 "$workdir/mise.json" "mise-v${latest_mise}-linux-x64")"
           mise_arm64_sha256="$(release_sha256 "$workdir/mise.json" "mise-v${latest_mise}-linux-arm64")"
 
+          # Use the exact verified mise release selected for this updater PR.
+          # Probe only Python in private, isolated state before mutating pins.
+          mise_bin="$workdir/mise"
+          curl "${curl_args[@]}" \
+            "https://github.com/jdx/mise/releases/download/v${latest_mise}/mise-v${latest_mise}-linux-x64" \
+            -o "$mise_bin"
+          printf '%s  %s\n' "$mise_amd64_sha256" "$mise_bin" | sha256sum -c -
+          chmod 0755 "$mise_bin"
+          latest_python="$(python3 scripts/preflight-python-upstream.py \
+            --current "$PYTHON_VERSION" \
+            --candidate "$latest_python" \
+            --mise-bin "$mise_bin")"
+
           branch="automation/update-upstreams"
           existing_pr="$(gh pr list \
             --head "$branch" \
@@ -396,12 +409,7 @@ jobs:
             --metadata "$workdir/context7.json" \
             --write
 
-          mise_bin="$workdir/mise"
-          curl "${curl_args[@]}" \
-            "https://github.com/jdx/mise/releases/download/v${latest_mise}/mise-v${latest_mise}-linux-x64" \
-            -o "$mise_bin"
-          printf '%s  %s\n' "$mise_amd64_sha256" "$mise_bin" | sha256sum -c -
-          chmod 0755 "$mise_bin"
+          # Reuse the verified mise binary used for Python candidate admission.
           MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
 
           bash scripts/validate-version-pins.sh
