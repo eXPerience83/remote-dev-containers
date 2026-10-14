@@ -125,6 +125,7 @@ RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
     REMOTE_DEV_TTYD_VERSION="${TTYD_VERSION}" \
     REMOTE_DEV_MISE_VERSION="${MISE_VERSION}" \
     REMOTE_DEV_PYTHON_VERSION="${PYTHON_VERSION}" \
+    REMOTE_DEV_PYTHON_315_VERSION="${PYTHON_315_VERSION}" \
     bash /src/scripts/validate-third-party-inventory.sh
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
