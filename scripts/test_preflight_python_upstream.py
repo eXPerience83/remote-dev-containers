@@ -131,11 +131,11 @@ class PythonPreflightTests(unittest.TestCase):
             f"ERROR failed to resolve python@{self.next314} for linux-arm64; refusing to replace locked versions\n"
             f"ERROR failed to resolve python@{self.next314} for linux-x64; refusing to replace locked versions\n"
         )
-        self.assertEqual(self.run_probe(result=1, output=error), "3.14.8")
+        self.assertEqual(self.run_probe(result=1, output=error), self.python314)
 
     def test_only_one_platform_missing_defers_candidate(self) -> None:
         error = f"ERROR failed to resolve python@{self.next314} for linux-arm64\n"
-        self.assertEqual(self.run_probe(result=1, output=error), "3.14.8")
+        self.assertEqual(self.run_probe(result=1, output=error), self.python314)
 
     def test_candidate_becomes_lockable_on_next_run(self) -> None:
         self.assertEqual(
