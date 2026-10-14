@@ -181,6 +181,22 @@ echo "System Bubblewrap executable is absent: OK"
 gh --version | head -n 1
 git --version
 python --version
+# Verify both immutable runtimes without relying on environment activation.
+if [[ "$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" != 3.14 ]]; then
+  echo "ERROR: unversioned Python must remain on the 3.14 default" >&2
+  exit 1
+fi
+python315_pin="$(sed -n 's/^PYTHON_315_VERSION=//p' /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env)"
+python315="${MISE_DATA_DIR:-/opt/remote-dev/mise}/installs/python/$python315_pin/bin/python3.15"
+if [[ ! "$python315_pin" =~ ^3[.]15[.][0-9]+$ ]] || [[ ! -x "$python315" ]]; then
+  echo "ERROR: independently locked Python 3.15 runtime is missing" >&2
+  exit 1
+fi
+if [[ "$("$python315" --version)" != "Python $python315_pin" ]]; then
+  echo "ERROR: secondary Python binary does not match the immutable 3.15 pin" >&2
+  exit 1
+fi
+echo "Python 3.14 default and Python 3.15 secondary runtimes: OK"
 node --version
 npm --version
 uv --version
