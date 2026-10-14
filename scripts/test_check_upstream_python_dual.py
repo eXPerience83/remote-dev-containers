@@ -100,7 +100,7 @@ def simulate_version_updates(body: str, root: Path) -> None:
         '}',
     ]
     for name, value in replacements.items():
-        setup.append(f'${name}="{value}"')
+        setup.append(f'{name}="{value}"')
     script = "\n".join(setup) + "\n" + patch
 
     with tempfile.TemporaryDirectory(prefix="upstream-python-flow-") as tmp:
