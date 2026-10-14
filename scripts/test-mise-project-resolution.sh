@@ -91,6 +91,62 @@ cd "$scratch/alternate"
 cd "$scratch/matching"
 [[ "$(python --version)" == "${outputs[python]}" ]]
 
+# Two offline uv venvs exercise real interpreter selection, independent
+# site-packages and no global mutation, in both hardened networkless agent roles.
+export UV_CACHE_DIR="$scratch/uv-cache" UV_PYTHON_DOWNLOADS=never
+python315_binary="/opt/remote-dev/mise/installs/python/$python315_version/bin/python3.15"
+[[ -x "$python315_binary" ]]
+venv314="$scratch/venv-314"
+venv315="$scratch/venv-315"
+if ! uv venv --offline --python "${binaries[python]}" "$venv314" > "$scratch/uv314-output" 2>&1; then
+  cat "$scratch/uv314-output" >&2
+  echo "ERROR: offline Python 3.14 uv venv creation failed" >&2
+  exit 1
+fi
+if ! uv venv --offline --python "$python315_binary" "$venv315" > "$scratch/uv315-output" 2>&1; then
+  cat "$scratch/uv315-output" >&2
+  echo "ERROR: offline Python 3.15 uv venv creation failed" >&2
+  exit 1
+fi
+verify_python_venv() {
+  local venv="$1" version="$2"
+  "$venv/bin/python" - "$version" "$venv" <<'PY'
+import pathlib
+import sys
+import sysconfig
+
+expected = tuple(map(int, sys.argv[1].split(".")))
+venv = pathlib.Path(sys.argv[2]).resolve()
+assert sys.version_info[:3] == expected, (sys.version, expected)
+assert pathlib.Path(sys.prefix).resolve() == venv
+assert sys.prefix != sys.base_prefix
+assert pathlib.Path(sysconfig.get_path("purelib")).is_relative_to(venv)
+PY
+}
+verify_python_venv "$venv314" "${versions[python]}"
+verify_python_venv "$venv315" "$python315_version"
+site314="$("$venv314/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+site315="$("$venv315/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+[[ "$site314" != "$site315" ]]
+printf 'VALUE = "only-314"\n' > "$site314/remote_dev_venv_314_probe.py"
+printf 'VALUE = "only-315"\n' > "$site315/remote_dev_venv_315_probe.py"
+"$venv314/bin/python" -c '
+import importlib.util
+from remote_dev_venv_314_probe import VALUE
+assert VALUE == "only-314"
+assert importlib.util.find_spec("remote_dev_venv_315_probe") is None
+'
+"$venv315/bin/python" -c '
+import importlib.util
+from remote_dev_venv_315_probe import VALUE
+assert VALUE == "only-315"
+assert importlib.util.find_spec("remote_dev_venv_314_probe") is None
+'
+[[ "$(python --version)" == "${outputs[python]}" ]]
+[[ "$(python3 --version)" == "${outputs[python]}" ]]
+[[ "$(mise which python)" == "${binaries[python]}" ]]
+echo "Offline uv venvs (Python ${versions[python]} and $python315_version) are isolated: OK"
+
 # Normal, exact missing declarations for each of the three image-managed tools.
 missing_versions=(3.12.1 22.0.0 0.6.0)
 for i in "${!tools[@]}"; do
