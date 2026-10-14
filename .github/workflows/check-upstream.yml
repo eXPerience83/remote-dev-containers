@@ -557,3 +557,4 @@ jobs:
             gh workflow run build-amd64.yml --ref "$branch"
           else
             echo "Build AMD64 run $run_id is already $run_status${run_conclusion:+/$run_conclusion} for $branch_head."
+          fi
