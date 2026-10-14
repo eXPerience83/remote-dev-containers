@@ -205,7 +205,199 @@ def main() -> int:
         validator,
         "runtime version drift",
         lambda root: replace_regex_once(
-            root / "mise.toml", r'^python = "[^"]+"$', 'python = "0.0.0"'
+            root / "mise.toml", r'^python = \[[^\n]+\]
+        ),
+        "does not match versions.env",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "second Python version drift",
+        lambda root: replace_once(
+            root / "mise.lock",
+            'version = "3.15.0"',
+            'version = "3.15.1"',
+        ),
+        "does not match versions.env",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "Python 3.15 wrong asset origin",
+        lambda root: replace_once(
+            root / "mise.lock",
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.15.0+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+            "https://example.invalid/python.tar.gz",
+        ),
+        "mise.lock python URL for linux-x64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected lockfile section",
+        lambda root: append_text(root / "mise.lock", '\n[metadata]\nlabel = "unexpected"\n'),
+        "mise.lock top-level keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "extra platform scalar",
+        lambda root: replace_regex_once(
+            root / "mise.lock",
+            r'^(backend = "core:node")$',
+            r'\1\n"platforms.linux-x64-musl" = "malformed"',
+        ),
+        "mise.lock tools.node keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "required platform scalar",
+        lambda root: replace_table_with_scalar(
+            root / "mise.lock",
+            '[tools.node."platforms.linux-arm64"]',
+            '[tools.node."platforms.linux-x64"]',
+            '"platforms.linux-arm64" = "malformed"',
+        ),
+        "no valid node artifact mapping for linux-arm64",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected artifact field",
+        lambda root: append_to_table(
+            root / "mise.lock",
+            '[tools.node."platforms.linux-arm64"]',
+            "size = 1\n",
+        ),
+        "mise.lock tools.node.linux-arm64 keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "untrusted uv API URL",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r'^url_api = "https://api\.github\.com/repos/astral-sh/uv/releases/assets/[0-9]+"$',
+            'url_api = "https://example.invalid/releases/assets/1"',
+        ),
+        "mise.lock uv API URL for linux-arm64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "historical musl uv ARM64 artifact",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r"-unknown-linux-gnu\.tar\.gz",
+            "-unknown-linux-musl.tar.gz",
+        ),
+        "mise.lock uv URL for linux-arm64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "historical musl uv x64 artifact",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r"-unknown-linux-gnu\.tar\.gz",
+            "-unknown-linux-musl.tar.gz",
+        ),
+        "mise.lock uv URL for linux-x64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "arbitrary uv artifact URL",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r'^url = "[^"]+"$',
+            'url = "https://example.invalid/uv.tar.gz"',
+        ),
+        "mise.lock uv URL for linux-x64 is unexpected",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "invalid uv checksum",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r'^checksum = "[^"]+"$',
+            'checksum = "sha256:INVALID"',
+        ),
+        "mise.lock uv checksum for linux-arm64 must be an exact lowercase SHA-256",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected uv backend",
+        lambda root: replace_regex_once(
+            root / "mise.lock",
+            r'^(backend = "aqua:astral-sh/uv")$',
+            'backend = "aqua:example/uv"',
+        ),
+        "mise.lock uv backend",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "missing uv provenance",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-x64"]',
+            r'^provenance = "github-attestations"\n?',
+            "",
+        ),
+        "mise.lock tools.uv.linux-x64 keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "unexpected uv provenance",
+        lambda root: replace_in_table(
+            root / "mise.lock",
+            '[tools.uv."platforms.linux-arm64"]',
+            r'^provenance = "github-attestations"$',
+            'provenance = "slsa"',
+        ),
+        "mise.lock uv artifact for linux-arm64 must require GitHub artifact attestations",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "missing provenance",
+        lambda root: replace_regex_once(
+            root / "mise.lock", r'^provenance = "github-attestations"\n', ""
+        ),
+        "mise.lock tools.python.linux-arm64 keys must be exactly",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "mixed Python build dates",
+        lambda root: change_python_x64_build_date(root / "mise.lock"),
+        "must use one cross-platform build date",
+    )
+    expect_failure(
+        source_root,
+        validator,
+        "duplicate uv asset API URL",
+        lambda root: duplicate_uv_asset_api_url(root / "mise.lock"),
+        "must use distinct GitHub release asset API URLs",
+    )
+
+    print("All mise lock validation tests passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+, 'python = ["0.0.0", "3.15.0"]'
         ),
         "does not match versions.env",
     )
