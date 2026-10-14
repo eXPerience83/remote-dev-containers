@@ -144,9 +144,9 @@ def expected_versions_from_env(env: dict[str, str]) -> dict[str, str | list[str]
     for tool, version in expected_versions.items():
         if not version or (isinstance(version, list) and not all(version)):
             fail(f"versions.env has no complete version for {tool}")
-    if not re.fullmatch(r"3\\.14\\.[0-9]+", expected_versions["python"][0]):
+    if not re.fullmatch(r"3\.14\.[0-9]+", expected_versions["python"][0]):
         fail("versions.env must pin Python 3.14.x as the first/default Python")
-    if not re.fullmatch(r"3\\.15\\.[0-9]+", expected_versions["python"][1]):
+    if not re.fullmatch(r"3\.15\.[0-9]+", expected_versions["python"][1]):
         fail("versions.env must pin Python 3.15.x as the second Python")
     return expected_versions
 
