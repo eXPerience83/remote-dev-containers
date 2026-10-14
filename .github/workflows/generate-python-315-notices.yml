@@ -1,0 +1,53 @@
+# Temporary read-only evidence job for issue #270; delete before merging.
+name: Generate Python 3.15 legal evidence (temporary)
+
+on:
+  push:
+    branches:
+      - feat/270-dual-python-314-315
+    paths:
+      - .github/workflows/generate-python-315-notices.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate source without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install decompressor
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zstd
+      - name: Generate exact Python 3.15 full-distribution metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/python-build-standalone-315"
+          python3 scripts/sync-python-runtime-notices.py \
+            --root . --python-version 3.15.0 --output "$out" --write
+          python3 scripts/compact-python-runtime-notices.py \
+            --root . --python-version 3.15.0 --output "$out" --write
+          python3 scripts/compact-python-runtime-notices.py \
+            --root . --python-version 3.15.0 --output "$out" --check
+          mkdir -p legal-evidence
+          cp -a "$out" legal-evidence/python-build-standalone-315
+      - name: Upload generated metadata without modifying repository
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-315-reviewed-license-evidence
+          path: legal-evidence/python-build-standalone-315/
+          if-no-files-found: error
+          retention-days: 7
