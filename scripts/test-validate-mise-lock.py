@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -182,6 +183,26 @@ def main() -> int:
         raise AssertionError(f"baseline validation failed:\n{baseline.stderr}")
     print("OK accept committed mise inputs")
 
+    # Derive the currently reviewed secondary version and its exact artifact
+    # from this fixture's committed inputs; future 3.15 patches remain testable.
+    pins = (source_root / "versions.env").read_text(encoding="utf-8")
+    version_match = re.search(r"(?m)^PYTHON_315_VERSION=(3\.15\.[0-9]+)$", pins)
+    if version_match is None:
+        raise AssertionError("expected an exact reviewed Python 3.15 maintenance pin")
+    python315 = version_match.group(1)
+    python315_parts = python315.split(".")
+    next_python315 = f"3.15.{int(python315_parts[2]) + 1}"
+    with (source_root / "mise.lock").open("rb") as handle:
+        reviewed_lock = tomllib.load(handle)
+    python_entries = reviewed_lock["tools"]["python"]
+    if len(python_entries) != 2 or python_entries[1]["version"] != python315:
+        raise AssertionError("expected second locked Python entry to match versions.env")
+    python315_url = python_entries[1]["platforms.linux-x64"]["url"]
+    if not python315_url.startswith(
+        "https://github.com/astral-sh/python-build-standalone/releases/download/"
+    ):
+        raise AssertionError("expected reviewed Python 3.15 x64 artifact origin")
+
     expect_failure(
         source_root,
         validator,
@@ -217,8 +238,8 @@ def main() -> int:
         "second Python version drift",
         lambda root: replace_once(
             root / "mise.lock",
-            'version = "3.15.0"',
-            'version = "3.15.1"',
+            f'version = "{python315}"',
+            f'version = "{next_python315}"',
         ),
         "does not match versions.env",
     )
@@ -228,7 +249,7 @@ def main() -> int:
         "Python 3.15 wrong asset origin",
         lambda root: replace_once(
             root / "mise.lock",
-            "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.15.0+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+            python315_url,
             "https://example.invalid/python.tar.gz",
         ),
         "mise.lock python URL for linux-x64 is unexpected",
