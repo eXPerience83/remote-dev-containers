@@ -205,7 +205,10 @@ def main() -> int:
         validator,
         "runtime version drift",
         lambda root: replace_regex_once(
-            root / "mise.toml", r'^python = \\[[^\\n]+\\]        ),
+            root / "mise.toml",
+            r'^python = \[[^\n]+\]$',
+            'python = ["0.0.0", "3.15.0"]',
+        ),
         "does not match versions.env",
     )
     expect_failure(
