@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / ".github/workflows/check-upstream.yml"
@@ -14,6 +15,37 @@ def require(text: str, fragment: str, label: str) -> None:
     """Require one architecture marker in workflow text."""
     if fragment not in text:
         raise AssertionError(f"missing {label}: {fragment!r}")
+
+
+def pinned_artifact_download_sha(text: str, label: str) -> str:
+    """Require exactly one immutable official artifact-download action reference."""
+    matches = re.findall(
+        r"(?m)^[ \t]*uses:[ \t]*actions/download-artifact@([^\s#]+)(?:[ \t]+#[^\n]*)?$",
+        text,
+    )
+    if len(matches) != 1 or re.fullmatch(r"[0-9a-f]{40}", matches[0]) is None:
+        raise AssertionError(
+            f"{label}: expected exactly one actions/download-artifact use pinned to a 40-character commit SHA"
+        )
+    return matches[0]
+
+
+def assert_download_pin_parser_fixtures() -> None:
+    """An upstream pin change is allowed; mutable, partial and ambiguous refs are not."""
+    good = "      uses: actions/download-artifact@" + "a" * 40 + " # v8.0.2\n"
+    if pinned_artifact_download_sha(good, "fixture") != "a" * 40:
+        raise AssertionError("valid SHA pin fixture was rejected")
+    for invalid in (
+        "      uses: actions/download-artifact@v8.0.2\n",
+        "      uses: actions/download-artifact@" + "a" * 39 + "\n",
+        good + "      uses: actions/download-artifact@" + "b" * 40 + "\n",
+        "",
+    ):
+        try:
+            pinned_artifact_download_sha(invalid, "fixture")
+        except AssertionError:
+            continue
+        raise AssertionError("invalid download action pin fixture was accepted")
 
 
 def job_block(text: str, job: str, next_job: str | None = None) -> str:
@@ -61,7 +93,7 @@ def assert_scheduler_contract(text: str) -> None:
     require(writer, "actions: write", "writer action-dispatch permission")
     require(writer, "contents: write", "writer branch-maintenance permission")
     require(writer, "pull-requests: write", "writer PR-maintenance permission")
-    require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned artifact download action")
+    pinned_artifact_download_sha(writer, "scheduled writer")
     require(writer, "Revalidate Antigravity metadata after crossing into write-capable job", "second trust-boundary validation")
     require(writer, '--live-discovery "$ANTIGRAVITY_DISCOVERY"', "fresh static discovery reconciliation")
     require(writer, 'git diff --cached --quiet', "index-based no-change check")
@@ -117,7 +149,7 @@ def assert_antigravity_manual_contract(text: str) -> None:
     require(writer, "actions: write", "writer action permission")
     require(writer, "contents: write", "writer content permission")
     require(writer, "pull-requests: write", "writer PR permission")
-    require(writer, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "pinned metadata download")
+    pinned_artifact_download_sha(writer, "manual review writer")
     require(writer, "Revalidate artifact after crossing into the write-capable job", "post-download artifact validation")
     require(writer, '${{ needs.candidate.outputs.installer_sha256 }}', "validated installer output crosses to writer")
     require(writer, '${{ needs.candidate.outputs.payload_sha256 }}', "validated payload output crosses to writer")
@@ -132,8 +164,17 @@ def main() -> None:
     """Run workflow architecture assertions."""
     upstream = UPSTREAM.read_text(encoding="utf-8")
     antigravity = ANTIGRAVITY.read_text(encoding="utf-8")
+    rescan = (ROOT / ".github/workflows/rescan-published-images.yml").read_text(encoding="utf-8")
+    assert_download_pin_parser_fixtures()
     assert_scheduler_contract(upstream)
     assert_antigravity_manual_contract(antigravity)
+    pins = {
+        pinned_artifact_download_sha(job_block(upstream, "check"), "scheduled writer"),
+        pinned_artifact_download_sha(job_block(antigravity, "maintain-pr"), "manual review writer"),
+        pinned_artifact_download_sha(job_block(rescan, "reconcile-alert"), "rescan writer"),
+    }
+    if len(pins) != 1:
+        raise AssertionError("all three trust-boundary writers must pin the same artifact downloader")
     print("Optional review workflow contracts: OK")
 
 
