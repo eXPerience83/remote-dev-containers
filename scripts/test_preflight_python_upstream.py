@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -54,6 +55,15 @@ class PythonPreflightTests(unittest.TestCase):
         self.mise_bin = Path(self.temp.name) / "mise"
         self.mise_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         self.mise_bin.chmod(0o700)
+        # Maintenance fixtures must follow reviewed pins after a later updater PR.
+        pins = (Path(__file__).resolve().parents[1] / "versions.env").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(r"(?m)^PYTHON_315_VERSION=(3\.15\.[0-9]+)$", pins)
+        if match is None:
+            raise AssertionError("reviewed Python 3.15 patch pin is missing")
+        self.python315 = match.group(1)
+        self.next315 = f"3.15.{int(self.python315.split('.')[2]) + 1}"
 
     def run_probe(self, *, output: str = "", result: int = 0, lock: str | None = None, current: str = "3.14.8", candidate: str = "3.14.9") -> str:
         calls = []
@@ -101,11 +111,11 @@ class PythonPreflightTests(unittest.TestCase):
     def test_python_315_maintenance_can_be_admitted_without_moving_default(self) -> None:
         self.assertEqual(
             self.run_probe(
-                current="3.15.0",
-                candidate="3.15.1",
-                lock=synthetic_python_lock("3.15.1"),
+                current=self.python315,
+                candidate=self.next315,
+                lock=synthetic_python_lock(self.next315),
             ),
-            "3.15.1",
+            self.next315,
         )
 
     def test_both_platforms_missing_defers_candidate(self) -> None:
