@@ -50,5 +50,16 @@ npm_root="$(npm root --global)/npm"
 # The reviewed CPython license is stored in components/python/LICENSE. Copy any
 # additional notices still present in the exact installed standalone artifact.
 copy_notice_files python "$python_root" optional
+
+# The secondary CPython build is a separate installed distribution. Keep any
+# runtime-carried notice files alongside the version-specific reviewed artifacts.
+python315_version="$(sed -n 's/^PYTHON_315_VERSION=//p' /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env)"
+if [[ ! "$python315_version" =~ ^3\\.15\\.[0-9]+$ ]]; then
+  echo "ERROR: missing reviewed Python 3.15 build identity" >&2
+  exit 1
+fi
+python315_root="${MISE_DATA_DIR:-/opt/remote-dev/mise}/installs/python/$python315_version"
+copy_notice_files python-315 "$python315_root" optional
+
 copy_notice_files node "$node_root" required
 copy_notice_files npm "$npm_root" required
