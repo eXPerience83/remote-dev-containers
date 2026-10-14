@@ -25,7 +25,7 @@ probe = load_module()
 
 
 def synthetic_python_lock(candidate: str, *, arm64: bool = True, provenance: bool = True) -> str:
-    lines = ['[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"']
+    lines = ['lockfile_version = 3', '', '[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"']
     for platform, arch in (
         ("linux-arm64", "aarch64"),
         ("linux-x64", "x86_64"),
@@ -66,6 +66,14 @@ class PythonPreflightTests(unittest.TestCase):
             self.assertEqual(kwargs["env"]["MISE_NOT_FOUND_AUTO_INSTALL"], "false")
             self.assertEqual(kwargs["env"]["MISE_SYSTEM_CONFIG_DIR"], str(kwargs["cwd"].parent / "system"))
             self.assertNotIn("GH_TOKEN", kwargs["env"])
+            # A reviewed incumbent is deliberately present before the probe.
+            # First-lock missing artifacts can be silently skipped by mise;
+            # a seeded lock forces the actual platform-regression error path.
+            seeded = (kwargs["cwd"] / "mise.lock").read_text(encoding="utf-8")
+            self.assertIn('version = "3.14.8"', seeded)
+            self.assertIn('[tools.python."platforms.linux-x64"]', seeded)
+            self.assertIn('[tools.python."platforms.linux-arm64"]', seeded)
+            self.assertNotIn("[[tools.node]]", seeded)
             if lock is not None:
                 (kwargs["cwd"] / "mise.lock").write_text(lock, encoding="utf-8")
             return subprocess.CompletedProcess(args, result, "", output)
