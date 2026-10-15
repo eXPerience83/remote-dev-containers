@@ -422,6 +422,28 @@ def check(root: Path, output: Path, python_version: str | None = None) -> None:
     print("Python standalone runtime notices: OK")
 
 
+
+def validate_notice_target(
+    root: Path, output: Path, python_version: str | None, parser: argparse.ArgumentParser
+) -> None:
+    """Reject ambiguous or mismatched legal-tree selections before any writes.
+
+    The two in-repository trees are reserved for their respective CPython lines.
+    Other output locations are supported for isolated regeneration, but the
+    interpreter version must be supplied explicitly.
+    """
+    default = (root / "third_party/components/python-build-standalone").resolve()
+    secondary = (root / "third_party/components/python-build-standalone-315").resolve()
+    target = output.resolve()
+    if target == default:
+        if python_version is not None and not re.fullmatch(r"3\.14\.[0-9]+", python_version):
+            parser.error("the default Python legal tree only accepts Python 3.14.x")
+    elif target == secondary:
+        if python_version is None or not re.fullmatch(r"3\.15\.[0-9]+", python_version):
+            parser.error("the Python 3.15 legal tree requires --python-version 3.15.x")
+    elif python_version is None:
+        parser.error("--python-version is required when --output is not the default path")
+
 def main() -> None:
     """Generate or validate exact Python standalone legal metadata."""
     parser = argparse.ArgumentParser()
@@ -439,6 +461,7 @@ def main() -> None:
         if args.output
         else root / "third_party" / "components" / "python-build-standalone"
     )
+    validate_notice_target(root, output, args.python_version, parser)
     if args.write:
         generate(root, output, os.environ.get("GH_TOKEN"), args.python_version)
         print(f"Python standalone runtime notices written to {output}")
