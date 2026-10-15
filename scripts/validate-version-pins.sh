@@ -113,6 +113,7 @@ require_edge_path_trigger mise.lock
 python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_check_upstream_python_dual.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_python_notice_target_guards.py"
 
 # Bounded checks for the known common ENV block, shared by all image roles.
 for setting in MISE_NOT_FOUND_AUTO_INSTALL MISE_NOT_FOUND_SYSTEM_FALLBACK; do
