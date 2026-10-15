@@ -230,6 +230,7 @@ def main() -> None:
         else root / "third_party" / "components" / "python-build-standalone"
     )
     sync = load_synchronizer()
+    sync.validate_notice_target(root, output, args.python_version, parser)
     if args.write:
         compact(output, sync)
     check(root, output, sync, args.python_version)
