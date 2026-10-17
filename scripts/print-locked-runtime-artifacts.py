@@ -44,32 +44,37 @@ def main() -> None:
 
     for tool_name in TOOLS:
         entries = tools.get(tool_name)
-        if not isinstance(entries, list) or len(entries) != 1:
-            fail(f"{lock_path} must contain exactly one locked {tool_name} entry")
+        expected_count = 2 if tool_name == "python" else 1
+        if not isinstance(entries, list) or len(entries) != expected_count:
+            fail(f"{lock_path} must contain exactly {expected_count} locked {tool_name} entries")
 
-        entry = entries[0]
-        if not isinstance(entry, dict):
-            fail(f"{lock_path} locked {tool_name} entry must be a table")
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                fail(f"{lock_path} locked {tool_name} entry must be a table")
 
-        version = entry.get("version")
-        if not isinstance(version, str) or not version:
-            fail(f"{lock_path} locked {tool_name} entry has no version")
+            version = entry.get("version")
+            if not isinstance(version, str) or not version:
+                fail(f"{lock_path} locked {tool_name} entry has no version")
+            if tool_name == "python":
+                expected_line = "3.14." if index == 0 else "3.15."
+                if not version.startswith(expected_line):
+                    fail(f"locked Python entry {index} must be from {expected_line}x")
 
-        artifact = entry.get(platform_key)
-        if not isinstance(artifact, dict):
-            fail(f"{lock_path} has no {platform_key} artifact for {tool_name}")
+            artifact = entry.get(platform_key)
+            if not isinstance(artifact, dict):
+                fail(f"{lock_path} has no {platform_key} artifact for {tool_name} {version}")
 
-        url = artifact.get("url")
-        checksum = artifact.get("checksum")
-        if not isinstance(url, str) or not url:
-            fail(f"{tool_name} {platform_key} artifact has no URL")
-        if not isinstance(checksum, str) or not checksum.startswith("sha256:"):
-            fail(f"{tool_name} {platform_key} artifact has no SHA-256 checksum")
+            url = artifact.get("url")
+            checksum = artifact.get("checksum")
+            if not isinstance(url, str) or not url:
+                fail(f"{tool_name} {platform_key} artifact has no URL")
+            if not isinstance(checksum, str) or not checksum.startswith("sha256:"):
+                fail(f"{tool_name} {platform_key} artifact has no SHA-256 checksum")
 
-        prefix = tool_name.upper()
-        print(f"{prefix}_VERSION={version}")
-        print(f"{prefix}_ARTIFACT_URL={url}")
-        print(f"{prefix}_ARTIFACT_CHECKSUM={checksum}")
+            prefix = "PYTHON_315" if tool_name == "python" and index == 1 else tool_name.upper()
+            print(f"{prefix}_VERSION={version}")
+            print(f"{prefix}_ARTIFACT_URL={url}")
+            print(f"{prefix}_ARTIFACT_CHECKSUM={checksum}")
 
 
 if __name__ == "__main__":

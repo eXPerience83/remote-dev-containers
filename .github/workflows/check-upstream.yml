@@ -169,6 +169,23 @@ jobs:
             fi
           done
 
+          python_line_315="${PYTHON_315_VERSION%.*}"
+          python_pattern_315="${python_line_315//./[.]}"
+          mapfile -t python_candidates_315 < <(
+            curl "${curl_args[@]}" https://www.python.org/ftp/python/ \
+              | grep -oE "href=\"${python_pattern_315}\.[0-9]+/" \
+              | sed -E 's/^href="//; s|/$||' \
+              | sort -Vr
+          )
+          latest_python_315=""
+          for candidate in "${python_candidates_315[@]}"; do
+            if curl "${curl_args[@]}" --head \
+              "https://www.python.org/ftp/python/${candidate}/Python-${candidate}.tar.xz" >/dev/null; then
+              latest_python_315="$candidate"
+              break
+            fi
+          done
+
           node_major="${NODE_VERSION%%.*}"
           latest_node="$(curl "${curl_args[@]}" https://nodejs.org/dist/index.json \
             | jq -r --arg prefix "v${node_major}." \
@@ -201,6 +218,10 @@ jobs:
           fi
           if [[ ! "$latest_python" =~ ^3\.14\.[0-9]+$ ]]; then
             echo "ERROR: Python latest maintenance release has an unexpected version: $latest_python" >&2
+            exit 1
+          fi
+          if [[ ! "$latest_python_315" =~ ^3\.15\.[0-9]+$ ]]; then
+            echo "ERROR: Python 3.15 latest maintenance release has an unexpected version: $latest_python_315" >&2
             exit 1
           fi
           if [[ ! "$latest_node" =~ ^24\.[0-9]+\.[0-9]+$ ]]; then
@@ -275,6 +296,10 @@ jobs:
           latest_python="$(python3 scripts/preflight-python-upstream.py \
             --current "$PYTHON_VERSION" \
             --candidate "$latest_python" \
+            --mise-bin "$mise_bin")"
+          latest_python_315="$(python3 scripts/preflight-python-upstream.py \
+            --current "$PYTHON_315_VERSION" \
+            --candidate "$latest_python_315" \
             --mise-bin "$mise_bin")"
 
           branch="automation/update-upstreams"
@@ -379,6 +404,7 @@ jobs:
           replace_env MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_env MISE_ARM64_SHA256 "$mise_arm64_sha256"
           replace_env PYTHON_VERSION "$latest_python"
+          replace_env PYTHON_315_VERSION "$latest_python_315"
           replace_env NODE_VERSION "$latest_node"
           replace_env NPM_VERSION "$latest_npm"
           replace_env UV_VERSION "$latest_uv"
@@ -398,11 +424,17 @@ jobs:
           replace_arg images/base/Dockerfile MISE_AMD64_SHA256 "$mise_amd64_sha256"
           replace_arg images/base/Dockerfile MISE_ARM64_SHA256 "$mise_arm64_sha256"
           replace_arg images/base/Dockerfile PYTHON_VERSION "$latest_python"
+          replace_arg images/base/Dockerfile PYTHON_315_VERSION "$latest_python_315"
           replace_arg images/base/Dockerfile NODE_VERSION "$latest_node"
           replace_arg images/base/Dockerfile NPM_VERSION "$latest_npm"
           replace_arg images/base/Dockerfile UV_VERSION "$latest_uv"
 
-          replace_mise_tool python "$latest_python"
+          # Python deliberately carries two ordered exact versions in one mise tool.
+          if ! grep -Eq '^python = \["3[.]14[.][0-9]+", "3[.]15[.][0-9]+"\]$' mise.toml; then
+            echo "ERROR: mise.toml lost its reviewed dual Python pin contract" >&2
+            exit 1
+          fi
+          sed -i "s|^python = .*|python = [\"${latest_python}\", \"${latest_python_315}\"]|" mise.toml
           replace_mise_tool node "$latest_node"
           replace_mise_tool uv "$latest_uv"
           python3 scripts/update-context7-review.py \
@@ -474,7 +506,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and statically discovers the current Antigravity installer/payload pair in a read-only job. Installer, manifest and archive are treated only as bounded data; neither install.sh nor agy executes during scheduled discovery. Antigravity remains outside the image and build-time SBOM."
+          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14 and 3.15, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and statically discovers the current Antigravity installer/payload pair in a read-only job. Installer, manifest and archive are treated only as bounded data; neither install.sh nor agy executes during scheduled discovery. Antigravity remains outside the image and build-time SBOM."
 
           antigravity_changed="$(jq -r '.changed' third_party/antigravity-cli-detection.json)"
           installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-detection.json)"

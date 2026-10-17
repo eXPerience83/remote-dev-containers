@@ -79,6 +79,7 @@ else
     [TTYD_VERSION]="${REMOTE_DEV_TTYD_VERSION:-}"
     [MISE_VERSION]="${REMOTE_DEV_MISE_VERSION:-}"
     [PYTHON_VERSION]="${REMOTE_DEV_PYTHON_VERSION:-}"
+    [PYTHON_315_VERSION]="${REMOTE_DEV_PYTHON_315_VERSION:-}"
   )
   for key in "${!build_versions[@]}"; do
     actual="${build_versions[$key]}"

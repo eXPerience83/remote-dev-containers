@@ -18,7 +18,7 @@ import tomllib
 from pathlib import Path
 from typing import NoReturn
 
-VERSION_RE = re.compile(r"^3\.14\.[0-9]+$")
+VERSION_RE = re.compile(r"^3\.(?:14|15)\.[0-9]+$")
 PLATFORMS = ("linux-x64", "linux-arm64")
 TIMEOUT_SECONDS = 600
 
@@ -163,6 +163,8 @@ def validate_python_only_lock(path: Path, candidate: str) -> None:
 def select_python_version(current: str, candidate: str, mise_bin: Path) -> str:
     current_patch = python_patch(current)
     candidate_patch = python_patch(candidate)
+    if candidate_patch[:2] != current_patch[:2]:
+        fail(f"Python updater cannot change maintenance lines: {current} -> {candidate}")
     if candidate_patch < current_patch:
         fail(f"Python upstream candidate {candidate} is older than reviewed {current}")
     if candidate == current:
