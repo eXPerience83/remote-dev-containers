@@ -120,6 +120,21 @@ def main() -> None:
     )
     require_text(workflow, "Require the main branch", "main branch execution guard")
     require_text(workflow, "persist-credentials: false", "credential-free checkout")
+    require_text(
+        workflow,
+        'python3 scripts/test_update_upstream_changelog.py',
+        "publisher preflight validates dual-Python changelog fixtures",
+    )
+    require_text(
+        workflow,
+        'echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"',
+        "reviewed Python 3.15 pin propagated to build metadata",
+    )
+    require_text(
+        workflow,
+        'PYTHON_315_VERSION=${{ steps.metadata.outputs.python_315_version }}',
+        "exact Python 3.15 pin passed into publisher Docker build",
+    )
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
