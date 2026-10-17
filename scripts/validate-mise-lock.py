@@ -134,20 +134,24 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> str | None
     fail(f"no URL policy defined for mise tool {tool}")
 
 
-def expected_versions_from_env(env: dict[str, str]) -> dict[str, str]:
+def expected_versions_from_env(env: dict[str, str]) -> dict[str, str | list[str]]:
     """Extract required managed-runtime versions from versions.env."""
     expected_versions = {
-        "python": env.get("PYTHON_VERSION", ""),
+        "python": [env.get("PYTHON_VERSION", ""), env.get("PYTHON_315_VERSION", "")],
         "node": env.get("NODE_VERSION", ""),
         "uv": env.get("UV_VERSION", ""),
     }
     for tool, version in expected_versions.items():
-        if not version:
-            fail(f"versions.env has no version for {tool}")
+        if not version or (isinstance(version, list) and not all(version)):
+            fail(f"versions.env has no complete version for {tool}")
+    if not re.fullmatch(r"3\.14\.[0-9]+", expected_versions["python"][0]):
+        fail("versions.env must pin Python 3.14.x as the first/default Python")
+    if not re.fullmatch(r"3\.15\.[0-9]+", expected_versions["python"][1]):
+        fail("versions.env must pin Python 3.15.x as the second Python")
     return expected_versions
 
 
-def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, str]) -> None:
+def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, str | list[str]]) -> None:
     """Validate mise settings, managed tools, and version coherence."""
     require_exact_keys(config, CONFIG_TOP_LEVEL_KEYS, "mise.toml top-level")
 
@@ -276,7 +280,7 @@ def validate_tool_entry(
         fail("mise.lock uv artifacts must use distinct GitHub release asset API URLs")
 
 
-def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str]) -> None:
+def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str | list[str]]) -> None:
     """Validate the lockfile tool set and each locked runtime entry."""
     require_exact_keys(lock, LOCK_TOP_LEVEL_KEYS, "mise.lock top-level")
     lock_tools = lock.get("tools")
@@ -290,7 +294,14 @@ def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str]) -> No
         )
 
     for tool, expected_version in expected_versions.items():
-        validate_tool_entry(tool, expected_version, lock_tools.get(tool))
+        if tool == "python":
+            entries = lock_tools.get("python")
+            if not isinstance(entries, list) or len(entries) != 2:
+                fail("mise.lock must contain exactly two ordered Python entries")
+            for entry, python_version in zip(entries, expected_version, strict=True):
+                validate_tool_entry("python", python_version, [entry])
+        else:
+            validate_tool_entry(tool, expected_version, lock_tools.get(tool))
 
 
 def parse_args() -> argparse.Namespace:

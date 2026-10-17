@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Bundle two independently locked CPython maintenance runtimes: Python 3.14.x remains the default/administrative interpreter, while compatible projects may explicitly select the parallel Python 3.15.x interpreter. Validate both versions on AMD64 and ARM64, preserve version-specific legal evidence and maintain both update lines without relaxing mise's fail-closed policy.
 - Expanded the immutable common developer baseline with low-cost filesystem, process, network/DNS/TLS, archive and template diagnostics; promoted already-intentional `python3`, `sqlite3`, `xz`, `ps`, `pgrep`, `gcc` and `npx` commands; and added `tree` for bounded repository inspection while preserving project-owned tool/version precedence and deferring Corepack/Yarn/pnpm shims.
 - Weekly exact-digest vulnerability rescanning for published AMD64 edge images with fresh Trivy evidence, bounded 30-day reports, a deduplicated automation-owned alert for fixable `CRITICAL` findings, fail-closed report validation and split scan/issue-write permissions; image rebuilding and promotion remain separate under #93.
 - Human-readable edge build identities in `edge-YYYY.MM.DD-<7-char-sha>` form, backed by the existing full source revision/digest and an explicit embedded `local|dev|edge|stable` image-channel field.

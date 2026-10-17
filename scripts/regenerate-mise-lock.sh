@@ -96,25 +96,34 @@ mv -f -- "$replacement" "$ROOT/mise.lock"
 replacement=""
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
 
-# The compact Python install-only artifacts omit their full legal metadata. Keep
-# the exact matching full-distribution metadata synchronized whenever mise.lock
-# selects a new Python artifact, but avoid the large downloads when it is current.
-if ! python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check; then
-  if ! command -v zstd >/dev/null 2>&1; then
-    if [[ "${CI:-}" == "true" ]] && command -v sudo >/dev/null 2>&1; then
-      sudo apt-get update
-      sudo apt-get install -y --no-install-recommends zstd
-    else
-      cat >&2 <<'EOF'
-ERROR: zstd is required to refresh Python runtime legal metadata.
-Install zstd and rerun scripts/regenerate-mise-lock.sh.
-EOF
-      exit 1
+# Maintain separate, exact full-distribution legal evidence for both Python lines.
+# These sources may carry different dependency license texts and must never share
+# one mutable notice tree.
+for python_version in "$PYTHON_VERSION" "$PYTHON_315_VERSION"; do
+  case "$python_version" in
+    3.14.*)
+      notice_dir="$ROOT/third_party/components/python-build-standalone" ;;
+    3.15.*)
+      notice_dir="$ROOT/third_party/components/python-build-standalone-315" ;;
+    *)
+      echo "ERROR: unreviewed Python notice line: $python_version" >&2
+      exit 1 ;;
+  esac
+  notice_args=(--python-version "$python_version" --output "$notice_dir")
+  if ! python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check "${notice_args[@]}"; then
+    if ! command -v zstd >/dev/null 2>&1; then
+      if [[ "${CI:-}" == "true" ]] && command -v sudo >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends zstd
+      else
+        echo "ERROR: zstd is required to refresh Python runtime legal metadata." >&2
+        exit 1
+      fi
     fi
+    python3 "$ROOT/scripts/sync-python-runtime-notices.py" --write "${notice_args[@]}"
+    python3 "$ROOT/scripts/compact-python-runtime-notices.py" --write "${notice_args[@]}"
   fi
-  python3 "$ROOT/scripts/sync-python-runtime-notices.py" --write
-  python3 "$ROOT/scripts/compact-python-runtime-notices.py" --write
-fi
-python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check
+  python3 "$ROOT/scripts/compact-python-runtime-notices.py" --check "${notice_args[@]}"
+done
 
 echo "Regenerated mise.lock with mise $MISE_VERSION from isolated inputs."

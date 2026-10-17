@@ -126,6 +126,26 @@
       ]
     },
     {
+      "id": "python-runtime-315",
+      "name": "Python 3.15 runtime (secondary)",
+      "image_scope": "both",
+      "version_key": "PYTHON_315_VERSION",
+      "version": "3.15.0",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "license": "Python-2.0 plus bundled dependency terms recorded from the exact Python 3.15 standalone artifacts",
+      "notices": [
+        {
+          "path": "components/python-315/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/python/cpython/v3.15.0/LICENSE"
+        },
+        {
+          "path": "components/python-build-standalone-315/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
       "id": "node-runtime",
       "name": "Node.js runtime",
       "image_scope": "both",

@@ -127,9 +127,9 @@ def safe_preserved_path(output: Path, relative: str) -> Path:
     return candidate
 
 
-def check(root: Path, output: Path, sync: ModuleType) -> None:
+def check(root: Path, output: Path, sync: ModuleType, python_version: str | None = None) -> None:
     """Validate compact metadata and shared licenses against mise.lock."""
-    expected_records = sync.parse_install_artifacts(root / "mise.lock")
+    expected_records = sync.parse_install_artifacts(root / "mise.lock", python_version)
     manifest_path = output / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -220,6 +220,7 @@ def main() -> None:
     mode.add_argument("--check", action="store_true")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--python-version", type=str)
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -229,9 +230,10 @@ def main() -> None:
         else root / "third_party" / "components" / "python-build-standalone"
     )
     sync = load_synchronizer()
+    sync.validate_notice_target(root, output, args.python_version, parser)
     if args.write:
         compact(output, sync)
-    check(root, output, sync)
+    check(root, output, sync, args.python_version)
 
 
 if __name__ == "__main__":

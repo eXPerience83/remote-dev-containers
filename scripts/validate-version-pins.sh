@@ -112,6 +112,8 @@ require_edge_path_trigger mise.toml
 require_edge_path_trigger mise.lock
 python3 "$ROOT/scripts/validate-check-upstream-codex-companion.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_validate_check_upstream_codex_companion.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_check_upstream_python_dual.py" --root "$ROOT"
+python3 "$ROOT/scripts/test_python_notice_target_guards.py"
 
 # Bounded checks for the known common ENV block, shared by all image roles.
 for setting in MISE_NOT_FOUND_AUTO_INSTALL MISE_NOT_FOUND_SYSTEM_FALLBACK; do
@@ -186,6 +188,10 @@ if [[ ! "$PYTHON_VERSION" =~ ^3\.14\.[0-9]+$ ]]; then
   echo "ERROR: PYTHON_VERSION must be an exact stable Python 3.14 maintenance release: $PYTHON_VERSION" >&2
   exit 1
 fi
+if [[ ! "$PYTHON_315_VERSION" =~ ^3\.15\.[0-9]+$ ]]; then
+  echo "ERROR: PYTHON_315_VERSION must pin an exact stable Python 3.15 maintenance release: $PYTHON_315_VERSION" >&2
+  exit 1
+fi
 if [[ ! "$NODE_VERSION" =~ ^24\.[0-9]+\.[0-9]+$ ]]; then
   echo "ERROR: NODE_VERSION must be an exact stable Node 24 LTS maintenance release: $NODE_VERSION" >&2
   exit 1
@@ -232,6 +238,7 @@ for variable in \
   MISE_AMD64_SHA256 \
   MISE_ARM64_SHA256 \
   PYTHON_VERSION \
+  PYTHON_315_VERSION \
   NODE_VERSION \
   NPM_VERSION \
   UV_VERSION; do
@@ -249,7 +256,8 @@ done
 
 printf 'Ubuntu base pin: %s@%s\n' "$UBUNTU_VERSION" "$UBUNTU_DIGEST"
 printf 'Codex release pin: %s\n' "$CODEX_RELEASE_TAG"
-printf 'Python release pin: %s\n' "$PYTHON_VERSION"
+printf 'Python default release pin: %s\n' "$PYTHON_VERSION"
+printf 'Python alternate release pin: %s\n' "$PYTHON_315_VERSION"
 printf 'Node LTS release pin: %s\n' "$NODE_VERSION"
 printf 'npm release pin: %s\n' "$NPM_VERSION"
 printf 'uv release pin: %s\n' "$UV_VERSION"

@@ -18,6 +18,7 @@ ARG MISE_VERSION=2026.10.12
 ARG MISE_AMD64_SHA256=72404716768b5b044cbd5170136d3d795cbd592658b6e932b66f0f8d67a54875
 ARG MISE_ARM64_SHA256=31bbf697b289fde4b5623b223af288edd9ef86298ce9ecff705ac867f6f27e09
 ARG PYTHON_VERSION=3.14.8
+ARG PYTHON_315_VERSION=3.15.0
 ARG NODE_VERSION=24.22.0
 ARG NPM_VERSION=12.2.1
 ARG UV_VERSION=0.13.1
@@ -124,6 +125,7 @@ RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
     REMOTE_DEV_TTYD_VERSION="${TTYD_VERSION}" \
     REMOTE_DEV_MISE_VERSION="${MISE_VERSION}" \
     REMOTE_DEV_PYTHON_VERSION="${PYTHON_VERSION}" \
+    REMOTE_DEV_PYTHON_315_VERSION="${PYTHON_315_VERSION}" \
     bash /src/scripts/validate-third-party-inventory.sh
 
 # GitHub CLI: exact release asset verified against a repository-controlled SHA-256.
@@ -189,7 +191,7 @@ COPY --chmod=0444 mise.toml /etc/mise/config.toml
 COPY --chmod=0444 mise.lock /etc/mise/config.lock
 COPY --chmod=0444 mise.toml mise.lock /etc/mise/
 
-# One current runtime per language. Other runtimes are deliberately not bundled.
+# Keep Python 3.14 as the image default while bundling 3.15 for explicit project use.
 # Bind administrative Python once, from this neutral build CWD, to the exact
 # immutable installed runtime. Rebuilds follow the pin; runtime never calls mise.
 RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
@@ -199,6 +201,8 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && admin_python="$(realpath "$(mise which python)")" \
     && test "${admin_python%/*}" = "$MISE_DATA_DIR/installs/python/$PYTHON_VERSION/bin" \
     && test -f "$admin_python" && test -x "$admin_python" \
+    && test -x "$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" \
+    && test "$("$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" --version)" = "Python $PYTHON_315_VERSION" \
     && ln -s "$admin_python" /usr/local/lib/remote-dev/python \
     && /usr/local/lib/remote-dev/python -I --version \
     && python --version \
@@ -219,6 +223,7 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
     locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
     && for expected in \
       "PYTHON_VERSION=${PYTHON_VERSION}" \
+      "PYTHON_315_VERSION=${PYTHON_315_VERSION}" \
       "NODE_VERSION=${NODE_VERSION}" \
       "UV_VERSION=${UV_VERSION}"; do \
         if ! grep -Fqx -- "$expected" <<< "$locked_runtime_manifest"; then \

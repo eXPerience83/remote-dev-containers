@@ -72,6 +72,7 @@ copy_fixture() {
     "$destination/scripts/"
   cp -R \
     "$ROOT/third_party/components/python-build-standalone" \
+    "$ROOT/third_party/components/python-build-standalone-315" \
     "$destination/third_party/components/"
 }
 

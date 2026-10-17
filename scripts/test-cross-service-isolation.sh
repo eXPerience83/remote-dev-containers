@@ -1135,7 +1135,7 @@ assert_mise_trust_state() {
     test "$MISE_NOT_FOUND_AUTO_INSTALL" = false
     test "$MISE_NOT_FOUND_SYSTEM_FALLBACK" = false
     project=/workspace/mise-trust-fixture
-    version="$(sed -n "s/^python = \"\([^\"]*\)\"$/\1/p" /etc/mise/config.toml)"
+    version="$(sed -nE "s/^python = \[\"(3[.]14[.][0-9]+)\", \"3[.]15[.][0-9]+\"\]$/\1/p" /etc/mise/config.toml)"
     test -n "$version"
     if test "$1" = prepare; then
       test ! -e "$project"
