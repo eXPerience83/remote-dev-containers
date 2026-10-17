@@ -102,6 +102,69 @@ def test_resolver_contract() -> None:
     require(result.returncode != 0, "resolver must reject a root digest that is not an image index")
 
 
+def named_workflow_step(workflow: str, name: str) -> str:
+    """Return only the uniquely named job step, not text from neighboring steps."""
+    marker = f"      - name: {name}\n"
+    require(workflow.count(marker) == 1, f"expected exactly one workflow step: {name}")
+    start = workflow.index(marker)
+    end = workflow.find("\n      - ", start + len(marker))
+    return workflow[start:] if end == -1 else workflow[start:end]
+
+
+def validate_python_315_publisher_wiring(workflow: str) -> None:
+    """Require the reviewed Python 3.15 pin in the owning metadata and build fields."""
+    metadata = named_workflow_step(workflow, "Resolve image metadata")
+    require_text(metadata, "id: metadata", "named metadata step id")
+    _, separator, metadata_run = metadata.partition("\n        run: |\n")
+    require(bool(separator), "image metadata step must have a run block")
+    require_text(
+        metadata_run,
+        'echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"',
+        "Python 3.15 output inside the image metadata run block",
+    )
+
+    base = named_workflow_step(workflow, "Build untagged edge base candidate")
+    require_text(base, "id: base", "named base candidate step id")
+    require_text(base, "file: images/base/Dockerfile", "base candidate Dockerfile")
+    _, separator, build_args = base.partition("\n          build-args: |\n")
+    require(bool(separator), "base candidate step must declare build arguments")
+    build_args = build_args.partition("\n          labels:")[0]
+    require_text(
+        build_args,
+        'PYTHON_315_VERSION=${{ steps.metadata.outputs.python_315_version }}',
+        "reviewed Python 3.15 pin inside base candidate build arguments",
+    )
+
+
+def test_python_315_publisher_wiring(workflow: str) -> None:
+    """Reject misplaced pins even if their strings still occur elsewhere in the YAML."""
+    validate_python_315_publisher_wiring(workflow)
+    metadata_output = '          echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"\n'
+    manifest_output = '          echo "ref=$ref" >> "$GITHUB_OUTPUT"\n'
+    require(workflow.count(metadata_output) == 1, "expected one Python 3.15 metadata output")
+    require(workflow.count(manifest_output) >= 1, "missing manifest output fixture")
+    misplaced_output = workflow.replace(metadata_output, "", 1).replace(
+        manifest_output, metadata_output + manifest_output, 1
+    )
+
+    python_arg = '            PYTHON_315_VERSION=${{ steps.metadata.outputs.python_315_version }}\n'
+    runtime_arg = '            BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}\n'
+    require(workflow.count(python_arg) == 1, "expected one Python 3.15 build argument")
+    require(workflow.count(runtime_arg) == 1, "missing runtime build argument fixture")
+    misplaced_arg = workflow.replace(python_arg, "", 1).replace(
+        runtime_arg, runtime_arg + python_arg, 1
+    )
+    for label, candidate in (
+        ("metadata output moved into manifest step", misplaced_output),
+        ("base build argument moved into runtime step", misplaced_arg),
+    ):
+        try:
+            validate_python_315_publisher_wiring(candidate)
+        except AssertionError:
+            continue
+        raise AssertionError(f"publisher contract accepted misplaced Python 3.15 pin: {label}")
+
+
 def main() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
@@ -125,16 +188,7 @@ def main() -> None:
         'python3 scripts/test_update_upstream_changelog.py',
         "publisher preflight validates dual-Python changelog fixtures",
     )
-    require_text(
-        workflow,
-        'echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"',
-        "reviewed Python 3.15 pin propagated to build metadata",
-    )
-    require_text(
-        workflow,
-        'PYTHON_315_VERSION=${{ steps.metadata.outputs.python_315_version }}',
-        "exact Python 3.15 pin passed into publisher Docker build",
-    )
+    test_python_315_publisher_wiring(workflow)
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
