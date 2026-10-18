@@ -36,6 +36,7 @@ GH_VERSION=2.99.0
 TTYD_VERSION=1.7.7
 MISE_VERSION=2026.9.0
 PYTHON_VERSION=3.14.7
+PYTHON_315_VERSION=3.15.0
 NODE_VERSION=24.20.0
 NPM_VERSION=12.0.2
 UV_VERSION=0.12.9
@@ -82,6 +83,43 @@ class UpstreamChangelogTests(unittest.TestCase):
             MODULE.changed_components(before, after),
             ["Context7 CLI (transient) 0.5.8 → 0.5.9"],
         )
+
+    def test_python_315_patch_is_reported_independently(self) -> None:
+        before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))
+        after = MODULE.parse_versions(
+            self._write(
+                "after.env",
+                BASE_VERSIONS.replace("PYTHON_315_VERSION=3.15.0", "PYTHON_315_VERSION=3.15.1"),
+            )
+        )
+        self.assertEqual(
+            MODULE.changed_components(before, after),
+            ["Python 3.15 3.15.0 → 3.15.1"],
+        )
+
+    def test_two_python_maintenance_lines_are_reported_separately(self) -> None:
+        before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))
+        after_text = BASE_VERSIONS.replace(
+            "PYTHON_VERSION=3.14.7", "PYTHON_VERSION=3.14.8"
+        ).replace("PYTHON_315_VERSION=3.15.0", "PYTHON_315_VERSION=3.15.1")
+        after = MODULE.parse_versions(self._write("after.env", after_text))
+        self.assertEqual(
+            MODULE.changed_components(before, after),
+            ["Python 3.14.7 → 3.14.8", "Python 3.15 3.15.0 → 3.15.1"],
+        )
+
+    def test_missing_second_python_pin_fails_closed(self) -> None:
+        complete = MODULE.parse_versions(self._write("complete.env", BASE_VERSIONS))
+        missing = MODULE.parse_versions(
+            self._write(
+                "missing.env",
+                BASE_VERSIONS.replace("PYTHON_315_VERSION=3.15.0", ""),
+            )
+        )
+        for before, after in ((missing, complete), (complete, missing)):
+            with self.subTest(missing_in="before" if before is missing else "after"):
+                with self.assertRaisesRegex(ValueError, "required version pin PYTHON_315_VERSION is missing"):
+                    MODULE.changed_components(before, after)
 
     def test_hash_only_change_does_not_modify_changelog(self) -> None:
         before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))
