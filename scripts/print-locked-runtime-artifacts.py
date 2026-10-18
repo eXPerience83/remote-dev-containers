@@ -13,7 +13,7 @@ ARCH_PLATFORMS = {
     "amd64": "platforms.linux-x64",
     "arm64": "platforms.linux-arm64",
 }
-TOOLS = ("python", "node", "uv")
+TOOLS = ("python", "node", "uv", "yq", "shfmt", "actionlint", "pypi:ruff", "pypi:pytest", "pypi:pre-commit")
 
 
 def fail(message: str) -> NoReturn:
@@ -60,6 +60,11 @@ def main() -> None:
                 if not version.startswith(expected_line):
                     fail(f"locked Python entry {index} must be from {expected_line}x")
 
+            if tool_name.startswith("pypi:"):
+                prefix = tool_name.removeprefix("pypi:").upper().replace("-", "_")
+                print(f"{prefix}_VERSION={version}")
+                print(f"{prefix}_GRAPH_DIGEST={entry['uv']['digest']}")
+                continue
             artifact = entry.get(platform_key)
             if not isinstance(artifact, dict):
                 fail(f"{lock_path} has no {platform_key} artifact for {tool_name} {version}")

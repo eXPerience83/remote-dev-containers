@@ -45,3 +45,9 @@ npm
 npx
 mise
 shellcheck
+ruff
+pytest
+pre-commit
+yq
+shfmt
+actionlint

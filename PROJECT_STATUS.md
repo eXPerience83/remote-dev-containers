@@ -14,6 +14,10 @@
 - Image rebuild/update workflows for bundled components rather than broad in-container package mutation.
 - `dev -> edge -> stable = latest` release-channel contract; immutable digest remains the strongest reproduction/rollback identity.
 
+## PR2 candidate (#121)
+
+The candidate adds exactly Ruff, pytest, pre-commit, Mike Farah yq, shfmt and actionlint (53 public commands). Python CLI graphs use pinned mise/PyPI+uv sidecars and explicit administrative Python 3.14; no shared Python packages are added. See `docs/universal-validation-tools.md` and `.es.md` for evidence and outstanding gates. PR2 acceptance remains pending; PR3 and #180 remain separate.
+
 ## Current implementation
 
 ```text

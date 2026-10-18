@@ -65,3 +65,5 @@ Antigravity CLI, Context7 CLI, Claude Code and similar vendor-governed/optional 
 The standard OCI `org.opencontainers.image.licenses` annotation is not set to a project-only value, because the images aggregate software under multiple licenses. Custom labels identify the Remote Dev project license and the notice path without relicensing bundled components.
 
 This inventory is an attribution and maintenance record, not legal advice.
+
+PR2 Python CLI wheel/license closure is preserved under `components/python-clis/`, bound to native mise/uv graphs by `manifest.json`. Refresh with `scripts/sync-python-cli-notices.py --write`; the default invocation checks offline. Includes conditional graph packages conservatively and license files from virtualenv seed wheels. New distribution boundaries require #53 human review; `reviewed_on` is not advanced automatically.

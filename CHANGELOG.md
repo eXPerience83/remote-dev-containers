@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- PR2 candidate: add isolated locked Ruff 0.17.1, pytest 9.1.1 and pre-commit 4.7.0 CLI environments plus Aqua-locked Mike Farah yq 4.54.1, shfmt 3.14.1 and actionlint 1.7.12. Preserve Python 3.14.8 default / 3.15.0 project selection, launcher independence and immutable runtime boundaries. Candidate installation and image acceptance gates remain pending; see `docs/universal-validation-tools.md`.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->

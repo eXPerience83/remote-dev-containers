@@ -49,7 +49,7 @@ snapshot_store() {
   find /opt/remote-dev/mise -printf '%P %y %s %T@ %C@ %l\n' | LC_ALL=C sort
 }
 snapshot_store > "$scratch/store-before"
-tools=(python node uv)
+tools=(python node uv yq)
 declare -A versions binaries outputs
 for tool in "${tools[@]}"; do
   if [[ "$tool" == python ]]; then
@@ -148,7 +148,7 @@ assert importlib.util.find_spec("remote_dev_venv_314_probe") is None
 echo "Offline uv venvs (Python ${versions[python]} and $python315_version) are isolated: OK"
 
 # Normal, exact missing declarations for each of the three image-managed tools.
-missing_versions=(3.12.1 22.0.0 0.6.0)
+missing_versions=(3.12.1 22.0.0 0.6.0 4.1.0)
 for i in "${!tools[@]}"; do
   tool="${tools[$i]}"
   [[ ! -e "/opt/remote-dev/mise/installs/$tool/${missing_versions[$i]}" ]]

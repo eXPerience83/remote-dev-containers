@@ -135,6 +135,7 @@ def run_validator(validator: Path, root: Path) -> subprocess.CompletedProcess[st
 
 def copied_fixture(source_root: Path, destination: Path) -> None:
     """Copy the repository-controlled validator inputs into a temporary root."""
+    shutil.copytree(source_root / ".mise", destination / ".mise")
     for relative_path in INPUT_FILES:
         shutil.copy2(source_root / relative_path, destination / relative_path)
 
@@ -397,7 +398,7 @@ def main() -> int:
         lambda root: replace_regex_once(
             root / "mise.lock", r'^provenance = "github-attestations"\n', ""
         ),
-        "mise.lock tools.python.linux-arm64 keys must be exactly",
+        "mise.lock tools.actionlint.linux-arm64 keys must be exactly",
     )
     expect_failure(
         source_root,
@@ -414,6 +415,20 @@ def main() -> int:
         "must use distinct GitHub release asset API URLs",
     )
 
+    for tool, backend in (("yq", "aqua:mikefarah/yq"), ("shfmt", "aqua:mvdan/sh"),
+                          ("actionlint", "aqua:rhysd/actionlint"), ("pytest", "pypi:pytest"),
+                          ("pre-commit", "pypi:pre-commit"), ("ruff", "pypi:ruff")):
+        expect_failure(source_root, validator, f"{tool} backend substitution",
+            lambda root, backend=backend: replace_once(root / "mise.lock", f'backend = "{backend}"', 'backend = "asdf:unreviewed"'),
+            "backend" if not backend.startswith("pypi:") else "must pin")
+    lock_data = tomllib.loads((source_root / "mise.lock").read_text())
+    ref = lock_data["tools"]["pypi:pytest"][0]["uv"]["path"]
+    expect_failure(source_root, validator, "graph tampering",
+        lambda root: append_text(root / ref / "uv.lock", "# tampered\n"), "digest mismatch")
+    expect_failure(source_root, validator, "project sidecar tampering",
+        lambda root: replace_once(root / ref / "pyproject.toml", "pytest==", "unreviewed=="), "unexpected sidecar project")
+    expect_failure(source_root, validator, "missing graph",
+        lambda root: (root / ref / "uv.lock").unlink(), "missing or unsafe")
     print("All mise lock validation tests passed.")
     return 0
 

@@ -30,12 +30,14 @@ smoke: agent-contract-tests
 		-e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
 		remote-dev:local /tmp/test-codex-runtime-noexec-staging.py
 	bash scripts/test-mise-project-resolution.sh remote-dev:local
+	bash scripts/test-validation-tools.sh remote-dev:local
 	bash scripts/runtime-smoke-test.sh remote-dev:local
 
 preflight:
 	python3 scripts/preflight-data-layout.py --root "$(DATA_ROOT)"
 
 agent-contract-tests:
+	python3 scripts/sync-python-cli-notices.py
 	python3 scripts/test-admin-python-contract.py
 	python3 scripts/test-agent-guidance.py
 	python3 scripts/test-agent-guidance-lifecycle.py

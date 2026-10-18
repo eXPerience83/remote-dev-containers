@@ -37,6 +37,13 @@ EOF
   exit 1
 fi
 
+UV_BIN="${UV_BIN:-$(mise which uv)}"
+UV_BIN="$(realpath "$UV_BIN")"
+if [[ "$("$UV_BIN" --version | awk '{print $2}')" != "$UV_VERSION" ]]; then
+  echo "ERROR: graph regeneration requires uv $UV_VERSION; set UV_BIN to the verified binary" >&2
+  exit 1
+fi
+
 for required_file in versions.env mise.toml mise.lock; do
   if [[ ! -f "$ROOT/$required_file" ]]; then
     echo "ERROR: required lock input is missing: $ROOT/$required_file" >&2
@@ -62,6 +69,7 @@ mkdir -p \
   "$scratch/system" \
   "$scratch/tmp"
 cp "$ROOT/versions.env" "$ROOT/mise.toml" "$ROOT/mise.lock" "$workspace/"
+cp -R "$ROOT/.mise" "$workspace/.mise"
 : > "$scratch/config/global.toml"
 
 # Clear caller-provided MISE_* settings before applying the small controlled set
@@ -77,6 +85,7 @@ done < <(env -0)
 (
   cd "$workspace"
   env "${env_args[@]}" \
+    PATH="$(dirname "$UV_BIN"):$PATH" \
     MISE_CACHE_DIR="$scratch/cache" \
     MISE_CONFIG_DIR="$scratch/config" \
     MISE_DATA_DIR="$scratch/data" \
@@ -90,6 +99,9 @@ done < <(env -0)
 )
 
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$workspace"
+# Content-addressed graph directories are published before the referencing lock.
+# Keep older directories: a failed replacement must leave the previous lock usable.
+cp -R "$workspace/.mise/." "$ROOT/.mise/"
 replacement="$(mktemp "$ROOT/.mise.lock.tmp.XXXXXX")"
 install -m 0644 "$workspace/mise.lock" "$replacement"
 mv -f -- "$replacement" "$ROOT/mise.lock"

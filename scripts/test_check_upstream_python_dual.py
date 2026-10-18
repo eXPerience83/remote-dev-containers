@@ -93,6 +93,8 @@ def simulate_version_updates(body: str, root: Path) -> None:
     }
     setup = [
         "set -euo pipefail",
+        'replace_env() { :; }',
+        'declare -A validation_versions=([RUFF]=0.17.1 [PYTEST]=9.1.1 [PRE_COMMIT]=4.7.0 [YQ]=4.54.1 [SHFMT]=3.14.1 [ACTIONLINT]=1.7.12)',
         'replace_mise_tool() {',
         '  local name="$1" value="$2"',
         '  grep -q "^${name} = \\"" mise.toml',
@@ -121,11 +123,10 @@ def simulate_version_updates(body: str, root: Path) -> None:
             )
         with config.open("rb") as handle:
             updated = tomllib.load(handle)
-        if updated["tools"] != {
-            "python": new_python,
-            "node": replacements["latest_node"],
-            "uv": replacements["latest_uv"],
-        } or updated["settings"] != reviewed["settings"]:
+        expected = dict(old_tools, python=new_python, node=replacements["latest_node"], uv=replacements["latest_uv"])
+        for tool in ("ruff", "pytest", "pre-commit"):
+            expected["pypi:" + tool] = dict(old_tools["pypi:" + tool], python=new_python[0])
+        if updated["tools"] != expected or updated["settings"] != reviewed["settings"]:
             raise AssertionError("updater failed to update both Python pins or changed unrelated settings")
 
         # Malformed/reversed pins must fail closed before changing the other tools.

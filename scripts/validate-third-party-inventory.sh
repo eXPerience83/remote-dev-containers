@@ -111,4 +111,8 @@ done < <(
   ' "$inventory"
 )
 
+if [[ -f "$root/scripts/sync-python-cli-notices.py" && -d "$root/.mise/locks" ]]; then
+  python3 "$root/scripts/sync-python-cli-notices.py"
+fi
+
 printf 'Third-party inventory: OK (%s distributed components)\n' "$(jq '.components | length' "$inventory")"
