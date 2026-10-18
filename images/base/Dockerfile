@@ -196,7 +196,7 @@ COPY .mise/locks/ /etc/mise/.mise/locks/
 # Bind administrative Python once, from this neutral build CWD, to the exact
 # immutable installed runtime. Rebuilds follow the pin; runtime never calls mise.
 RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
-    && mise install --locked \
+    && UV_CACHE_DIR="$MISE_CACHE_DIR/uv" mise install --locked \
     && npm install --global --ignore-scripts --no-audit --no-fund "npm@${NPM_VERSION}" \
     && install -d -o 0 -g 0 -m 0755 /usr/local/lib/remote-dev \
     && admin_python="$(realpath "$(mise which python)")" \

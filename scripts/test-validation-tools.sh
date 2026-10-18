@@ -24,6 +24,8 @@ export PATH="/opt/remote-dev/mise/shims:/usr/local/bin:/usr/bin:/bin"
 mkdir -p "$scratch/neutral" "$scratch/project" "$scratch/untrusted"
 cd "$scratch/neutral"
 store_snapshot() { find /opt/remote-dev/mise -printf '%P %y %s %T@ %C@ %l\n' | LC_ALL=C sort; }
+# Frozen CLI build caches must not become a second bundled package tree in HOME.
+[[ ! -e /root/.cache/uv ]]
 store_snapshot > "$scratch/store-before"
 for command in ruff pytest pre-commit yq shfmt actionlint; do
   version_key="${command^^}"
