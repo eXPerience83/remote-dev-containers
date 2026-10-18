@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      compare_images:
+        description: "Build reference images and collect optional size/security comparisons"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -19,7 +25,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.compare_images == true && '0' || '1' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -112,6 +118,7 @@ jobs:
           python3 scripts/test_render_vulnerability_rescan_alert.py
           python3 scripts/test_resolve_published_image_digest.py
           python3 scripts/test_periodic_image_rescan_workflow.py
+          python3 scripts/test_build_image_comparison_workflow.py
           python3 scripts/test_publish_edge_security_cadence.py
           jq -e '.schema_version == 2 and .blocking_findings == []' \
             third_party/antigravity-cli-inspection.json >/dev/null
@@ -124,6 +131,7 @@ jobs:
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
 
       - name: Measure PR2 before/after image delta
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
         run: bash scripts/measure-tooling-image-delta.sh
 
       - name: Reproduce publisher mise isolation fixture
@@ -183,6 +191,7 @@ jobs:
           exit-code: "0"
 
       - name: Record before base spdx-json evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev-base:pr2-before
@@ -191,6 +200,7 @@ jobs:
           exit-code: '0'
 
       - name: Record before base json evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev-base:pr2-before
@@ -199,6 +209,7 @@ jobs:
           exit-code: '0'
 
       - name: Record before runtime spdx-json evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev:pr2-before
@@ -207,6 +218,7 @@ jobs:
           exit-code: '0'
 
       - name: Record before runtime json evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev:pr2-before
@@ -224,11 +236,20 @@ jobs:
             sbom-remote-dev.spdx.json
             trivy-base.json
             trivy-remote-dev.json
+            third_party/components/remote-dev-ttyd-osc52/remote-dev-ttyd-osc52.spdx.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload optional image comparison reports
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.compare_images == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-comparison-reports
+          path: |
             sbom-before-*.spdx.json
             trivy-before-*.json
             tooling-image-delta.json
-            third_party/components/remote-dev-ttyd-osc52/remote-dev-ttyd-osc52.spdx.json
-          if-no-files-found: warn
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Enforce no fixable critical vulnerabilities

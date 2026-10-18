@@ -97,6 +97,7 @@ validate: agent-contract-tests ttyd-osc52-check
 	python3 scripts/test_render_vulnerability_rescan_alert.py
 	python3 scripts/test_resolve_published_image_digest.py
 	python3 scripts/test_periodic_image_rescan_workflow.py
+	python3 scripts/test_build_image_comparison_workflow.py
 	python3 scripts/test_publish_edge_security_cadence.py
 	jq -e '.schema_version == 2 and .blocking_findings == []' third_party/antigravity-cli-inspection.json >/dev/null
 	@for file in compose/*.yml; do docker compose -f "$$file" config --quiet; echo "OK $$file"; done
