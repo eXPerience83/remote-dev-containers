@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.10.12",
+      "version": "2026.10.13",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.12/mise-v2026.10.12-linux-x64",
-          "asset_sha256": "72404716768b5b044cbd5170136d3d795cbd592658b6e932b66f0f8d67a54875",
-          "asset_size": 164137552,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.13/mise-v2026.10.13-linux-x64",
+          "asset_sha256": "94c45523c7b6760b7da704f16051171ca32e8447a849a02266a439a4455e9a12",
+          "asset_size": 167691024,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.12/mise-v2026.10.12-linux-arm64",
-          "asset_sha256": "31bbf697b289fde4b5623b223af288edd9ef86298ce9ecff705ac867f6f27e09",
-          "asset_size": 143819664,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.13/mise-v2026.10.13-linux-arm64",
+          "asset_sha256": "983fabf36625566f216400b907b33b4daca99adb5bc3d3cdab123b5e791575b2",
+          "asset_size": 145861248,
           "archive_member_count": null,
           "legal_members": []
         }
