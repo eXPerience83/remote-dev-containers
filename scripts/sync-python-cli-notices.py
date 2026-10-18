@@ -13,29 +13,34 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def require(condition, message="invalid Python CLI notice evidence"):
+    if not condition:
+        raise ValueError(message)
+
+
 def download(wheel):
     url = wheel['url']
-    assert url.startswith('https://files.pythonhosted.org/packages/')
+    require(url.startswith('https://files.pythonhosted.org/packages/'))
     with urllib.request.urlopen(url, timeout=60) as response:
-        assert response.geturl().startswith('https://files.pythonhosted.org/packages/')
+        require(response.geturl().startswith('https://files.pythonhosted.org/packages/'))
         data = response.read(64 * 1024 * 1024 + 1)
-    assert len(data) <= 64 * 1024 * 1024
-    assert 'sha256:' + hashlib.sha256(data).hexdigest() == wheel['hash']
+    require(len(data) <= 64 * 1024 * 1024)
+    require('sha256:' + hashlib.sha256(data).hexdigest() == wheel['hash'])
     return data
 
 
 def licenses(data, prefix='', depth=0):
-    assert depth <= 1
+    require(depth <= 1)
     result = {}
     with zipfile.ZipFile(io.BytesIO(data)) as wheel:
-        assert len(wheel.infolist()) <= 4096
-        assert sum(e.file_size for e in wheel.infolist()) <= 128 * 1024 * 1024
+        require(len(wheel.infolist()) <= 4096)
+        require(sum(e.file_size for e in wheel.infolist()) <= 128 * 1024 * 1024)
         for entry in wheel.infolist():
             if entry.is_dir():
                 continue
             path = PurePosixPath(entry.filename)
-            assert not path.is_absolute() and '..' not in path.parts
-            assert entry.file_size <= 64 * 1024 * 1024
+            require(not path.is_absolute() and '..' not in path.parts)
+            require(entry.file_size <= 64 * 1024 * 1024)
             if path.name.lower().startswith(('license', 'copying', 'notice', 'authors')):
                 result[prefix + entry.filename] = wheel.read(entry)
             # virtualenv redistributes seed wheels; preserve their notices too.
@@ -58,7 +63,7 @@ def expected_packages():
             selected = [w for w in wheels if w['url'].endswith('none-any.whl') or
                         ('manylinux' in w['url'] and ('x86_64' in w['url'] or 'aarch64' in w['url'])
                          and (package['name'] == 'ruff' or '-cp314-cp314-' in w['url']))]
-            assert selected, key
+            require(selected, key)
             packages[key] = (package, selected)
     return packages
 
@@ -72,20 +77,21 @@ def main():
     packages = expected_packages()
     if not args.write:
         manifest = json.loads(manifest_path.read_text())
-        assert set(manifest['packages']) == set(packages)
+        require(set(manifest['packages']) == set(packages))
         for key, (_, wheels) in packages.items():
             record = manifest['packages'][key]
-            assert record['wheels'] == wheels and record['notices'] and record['license'], key
+            require(record['wheels'] == wheels and record['notices'] and record['license'], key)
             for name, digest in record['notices'].items():
-                assert not PurePosixPath(name).is_absolute() and '..' not in PurePosixPath(name).parts
+                require(not PurePosixPath(name).is_absolute() and '..' not in PurePosixPath(name).parts)
                 path = target / key / name
-                assert not path.is_symlink() and path.is_file()
-                assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
+                require(not path.is_symlink() and path.is_file())
+                require(hashlib.sha256(path.read_bytes()).hexdigest() == digest)
         print('Python CLI wheel/license closure: OK')
         return
+    previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else {'packages': {}}
     manifest = {'schema_version': 1, 'packages': {}}
     for key, (package, wheels) in sorted(packages.items()):
-        notices = {}
+        chunks = []
         license_expression = None
         for index, artifact in enumerate(wheels):
             data = download(artifact)
@@ -95,17 +101,30 @@ def main():
                 license_expression = msg.get('License-Expression') or msg.get('License') or '; '.join(
                     c for c in msg.get_all('Classifier', []) if c.startswith('License ::'))
             extracted = licenses(data)
-            assert extracted, key
-            for name, content in extracted.items():
-                relative = f'{index}/{name}'
-                path = target / key / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(content)
-                notices[relative] = hashlib.sha256(content).hexdigest()
+            require(extracted, key)
+            for name, content in sorted(extracted.items()):
+                # Preserve exact upstream bytes with explicit artifact/member labels.
+                label = artifact['url'].rsplit('/', 1)[1] + '/' + name
+                chunks.append(('\n===== ' + label + ' =====\n').encode() + content)
+        combined = b'\n'.join(chunks)
+        path = target / key / 'NOTICES.txt'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(combined)
+        notices = {'NOTICES.txt': hashlib.sha256(combined).hexdigest()}
         manifest['packages'][key] = {'name': package['name'], 'version': package['version'],
             'license': license_expression, 'wheels': wheels, 'notices': notices}
         print(key, license_expression)
     manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+    # Remove only previously generated notice files after publishing replacements.
+    for key, record in previous['packages'].items():
+        for name in record['notices']:
+            path = target / key / name
+            require(path.resolve().is_relative_to(target.resolve()))
+            if name not in manifest['packages'].get(key, {}).get('notices', {}):
+                path.unlink(missing_ok=True)
+    for directory in sorted((p for p in target.rglob('*') if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+        if not any(directory.iterdir()):
+            directory.rmdir()
 
 
 if __name__ == '__main__':

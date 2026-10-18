@@ -14,7 +14,7 @@
         }
       ],
       "notices": {
-        "0/cfgv-3.5.0.dist-info/LICENSE": "01fc3f8031a672b3f5d7d8ac262e432f3ea812809f5697d6bc5b270bf6446561"
+        "NOTICES.txt": "b6d769dc09584c2799209339af767db3124fd93c44abbc09e38559d7d854ee4d"
       }
     },
     "colorama-0.4.6": {
@@ -30,7 +30,7 @@
         }
       ],
       "notices": {
-        "0/colorama-0.4.6.dist-info/licenses/LICENSE.txt": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318"
+        "NOTICES.txt": "ab0aa481faf6dff9d7f1637194e6a0cef7931a90bfacb8601963ec163323be91"
       }
     },
     "distlib-0.4.4": {
@@ -46,7 +46,7 @@
         }
       ],
       "notices": {
-        "0/distlib-0.4.4.dist-info/licenses/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+        "NOTICES.txt": "d470d3117d22149ff3c5703a9f83ef88e960d10a09346473f884e416b5ec7b54"
       }
     },
     "filelock-4.2.0": {
@@ -62,7 +62,7 @@
         }
       ],
       "notices": {
-        "0/filelock-4.2.0.dist-info/licenses/LICENSE": "608c89d5060ae9921adccf3236695bc654a9946e12323ef6c021dfa04e294d48"
+        "NOTICES.txt": "8f536878ffa646251e50b3fb51b7b8f2869d07b3f7baba59fb3dcba6cf891c5f"
       }
     },
     "identify-2.6.20": {
@@ -78,8 +78,7 @@
         }
       ],
       "notices": {
-        "0/identify/vendor/licenses.py": "8ec02badbeffe6a7616e4788ac349c35686cf486754c4c3f27cd66d39159401c",
-        "0/identify-2.6.20.dist-info/licenses/LICENSE": "edbc2ad3b7084fac873e1b1b450fd370d914eb97f7f31263b4ff65f47dc10c43"
+        "NOTICES.txt": "35e6a52e668d0a4f78bc6e7ee20977128e4b96d6da6f5260f10db6dad80f1283"
       }
     },
     "iniconfig-2.3.1": {
@@ -95,7 +94,7 @@
         }
       ],
       "notices": {
-        "0/iniconfig-2.3.1.dist-info/licenses/LICENSE": "3409fa91f7ace557894632676656e32264fe5ef7581535725dc9a23774551bd4"
+        "NOTICES.txt": "6640edf26b3ce92117faf7705d06e4535436adf1293b1b9df90c582f0bc30d24"
       }
     },
     "nodeenv-1.11.0": {
@@ -111,8 +110,7 @@
         }
       ],
       "notices": {
-        "0/nodeenv-1.11.0.dist-info/licenses/AUTHORS": "54508e549c358a34887637eb8e09a868cb92e3faacc11afc242055b96f473fe0",
-        "0/nodeenv-1.11.0.dist-info/licenses/LICENSE": "606faf42d48b54d539dae99db6fecd48544535587e27275b319a3f36113cb6fa"
+        "NOTICES.txt": "aca6063d2ca76b896682f99c8273626fea1d3e7878e3d3e8fd062c10357cf362"
       }
     },
     "packaging-26.3": {
@@ -128,9 +126,7 @@
         }
       ],
       "notices": {
-        "0/packaging-26.3.dist-info/licenses/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/packaging-26.3.dist-info/licenses/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/packaging-26.3.dist-info/licenses/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        "NOTICES.txt": "a06055b8b3b4206b19481ecf062c6cf56c80f97a388859ee8f75ec17ee59ccdd"
       }
     },
     "platformdirs-4.13.3": {
@@ -146,7 +142,7 @@
         }
       ],
       "notices": {
-        "0/platformdirs-4.13.3.dist-info/licenses/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+        "NOTICES.txt": "4fdc039c7840ceb41942a7295d27ea501711fb92571049e50578df2c56f86d72"
       }
     },
     "pluggy-1.7.0": {
@@ -162,7 +158,7 @@
         }
       ],
       "notices": {
-        "0/pluggy-1.7.0.dist-info/licenses/LICENSE": "d6b65e6c213a5d0b577911d34d6e5949b9f59d76c238c5071a2f3fc16cfb2606"
+        "NOTICES.txt": "d8492c9fe9ce56cb106c6baf7162d063675b6655c8059734d07af7f2f8681863"
       }
     },
     "pre-commit-4.7.0": {
@@ -178,7 +174,7 @@
         }
       ],
       "notices": {
-        "0/pre_commit-4.7.0.dist-info/licenses/LICENSE": "ea2ca27cba7cc35822d95a46d59bcd3cc88e196592e6390d1949a359ffc990e8"
+        "NOTICES.txt": "9a57c08e1b72aafca6a92354707c9cb11d539f816a7752510dd0ca392a931a13"
       }
     },
     "pygments-2.21.0": {
@@ -194,8 +190,7 @@
         }
       ],
       "notices": {
-        "0/pygments-2.21.0.dist-info/licenses/AUTHORS": "71a83872ad82f57be692cf827e048e2cd51d45169cfa1ea3f28706d97a872c0f",
-        "0/pygments-2.21.0.dist-info/licenses/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        "NOTICES.txt": "76d5ed0de0cc3707230cab378a14cc751d6ff925947f7081cb706adcee70ee2e"
       }
     },
     "pytest-9.1.1": {
@@ -211,7 +206,7 @@
         }
       ],
       "notices": {
-        "0/pytest-9.1.1.dist-info/licenses/LICENSE": "ca836a5f9ecca3b2f350230faa20a48fb8b145653b5568d784862df864706b9b"
+        "NOTICES.txt": "d3612b6674f25dd31b4c6575c79aef874030746ec370ea969ed643020c56c3d7"
       }
     },
     "python-discovery-1.6.3": {
@@ -227,7 +222,7 @@
         }
       ],
       "notices": {
-        "0/python_discovery-1.6.3.dist-info/licenses/LICENSE": "90e25e1faf2a4aaea8d95ee8e7f5738b052a1acc0c9c58068101f931a86bd588"
+        "NOTICES.txt": "18d5f6d00c8b1147da73bd38c7a157df73d0c31f0f84923c679f3fb67bfe76e7"
       }
     },
     "pyyaml-6.0.3": {
@@ -249,8 +244,7 @@
         }
       ],
       "notices": {
-        "0/pyyaml-6.0.3.dist-info/licenses/LICENSE": "8d3928f9dc4490fd635707cb88eb26bd764102a7282954307d3e5167a577e8a4",
-        "1/pyyaml-6.0.3.dist-info/licenses/LICENSE": "8d3928f9dc4490fd635707cb88eb26bd764102a7282954307d3e5167a577e8a4"
+        "NOTICES.txt": "146f4ac04efa3511a563394ad32e210bcfbd60197abd47da039645a371d8acd1"
       }
     },
     "ruff-0.17.1": {
@@ -272,8 +266,7 @@
         }
       ],
       "notices": {
-        "0/ruff-0.17.1.dist-info/licenses/LICENSE": "2597d854122b77ddc71971564ca2350a37608575ce324adc5650a2b2051c8f18",
-        "1/ruff-0.17.1.dist-info/licenses/LICENSE": "2597d854122b77ddc71971564ca2350a37608575ce324adc5650a2b2051c8f18"
+        "NOTICES.txt": "d4cf685fae3a49898cc43b48bd152a74b543aab2e43058eebba5c413ebc97c1b"
       }
     },
     "virtualenv-21.14.8": {
@@ -289,127 +282,7 @@
         }
       ],
       "notices": {
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/dependency_groups/LICENSE.txt": "1ab36e3e2a4ba8631625384f87e9e091db1faed034c5b23325b3239abf2cc525",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/idna/LICENSE.md": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt": "c37bf186e27cf9dbe9619e55edfe3cea7b30091ceb3da63c7dacbe0e6d77907b",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/AUTHORS.txt": "82b4a5f580cd3a93851494d7f1960a49d81fa2e5e2fc3ce5472606136faee5a2",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/LICENSE.txt": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/dependency_groups/LICENSE.txt": "1ab36e3e2a4ba8631625384f87e9e091db1faed034c5b23325b3239abf2cc525",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
-        "0/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": "c37bf186e27cf9dbe9619e55edfe3cea7b30091ceb3da63c7dacbe0e6d77907b",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/idna/LICENSE.md": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/AUTHORS.txt": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/LICENSE.txt": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
-        "0/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE": "458502e12d97bbf64438606a20044aa85eb05fb0a8a807bb35dbec253fd1fc04",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE": "9755a18519666e5f0f4cae3daad3d7012bcae48a600b31237d75e9fe134e6683",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE": "09f1c8c9e941af3e584d59641ea9b87d83c0cb0fd007eb5ef391a7e2643c1a46",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt": "30c23618679108f3e8ea1d2a658c7ca417bdfc891c98ef1a89fa4ff0c9828654",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/NOTICE": "2dddf08818297a3b89d43d95ff659d8da85741108c9136dfa3a4d856c0623bd8",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE": "09c9bcea95ca086f8bc5bed174e40bc835b297d40fb5f86bbbb570fe0a5581a7",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools-82.0.1.dist-info/licenses/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE": "458502e12d97bbf64438606a20044aa85eb05fb0a8a807bb35dbec253fd1fc04",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE": "9755a18519666e5f0f4cae3daad3d7012bcae48a600b31237d75e9fe134e6683",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE": "09f1c8c9e941af3e584d59641ea9b87d83c0cb0fd007eb5ef391a7e2643c1a46",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt": "30c23618679108f3e8ea1d2a658c7ca417bdfc891c98ef1a89fa4ff0c9828654",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/config/NOTICE": "2dddf08818297a3b89d43d95ff659d8da85741108c9136dfa3a4d856c0623bd8",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE": "09c9bcea95ca086f8bc5bed174e40bc835b297d40fb5f86bbbb570fe0a5581a7",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools-84.0.0.dist-info/licenses/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
-        "0/virtualenv-21.14.8.dist-info/licenses/LICENSE": "38ef740a641ff08df082680e98ab30d09badccee9e5fb686bce21212f3a663f0"
+        "NOTICES.txt": "5ecbdd0979d0750b1c1e69d11b21ed5d1639ac8e8c51ea875ae0b57a32b59bdc"
       }
     }
   }

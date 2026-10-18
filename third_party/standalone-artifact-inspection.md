@@ -10,6 +10,9 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
 | mise | `2026.10.13` | raw-binary | None | LICENSE |
 | uv | `0.13.1` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
+| yq | `4.54.1` | raw-binary | None | LICENSE |
+| shfmt | `3.14.1` | raw-binary | None | LICENSE |
+| actionlint | `1.7.12` | tar.gz | LICENSE.txt | LICENSE.txt |
 
 ## Interpretation
 

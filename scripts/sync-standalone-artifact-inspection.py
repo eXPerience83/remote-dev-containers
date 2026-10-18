@@ -31,8 +31,12 @@ COMPONENT_ORDER = (
     "ttyd",
     "mise",
     "uv",
+    "yq", "shfmt", "actionlint",
 )
 COMPONENT_NOTICE_PATHS = {
+    "yq": ("third_party/components/yq/LICENSE",),
+    "shfmt": ("third_party/components/shfmt/LICENSE",),
+    "actionlint": ("third_party/components/actionlint/LICENSE.txt",),
     "github-cli": ("third_party/components/github-cli/LICENSE",),
     "codex-cli": (
         "third_party/components/codex/LICENSE",
@@ -116,6 +120,33 @@ def load_uv_assets(lock_path: Path, expected_version: str) -> dict[str, dict[str
             "asset_url": url,
             "asset_sha256": checksum.removeprefix("sha256:"),
         }
+    return result
+
+
+def locked_validation_assets(values, lock_path):
+    """Exactly the three PR2 Aqua artifacts, never an arbitrary backend."""
+    lock = tomllib.loads(lock_path.read_text())
+    result = {}
+    for tool, repo, packaging in (("yq", "mikefarah/yq", "raw-binary"),
+                                  ("shfmt", "mvdan/sh", "raw-binary"),
+                                  ("actionlint", "rhysd/actionlint", "tar.gz")):
+        version = values.get(tool.upper() + "_VERSION")
+        entries = lock["tools"].get(tool, [])
+        if not version or len(entries) != 1:
+            fail(f"missing locked {tool}")
+        entry = entries[0]
+        if entry.get("version") != version or entry.get("backend") != "aqua:" + repo:
+            fail(f"unreviewed locked {tool}")
+        architectures = {}
+        for arch, platform in (("amd64", "linux-x64"), ("arm64", "linux-arm64")):
+            artifact = entry["platforms." + platform]
+            asset = {"yq": f"yq_linux_{arch}", "shfmt": f"shfmt_v{version}_linux_{arch}",
+                     "actionlint": f"actionlint_{version}_linux_{arch}.tar.gz"}[tool]
+            url = f"https://github.com/{repo}/releases/download/v{version}/{asset}"
+            if artifact.get("url") != url or not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("checksum", "")):
+                fail(f"unexpected {tool} {arch} artifact")
+            architectures[arch] = {"asset_url": url, "asset_sha256": artifact["checksum"][7:]}
+        result[tool] = {"version": version, "packaging": packaging, "architectures": architectures}
     return result
 
 
@@ -232,6 +263,7 @@ def expected_components(root: Path) -> dict[str, dict[str, Any]]:
             "packaging": "tar.gz",
             "architectures": load_uv_assets(root / "mise.lock", uv_version),
         },
+        **locked_validation_assets(values, root / "mise.lock"),
     }
 
 
