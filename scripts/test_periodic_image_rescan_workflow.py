@@ -37,6 +37,24 @@ def main() -> None:
     require("pull-requests: write" not in text, "periodic rescan must never write PRs")
     require("actions: write" not in text, "periodic rescan must never write Actions")
 
+    # Published GHCR packages may require authentication even for read-only pulls.
+    # Keep that auth confined to the main-only scan job, before digest resolution.
+    scan_job = text.split("\n  reconcile-alert:", 1)[0]
+    login_name = "      - name: Authenticate GHCR for read-only image rescans"
+    resolve_name = "      - name: Resolve mutable edge tags to exact digests"
+    require(scan_job.count(login_name) == 1, "exactly one read-only GHCR login")
+    require(scan_job.count(resolve_name) == 1, "exactly one digest resolve step")
+    require(scan_job.index(login_name) < scan_job.index(resolve_name), "login must precede digest resolution")
+    require_text(
+        scan_job,
+        "uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4",
+        "pinned official GHCR login action",
+    )
+    require_text(scan_job, "registry: ghcr.io", "fixed GHCR registry")
+    require_text(scan_job, "username: ${{ github.actor }}", "GitHub actor identity")
+    require_text(scan_job, "password: ${{ github.token }}", "scoped automatic token")
+    require("docker/login-action@" not in text.split("\n  reconcile-alert:", 1)[1], "alert writer must not receive registry auth")
+
     require_text(
         text,
         "ghcr.io/experience83/remote-dev-base edge-amd64",
