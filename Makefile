@@ -30,12 +30,15 @@ smoke: agent-contract-tests
 		-e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
 		remote-dev:local /tmp/test-codex-runtime-noexec-staging.py
 	bash scripts/test-mise-project-resolution.sh remote-dev:local
+	bash scripts/test-validation-tools.sh remote-dev:local
 	bash scripts/runtime-smoke-test.sh remote-dev:local
 
 preflight:
 	python3 scripts/preflight-data-layout.py --root "$(DATA_ROOT)"
 
 agent-contract-tests:
+	python3 scripts/sync-python-cli-notices.py
+	python3 scripts/test_python_cli_notices.py
 	python3 scripts/test-admin-python-contract.py
 	python3 scripts/test-agent-guidance.py
 	python3 scripts/test-agent-guidance-lifecycle.py
@@ -94,6 +97,7 @@ validate: agent-contract-tests ttyd-osc52-check
 	python3 scripts/test_render_vulnerability_rescan_alert.py
 	python3 scripts/test_resolve_published_image_digest.py
 	python3 scripts/test_periodic_image_rescan_workflow.py
+	python3 scripts/test_build_image_comparison_workflow.py
 	python3 scripts/test_publish_edge_security_cadence.py
 	jq -e '.schema_version == 2 and .blocking_findings == []' third_party/antigravity-cli-inspection.json >/dev/null
 	@for file in compose/*.yml; do docker compose -f "$$file" config --quiet; echo "OK $$file"; done

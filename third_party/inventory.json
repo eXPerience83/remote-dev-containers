@@ -216,6 +216,296 @@
           "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0/NOTICE"
         }
       ]
+    },
+    {
+      "id": "yq",
+      "name": "yq",
+      "image_scope": "both",
+      "version_key": "YQ_VERSION",
+      "version": "4.54.1",
+      "source": "https://github.com/mikefarah/yq",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/yq/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/mikefarah/yq/v4.54.1/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "shfmt",
+      "name": "shfmt",
+      "image_scope": "both",
+      "version_key": "SHFMT_VERSION",
+      "version": "3.14.1",
+      "source": "https://github.com/mvdan/sh",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "components/shfmt/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/mvdan/sh/v3.14.1/LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "actionlint",
+      "name": "actionlint",
+      "image_scope": "both",
+      "version_key": "ACTIONLINT_VERSION",
+      "version": "1.7.12",
+      "source": "https://github.com/rhysd/actionlint",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/actionlint/LICENSE.txt",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-cfgv",
+      "name": "cfgv",
+      "image_scope": "both",
+      "version": "3.5.0",
+      "source": "https://pypi.org/project/cfgv/3.5.0/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/cfgv-3.5.0/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-colorama",
+      "name": "colorama",
+      "image_scope": "both",
+      "version": "0.4.6",
+      "source": "https://pypi.org/project/colorama/0.4.6/",
+      "license": "License :: OSI Approved :: BSD License",
+      "notices": [
+        {
+          "path": "components/python-clis/colorama-0.4.6/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-distlib",
+      "name": "distlib",
+      "image_scope": "both",
+      "version": "0.4.4",
+      "source": "https://pypi.org/project/distlib/0.4.4/",
+      "license": "PSF-2.0",
+      "notices": [
+        {
+          "path": "components/python-clis/distlib-0.4.4/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-filelock",
+      "name": "filelock",
+      "image_scope": "both",
+      "version": "4.2.0",
+      "source": "https://pypi.org/project/filelock/4.2.0/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/filelock-4.2.0/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-identify",
+      "name": "identify",
+      "image_scope": "both",
+      "version": "2.6.20",
+      "source": "https://pypi.org/project/identify/2.6.20/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/identify-2.6.20/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-iniconfig",
+      "name": "iniconfig",
+      "image_scope": "both",
+      "version": "2.3.1",
+      "source": "https://pypi.org/project/iniconfig/2.3.1/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/iniconfig-2.3.1/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-nodeenv",
+      "name": "nodeenv",
+      "image_scope": "both",
+      "version": "1.11.0",
+      "source": "https://pypi.org/project/nodeenv/1.11.0/",
+      "license": "BSD",
+      "notices": [
+        {
+          "path": "components/python-clis/nodeenv-1.11.0/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-packaging",
+      "name": "packaging",
+      "image_scope": "both",
+      "version": "26.3",
+      "source": "https://pypi.org/project/packaging/26.3/",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "notices": [
+        {
+          "path": "components/python-clis/packaging-26.3/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-platformdirs",
+      "name": "platformdirs",
+      "image_scope": "both",
+      "version": "4.13.3",
+      "source": "https://pypi.org/project/platformdirs/4.13.3/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/platformdirs-4.13.3/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-pluggy",
+      "name": "pluggy",
+      "image_scope": "both",
+      "version": "1.7.0",
+      "source": "https://pypi.org/project/pluggy/1.7.0/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/pluggy-1.7.0/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-pre-commit",
+      "name": "pre-commit",
+      "image_scope": "both",
+      "version": "4.7.0",
+      "source": "https://pypi.org/project/pre-commit/4.7.0/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/pre-commit-4.7.0/",
+          "source": "artifact"
+        }
+      ],
+      "version_key": "PRE_COMMIT_VERSION"
+    },
+    {
+      "id": "python-cli-pygments",
+      "name": "pygments",
+      "image_scope": "both",
+      "version": "2.21.0",
+      "source": "https://pypi.org/project/pygments/2.21.0/",
+      "license": "BSD-2-Clause",
+      "notices": [
+        {
+          "path": "components/python-clis/pygments-2.21.0/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-pytest",
+      "name": "pytest",
+      "image_scope": "both",
+      "version": "9.1.1",
+      "source": "https://pypi.org/project/pytest/9.1.1/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/pytest-9.1.1/",
+          "source": "artifact"
+        }
+      ],
+      "version_key": "PYTEST_VERSION"
+    },
+    {
+      "id": "python-cli-python-discovery",
+      "name": "python-discovery",
+      "image_scope": "both",
+      "version": "1.6.3",
+      "source": "https://pypi.org/project/python-discovery/1.6.3/",
+      "license": "Permission is hereby granted, free of charge, to any person obtaining a\n        copy of this software and associated documentation files (the\n        \"Software\"), to deal in the Software without restriction, including\n        without limitation the rights to use, copy, modify, merge, publish,\n        distribute, sublicense, and/or sell copies of the Software, and to\n        permit persons to whom the Software is furnished to do so, subject to\n        the following conditions:\n        \n        The above copyright notice and this permission notice shall be included\n        in all copies or substantial portions of the Software.\n        \n        THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\n        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\n        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\n        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\n        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\n        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\n        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+      "notices": [
+        {
+          "path": "components/python-clis/python-discovery-1.6.3/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-pyyaml",
+      "name": "pyyaml",
+      "image_scope": "both",
+      "version": "6.0.3",
+      "source": "https://pypi.org/project/pyyaml/6.0.3/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/pyyaml-6.0.3/",
+          "source": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "python-cli-ruff",
+      "name": "ruff",
+      "image_scope": "both",
+      "version": "0.17.1",
+      "source": "https://pypi.org/project/ruff/0.17.1/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/ruff-0.17.1/",
+          "source": "artifact"
+        }
+      ],
+      "version_key": "RUFF_VERSION"
+    },
+    {
+      "id": "python-cli-virtualenv",
+      "name": "virtualenv",
+      "image_scope": "both",
+      "version": "21.14.8",
+      "source": "https://pypi.org/project/virtualenv/21.14.8/",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "components/python-clis/virtualenv-21.14.8/",
+          "source": "artifact"
+        }
+      ],
+      "distribution_notes": "MIT identifies virtualenv itself. Redistributed seed wheels and vendored components retain their own terms, preserved with exact member labels in NOTICES.txt."
     }
   ]
 }

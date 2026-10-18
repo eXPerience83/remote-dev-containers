@@ -21,9 +21,9 @@ The Python runtime comes from architecture-specific `python-build-standalone` `i
 
 The current upstream full archives reference but omit the zlib-ng 2.2.4 and zstd 1.5.7 license files. Those two texts are supplemented from the exact official `python/cpython-source-deps` tags with reviewed SHA-256 values. Any other referenced-but-missing license makes synchronization fail rather than being guessed or silently omitted.
 
-`standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex, ttyd, mise and uv assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner.
+`standalone-artifact-inspection.md` and its JSON companion record a bounded inspection of the exact AMD64 and ARM64 GitHub CLI, Codex CLI, its code-mode host companion, ttyd, mise, uv, yq, shfmt and actionlint assets currently pinned by the repository. The inspection confirms whether each release archive carries separate legal files and whether an embedded file matches the version-specific notice preserved here. It is current-version evidence, not a generic dependency-license scanner.
 
-`scripts/sync-standalone-artifact-inspection.py` refreshes this evidence only for those five explicitly supported components. It downloads an asset only when its pinned version, URL, SHA-256 or preserved repository notice changed, verifies the repository-controlled digest before inspection, supports only the known `tar.gz` and raw-binary packaging forms and never extracts an archive into the filesystem. The daily upstream workflow runs it after updating pins and `mise.lock`, so the generated JSON and Markdown remain in the same reviewable pull request as the version change.
+`scripts/sync-standalone-artifact-inspection.py` refreshes this evidence only for those nine explicitly supported components. It downloads an asset only when its pinned version, URL, SHA-256 or preserved repository notice changed, verifies the repository-controlled digest before inspection, supports only the known `tar.gz` and raw-binary packaging forms and never extracts an archive into the filesystem. The daily upstream workflow runs it after updating pins and `mise.lock`, so the generated JSON and Markdown remain in the same reviewable pull request as the version change.
 
 CI remains offline for this evidence: `scripts/validate-standalone-artifact-inspection.py` compares the committed report's component versions, asset URLs and SHA-256 values with `versions.env` and `mise.lock`. An update PR cannot pass validation with stale evidence, while ordinary builds do not redownload release assets.
 
@@ -40,13 +40,13 @@ For a version update to a **distributed image component**, the same pull request
 1. update `versions.env`;
 2. update the matching entry in `third_party/inventory.json`;
 3. review and replace any repository-preserved or artifact-derived license or NOTICE file whose upstream text changed;
-4. refresh the bounded standalone-artifact report when GitHub CLI, Codex CLI, ttyd, mise or uv changes;
+4. refresh the bounded standalone-artifact report when GitHub CLI, Codex CLI, its code-mode host companion, ttyd, mise, uv, yq, shfmt or actionlint changes;
 5. pass `scripts/validate-third-party-inventory.sh` and the component-specific notice validators;
 6. build both images and pass `remote-dev-notices --check`.
 
 Explicit non-distributed review metadata is maintained separately from that image-inventory contract. Changing such a pin still requires the owning legal/privacy/supply-chain review and focused tests, but must not create a fake distributed-component inventory entry.
 
-Renovate owns standard dependency references that it understands directly, such as Dockerfile frontend images, the Ubuntu base image and pinned GitHub Actions. The custom upstream workflow owns Codex, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv because those updates also require architecture-specific digests, runtime-lock regeneration and legal-inventory synchronization. It also owns detection/proposal of reviewed metadata for optional Context7 CLI and, once #83 is complete, Antigravity review evidence without turning either optional agent into image content. Each dependency has one automation owner.
+Renovate owns standard dependency references that it understands directly, such as Dockerfile frontend images, the Ubuntu base image and pinned GitHub Actions. The custom upstream workflow owns Codex, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv and the six PR2 validation CLIs because those updates also require architecture-specific digests, runtime-lock regeneration and legal-inventory synchronization. It also owns detection/proposal of reviewed metadata for optional Context7 CLI and, once #83 is complete, Antigravity review evidence without turning either optional agent into image content. Each dependency has one automation owner.
 
 The daily upstream workflow runs `scripts/update-third-party-inventory.py --write` after changing distributed version pins. For each already inventoried repository-sourced component it updates the exact source URL and downloads the legal document from the new version tag into the same pull request. When `mise.lock` changes the Python artifact, `scripts/regenerate-mise-lock.sh` regenerates and compacts the bounded Python legal metadata before the update commit is created. It then runs `scripts/sync-standalone-artifact-inspection.py` to refresh exact packaging evidence for any changed supported standalone asset. Downloads are restricted to explicitly approved HTTPS hosts and preserved notice paths are confined to `third_party/`.
 
@@ -58,10 +58,12 @@ Generated SPDX SBOM files are uploaded with CI artifacts as a supplementary omis
 
 ## Distribution boundaries
 
-The base image contains Ubuntu packages, GitHub CLI, ttyd, mise, Python, Node.js, npm and uv. The final image adds OpenAI Codex CLI.
+The base image contains Ubuntu packages, GitHub CLI, ttyd, mise, Python, Node.js, npm, uv, the isolated Ruff/pytest/pre-commit CLI environments, Mike Farah yq, shfmt and actionlint. The final image adds OpenAI Codex CLI.
 
 Antigravity CLI, Context7 CLI, Claude Code and similar vendor-governed/optional tools are not downloaded or redistributed by the current images. Context7 CLI may be downloaded transiently from npm only during explicit device authentication and is removed before the resulting key is adopted. Their policy is documented in the relevant optional-agent/integration documentation.
 
 The standard OCI `org.opencontainers.image.licenses` annotation is not set to a project-only value, because the images aggregate software under multiple licenses. Custom labels identify the Remote Dev project license and the notice path without relicensing bundled components.
 
 This inventory is an attribution and maintenance record, not legal advice.
+
+PR2 Python CLI wheel/license closure is preserved under `components/python-clis/`, bound to native mise/uv graphs by `manifest.json`. Refresh with `scripts/sync-python-cli-notices.py --write`; the default invocation checks offline. Includes conditional graph packages conservatively and license files from virtualenv seed wheels. New distribution boundaries require #53 human review; `reviewed_on` is not advanced automatically.

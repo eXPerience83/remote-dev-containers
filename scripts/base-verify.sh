@@ -79,6 +79,9 @@ if [[ "$npx_version" != "$npm_version" ]]; then
 fi
 printf 'npm %s (npx %s)\n' "$npm_version" "$npx_version"
 uv --version
+for command in ruff pytest pre-commit yq shfmt actionlint; do
+  "$command" --version
+done
 gh --version | head -n 1
 ttyd --version
 mise --version

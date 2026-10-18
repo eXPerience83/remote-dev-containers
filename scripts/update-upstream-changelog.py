@@ -22,6 +22,13 @@ _COMPONENTS = (
     ("NODE_VERSION", "Node.js", lambda value: value),
     ("NPM_VERSION", "npm", lambda value: value),
     ("UV_VERSION", "uv", lambda value: value),
+    ("RUFF_VERSION", "Ruff", lambda value: value),
+    ("PYTEST_VERSION", "pytest", lambda value: value),
+    ("PRE_COMMIT_VERSION", "pre-commit", lambda value: value),
+    ("YQ_VERSION", "yq", lambda value: value),
+    ("SHFMT_VERSION", "shfmt", lambda value: value),
+    ("ACTIONLINT_VERSION", "actionlint", lambda value: value),
+
     ("CONTEXT7_CLI_VERSION", "Context7 CLI (transient)", lambda value: value),
 )
 _ENV_LINE_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")

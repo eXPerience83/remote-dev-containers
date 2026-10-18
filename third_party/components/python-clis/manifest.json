@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "packages": {
+    "cfgv-3.5.0": {
+      "name": "cfgv",
+      "version": "3.5.0",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl",
+          "hash": "sha256:a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0",
+          "size": 7445,
+          "upload-time": "2025-11-19T20:55:50.744Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "b6d769dc09584c2799209339af767db3124fd93c44abbc09e38559d7d854ee4d"
+      }
+    },
+    "colorama-0.4.6": {
+      "name": "colorama",
+      "version": "0.4.6",
+      "license": "License :: OSI Approved :: BSD License",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+          "hash": "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+          "size": 25335,
+          "upload-time": "2022-10-25T02:36:20.889Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "ab0aa481faf6dff9d7f1637194e6a0cef7931a90bfacb8601963ec163323be91"
+      }
+    },
+    "distlib-0.4.4": {
+      "name": "distlib",
+      "version": "0.4.4",
+      "license": "PSF-2.0",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl",
+          "hash": "sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638",
+          "size": 472099,
+          "upload-time": "2026-10-16T13:56:32.053Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "d470d3117d22149ff3c5703a9f83ef88e960d10a09346473f884e416b5ec7b54"
+      }
+    },
+    "filelock-4.2.0": {
+      "name": "filelock",
+      "version": "4.2.0",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/8e/a3/9bc26acff301fe1aaea1cc3d82a1d57e0a34df3e1cadbfa91ac2dbcdde5c/filelock-4.2.0-py3-none-any.whl",
+          "hash": "sha256:2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238",
+          "size": 135032,
+          "upload-time": "2026-10-14T20:57:11.349Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "8f536878ffa646251e50b3fb51b7b8f2869d07b3f7baba59fb3dcba6cf891c5f"
+      }
+    },
+    "identify-2.6.20": {
+      "name": "identify",
+      "version": "2.6.20",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/fa/70/fffc9613501877c0a10a1ef73a165e6ded3e53f6e7502227fef56d973933/identify-2.6.20-py2.py3-none-any.whl",
+          "hash": "sha256:6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa",
+          "size": 99506,
+          "upload-time": "2026-09-26T20:29:06.054Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "35e6a52e668d0a4f78bc6e7ee20977128e4b96d6da6f5260f10db6dad80f1283"
+      }
+    },
+    "iniconfig-2.3.1": {
+      "name": "iniconfig",
+      "version": "2.3.1",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl",
+          "hash": "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7",
+          "size": 7552,
+          "upload-time": "2026-10-06T22:48:36.959Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "6640edf26b3ce92117faf7705d06e4535436adf1293b1b9df90c582f0bc30d24"
+      }
+    },
+    "nodeenv-1.11.0": {
+      "name": "nodeenv",
+      "version": "1.11.0",
+      "license": "BSD",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/54/c8/12811c9b48fde162bb72b6f2e78fada9a247a09d7bb5be2050a5d099c77b/nodeenv-1.11.0-py2.py3-none-any.whl",
+          "hash": "sha256:edaa16e6c14d7cf395d75d4bbd5a26390f4dc06501a33b4e76282b02cc688a25",
+          "size": 34277,
+          "upload-time": "2026-09-26T11:29:19.933Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "aca6063d2ca76b896682f99c8273626fea1d3e7878e3d3e8fd062c10357cf362"
+      }
+    },
+    "packaging-26.3": {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+          "hash": "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+          "size": 129956,
+          "upload-time": "2026-08-04T18:15:27.159Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "a06055b8b3b4206b19481ecf062c6cf56c80f97a388859ee8f75ec17ee59ccdd"
+      }
+    },
+    "platformdirs-4.13.3": {
+      "name": "platformdirs",
+      "version": "4.13.3",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/45/b8/fd1af06b079af236f5423f7c1821264419cc8f6b4803f79353acbb8bfa53/platformdirs-4.13.3-py3-none-any.whl",
+          "hash": "sha256:f6ad7f447f24f8a3b82cce5976387428bff894a0eca6c3488f4a17f153c130c4",
+          "size": 32762,
+          "upload-time": "2026-10-16T01:16:15.051Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "4fdc039c7840ceb41942a7295d27ea501711fb92571049e50578df2c56f86d72"
+      }
+    },
+    "pluggy-1.7.0": {
+      "name": "pluggy",
+      "version": "1.7.0",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl",
+          "hash": "sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
+          "size": 27082,
+          "upload-time": "2026-10-15T09:50:56.808Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "d8492c9fe9ce56cb106c6baf7162d063675b6655c8059734d07af7f2f8681863"
+      }
+    },
+    "pre-commit-4.7.0": {
+      "name": "pre-commit",
+      "version": "4.7.0",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/eb/83/ce0a196e4f7b20b11ce3aa1fc72fb973f64b7628d51c1b8aebad37fb7f81/pre_commit-4.7.0-py2.py3-none-any.whl",
+          "hash": "sha256:2e229038ad3656081b70c27913157e4b636ef306f643f024a8a8e3f0f7b2f877",
+          "size": 226261,
+          "upload-time": "2026-10-12T20:45:38.858Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "9a57c08e1b72aafca6a92354707c9cb11d539f816a7752510dd0ca392a931a13"
+      }
+    },
+    "pygments-2.21.0": {
+      "name": "pygments",
+      "version": "2.21.0",
+      "license": "BSD-2-Clause",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+          "hash": "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+          "size": 1250147,
+          "upload-time": "2026-08-17T08:02:44.912Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "76d5ed0de0cc3707230cab378a14cc751d6ff925947f7081cb706adcee70ee2e"
+      }
+    },
+    "pytest-9.1.1": {
+      "name": "pytest",
+      "version": "9.1.1",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl",
+          "hash": "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+          "size": 386536,
+          "upload-time": "2026-06-19T10:58:31.347Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "d3612b6674f25dd31b4c6575c79aef874030746ec370ea969ed643020c56c3d7"
+      }
+    },
+    "python-discovery-1.6.3": {
+      "name": "python-discovery",
+      "version": "1.6.3",
+      "license": "Permission is hereby granted, free of charge, to any person obtaining a\n        copy of this software and associated documentation files (the\n        \"Software\"), to deal in the Software without restriction, including\n        without limitation the rights to use, copy, modify, merge, publish,\n        distribute, sublicense, and/or sell copies of the Software, and to\n        permit persons to whom the Software is furnished to do so, subject to\n        the following conditions:\n        \n        The above copyright notice and this permission notice shall be included\n        in all copies or substantial portions of the Software.\n        \n        THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\n        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\n        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\n        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\n        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\n        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\n        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/de/ec/643826e4d69b7bdce4213f221e8f5ed06d0a9dd69fa9b33342578d2cc8c8/python_discovery-1.6.3-py3-none-any.whl",
+          "hash": "sha256:cb7654125e3dcb594269a6feb56ac693f1f13b7c654493a93eba72dc22d18034",
+          "size": 39386,
+          "upload-time": "2026-10-16T03:54:28.237Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "18d5f6d00c8b1147da73bd38c7a157df73d0c31f0f84923c679f3fb67bfe76e7"
+      }
+    },
+    "pyyaml-6.0.3": {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/92/b5/47e807c2623074914e29dabd16cbbdd4bf5e9b2db9f8090fa64411fc5382/pyyaml-6.0.3-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+          "hash": "sha256:501a031947e3a9025ed4405a168e6ef5ae3126c59f90ce0cd6f2bfc477be31b7",
+          "size": 766454,
+          "upload-time": "2025-09-25T21:32:37.966Z"
+        },
+        {
+          "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "hash": "sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5",
+          "size": 794175,
+          "upload-time": "2025-09-25T21:32:40.865Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "146f4ac04efa3511a563394ad32e210bcfbd60197abd47da039645a371d8acd1"
+      }
+    },
+    "ruff-0.17.1": {
+      "name": "ruff",
+      "version": "0.17.1",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/c0/8c/e075e9c917cb0575297880c96768304e881240171c870cbd8d9b7b54bec2/ruff-0.17.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+          "hash": "sha256:872e03dd231744d6c5ec5c8af6be52b71323fc6ee096e4c8b34d9f844ee3b978",
+          "size": 9938300,
+          "upload-time": "2026-10-15T15:22:41.284Z"
+        },
+        {
+          "url": "https://files.pythonhosted.org/packages/62/86/5566290219708ce2928f3a29c4f843a1185b341ec6111c4631a33c5ceced/ruff-0.17.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "hash": "sha256:a6ef98e51de8ef38082f90653ceeb84944bd7673783eea13e1647c5b9b064189",
+          "size": 10350811,
+          "upload-time": "2026-10-15T15:22:54.401Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "d4cf685fae3a49898cc43b48bd152a74b543aab2e43058eebba5c413ebc97c1b"
+      }
+    },
+    "virtualenv-21.14.8": {
+      "name": "virtualenv",
+      "version": "21.14.8",
+      "license": "MIT",
+      "wheels": [
+        {
+          "url": "https://files.pythonhosted.org/packages/14/01/cd63b97dd556293e1c74d76053936d9cef11a28eac605c735ae9f0ee324f/virtualenv-21.14.8-py3-none-any.whl",
+          "hash": "sha256:d2a347fdbc1a65e33c2c5e84dc767b4a3538a25749536a752744d4fe1f71c37a",
+          "size": 5487606,
+          "upload-time": "2026-10-16T00:09:07.441Z"
+        }
+      ],
+      "notices": {
+        "NOTICES.txt": "5ecbdd0979d0750b1c1e69d11b21ed5d1639ac8e8c51ea875ae0b57a32b59bdc"
+      }
+    }
+  }
+}

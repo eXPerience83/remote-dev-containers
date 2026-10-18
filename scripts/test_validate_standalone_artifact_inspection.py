@@ -68,6 +68,14 @@ url = "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-unknow
 """.format(arm="3" * 64, amd="4" * 64)
 
 
+for tool, repo in (("yq", "mikefarah/yq"), ("shfmt", "mvdan/sh"), ("actionlint", "rhysd/actionlint")):
+    ENV += tool.upper() + "_VERSION=1.2.3\n"
+    LOCK += f'\n[[tools.{tool}]]\nversion = "1.2.3"\nbackend = "aqua:{repo}"\n'
+    for arch, platform in (("amd64", "linux-x64"), ("arm64", "linux-arm64")):
+        asset = {"yq": f"yq_linux_{arch}", "shfmt": f"shfmt_v1.2.3_linux_{arch}", "actionlint": f"actionlint_1.2.3_linux_{arch}.tar.gz"}[tool]
+        LOCK += f'\n[tools.{tool}."platforms.{platform}"]\nchecksum = "sha256:{"7" * 64}"\nurl = "https://github.com/{repo}/releases/download/v1.2.3/{asset}"\n'
+
+
 class ValidatorTests(unittest.TestCase):
     """Exercise current and stale report cases."""
 

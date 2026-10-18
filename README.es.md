@@ -1,5 +1,7 @@
 # Remote Dev Containers — inicio v0.1.1-dev
 
+El candidato PR2 añade seis CLI de validación bloqueadas; consulta [diseño, evidencias y gates pendientes](docs/universal-validation-tools.es.md).
+
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]

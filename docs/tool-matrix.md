@@ -32,7 +32,8 @@ The canonical command inventory is [`config/common-tool-baseline.txt`](../config
 | Python | `python`, `python3`, `uv` |
 | JavaScript | `node`, `npm`, `npx` |
 | Tool manager | `mise` |
-| Checks | `shellcheck` |
+| Checks | `shellcheck`, `ruff`, `pytest`, `pre-commit`, `shfmt`, `actionlint` |
+| Structured data | `yq` |
 
 The image bundles the latest reviewed Python **3.14.x** (default for bare `python` and `python3` and for image-administrative scripts) **and Python 3.15.x** (available for explicit project selection), alongside Node 24 LTS and npm 12. Each Python maintenance line is independently pinned in the repository's lock and update inputs; merely installing 3.15 does not change the default for Home Assistant or other existing projects. The existing build-essential package continues to provide additional native compiler/linker commands such as `g++`, but only `gcc` is part of the public command inventory in this phase; package membership alone does not promote every executable into the product API.
 
@@ -56,7 +57,7 @@ Use global `python` for work that needs only the image default. For a repository
 
 The mere presence of `.venv`, `venv`, `.env`, Python metadata or `package.json` does not activate an environment, source a file or inject local executable directories into PATH. `.env` normally contains environment variables; `.venv` is a Python environment. Remote Dev does not search upward for local executables or wrap language commands to detect projects.
 
-Project dependencies/tools such as pytest, Ruff, mypy, pre-commit, ESLint and TypeScript belong in the repository's selected environment. Global `pip install` and `npm install -g` are not fallbacks for project dependencies. `uv tool install` under the existing `UV_TOOL_DIR` remains writable development tooling state, outside the immutable baseline and outside the future trusted/persistent toolchain store (#180). Executable temporary environments use inherited `$TMPDIR`; `/tmp` remains `noexec`.
+The image provides isolated Ruff, pytest and pre-commit CLI defaults for basic preflight work. Their immutable mise/PyPI+uv environments bind administrative Python 3.14 and lock every transitive dependency; they never install into either bundled Python site-packages and remain independent of project Python selection. Repository-specific versions and dependencies (including pytest plugins) still belong in the repository's explicitly selected environment. Mike Farah yq, shfmt and actionlint use the reviewed Aqua backends. See [PR2 validation tools](universal-validation-tools.md) ([español](universal-validation-tools.es.md)). Global `pip install` and `npm install -g` are not fallbacks for project dependencies. `uv tool install` under the existing `UV_TOOL_DIR` remains writable development tooling state, outside the immutable baseline and outside the future trusted/persistent toolchain store (#180). Executable temporary environments use inherited `$TMPDIR`; `/tmp` remains `noexec`.
 
 For a Python 3.15-ready repository, a trusted project `mise.toml` can explicitly select an exact installed Python 3.15 patch; a Python 3.14 project retains its own exact 3.14 pin. The ordered system `mise.toml` installs both versions with **3.14 first**, keeping bare `python` and `python3` on 3.14 outside explicit project selection. Projects needing a different exact patch must provide a reviewed project-owned environment; Remote Dev never silently substitutes the other Python line or downloads it merely because a command was looked up. A project can create a dedicated virtual environment using the selected interpreter and `uv venv --python <exact-version>`; always verify `sys.version_info` in that environment before running its tests.
 

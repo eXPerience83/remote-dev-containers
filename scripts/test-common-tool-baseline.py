@@ -33,7 +33,7 @@ class CommonBaselineTests(unittest.TestCase):
         self.assertEqual(len(commands), len(set(commands)))
         section = (ROOT / 'docs/tool-matrix.md').read_text().split('| Area | Public commands |')[1].split('## Role-specific')[0]
         self.assertEqual(set(re.findall(r'`([a-z][a-z0-9-]*)`', section)), set(commands))
-        self.assertTrue(set(commands).isdisjoint({'codex', 'agy', 'tini', 'pytest', 'ruff', 'mypy', 'run-codex', 'run-antigravity'}))
+        self.assertTrue(set(commands).isdisjoint({'codex', 'agy', 'tini', 'mypy', 'run-codex', 'run-antigravity'}))
 
     def test_reject_invalid_data_without_output_or_execution(self):
         marker = self.root / 'executed'

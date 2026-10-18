@@ -178,6 +178,27 @@ def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, s
 def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, str]) -> bool:
     """Refresh changed versions and their repository-preserved legal documents."""
     changed = False
+    cli_manifest = root / "third_party/components/python-clis/manifest.json"
+    if cli_manifest.exists():
+        records = json.loads(cli_manifest.read_text())["packages"]
+        refreshed = []
+        for record in records.values():
+            name, version = record["name"], record["version"]
+            component = dict(id="python-cli-" + name, name=name, image_scope="both", version=version,
+                source=f"https://pypi.org/project/{name}/{version}/", license=record["license"],
+                notices=[dict(path=f"components/python-clis/{name}-{version}/", source="artifact")])
+            if name == "virtualenv":
+                component["distribution_notes"] = (
+                    "MIT identifies virtualenv itself. Redistributed seed wheels and vendored "
+                    "components retain their own terms, preserved with exact member labels in NOTICES.txt."
+                )
+            if name in ("ruff", "pytest", "pre-commit"):
+                component["version_key"] = name.upper().replace("-", "_") + "_VERSION"
+            refreshed.append(component)
+        previous = [c for c in inventory["components"] if c["id"].startswith("python-cli-")]
+        if previous != refreshed:
+            inventory["components"] = [c for c in inventory["components"] if not c["id"].startswith("python-cli-")] + refreshed
+            changed = True
     pending_files: list[tuple[Path, bytes]] = []
     seen_keys: set[str] = set()
 

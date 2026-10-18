@@ -9,6 +9,7 @@ on:
       - "versions.env"
       - "mise.toml"
       - "mise.lock"
+      - ".mise/locks/**"
       - "images/**"
       - "scripts/**"
       - "config/**"

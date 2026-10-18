@@ -55,6 +55,10 @@ case "$FAKE_MISE_MODE" in
 esac
 EOF
 chmod 0755 "$fake_mise"
+fake_uv="$scratch/fake-uv"
+printf '#!/bin/sh\nprintf "uv %s\\n"\n' "$UV_VERSION" > "$fake_uv"
+chmod 0755 "$fake_uv"
+export UV_BIN="$fake_uv"
 
 copy_fixture() {
   local destination="$1"
@@ -70,6 +74,7 @@ copy_fixture() {
     "$ROOT/scripts/sync-python-runtime-notices.py" \
     "$ROOT/scripts/compact-python-runtime-notices.py" \
     "$destination/scripts/"
+  cp -R "$ROOT/.mise" "$destination/.mise"
   cp -R \
     "$ROOT/third_party/components/python-build-standalone" \
     "$ROOT/third_party/components/python-build-standalone-315" \

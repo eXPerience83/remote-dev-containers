@@ -26,7 +26,7 @@ probe = load_module()
 
 
 def synthetic_python_lock(candidate: str, *, arm64: bool = True, provenance: bool = True) -> str:
-    lines = ['lockfile_version = 3', '', '[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"']
+    lines = ['lockfile_version = 3', '', '[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"', f'specifiers = ["{candidate}"]']
     for platform, arch in (
         ("linux-arm64", "aarch64"),
         ("linux-x64", "x86_64"),

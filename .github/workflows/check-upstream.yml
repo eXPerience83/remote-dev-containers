@@ -151,6 +151,14 @@ jobs:
           latest_ttyd="$(gh api repos/tsl0922/ttyd/releases/latest --jq .tag_name)"
           latest_mise="$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')"
           latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
+          declare -A validation_versions
+          for spec in 'RUFF:astral-sh/ruff' 'PYTEST:pytest-dev/pytest' 'PRE_COMMIT:pre-commit/pre-commit' 'YQ:mikefarah/yq' 'SHFMT:mvdan/sh' 'ACTIONLINT:rhysd/actionlint'; do
+            key="${spec%%:*}"
+            repo="${spec#*:}"
+            version="$(gh api "repos/$repo/releases/latest" --jq '.tag_name | ltrimstr("v")')"
+            [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] || exit 1
+            validation_versions[$key]="$version"
+          done
 
           python_line="${PYTHON_VERSION%.*}"
           python_pattern="${python_line//./[.]}"
@@ -437,14 +445,35 @@ jobs:
           sed -i "s|^python = .*|python = [\"${latest_python}\", \"${latest_python_315}\"]|" mise.toml
           replace_mise_tool node "$latest_node"
           replace_mise_tool uv "$latest_uv"
+          for key in RUFF PYTEST PRE_COMMIT YQ SHFMT ACTIONLINT; do
+            replace_env "${key}_VERSION" "${validation_versions[$key]}"
+          done
+          for tool in yq shfmt actionlint; do
+            key="${tool^^}"
+            replace_mise_tool "$tool" "${validation_versions[$key]}"
+          done
+          for tool in ruff pytest pre-commit; do
+            key="${tool^^}"
+            key="${key//-/_}"
+            sed -i "s|^\"pypi:$tool\" = .*|\"pypi:$tool\" = { version = \"${validation_versions[$key]}\", python = \"${latest_python}\" }|" mise.toml
+          done
           python3 scripts/update-context7-review.py \
             --metadata "$workdir/context7.json" \
             --write
 
+          # Native PyPI graph generation must use the selected exact uv resolver.
+          gh api "repos/astral-sh/uv/releases/tags/${latest_uv}" > "$workdir/uv.json"
+          uv_asset=uv-x86_64-unknown-linux-gnu.tar.gz
+          uv_sha256="$(release_sha256 "$workdir/uv.json" "$uv_asset")"
+          curl "${curl_args[@]}" "https://github.com/astral-sh/uv/releases/download/${latest_uv}/${uv_asset}" -o "$workdir/uv.tar.gz"
+          printf '%s  %s\n' "$uv_sha256" "$workdir/uv.tar.gz" | sha256sum -c -
+          tar -xzf "$workdir/uv.tar.gz" -C "$workdir"
+          export UV_BIN="$workdir/uv-x86_64-unknown-linux-gnu/uv"
           # Reuse the verified mise binary used for Python candidate admission.
           MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
 
           bash scripts/validate-version-pins.sh
+          python3 scripts/sync-python-cli-notices.py --write
           python3 scripts/update-third-party-inventory.py --write
           bash scripts/validate-third-party-inventory.sh
           python3 scripts/sync-standalone-artifact-inspection.py
@@ -459,6 +488,7 @@ jobs:
             versions.env
             mise.toml
             mise.lock
+            .mise/locks
             images/base/Dockerfile
             images/codex/Dockerfile
             scripts/remote-dev-context7-device-login.py

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 import tomllib
@@ -20,6 +21,10 @@ EXPECTED_BACKENDS = {
     "python": "core:python",
     "node": "core:node",
     "uv": "aqua:astral-sh/uv",
+    "yq": "aqua:mikefarah/yq",
+    "shfmt": "aqua:mvdan/sh",
+    "actionlint": "aqua:rhysd/actionlint",
+    **{f"pypi:{name}": f"pypi:{name}" for name in ("ruff", "pytest", "pre-commit")},
 }
 CONFIG_TOP_LEVEL_KEYS = {"settings", "tools"}
 CONFIG_SETTING_KEYS = {
@@ -27,16 +32,20 @@ CONFIG_SETTING_KEYS = {
     "locked_verify_provenance",
     "lockfile_platforms",
 }
-LOCK_TOP_LEVEL_KEYS = {"tools"}
+LOCK_TOP_LEVEL_KEYS = {"tools", "lockfile_version"}
 TOOL_ENTRY_KEYS = {
     "version",
     "backend",
+    "specifiers",
     *(f"platforms.{platform}" for platform in PLATFORMS),
 }
 ARTIFACT_KEYS = {
     "node": {"checksum", "url"},
     "python": {"checksum", "url", "provenance"},
     "uv": {"checksum", "url", "url_api", "provenance"},
+    "yq": {"checksum", "url", "url_api", "provenance"},
+    "shfmt": {"checksum", "url", "url_api"},
+    "actionlint": {"checksum", "url", "url_api", "provenance"},
 }
 
 
@@ -131,6 +140,16 @@ def validate_url(tool: str, version: str, platform: str, url: str) -> str | None
             fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")
         return None
 
+    assets = {
+        "yq": ("mikefarah/yq", f"yq_linux_{'amd64' if platform == 'linux-x64' else 'arm64'}"),
+        "shfmt": ("mvdan/sh", f"shfmt_v{version}_linux_{'amd64' if platform == 'linux-x64' else 'arm64'}"),
+        "actionlint": ("rhysd/actionlint", f"actionlint_{version}_linux_{'amd64' if platform == 'linux-x64' else 'arm64'}.tar.gz"),
+    }
+    if tool in assets:
+        repo, asset = assets[tool]
+        if url != f"https://github.com/{repo}/releases/download/v{version}/{asset}":
+            fail(f"mise.lock {tool} URL for {platform} is unexpected: {url}")
+        return None
     fail(f"no URL policy defined for mise tool {tool}")
 
 
@@ -141,6 +160,10 @@ def expected_versions_from_env(env: dict[str, str]) -> dict[str, str | list[str]
         "node": env.get("NODE_VERSION", ""),
         "uv": env.get("UV_VERSION", ""),
     }
+    expected_versions.update({name: env.get(key + "_VERSION", "") for name, key in {
+        "yq": "YQ", "shfmt": "SHFMT", "actionlint": "ACTIONLINT",
+        "pypi:ruff": "RUFF", "pypi:pytest": "PYTEST", "pypi:pre-commit": "PRE_COMMIT",
+    }.items()})
     for tool, version in expected_versions.items():
         if not version or (isinstance(version, list) and not all(version)):
             fail(f"versions.env has no complete version for {tool}")
@@ -181,6 +204,8 @@ def validate_mise_config(config: dict[str, Any], expected_versions: dict[str, st
             f"{sorted(expected_versions)}, got {sorted(configured_tools)}"
         )
     for tool, expected_version in expected_versions.items():
+        if tool.startswith("pypi:"):
+            expected_version = {"version": expected_version, "python": expected_versions["python"][0]}
         if configured_tools.get(tool) != expected_version:
             fail(
                 f"mise.toml {tool} version {configured_tools.get(tool)!r} does not match "
@@ -206,7 +231,7 @@ def validate_artifact(
     url = expect_string(artifact, "url", f"mise.lock tools.{tool}.{platform}")
     build_identifier = validate_url(tool, version, platform, url)
 
-    if tool in {"python", "uv"} and artifact.get("provenance") != "github-attestations":
+    if tool in {"python", "uv", "actionlint"} and artifact.get("provenance") != "github-attestations":
         fail(
             f"mise.lock {tool} artifact for {platform} must require "
             "GitHub artifact attestations"
@@ -218,6 +243,13 @@ def validate_artifact(
         if not UV_API_URL_RE.fullmatch(url_api):
             fail(f"mise.lock uv API URL for {platform} is unexpected: {url_api}")
 
+    if tool == "yq" and artifact.get("provenance") != "cosign":
+        fail("mise.lock yq must require cosign provenance")
+    repos = {"yq": "mikefarah/yq", "shfmt": "mvdan/sh", "actionlint": "rhysd/actionlint"}
+    if tool in repos and not re.fullmatch(
+        rf"https://api\.github\.com/repos/{repos[tool]}/releases/assets/[1-9][0-9]*", artifact.get("url_api", "")
+    ):
+        fail(f"mise.lock {tool} API URL is unexpected")
     return build_identifier
 
 
@@ -242,6 +274,8 @@ def validate_tool_entry(
             f"mise.lock {tool} version {version!r} does not match "
             f"versions.env {expected_version!r}"
         )
+    if entry.get("specifiers") != [expected_version]:
+        fail(f"mise.lock {tool} specifiers must match the exact version")
     if backend != EXPECTED_BACKENDS[tool]:
         fail(
             f"mise.lock {tool} backend {backend!r} does not match "
@@ -283,6 +317,8 @@ def validate_tool_entry(
 def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str | list[str]]) -> None:
     """Validate the lockfile tool set and each locked runtime entry."""
     require_exact_keys(lock, LOCK_TOP_LEVEL_KEYS, "mise.lock top-level")
+    if lock.get("lockfile_version") != 3:
+        fail("mise.lock must use lockfile_version 3")
     lock_tools = lock.get("tools")
     if not isinstance(lock_tools, dict):
         fail("mise.lock must contain tool entries")
@@ -300,8 +336,73 @@ def validate_lock(lock: dict[str, Any], expected_versions: dict[str, str | list[
                 fail("mise.lock must contain exactly two ordered Python entries")
             for entry, python_version in zip(entries, expected_version, strict=True):
                 validate_tool_entry("python", python_version, [entry])
-        else:
+        elif not tool.startswith("pypi:"):
             validate_tool_entry(tool, expected_version, lock_tools.get(tool))
+
+
+def validate_python_graphs(root, lock, versions):
+    """Bounded validation of the three native uv sidecars; mise rechecks on replay."""
+    for name in ("ruff", "pytest", "pre-commit"):
+        tool = f"pypi:{name}"
+        entries = lock["tools"].get(tool)
+        if not isinstance(entries, list) or len(entries) != 1:
+            fail(f"mise.lock must contain exactly one {tool} entry")
+        entry = entries[0]
+        require_exact_keys(entry, {"version", "backend", "specifiers", "options", "uv"}, tool)
+        version = versions[tool]
+        if (entry["version"] != version or entry["backend"] != tool
+                or entry["specifiers"] != [version]
+                or entry["options"] != {"python": versions["python"][0]}):
+            fail(f"{tool} must pin the reviewed backend, version and administrative Python")
+        ref = entry["uv"]
+        require_exact_keys(ref, {"path", "digest"}, tool + ".uv")
+        if not re.fullmatch(rf"\.mise/locks/pypi-{name}/{re.escape(version)}~[0-9a-f]{{8}}", ref["path"]):
+            fail(f"{tool} has unexpected sidecar path")
+        directory = root / ref["path"]
+        for path in (directory, *directory.parents):
+            if path == root.parent:
+                break
+            if path.is_symlink():
+                fail(f"{tool} sidecar must not be symlinked")
+        for filename in ("uv.lock", "pyproject.toml"):
+            path = directory / filename
+            if not path.is_file() or path.is_symlink() or path.stat().st_size > 2_000_000:
+                fail(f"{tool} missing or unsafe sidecar {filename}")
+        graph_path = directory / "uv.lock"
+        digest = "sha256:" + hashlib.sha256(graph_path.read_bytes()).hexdigest()
+        if digest != ref["digest"]:
+            fail(f"{tool} sidecar digest mismatch")
+        project = load_toml(directory / "pyproject.toml")
+        expected_project = {"project": {"name": "mise-pypi-tool-environment", "version": "0.0.0",
+            "requires-python": "==" + versions["python"][0], "dependencies": [f"{name}=={version}"]}}
+        if project != expected_project:
+            fail(f"{tool} unexpected sidecar project")
+        graph = load_toml(graph_path)
+        if graph.get("requires-python") != "==" + versions["python"][0]:
+            fail(f"{tool} graph must bind administrative Python")
+        packages = graph.get("package", [])
+        if not 2 <= len(packages) <= 32:
+            fail(f"{tool} missing or oversized dependency graph")
+        if not any(p["name"] == name and p["version"] == version for p in packages):
+            fail(f"{tool} missing graph root")
+        for package in packages:
+            if package["name"] == "mise-pypi-tool-environment":
+                if package.get("source") != {"virtual": "."}:
+                    fail(f"{tool} invalid virtual root")
+                continue
+            if package.get("source") != {"registry": "https://pypi.org/simple/"}:
+                fail(f"{tool} unreviewed package registry")
+            wheels = package.get("wheels", [])
+            if not wheels:
+                fail(f"{tool} source-only dependency")
+            for wheel in wheels:
+                if (not wheel.get("url", "").startswith("https://files.pythonhosted.org/packages/")
+                        or not SHA256_RE.fullmatch(wheel.get("hash", ""))):
+                    fail(f"{tool} unreviewed wheel origin or hash")
+            if not any("none-any.whl" in w["url"] for w in wheels):
+                for arch in ("x86_64", "aarch64"):
+                    if not any(arch in w["url"] and "manylinux" in w["url"] for w in wheels):
+                        fail(f"{tool} lacks Linux {arch} wheel")
 
 
 def parse_args() -> argparse.Namespace:
@@ -321,7 +422,9 @@ def main() -> int:
     root = parse_args().root.resolve()
     expected_versions = expected_versions_from_env(load_env(root / "versions.env"))
     validate_mise_config(load_toml(root / "mise.toml"), expected_versions)
-    validate_lock(load_toml(root / "mise.lock"), expected_versions)
+    lock = load_toml(root / "mise.lock")
+    validate_lock(lock, expected_versions)
+    validate_python_graphs(root, lock, expected_versions)
 
     print(
         "mise runtime lock is coherent for "
