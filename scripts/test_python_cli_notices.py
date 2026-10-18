@@ -27,6 +27,18 @@ def archive(files):
 
 
 class Notices(unittest.TestCase):
+    def test_wheel_and_redirect_origins_fail_closed(self):
+        module.validate_wheel_url('https://files.pythonhosted.org/packages/a/test.whl')
+        for url in ('http://files.pythonhosted.org/packages/a/test.whl',
+                    'https://files.pythonhosted.org.evil.test/packages/a/test.whl',
+                    'https://files.pythonhosted.org@evil.test/packages/a/test.whl',
+                    'https://files.pythonhosted.org/packages/a/test.whl?token=x',
+                    'https://example.org/test.whl'):
+            with self.assertRaises(ValueError):
+                module.validate_wheel_url(url)
+            with self.assertRaises(ValueError):
+                module.WheelRedirects().redirect_request(None, None, 302, '', {}, url)
+
     def test_embedded_seed_license_exact_bytes(self):
         data = archive({'pkg.dist-info/licenses/': b'', 'pkg.dist-info/licenses/LICENSE': b'own\r\n',
                         'embed/seed.whl': archive({'seed.dist-info/LICENSE': b'seed\n'})})
@@ -51,7 +63,7 @@ class Notices(unittest.TestCase):
 
     def check(self, root):
         with patch.object(module, 'ROOT', root), patch.object(sys, 'argv', ['sync-python-cli-notices']), \
-                patch.object(module.urllib.request, 'urlopen', side_effect=AssertionError('passive network')):
+                patch.object(module.urllib.request, 'build_opener', side_effect=AssertionError('passive network')):
             module.main()
 
     def test_real_evidence_check_is_offline(self):

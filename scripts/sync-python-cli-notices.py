@@ -8,6 +8,7 @@ import json
 from pathlib import Path, PurePosixPath
 import tomllib
 import urllib.request
+import urllib.parse
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,11 +19,25 @@ def require(condition, message="invalid Python CLI notice evidence"):
         raise ValueError(message)
 
 
+def validate_wheel_url(url):
+    parsed = urllib.parse.urlsplit(url)
+    require(parsed.scheme == 'https' and parsed.netloc == 'files.pythonhosted.org'
+            and parsed.path.startswith('/packages/') and parsed.path.endswith('.whl')
+            and not parsed.query and not parsed.fragment, 'unapproved wheel URL')
+
+
+class WheelRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        validate_wheel_url(newurl)
+        return super().redirect_request(request, fp, code, message, headers, newurl)
+
+
 def download(wheel):
     url = wheel['url']
-    require(url.startswith('https://files.pythonhosted.org/packages/'))
-    with urllib.request.urlopen(url, timeout=60) as response:
-        require(response.geturl().startswith('https://files.pythonhosted.org/packages/'))
+    validate_wheel_url(url)
+    opener = urllib.request.build_opener(WheelRedirects())
+    with opener.open(url, timeout=60) as response:
+        validate_wheel_url(response.geturl())
         data = response.read(64 * 1024 * 1024 + 1)
     require(len(data) <= 64 * 1024 * 1024)
     require('sha256:' + hashlib.sha256(data).hexdigest() == wheel['hash'])

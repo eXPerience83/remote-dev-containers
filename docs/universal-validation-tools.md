@@ -1,6 +1,6 @@
 # PR2 local validation tools (#121)
 
-This candidate adds exactly six commands to the accepted PR1 baseline (47 → 53): Ruff **0.17.1**, pytest **9.1.1**, pre-commit **4.7.0**, Mike Farah yq **4.54.1**, shfmt **3.14.1**, actionlint **1.7.12**. Official stable release metadata and assets were rechecked on 2026-10-18. This is a candidate, pending installation/build acceptance; it is not a stable release or an ARM64 support claim.
+This candidate adds exactly six commands to the accepted PR1 baseline (47 → 53): Ruff **0.17.1**, pytest **9.1.1**, pre-commit **4.7.0**, Mike Farah yq **4.54.1**, shfmt **3.14.1**, actionlint **1.7.12**. Official stable release metadata and assets were rechecked on 2026-10-18. This is a candidate, pending final review and acceptance; it is not a stable release or an ARM64 support claim.
 
 ## Installation and project precedence
 
@@ -16,12 +16,12 @@ Use the pinned mise from `versions.env` and the exact pinned uv (`UV_BIN`) with 
 
 `scripts/sync-python-cli-notices.py --write` retrieves only hash-verified official wheels from the committed graphs and preserves their actual license/notice files, including virtualenv's embedded seed wheels. Its offline check binds the preserved evidence to exact graph artifacts. All graph packages (including platform-conditional colorama) are represented conservatively in the inventory; this does not assert every conditional package is installed on Linux. Existing image SPDX SBOM and Trivy/no-fixable-critical gates remain mandatory. Repository evidence complements scanner coverage rather than claiming perfect discovery of embedded bytes. #53 human legal review remains required.
 
-## Validation and current blocker
+## Validation and evidence
 
 `test-validation-tools.sh` exercises all six commands offline in read-only, networkless, capability-free containers for both Codex and Antigravity role fixtures, from neutral and Python-3.15 project CWDs. It checks Ruff rejection/formatting, real pytest tests and its isolated 3.14 interpreter, local pre-commit hooks, yq transformation, shfmt formatting, valid/invalid Actions workflows, both clean global Python site-packages, explicit project venv selection and immutable store stability. Existing mise tests add yq missing-version/no-fallback coverage. Role fixtures prove process environment behavior, not real authenticated model task success; live agent/TrueNAS acceptance stays external.
 
-Local generation with the verified pinned mise and uv succeeded for both architectures. Replay currently exposes a pinned-mise incompatibility: `mise install --locked` with the explicit PyPI Python selector reports `No lockfile URL found for python@3.14.8 on platform linux-x64`, although the committed lock contains that exact URL and checksum. Reproduced with project and canonical system configurations. The candidate deliberately retains the strict mode and explicit interpreter binding. Do not merge until the exact candidate passes clean-image replay or a separately approved upstream fix resolves this blocker.
+Local generation with the verified pinned mise and uv succeeded for both architectures. Actual payload functional tests also pass in private frozen uv environments, with both global Python site-packages clean. Local replay against inherited installation state reported `No lockfile URL found for python@3.14.8`; **clean Docker CI at `6108761` subsequently passed locked installation and all image/runtime smokes**, including both hardened role fixtures and Python 3.15 project selection. The local inherited-state fixture is not evidence of a clean-image mise defect. No locking or interpreter-isolation safeguard was disabled.
 
-This session has no Docker CLI/backend. Hardened image execution, exact before/after image sizes, SPDX generation and Trivy must therefore be assessed from GitHub CI. No local image, SBOM, scan or size result is claimed. The issue's 50 MiB uncompressed soft threshold still requires review of the measured delta. No deployment, stable publication or merge is authorized by this candidate.
+This session has no Docker CLI/backend. Hardened image execution, exact before/after image sizes, SPDX generation and Trivy are assessed from GitHub CI. No local image, SBOM, scan or size result is claimed. The issue's 50 MiB uncompressed soft threshold still requires review of the measured delta. No deployment, stable publication or merge is authorized by this candidate.
 
 License bytes are consolidated per package into labeled `NOTICES.txt` files (including exact wheel/member names), so generated evidence remains reviewable without excluding it from code review. Standalone inspection also covers all six new AMD64/ARM64 Aqua assets; existing standalone evidence is preserved.

@@ -187,6 +187,11 @@ def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, 
             component = dict(id="python-cli-" + name, name=name, image_scope="both", version=version,
                 source=f"https://pypi.org/project/{name}/{version}/", license=record["license"],
                 notices=[dict(path=f"components/python-clis/{name}-{version}/", source="artifact")])
+            if name == "virtualenv":
+                component["distribution_notes"] = (
+                    "MIT identifies virtualenv itself. Redistributed seed wheels and vendored "
+                    "components retain their own terms, preserved with exact member labels in NOTICES.txt."
+                )
             if name in ("ruff", "pytest", "pre-commit"):
                 component["version_key"] = name.upper().replace("-", "_") + "_VERSION"
             refreshed.append(component)

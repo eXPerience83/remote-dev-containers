@@ -504,7 +504,8 @@
           "path": "components/python-clis/virtualenv-21.14.8/",
           "source": "artifact"
         }
-      ]
+      ],
+      "distribution_notes": "MIT identifies virtualenv itself. Redistributed seed wheels and vendored components retain their own terms, preserved with exact member labels in NOTICES.txt."
     }
   ]
 }
