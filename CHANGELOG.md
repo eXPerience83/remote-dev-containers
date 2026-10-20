@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-10-20 — mise 2026.10.13 → 2026.10.15; uv 0.13.1 → 0.13.3; Context7 CLI (transient) 0.8.0 → 0.8.1.
+
 - 2026-10-18 — mise 2026.10.12 → 2026.10.13.
 
 - 2026-10-17 — Codex CLI 0.162.1 → 0.163.0; mise 2026.10.8 → 2026.10.12; Node.js 24.21.0 → 24.22.0; npm 12.2.0 → 12.2.1; uv 0.13.0 → 0.13.1; Context7 CLI (transient) 0.6.0 → 0.8.0.
