@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'mise.lock'
+      - 'scripts/sync-python-runtime-notices.py'
+      - 'scripts/compact-python-runtime-notices.py'
       - 'third_party/components/python-build-standalone/**'
       - 'third_party/components/python-build-standalone-315/**'
       - '.github/workflows/security-python-legal-refresh.yml'
