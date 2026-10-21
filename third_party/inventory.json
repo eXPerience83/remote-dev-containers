@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.102.0",
+      "version": "2.102.1",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.102.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.102.1/LICENSE"
         }
       ]
     },
@@ -94,14 +94,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.10.13",
+      "version": "2026.10.17",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.10.13/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.10.17/LICENSE"
         }
       ]
     },
