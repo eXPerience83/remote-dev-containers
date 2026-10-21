@@ -1,0 +1,47 @@
+name: Temporary Python CA legal regeneration (PR 286)
+
+on:
+  pull_request:
+    paths:
+      - 'mise.lock'
+      - 'third_party/components/python-build-standalone/**'
+      - 'third_party/components/python-build-standalone-315/**'
+      - '.github/workflows/security-python-legal-refresh.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install archive extractor
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zstd
+      - name: Regenerate full upstream Python standalone legal evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for ver in 3.14.8 3.15.0; do
+            if [[ "$ver" == 3.14.* ]]; then
+              out=third_party/components/python-build-standalone
+            else
+              out=third_party/components/python-build-standalone-315
+            fi
+            python3 scripts/sync-python-runtime-notices.py --write --python-version "$ver" --output "$out"
+            python3 scripts/compact-python-runtime-notices.py --write --python-version "$ver" --output "$out"
+          done
+          git status --short -- third_party/components/python-build-standalone third_party/components/python-build-standalone-315
+      - name: Preserve exact regenerated notices
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: regenerated-python-ca-notices
+          path: |
+            third_party/components/python-build-standalone/
+            third_party/components/python-build-standalone-315/
+          if-no-files-found: error
+          retention-days: 1
