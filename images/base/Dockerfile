@@ -219,7 +219,7 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
         "$security_python" -I -c 'import pip; v=tuple(map(int,pip.__version__.split(".")[:3])); assert v >= (26,2,2), f"insecure pip {pip.__version__}"' || exit; \
         "$security_python" -I -m pip --version || exit; \
       done \
-    && rm -rf "${MISE_CACHE_DIR:?"}"/*
+    && rm -rf "${MISE_CACHE_DIR:?}"/*
 
 # Keep project and bundled-component terms inspectable in both the repository and
 # the built image. Runtime archives contribute their own license files here.
