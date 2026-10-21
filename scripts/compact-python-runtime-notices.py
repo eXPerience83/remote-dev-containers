@@ -206,8 +206,8 @@ def check(root: Path, output: Path, sync: ModuleType, python_version: str | None
         actual_digest = hashlib.sha256(content).hexdigest()
         if actual_digest != digest:
             fail(f"supplemental Python license digest mismatch: {path}")
-    if actual_supplemental != expected_supplemental:
-        fail("Python supplemental license sources do not match the reviewed mapping")
+    if not actual_supplemental.issubset(expected_supplemental):
+        fail("Python supplemental license manifest contains an unreviewed source")
 
     print("Compact Python standalone runtime notices: OK")
 

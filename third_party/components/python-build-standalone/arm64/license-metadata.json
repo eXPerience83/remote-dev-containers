@@ -21,7 +21,6 @@
     "licenses/LICENSE.libxcb.txt",
     "licenses/LICENSE.mpdecimal.txt",
     "licenses/LICENSE.ncurses.txt",
-    "licenses/LICENSE.openssl-1.1.txt",
     "licenses/LICENSE.openssl-3.txt",
     "licenses/LICENSE.sqlite.txt",
     "licenses/LICENSE.tcl.txt",
@@ -93,11 +92,9 @@
     "_hashlib": [
       {
         "licenses": [
-          "Apache-2.0",
-          "OpenSSL"
+          "Apache-2.0"
         ],
         "license_paths": [
-          "licenses/LICENSE.openssl-1.1.txt",
           "licenses/LICENSE.openssl-3.txt"
         ]
       }
@@ -123,11 +120,9 @@
     "_ssl": [
       {
         "licenses": [
-          "Apache-2.0",
-          "OpenSSL"
+          "Apache-2.0"
         ],
         "license_paths": [
-          "licenses/LICENSE.openssl-1.1.txt",
           "licenses/LICENSE.openssl-3.txt"
         ]
       }

@@ -159,6 +159,22 @@ url = "https://github.com/astral-sh/python-build-standalone/releases/download/20
                 json.dumps(manifest), encoding="utf-8"
             )
             self.sync.check(root, output)
+            # New upstream full archives can already include both historical
+            # missing licenses; no supplemental download is then necessary.
+            manifest["supplemental_licenses"] = []
+            (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self.sync.check(root, output)
+            # Unknown or substituted supplemental sources must remain rejected.
+            manifest["supplemental_licenses"] = [
+                {"source_url": "https://example.invalid/LICENSE", "sha256": "0" * 64}
+            ]
+            (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self.assert_rejected(self.sync.check, root, output)
+            # A non-dictionary supplemental entry must fail even when its
+            # removal would otherwise make the approved subset look empty.
+            manifest["supplemental_licenses"] = [False]
+            (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self.assert_rejected(self.sync.check, root, output)
 
 
 if __name__ == "__main__":
