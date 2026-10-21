@@ -223,12 +223,16 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
 
 # Keep project and bundled-component terms inspectable in both the repository and
 # the built image. Runtime archives contribute their own license files here.
+# Create the parent explicitly: COPY --chmod=0444 otherwise creates it as 0444,
+# which prevents traversal when CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH are dropped.
+RUN install -d -o 0 -g 0 -m 0755 /usr/share/doc/remote-dev
 COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
 RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
-    locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
+    test "$(stat -c '%u:%g %a' /usr/share/doc/remote-dev)" = '0:0 755' \
+    && locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
     && for expected in \
       "PYTHON_VERSION=${PYTHON_VERSION}" \
       "PYTHON_315_VERSION=${PYTHON_315_VERSION}" \
