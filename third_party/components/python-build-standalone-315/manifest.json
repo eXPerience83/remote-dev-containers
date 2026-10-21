@@ -8,18 +8,7 @@
     "noopt"
   ],
   "shared_license_texts": true,
-  "supplemental_licenses": [
-    {
-      "path": "licenses/LICENSE.zlib-ng.txt",
-      "source_url": "https://raw.githubusercontent.com/python/cpython-source-deps/zlib-ng-2.2.4/LICENSE.md",
-      "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee"
-    },
-    {
-      "path": "licenses/LICENSE.zstd.txt",
-      "source_url": "https://raw.githubusercontent.com/python/cpython-source-deps/zstd-1.5.7/LICENSE",
-      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
-    }
-  ],
+  "supplemental_licenses": [],
   "artifacts": [
     {
       "arch": "amd64",
