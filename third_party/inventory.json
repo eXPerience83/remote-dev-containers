@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-10-18",
+  "refreshed_on": "2026-10-21",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -180,19 +180,19 @@
       "name": "uv",
       "image_scope": "both",
       "version_key": "UV_VERSION",
-      "version": "0.13.1",
+      "version": "0.13.4",
       "source": "https://github.com/astral-sh/uv",
       "license": "Apache-2.0 OR MIT",
       "notices": [
         {
           "path": "components/uv/LICENSE-APACHE-2.0",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.1/LICENSE-APACHE"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.4/LICENSE-APACHE"
         },
         {
           "path": "components/uv/LICENSE-MIT",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.1/LICENSE-MIT"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.4/LICENSE-MIT"
         }
       ]
     },

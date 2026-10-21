@@ -21,7 +21,7 @@ ARG PYTHON_VERSION=3.14.8
 ARG PYTHON_315_VERSION=3.15.0
 ARG NODE_VERSION=24.22.0
 ARG NPM_VERSION=12.2.1
-ARG UV_VERSION=0.13.1
+ARG UV_VERSION=0.13.4
 
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
@@ -212,7 +212,14 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && test "$(npm --version)" = "$NPM_VERSION" \
     && test "$(npx --version)" = "$NPM_VERSION" \
     && uv --version \
-    && rm -rf "${MISE_CACHE_DIR:?}"/*
+    && test "$(uv --version | awk '{print $2}')" = "${UV_VERSION}" \
+    && for security_python in \
+      "$MISE_DATA_DIR/installs/python/$PYTHON_VERSION/bin/python3" \
+      "$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3"; do \
+        "$security_python" -I -c 'import pip; v=tuple(map(int,pip.__version__.split(".")[:3])); assert v >= (26,2,2), f"insecure pip {pip.__version__}"' || exit; \
+        "$security_python" -I -m pip --version || exit; \
+      done \
+    && rm -rf "${MISE_CACHE_DIR:?"}"/*
 
 # Keep project and bundled-component terms inspectable in both the repository and
 # the built image. Runtime archives contribute their own license files here.
