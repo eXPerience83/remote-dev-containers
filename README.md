@@ -1,6 +1,6 @@
 # Remote Dev Containers — starter v0.1.1-dev
 
-The PR2 candidate adds six locked validation CLIs; see [design, evidence and pending gates](docs/universal-validation-tools.md).
+PR2 is integrated into `edge`: six pinned validation CLIs and a 53-command public baseline. See the [PR2 tooling contract and evidence](docs/universal-validation-tools.md). Live TrueNAS acceptance is still pending.
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
@@ -28,13 +28,15 @@ Current foundations:
 - an optional isolated Antigravity service with private state and a vendor runtime installed only by explicit user action;
 - Ubuntu 26.04 LTS, AMD64 first;
 - Codex CLI from an official pinned release asset, plus an explicit optional official runtime path with the bundled CLI retained as fallback;
-- GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd and tmux;
+- GitHub CLI, default Python 3.14 and project-selectable Python 3.15, Node 24, npm, uv, mise, ttyd, tmux and six PR2 validation CLIs (`ruff`, `pytest`, `pre-commit`, `yq`, `shfmt`, `actionlint`);
 - one canonical role-neutral persistent-data contract;
 - one configuration-backed `WEB_PASSWORD` browser-authentication runtime contract for protected agent endpoints, with separate Codex/Antigravity configuration entries; values may currently be reused across agents;
 - project selection below each private `/workspace` collection root;
 - `dev -> edge -> stable = latest` release semantics, with dated edge build identity separate from channel and immutable provenance.
 
 ## Install on TrueNAS SCALE
+
+**[Step-by-step manual: first deployment, persistent directories, and safe updates](docs/truenas-install.md).** Includes same-source script retrieval and a PR2 acceptance checklist.
 
 Use [`compose/truenas.yml`](compose/truenas.yml) as the **canonical TrueNAS Custom App YAML**. Do not maintain a copied stack definition in the README.
 

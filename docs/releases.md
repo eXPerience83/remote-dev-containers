@@ -120,7 +120,7 @@ Two bounded automation owners may update machine-owned subsections under `Unrele
 
 ### Grouped upstream refreshes
 
-`.github/workflows/check-upstream.yml` owns bundled/runtime/tool pins such as Codex CLI, GitHub CLI, ttyd, mise, uv and selected Python/Node/npm lines.
+`.github/workflows/check-upstream.yml` owns bundled/runtime/tool pins such as Codex CLI, GitHub CLI, ttyd, mise, uv, six PR2 validation CLIs and selected Python/Node/npm lines.
 
 When actual component versions change, the same review PR updates the bounded `### Automated upstream refreshes` area using repository old/new values. Checksum-only churn does not invent a fake user-facing application-version change. Re-running against the same baseline is deterministic and the automation never auto-merges the PR.
 

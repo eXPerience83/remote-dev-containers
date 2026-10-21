@@ -1,6 +1,6 @@
 # Dual Python 3.14 / 3.15 runtime contract
 
-Status: **candidate in PR #273, not merged or deployed**. Owning issue: [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270). The shared-image universal CLI expansion remains separate under [#121 PR2](https://github.com/eXPerience83/remote-dev-containers/issues/121); Python #257 was completed by PR #271. This document describes the candidate behavior and acceptance gates, not a claim that TrueNAS already runs it.
+Status: **PR #273 is merged into main and shipped in experimental edge**. Owning issue [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270) is closed following exact-head CI and owner acceptance of its image-size exception. Universal CLI [PR2 #281](https://github.com/eXPerience83/remote-dev-containers/pull/281) is also merged and published in edge as of 2026-10-18, with its real TrueNAS operational acceptance still pending. Python upstream issue #257 was addressed by PR #271. This document describes implemented behavior, not proof of authenticated real-agent sessions.
 
 ## Supported versions and selection
 
@@ -40,22 +40,21 @@ The CI `Build AMD64` workflow runs `scripts/build-local.sh` and the following gu
 | --- | --- |
 | Both exact Python executables and 3.14 default | `scripts/smoke-test.sh` |
 | 3.14/3.15 project selection in **both Codex and Antigravity roles** | `scripts/test-mise-project-resolution.sh` |
-| Offline `uv` venvs for both interpreters, exact versions, distinct site-packages, no global version change | `scripts/test-mise-project-resolution.sh` (added in this PR; requires its exact-head CI pass) |
+| Offline `uv` venvs for both interpreters, exact versions, distinct site-packages, no global version change | `scripts/test-mise-project-resolution.sh` (merged; PR CI passed) |
 | Missing version, untrusted config, no fallback or implicit install, immutable tool store | `scripts/test-mise-project-resolution.sh` |
 | State/mount/rootfs isolation, role credentials and launcher separation | `scripts/test-cross-service-isolation.sh` |
 | Lock platform/backend/asset/provenance drift and safe regeneration | `scripts/test-validate-mise-lock.py`, `scripts/test-regenerate-mise-lock.sh` |
 | Patch propagation delays and unexpected failures | `scripts/test_preflight_python_upstream.py` |
 | Third-party notices and vulnerabilities | `scripts/validate-third-party-inventory.sh`, `remote-dev-notices --check`, SPDX SBOM, Trivy and no-fixable-CRITICAL gate |
 
-CI proves AMD64 execution and complete AMD64/ARM64 lock **metadata**; it does **not** claim ARM64 runtime support (tracked separately by #112) or genuine authenticated vendor-agent sessions. A final rollout still requires manual TrueNAS validation (both agent browser sessions, histories, project selections and unchanged sandbox boundaries).
+CI proves AMD64 execution and complete AMD64/ARM64 lock **metadata**; it does **not** claim ARM64 runtime support (tracked separately by #112) or genuine authenticated vendor-agent sessions. Each newly published image still requires appropriate TrueNAS operational validation (agent browser sessions, histories, project selections and security boundaries); PR2 acceptance is tracked separately under #121.
 
 ## Size and release decision
 
 The candidate with both versions has a measurable cost. At identical pinned component versions, the green `main` build at `b42f9c2` (run [38548947867](https://github.com/eXPerience83/remote-dev-containers/actions/runs/38548947867)) reports a final uncompressed image size of **1,547,987,128 bytes**. Candidate build at `bba44c0` (run [38633948930](https://github.com/eXPerience83/remote-dev-containers/actions/runs/38633948930)) reports **1,655,339,677 bytes**. Increment: **107,352,549 bytes / 102.38 MiB**. Base image grows by 107,351,674 bytes. This exceeds #121's 50 MiB **soft** review threshold: shipping an always-available second interpreter is an explicit functionality/size trade-off, not a free optimization. No exact compressed-pull delta is asserted.
 
-## Still to accept
+## Decisions and remaining follow-up
 
-- Exact-head CI of the new offline dual-venv test must pass; CodeRabbit review (and all required feedback) must be completed.
-- Resolve/coordinate open upstream update PR [#272](https://github.com/eXPerience83/remote-dev-containers/pull/272) and rerun CI after any merge/rebase. Do not overwrite upstream pins in an unrelated PR.
-- Explicitly review the +102.38 MiB size exception, update acceptance evidence on #270/PR #273 and manually merge only after the exact final head passes all gates.
-- Keep #121 PR2 (Ruff/pytest/pre-commit/yq/shfmt/actionlint) and PR3 demand study as separate reviewed changes.
+- PR #273 has merged with exact-head CI validated and an explicit owner-accepted **+102.38 MiB** uncompressed image-size exception (2026-10-17). This is not a measured compressed-pull delta.
+- PR2 #281 (six immutable validation CLIs) was merged and published in edge on 2026-10-18; live TrueNAS acceptance for that integrated image remains open under [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121).
+- PR3 agent-demand research and #180 persistent on-demand toolchains remain separate work. Neither should introduce extra startup parameters or passive downloads.

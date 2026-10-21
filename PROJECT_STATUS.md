@@ -14,9 +14,11 @@
 - Image rebuild/update workflows for bundled components rather than broad in-container package mutation.
 - `dev -> edge -> stable = latest` release-channel contract; immutable digest remains the strongest reproduction/rollback identity.
 
-## PR2 candidate (#121)
+## PR2 integrated — operational acceptance pending (#121)
 
-The candidate adds exactly Ruff, pytest, pre-commit, Mike Farah yq, shfmt and actionlint (53 public commands). Python CLI graphs use pinned mise/PyPI+uv sidecars and explicit administrative Python 3.14; no shared Python packages are added. See `docs/universal-validation-tools.md` and `.es.md` for evidence and outstanding gates. PR2 acceptance remains pending; PR3 and #180 remain separate.
+Security fix #286 (emSign CA trust) and the TrueNAS notice-directory traversal fix #285 are merged into `main` (2026-10-21), with the former exact-head build and post-merge experimental edge publication verified. The notice fix creates `/usr/share/doc/remote-dev` as `root:root 0755` and tests notices under a capability-free container. **Real TrueNAS acceptance of the new image, without restoring DAC capabilities, remains to be recorded in #121.** The release channel is still experimental; there is no stable tag.
+
+PR #281 is squash-merged into `main` at `5a56c3006135d41c913bb09a7f3be37d35c2c4df` and passed main-push `Build AMD64` and experimental `Publish edge AMD64` (2026-10-18). Ruff, pytest, pre-commit, Mike Farah yq, shfmt and actionlint are bundled (53 public commands). Python CLIs use pinned mise/PyPI+uv graphs and administrative Python 3.14 without contaminating the shared interpreters. Owner-approved soft image-size exception and targeted distribution/licensing review are recorded under #53. **Live TrueNAS PR2 acceptance remains outstanding**; #121 is open. See `docs/universal-validation-tools.md` / `.es.md` and the first-install manuals `docs/truenas-install.md` / `.es.md`. PR3 and #180 remain separate.
 
 ## Current implementation
 
@@ -61,7 +63,7 @@ The current TrueNAS YAML path is deterministic:
 - `scripts/truenas-acl-audit.py` validates the TrueNAS Generic/POSIX private-state ACL contract without modifying data;
 - no browser-password secret directory is created or required.
 
-See `docs/truenas-acl-contract.md` for the ACL rationale, audit and migration guidance.
+See `docs/truenas-acl-contract.md` for ACL rationale and `docs/truenas-install.md` / `.es.md` for exact-revision bootstrap and post-update acceptance instructions.
 
 ## Security boundary
 
@@ -101,13 +103,13 @@ Exact mutable component versions remain authoritative in `versions.env` and runt
 
 The main implementation foundations are already present. Before the first stable publication the repository still needs to satisfy the support level it actually claims, including:
 
-- merge the #92 documentation synchronization and close the stale status gap;
-- reconcile #31 so completed gates are no longer listed as pending and only real release blockers remain;
+- complete real TrueNAS PR2/#121 acceptance for both agent roles, persistence, the six tools, project Python selection and session continuity;
+- reconcile #31 so only genuine stable-release blockers remain;
 - pass the stable-release checklist in `docs/releases.md` on an exact `main` revision/digest;
 - complete any open maintenance/security item that #31 identifies as blocking the claimed stable support level;
 - create the dated stable changelog section and publish an exact SemVer release only after those gates pass.
 
-Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #121 universal tooling, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because the core YAML deployment works.
+Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #180 persistent on-demand toolchains, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because PR2's universal baseline has been integrated.
 
 ## Upstream pin policy
 
