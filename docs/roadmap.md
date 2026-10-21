@@ -59,9 +59,9 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 
 ## Current milestone — first stable release preparation
 
-Remote Dev still has no stable release. The current work is to make the public/support surface match the implementation and then run the exact stable-release gates.
+PR2 #281 (six locked pre-CI CLIs) was integrated and published to experimental edge on 2026-10-18; live TrueNAS acceptance is pending under #121. Remote Dev still has no stable release. The current work is to make the public/support surface match the implementation and then run the exact stable-release gates.
 
-1. **#92 — documentation synchronization.** Align README EN/ES, project status, roadmap, architecture/security/tool/release guidance and changelog with the implemented stack and final experimental Antigravity wording.
+1. **Operator documentation and PR2 acceptance.** Maintain the bilingual first-install/update runbooks and validate the integrated 53-command `edge` build on TrueNAS with the two enabled agent roles.
 2. **#31 — tracker reconciliation.** Remove already completed gates from the pending lists and identify only blockers that genuinely remain for the support level claimed by the first stable release.
 3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, agent authentication, persistence, isolation, notices/SBOM and vulnerability gates.
 4. **Stable publication.** Only after the gates pass, create the dated changelog release section and exact `vMAJOR.MINOR.PATCH`; publish `stable` and `latest` as the same reviewed digest.
@@ -85,7 +85,8 @@ These are not shipped by the current core contract unless their own issue says o
 - #95 — Context7 for Antigravity.
 - #71 — optional SMB access to selected project paths only.
 - #112 — ARM64.
-- #121 — broader/universal developer tooling.
+- #121 — PR1 and PR2 are integrated (53 baseline commands); live TrueNAS acceptance remains before closing the tracker. PR3 is a separate agent-demand survey.
+- #180 — persistent on-demand project toolchains beyond the immutable baseline.
 - #148 — concurrent sessions/worktrees.
 - #151 — isolated container build/test tooling without a host Docker socket.
 - #97/#90/#91/#152/#87 — frontend/mobile/browser-experience work.

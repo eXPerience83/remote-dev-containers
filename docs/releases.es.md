@@ -120,7 +120,7 @@ Dos propietarios de automatización acotados pueden modificar subsecciones machi
 
 ### Actualizaciones upstream agrupadas
 
-`.github/workflows/check-upstream.yml` es propietario de pines de runtime/herramientas agrupados como Codex CLI, GitHub CLI, ttyd, mise, uv y las líneas seleccionadas de Python/Node/npm.
+`.github/workflows/check-upstream.yml` es propietario de pines de runtime/herramientas agrupados como Codex CLI, GitHub CLI, ttyd, mise, uv, las seis CLI de validación PR2 y las líneas seleccionadas de Python/Node/npm.
 
 Cuando cambian realmente versiones de componentes, el mismo PR de revisión actualiza el área acotada `### Automated upstream refreshes` utilizando los valores antiguos/nuevos del repositorio. El ruido exclusivo de checksums no inventa una falsa actualización de aplicación. Repetir la ejecución contra la misma base es determinista y la automatización nunca hace auto-merge.
 

@@ -1,6 +1,6 @@
 # Contrato de Python 3.14 / 3.15 en paralelo
 
-Estado: **candidato en PR #273; no está fusionado ni desplegado**. Issue responsable: [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270). La ampliación de herramientas universales sigue separada en [#121 PR2](https://github.com/eXPerience83/remote-dev-containers/issues/121); el problema anterior de actualizaciones de Python #257 se corrigió en PR #271. Este documento describe el comportamiento candidato y los requisitos de aceptación, no que TrueNAS ya lo esté ejecutando.
+Estado: **PR #273 fusionada en main y distribuida en edge**. Issue [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270), cerrado tras la aceptación de su excepción de tamaño y la CI. La ampliación universal [PR2 #281](https://github.com/eXPerience83/remote-dev-containers/pull/281) también está integrada y publicada como edge desde el 18/10/2026, pero su aceptación operativa en TrueNAS sigue pendiente. El incidente de actualizaciones #257 se corrigió en PR #271. Esta guía describe el contrato implementado; no confunde CI con sesiones reales de agentes.
 
 ## Versiones y selección
 
@@ -40,22 +40,21 @@ La Action `Build AMD64` ejecuta `scripts/build-local.sh` y estos controles:
 | --- | --- |
 | Ambos Python exactos y 3.14 predeterminado | `scripts/smoke-test.sh` |
 | Selección 3.14/3.15 por proyecto en **Codex y Antigravity** | `scripts/test-mise-project-resolution.sh` |
-| Dos venv `uv` sin red: versión exacta, paquetes aislados y Python global intacto | `scripts/test-mise-project-resolution.sh` (añadida a este PR; exige CI verde del último commit) |
+| Dos venv `uv` sin red: versión exacta, paquetes aislados y Python global intacto | `scripts/test-mise-project-resolution.sh` (integrada; CI de la PR superada) |
 | Versión ausente, proyecto no confiable, sin instalación/fallback y almacén inmutable | `scripts/test-mise-project-resolution.sh` |
 | Separación de estados y montajes, credenciales, launcher y rootfs | `scripts/test-cross-service-isolation.sh` |
 | Lock: arquitecturas, backend, artefactos, procedencia y regeneración segura | `scripts/test-validate-mise-lock.py` y `scripts/test-regenerate-mise-lock.sh` |
 | Retrasos de propagación y errores inesperados | `scripts/test_preflight_python_upstream.py` |
 | Licencias y vulnerabilidades | `scripts/validate-third-party-inventory.sh`, `remote-dev-notices --check`, SBOM SPDX, Trivy y bloqueo de críticos corregibles |
 
-CI demuestra ejecución AMD64 y metadatos de lock completos para AMD64/ARM64; **no** implica soporte de ejecución ARM64 (issue #112) ni sesiones reales autenticadas con los agentes. Antes de implantarlo sigue siendo necesaria la validación manual de TrueNAS: interfaz de ambos agentes, historial, selección de intérpretes y seguridad de contenedores.
+CI demuestra ejecución AMD64 y metadatos de lock completos para AMD64/ARM64; **no** implica soporte de ejecución ARM64 (issue #112) ni sesiones reales autenticadas con los agentes. La aceptación operativa de cada nueva imagen sigue requiriendo comprobar en TrueNAS las interfaces de los agentes, sus historiales, la selección de intérprete y los límites del contenedor; la integración PR2 se valida por separado en #121.
 
 ## Tamaño y decisión de publicación
 
 Añadir el segundo intérprete tiene coste. Con los mismos pins de componentes, el build verde de `main` `b42f9c2` ([38548947867](https://github.com/eXPerience83/remote-dev-containers/actions/runs/38548947867)) ocupa **1.547.987.128 bytes** sin comprimir. El candidato `bba44c0` ([38633948930](https://github.com/eXPerience83/remote-dev-containers/actions/runs/38633948930)) ocupa **1.655.339.677 bytes**. Incremento: **107.352.549 bytes / 102.38 MiB**. La imagen base aumenta 107.351.674 bytes. Supera el umbral **blando** de revisión de 50 MiB de #121: disponer siempre del segundo Python es una decisión explícita de funcionalidad frente a tamaño. No afirmamos conocer el incremento exacto de descarga comprimida.
 
-## Pendiente antes de aceptar
+## Decisiones y seguimiento
 
-- CI verde del último commit con el nuevo test de venv, revisión de CodeRabbit y resolución de sus observaciones.
-- Coordinar [PR #272](https://github.com/eXPerience83/remote-dev-containers/pull/272), relativo a actualizaciones upstream, y repetir la CI tras cualquier fusión/rebase. No sobrescribir pins desde PR no relacionado.
-- Revisar expresamente la excepción de +102.38 MiB, registrar las evidencias en #270/PR #273 y fusionar manualmente solo si todos los controles del commit final pasan.
-- Mantener PR2 del #121 (Ruff, pytest, pre-commit, yq, shfmt y actionlint) y PR3 (demanda real de herramientas) como cambios independientes.
+- PR #273 está fusionada, con CI de su revisión final validada y excepción de **+102,38 MiB** sin comprimir aceptada explícitamente por el propietario el 17/10/2026. No se interpreta como incremento de descarga comprimida.
+- PR2 #281, con las seis herramientas universales, se fusionó y publicó en edge el 18/10/2026. La aceptación de esa imagen en el TrueNAS real sigue pendiente en [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121).
+- El estudio PR3 y los toolchains bajo demanda de #180 siguen siendo trabajo independiente. No introducir parámetros de arranque ni instalaciones pasivas para suplirlos.

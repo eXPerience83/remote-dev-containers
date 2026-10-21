@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-- PR2 candidate: add isolated locked Ruff 0.17.1, pytest 9.1.1 and pre-commit 4.7.0 CLI environments plus Aqua-locked Mike Farah yq 4.54.1, shfmt 3.14.1 and actionlint 1.7.12. Preserve Python 3.14.8 default / 3.15.0 project selection, launcher independence and immutable runtime boundaries. Final exact-head build and legal/size acceptance remain pending; see `docs/universal-validation-tools.md`.
-
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->
@@ -56,6 +54,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- PR2 (#281): six pre-CI validation CLIs — Ruff 0.17.1, pytest 9.1.1 and pre-commit 4.7.0 in isolated hash-locked Python CLI environments, plus Aqua-locked Mike Farah yq 4.54.1, shfmt 3.14.1 and actionlint 1.7.12. The public baseline is now 53 commands; Python 3.14/3.15 project precedence, read-only root, private agent state and fail-closed behavior are intact. Exact-head CI and main-push AMD64 build/experimental edge publication succeeded on 2026-10-18. **Live TrueNAS PR2 acceptance is pending**. The project owner approved a targeted distribution/license review and +70.41 MiB base / +68.06 MiB final uncompressed soft-budget exception under #53. This is not a stable release.
+- Added bilingual TrueNAS first-install/update runbooks for exact-image-source bootstrap, preflight, host ACL audit and PR2 acceptance, reusing the existing canonical directory initializer rather than adding a second creation script.
 - Bundle two independently locked CPython maintenance runtimes: Python 3.14.x remains the default/administrative interpreter, while compatible projects may explicitly select the parallel Python 3.15.x interpreter. Validate both versions on AMD64 and ARM64, preserve version-specific legal evidence and maintain both update lines without relaxing mise's fail-closed policy.
 - Expanded the immutable common developer baseline with low-cost filesystem, process, network/DNS/TLS, archive and template diagnostics; promoted already-intentional `python3`, `sqlite3`, `xz`, `ps`, `pgrep`, `gcc` and `npx` commands; and added `tree` for bounded repository inspection while preserving project-owned tool/version precedence and deferring Corepack/Yarn/pnpm shims.
 - Weekly exact-digest vulnerability rescanning for published AMD64 edge images with fresh Trivy evidence, bounded 30-day reports, a deduplicated automation-owned alert for fixable `CRITICAL` findings, fail-closed report validation and split scan/issue-write permissions; image rebuilding and promotion remain separate under #93.
@@ -109,6 +109,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Reference-image rebuilds (`remote-dev-base:pr2-before` and `remote-dev:pr2-before`) and four optional before-image SPDX/Trivy reports are performed by `scripts/measure-tooling-image-delta.sh`, invoked only on explicit `workflow_dispatch` with `compare_images=true`. Normal PR/main builds run the candidate-image checks without rebuilding previous images; mandatory smoke, notices, SPDX and Trivy gates remain unchanged.
 - Bumped the local development baseline from `0.1.0-dev` to `0.1.1-dev`. This does not create a stable release: edge publication keeps its dated `edge-YYYY.MM.DD-<short-sha>` identity and stable/latest remain reserved for an explicit SemVer release.
 - Clarified the current browser-password policy: Codex and enabled Antigravity require only a non-empty single-line configured value unless an explicit reviewed insecure override is used; Remote Dev does not enforce minimum length, composition or cross-agent uniqueness, and the two agent configuration entries may intentionally reuse the same password pending a future browser-access/security decision.
 - Clarified that the current launcher is a password-free navigation surface rather than the stack's central authentication boundary. Stronger single-entry launcher/gateway authentication remains future #181 work; the existing launcher-auth override is advanced/non-default and is not required for the normal deployment.
@@ -162,6 +163,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
 ### Security
+
+- Security fix #286 (2026-10-21): replaced both architecture-locked Python 3.14.8/3.15.0 standalone builds with upstream `20261020` packages carrying patched `pip 26.2.2` / `certifi 2026.10.19`, and repinned `uv` to patched 0.13.4. Both base/final Trivy reports now have **zero fixable CRITICAL** on the reviewed final-head CI. Verified four upstream Python archive digests, two uv digests, runtime notices and SPDX evidence; no scanner suppression or stable release.
+- TrueNAS hardening fix #285 (2026-10-21): pre-create `/usr/share/doc/remote-dev` with `root:root 0755` so license/notice files remain traversable even under `cap_drop: [ALL]`; add build-time and cap-dropped functional regression tests. Actual TrueNAS confirmation of the updated image remains pending (#121).
 
 - Hardened launcher, Codex and experimental Antigravity outer containers with read-only root filesystems, `cap_drop: [ALL]`, exact role capability whitelists, private bounded `/tmp` and `/run` tmpfs mounts, explicit PID ceilings and live same-image isolation/toolchain assertions; `/tmp` remains `noexec`, while executable Codex update and Context7 staging remains bounded under transient `/run`.
 - Reduced the launcher further after retiring file-backed browser secrets: production launcher containers now start directly as UID/GID `65532` with no added capabilities, while remaining free of bind, persistent, and agent-state mounts and under `no-new-privileges`.

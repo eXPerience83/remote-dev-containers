@@ -1,6 +1,6 @@
 # Remote Dev Containers — inicio v0.1.1-dev
 
-El candidato PR2 añade seis CLI de validación bloqueadas; consulta [diseño, evidencias y gates pendientes](docs/universal-validation-tools.es.md).
+PR2 ya está integrada en `edge`: seis herramientas de validación con versiones bloqueadas y 53 comandos públicos. Consulta el [contrato y las pruebas de PR2](docs/universal-validation-tools.es.md). La aceptación práctica en TrueNAS está pendiente.
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
@@ -28,13 +28,15 @@ Bases actuales:
 - un servicio Antigravity opcional aislado con estado privado y runtime del proveedor instalado únicamente mediante acción explícita del usuario;
 - Ubuntu 26.04 LTS, AMD64 primero;
 - Codex CLI desde un artefacto oficial fijado, más una ruta opcional explícita de runtime oficial conservando el CLI incluido como fallback;
-- GitHub CLI, Python 3.14, Node 24, npm, uv, mise, ttyd y tmux;
+- GitHub CLI, Python 3.14 predeterminado y 3.15 seleccionable por proyecto, Node 24, npm, uv, mise, ttyd, tmux y las seis herramientas PR2 (`ruff`, `pytest`, `pre-commit`, `yq`, `shfmt`, `actionlint`);
 - un único contrato canónico y neutral de persistencia;
 - un único contrato runtime de autenticación web basado en `WEB_PASSWORD` para los endpoints de agente protegidos, con entradas separadas para Codex/Antigravity; actualmente los valores pueden reutilizarse entre agentes;
 - selección de proyecto debajo de cada `/workspace` privado;
 - semántica de releases `dev -> edge -> stable = latest`, manteniendo la identidad fechada de edge separada del canal y de la procedencia inmutable.
 
 ## Instalar en TrueNAS SCALE
+
+**[Manual paso a paso: primer despliegue, directorios persistentes y actualización segura](docs/truenas-install.es.md).** Incluye los comandos para obtener los scripts de la misma revisión que la imagen y un checklist de aceptación de PR2.
 
 Utiliza [`compose/truenas.yml`](compose/truenas.yml) como **YAML canónico de Custom App para TrueNAS**. No mantengas una copia independiente del stack en el README.
 
