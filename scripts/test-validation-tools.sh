@@ -21,6 +21,14 @@ export RUFF_CACHE_DIR="$scratch/ruff-cache" UV_CACHE_DIR="$scratch/uv-cache"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 unset MISE_TRUSTED_CONFIG_PATHS MISE_TRUSTED_CONFIG_FILES
 export PATH="/opt/remote-dev/mise/shims:/usr/local/bin:/usr/bin:/bin"
+# Read-only notice files must remain reachable without any DAC capabilities.
+notice_dir=/usr/share/doc/remote-dev
+notice_mode="$(stat -c '%u:%g %a' "$notice_dir")"
+if [[ "$notice_mode" != '0:0 755' ]]; then
+  printf 'ERROR: notices directory %s has %s; expected root:root 0755\n' "$notice_dir" "$notice_mode" >&2
+  exit 1
+fi
+remote-dev-notices --check
 mkdir -p "$scratch/neutral" "$scratch/project" "$scratch/untrusted"
 cd "$scratch/neutral"
 store_snapshot() { find /opt/remote-dev/mise -printf '%P %y %s %T@ %C@ %l\n' | LC_ALL=C sort; }
