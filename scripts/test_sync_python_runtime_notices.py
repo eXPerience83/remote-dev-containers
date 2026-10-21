@@ -170,6 +170,11 @@ url = "https://github.com/astral-sh/python-build-standalone/releases/download/20
             ]
             (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             self.assert_rejected(self.sync.check, root, output)
+            # A non-dictionary supplemental entry must fail even when its
+            # removal would otherwise make the approved subset look empty.
+            manifest["supplemental_licenses"] = [False]
+            (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self.assert_rejected(self.sync.check, root, output)
 
 
 if __name__ == "__main__":

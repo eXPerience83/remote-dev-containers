@@ -411,10 +411,11 @@ def check(root: Path, output: Path, python_version: str | None = None) -> None:
     expected_supplemental = {
         (entry["url"], entry["sha256"]) for entry in SUPPLEMENTAL_LICENSES.values()
     }
+    if not all(isinstance(entry, dict) for entry in supplemental):
+        fail("Python supplemental license records must be objects")
     actual_supplemental = {
         (entry.get("source_url"), entry.get("sha256"))
         for entry in supplemental
-        if isinstance(entry, dict)
     }
     if not actual_supplemental.issubset(expected_supplemental):
         fail("Python supplemental license manifest contains an unreviewed source")
