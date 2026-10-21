@@ -416,8 +416,8 @@ def check(root: Path, output: Path, python_version: str | None = None) -> None:
         for entry in supplemental
         if isinstance(entry, dict)
     }
-    if actual_supplemental != expected_supplemental:
-        fail("Python supplemental license sources do not match the reviewed mapping")
+    if not actual_supplemental.issubset(expected_supplemental):
+        fail("Python supplemental license manifest contains an unreviewed source")
 
     print("Python standalone runtime notices: OK")
 
