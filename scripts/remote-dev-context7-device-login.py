@@ -28,9 +28,9 @@ import urllib.request
 CONTEXT7_CLI_NAME = "ctx7"
 CONTEXT7_KEY_PREFIX = "ctx7sk-"
 CONTEXT7_CREDENTIALS_RELATIVE = Path("context7") / "credentials.json"
-REVIEWED_CONTEXT7_CLI_VERSION = "0.8.0"
+REVIEWED_CONTEXT7_CLI_VERSION = "0.8.1"
 REVIEWED_CONTEXT7_CLI_INTEGRITY = (
-    "sha512-iEhY9CS2aujMLbSh6WqFPiZgUTUuU+RRvANoNlX+PYUuwlpup83joVjVoI3Xvok6nlHeESYiqH4AhoDmiYiukA=="
+    "sha512-Co+cXpXk34FdknwUaCah88xSsjSSC7fy77Uz9mPjvdjFmho5F6qxG2X0TaxgqFDh9qAaSFS9Nn50j30C8rwRGg=="
 )
 EXPECTED_PACKAGE_LICENSE = "MIT"
 NPM_REGISTRY = "https://registry.npmjs.org/"

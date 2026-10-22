@@ -4,7 +4,7 @@
   "components": [
     {
       "id": "github-cli",
-      "version": "2.102.0",
+      "version": "2.102.1",
       "packaging": "tar.gz",
       "repository_notices": [
         {
@@ -16,13 +16,13 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz",
-          "asset_sha256": "bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386",
-          "asset_size": 15319960,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.102.1/gh_2.102.1_linux_amd64.tar.gz",
+          "asset_sha256": "77b9e297e94c50336823d0f84de7ef1be60cba704601fa0d98f129f47a94987b",
+          "asset_size": 15327429,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.102.0_linux_amd64/LICENSE",
+              "path": "gh_2.102.1_linux_amd64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -30,13 +30,13 @@
           ]
         },
         "arm64": {
-          "asset_url": "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz",
-          "asset_sha256": "7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484",
-          "asset_size": 13917794,
+          "asset_url": "https://github.com/cli/cli/releases/download/v2.102.1/gh_2.102.1_linux_arm64.tar.gz",
+          "asset_sha256": "5019b3cc6e8a03bb4d88600f8dbda2add8e6407705c159b0c63151036e77a1af",
+          "asset_size": 13922552,
           "archive_member_count": 231,
           "legal_members": [
             {
-              "path": "gh_2.102.0_linux_arm64/LICENSE",
+              "path": "gh_2.102.1_linux_arm64/LICENSE",
               "sha256": "6da4adc42392c8485e40b4251c7e332fc3352df1947c9ffade71dd60b14a7a4f",
               "size": 1068,
               "matches_repository_notice": "third_party/components/github-cli/LICENSE"
@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.10.13",
+      "version": "2026.10.17",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.13/mise-v2026.10.13-linux-x64",
-          "asset_sha256": "94c45523c7b6760b7da704f16051171ca32e8447a849a02266a439a4455e9a12",
-          "asset_size": 167691024,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.17/mise-v2026.10.17-linux-x64",
+          "asset_sha256": "fe6dd17e68e09682b31d2e7bb7bb755d22636ac1af5d94621e300f2ca9e9fe8a",
+          "asset_size": 170281952,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.13/mise-v2026.10.13-linux-arm64",
-          "asset_sha256": "983fabf36625566f216400b907b33b4daca99adb5bc3d3cdab123b5e791575b2",
-          "asset_size": 145861248,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.10.17/mise-v2026.10.17-linux-arm64",
+          "asset_sha256": "e90904144ba4377c5fbe385f429830282c68f3b4f9c690bf6c5a2ae9b74a809b",
+          "asset_size": 147035304,
           "archive_member_count": null,
           "legal_members": []
         }
