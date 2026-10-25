@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/rescan-published-images.yml"
@@ -22,7 +22,7 @@ def pinned_login_action_sha(workflow: str, label: str) -> str:
     lines = [line for line in workflow.splitlines() if "docker/login-action" in line]
     require(len(lines) == 1, f"{label}: expected exactly one GHCR login action")
     match = re.fullmatch(
-        r"[ \\t]+(?:- )?uses: docker/login-action@([0-9a-f]{40}) # v4[ \\t]*",
+        r"[ \t]+(?:- )?uses: docker/login-action@([0-9a-f]{40}) # v4[ \t]*",
         lines[0],
     )
     require(match is not None, f"{label}: docker/login-action must use a full v4 commit SHA")
