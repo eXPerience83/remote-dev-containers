@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,7 +17,41 @@ def require_text(text: str, needle: str, label: str) -> None:
     require(needle in text, f"missing {label}: {needle}")
 
 
+def pinned_login_action_sha(workflow: str, label: str) -> str:
+    """Require exactly one immutable docker/login-action v4 reference."""
+    lines = [line for line in workflow.splitlines() if "docker/login-action" in line]
+    require(len(lines) == 1, f"{label}: expected exactly one GHCR login action")
+    match = re.fullmatch(
+        r"[ \t]+(?:- )?uses: docker/login-action@([0-9a-f]{40}) # v4[ \t]*",
+        lines[0],
+    )
+    require(match is not None, f"{label}: docker/login-action must use a full v4 commit SHA")
+    return match.group(1)
+
+
+def test_login_action_pin_parser() -> None:
+    """Guard against future weak pins without locking tests to a specific digest."""
+    sha = "a" * 40
+    valid = f"      - uses: docker/login-action@{sha} # v4"
+    require(pinned_login_action_sha(valid, "positive fixture") == sha, "valid SHA pin rejected")
+    invalid = (
+        "      - uses: docker/login-action@v4",
+        "      - uses: docker/login-action@" + "a" * 39 + " # v4",
+        "      - uses: docker/login-action@" + "g" * 40 + " # v4",
+        f"      - uses: docker/login-action@{sha} # v5",
+        valid + "\n" + valid,
+        f"      # uses: docker/login-action@{sha} # v4",
+    )
+    for case in invalid:
+        try:
+            pinned_login_action_sha(case, "negative fixture")
+        except AssertionError:
+            continue
+        raise AssertionError(f"unsafe docker/login-action pin accepted: {case!r}")
+
+
 def main() -> None:
+    test_login_action_pin_parser()
     text = WORKFLOW.read_text(encoding="utf-8")
 
     require_text(text, 'cron: "23 4 * * 1"', "weekly schedule")
@@ -45,11 +80,19 @@ def main() -> None:
     require(scan_job.count(login_name) == 1, "exactly one read-only GHCR login")
     require(scan_job.count(resolve_name) == 1, "exactly one digest resolve step")
     require(scan_job.index(login_name) < scan_job.index(resolve_name), "login must precede digest resolution")
-    require_text(
-        scan_job,
-        "uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4",
-        "pinned official GHCR login action",
-    )
+    login_sha = pinned_login_action_sha(scan_job, "read-only GHCR rescan")
+    # Renovate updates these references together. A full SHA is mandatory, but
+    # testing one literal SHA would break every legitimate digest update.
+    for relative in (
+        ".github/workflows/publish-amd64.yml",
+        ".github/workflows/publish-edge-amd64.yml",
+        ".github/workflows/publish-pr-candidate-worker-amd64.yml",
+    ):
+        workflow = (ROOT / relative).read_text(encoding="utf-8")
+        require(
+            pinned_login_action_sha(workflow, relative) == login_sha,
+            f"{relative}: docker/login-action SHA differs from periodic rescan",
+        )
     require_text(scan_job, "registry: ghcr.io", "fixed GHCR registry")
     require_text(scan_job, "username: ${{ github.actor }}", "GitHub actor identity")
     require_text(scan_job, "password: ${{ github.token }}", "scoped automatic token")
