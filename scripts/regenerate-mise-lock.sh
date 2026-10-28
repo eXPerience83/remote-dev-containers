@@ -67,7 +67,8 @@ mkdir -p \
   "$scratch/config" \
   "$scratch/data" \
   "$scratch/system" \
-  "$scratch/tmp"
+  "$scratch/tmp" \
+  "$scratch/bootstrap"
 cp "$ROOT/versions.env" "$ROOT/mise.toml" "$ROOT/mise.lock" "$workspace/"
 cp -R "$ROOT/.mise" "$workspace/.mise"
 : > "$scratch/config/global.toml"
@@ -82,8 +83,21 @@ while IFS='=' read -r -d '' name _; do
   fi
 done < <(env -0)
 
-(
-  cd "$workspace"
+# A PyPI uv dependency graph needs the exact administrative Python available
+# locally. First lock Python alone, validate its *actual* artifacts for both
+# platforms, and install only that verified x64 runtime in the isolated data dir.
+# uv remains forbidden from fetching a second, independently selected Python.
+cat > "$scratch/bootstrap/mise.toml" <<EOF
+[settings]
+lockfile = true
+locked_verify_provenance = true
+lockfile_platforms = ["linux-x64", "linux-arm64"]
+
+[tools]
+python = "$PYTHON_VERSION"
+EOF
+
+run_isolated_mise() {
   env "${env_args[@]}" \
     PATH="$(dirname "$UV_BIN"):$PATH" \
     MISE_CACHE_DIR="$scratch/cache" \
@@ -91,9 +105,60 @@ done < <(env -0)
     MISE_DATA_DIR="$scratch/data" \
     MISE_GLOBAL_CONFIG_FILE="$scratch/config/global.toml" \
     MISE_HTTP_TIMEOUT="$MISE_HTTP_TIMEOUT_VALUE" \
+    MISE_PYTHON_COMPILE=false \
     MISE_SAFE=1 \
     MISE_SYSTEM_DIR="$scratch/system" \
     MISE_TMP_DIR="$scratch/tmp" \
+    UV_PYTHON_DOWNLOADS=never \
+    "$@"
+}
+
+(
+  cd "$scratch/bootstrap"
+  run_isolated_mise timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
+    "$MISE_BIN" lock --platform linux-x64,linux-arm64
+)
+
+# A bootstrap lock is deliberately Python-only, so the full validator cannot
+# check it. Reuse its exact locked-artifact policy before installing anything.
+python3 - "$ROOT/scripts/validate-mise-lock.py" "$scratch/bootstrap/mise.lock" "$PYTHON_VERSION" <<'PY'
+import importlib.util
+import sys
+import tomllib
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("mise_lock_validator", sys.argv[1])
+assert spec is not None and spec.loader is not None
+validator = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(validator)
+with Path(sys.argv[2]).open("rb") as handle:
+    lock = tomllib.load(handle)
+validator.require_exact_keys(lock, {"lockfile_version", "tools"}, "bootstrap lock")
+if lock["lockfile_version"] != 3 or not isinstance(lock["tools"], dict):
+    validator.fail("bootstrap must use mise.lock version 3 with a tool mapping")
+validator.require_exact_keys(lock["tools"], {"python"}, "bootstrap tools")
+validator.validate_tool_entry("python", sys.argv[3], lock["tools"]["python"])
+PY
+
+(
+  cd "$scratch/bootstrap"
+  run_isolated_mise timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
+    "$MISE_BIN" install --locked "python@$PYTHON_VERSION"
+)
+python_dir="$(cd "$scratch/bootstrap" && run_isolated_mise "$MISE_BIN" where "python@$PYTHON_VERSION")"
+python_dir="$(realpath "$python_dir")"
+if [[ "$python_dir" != "$scratch/data/"* || ! -x "$python_dir/bin/python3" ]]; then
+  echo "ERROR: locked administrative Python was not installed inside the isolated mise data directory" >&2
+  exit 1
+fi
+if [[ "$("$python_dir/bin/python3" --version)" != "Python $PYTHON_VERSION" ]]; then
+  echo "ERROR: isolated Python interpreter does not match pinned $PYTHON_VERSION" >&2
+  exit 1
+fi
+
+(
+  cd "$workspace"
+  run_isolated_mise env PATH="$python_dir/bin:$(dirname "$UV_BIN"):$PATH" \
     timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
     "$MISE_BIN" lock --platform linux-x64,linux-arm64
 )
