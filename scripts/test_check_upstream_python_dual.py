@@ -28,6 +28,8 @@ REQUIRED_ONCE = (
     'git push --force-with-lease -u origin "$branch"',
     'gh pr create \\',
     'gh pr edit "$existing_pr" \\',
+    'python3 scripts/sync-python-cli-notices.py --write',
+    'bash scripts/validate-version-pins.sh',
 )
 
 
@@ -63,6 +65,13 @@ def validate_step(body: str) -> None:
         raise AssertionError("dual-Python guard must precede other mise updates")
     if body.index('git commit -m "chore: update upstream versions and review evidence"') > body.index('gh pr create \\'):
         raise AssertionError("updater must commit changes before proposing a PR")
+    # The refreshed PyPI uv.lock graph must have matching wheel/license evidence
+    # BEFORE validate-version-pins.sh checks the manifest's exact package set.
+    lock_pos = body.index('MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh')
+    notice_pos = body.index('python3 scripts/sync-python-cli-notices.py --write')
+    validate_pos = body.index('bash scripts/validate-version-pins.sh')
+    if not lock_pos < notice_pos < validate_pos:
+        raise AssertionError("updater must refresh CLI notices before strict validation")
 
 
 
@@ -219,6 +228,13 @@ def main() -> int:
     expect_rejection(body.replace(GUARD, GUARD.replace("' mise.toml; then", ""), 1))
     expect_rejection(body + '\ngit commit -m "chore: update upstream versions and review evidence"\n')
     expect_rejection(body.replace('replace_env PYTHON_315_VERSION "$latest_python_315"', "# removed 3.15 update", 1))
+    expect_rejection(body.replace(
+        'python3 scripts/sync-python-cli-notices.py --write\n'
+        'bash scripts/validate-version-pins.sh',
+        'bash scripts/validate-version-pins.sh\n'
+        'python3 scripts/sync-python-cli-notices.py --write',
+        1,
+    ))
     print("Dual-Python updater shell, offline pin mutation and single-flow regressions: OK")
     return 0
 
