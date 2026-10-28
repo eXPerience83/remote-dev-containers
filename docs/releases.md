@@ -16,7 +16,7 @@ dev -> edge -> stable = latest
 
 These concepts stay separate from human-readable build identity and immutable provenance. Remote Dev has **not published a stable release yet**; current public integrated deployments use `edge`/`edge-amd64`.
 
-The repository's local development baseline is `0.1.1-dev`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer.
+The repository's local development baseline is `0.1.1-dev`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer. Routine upstream pin refreshes (including [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), changelog updates and documentation corrections **do not automatically increment `BASE_VERSION` or create a versioned release**. Bumping the project version requires an explicit release decision, the appropriate gates and consistent image identity.
 
 ## Identity layers
 
