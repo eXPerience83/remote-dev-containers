@@ -152,12 +152,16 @@ jobs:
           latest_mise="$(gh api repos/jdx/mise/releases/latest --jq '.tag_name | ltrimstr("v")')"
           latest_uv="$(gh api repos/astral-sh/uv/releases/latest --jq .tag_name)"
           declare -A validation_versions
+          declare -A pypi_candidates
           for spec in 'RUFF:astral-sh/ruff' 'PYTEST:pytest-dev/pytest' 'PRE_COMMIT:pre-commit/pre-commit' 'YQ:mikefarah/yq' 'SHFMT:mvdan/sh' 'ACTIONLINT:rhysd/actionlint'; do
             key="${spec%%:*}"
             repo="${spec#*:}"
             version="$(gh api "repos/$repo/releases/latest" --jq '.tag_name | ltrimstr("v")')"
             [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] || exit 1
-            validation_versions[$key]="$version"
+            case "$key" in
+              RUFF|PYTEST|PRE_COMMIT) pypi_candidates[$key]="$version" ;;
+              *) validation_versions[$key]="$version" ;;
+            esac
           done
 
           python_line="${PYTHON_VERSION%.*}"
@@ -249,6 +253,42 @@ jobs:
           trap 'rm -rf "$workdir"' EXIT
           cp versions.env "$workdir/versions-before.env"
           cp third_party/antigravity-cli-inspection.json "$workdir/baseline-antigravity-reviewed.json"
+          # GitHub's latest release can precede PyPI wheel publication. mise
+          # applies a 24h minimum_release_age to uv graph resolution; respect
+          # that same cutoff rather than creating invalid version-only locks.
+          # Defer only the young PyPI tool; continue unrelated upstream updates.
+          for spec in RUFF:ruff PYTEST:pytest PRE_COMMIT:pre-commit; do
+            key="${spec%%:*}"
+            package="${spec#*:}"
+            current_key="${key}_VERSION"
+            current="${!current_key}"
+            candidate="${pypi_candidates[$key]}"
+            if [[ "$candidate" == "$current" ]]; then
+              validation_versions[$key]="$current"
+              continue
+            fi
+
+            metadata="$workdir/pypi-${package}.json"
+            status=""
+            if status="$(curl "${curl_args[@]}" --max-filesize 5000000 \
+              --output "$metadata" --write-out '%{http_code}' \
+              "https://pypi.org/pypi/${package}/${candidate}/json")"; then
+              [[ "$status" == 200 ]] || {
+                echo "ERROR: unexpected PyPI response for $package $candidate: $status" >&2
+                exit 1
+              }
+            elif [[ "$status" == 404 ]]; then
+              echo "PyPI $package $candidate is not published yet; retaining reviewed $current." >&2
+              validation_versions[$key]="$current"
+              continue
+            else
+              echo "ERROR: PyPI metadata request failed for $package $candidate (HTTP $status)" >&2
+              exit 1
+            fi
+            validation_versions[$key]="$(python3 scripts/select-mature-pypi-version.py \
+              --package "$package" --current "$current" \
+              --candidate "$candidate" --metadata "$metadata")"
+          done
           gh api "repos/openai/codex/releases/tags/${latest_codex}" > "$workdir/codex.json"
           gh api "repos/cli/cli/releases/tags/v${latest_gh}" > "$workdir/gh.json"
           gh api "repos/tsl0922/ttyd/releases/tags/${latest_ttyd}" > "$workdir/ttyd.json"
