@@ -210,11 +210,11 @@ for mode in bootstrap-fail install-fail; do
     echo "ERROR: $mode was treated as success" >&2
     exit 1
   fi
-  cmp -s "$ROOT/mise.lock" "$case_root/mise.lock" \\
+  cmp -s "$ROOT/mise.lock" "$case_root/mise.lock" \
     || { echo "ERROR: $mode changed the committed lock" >&2; exit 1; }
   assert_no_temp_lock "$case_root"
   case_scratch="$(cat "$case_record" 2>/dev/null || true)"
-  [[ -z "$case_scratch" || ! -e "$case_scratch" ]] \\
+  [[ -z "$case_scratch" || ! -e "$case_scratch" ]] \
     || { echo "ERROR: $mode temporary state was not cleaned" >&2; exit 1; }
   echo "OK preserve lock after $mode"
 done
