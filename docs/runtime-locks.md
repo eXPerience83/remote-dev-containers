@@ -22,12 +22,14 @@ npm is intentionally excluded from `mise.lock` because the image installs it sep
 
 ## Regenerate the lockfile
 
-Use the exact mise release pinned by `MISE_VERSION` in `versions.env`. The helper rejects any other mise version. It copies only `versions.env`, `mise.toml` and the existing `mise.lock` into a temporary workspace, clears inherited `MISE_*` settings, uses isolated config/data/cache/system/tmp directories, bounds network and command time, validates the generated lock and replaces the repository lock only after validation succeeds. A failed or malformed regeneration leaves the previous lock untouched.
+Use the exact mise release pinned by `MISE_VERSION` in `versions.env`. The helper rejects any other mise version. It copies only `versions.env`, `mise.toml` and the existing `mise.lock` into a temporary workspace, clears inherited `MISE_*` settings, uses isolated config/data/cache/system/tmp directories, and bounds network and command time. Since [PR #291](https://github.com/eXPerience83/remote-dev-containers/pull/291), regeneration **first creates and validates a Python-only bootstrap lock**, installs the exact selected administrative Python in the isolated workspace, and makes that interpreter available to uv before generating the full native PyPI graphs. `UV_PYTHON_DOWNLOADS=never` remains enforced. The helper validates the resulting two-platform lock and replaces the repository lock only after success; failure leaves the previous lock untouched.
 
 ```bash
 source versions.env
 mise --version
 bash scripts/regenerate-mise-lock.sh
+# If Python CLI uv graphs changed, refresh their hash-checked legal notices first:
+python3 scripts/sync-python-cli-notices.py --write
 bash scripts/validate-version-pins.sh
 ```
 
@@ -37,10 +39,11 @@ When changing Python, Node.js or uv:
 2. Update the matching `ARG` default in `images/base/Dockerfile`.
 3. Update the matching tool in `mise.toml`.
 4. Run `scripts/regenerate-mise-lock.sh` with the pinned mise release.
-5. Review every changed URL, SHA-256 and provenance field for both `linux-x64` and `linux-arm64`.
-6. Run `make validate` and build the AMD64 images so mise verifies the current-platform downloaded artifacts and supported provenance.
+5. If the Python CLI uv graphs have changed, refresh the hash-verified wheel/license notices with `python3 scripts/sync-python-cli-notices.py --write` **before** strict version validation. Refresh the Python runtime's own version-specific legal metadata and inventory with their repository scripts as part of the same change.
+6. Review every changed URL, SHA-256 and provenance field for both `linux-x64` and `linux-arm64`.
+7. Run `make validate` and build the AMD64 images so mise verifies the current-platform downloaded artifacts and supported provenance.
 
-The daily upstream workflow follows the same procedure with a freshly downloaded mise binary whose SHA-256 is verified before it regenerates the lock. A plain `mise lock` refreshes artifact metadata for the already pinned versions, so the workflow may propose a lock-only change when an upstream provider publishes a newer artifact for an unchanged runtime version. The workflow is restricted to `main`, serialized to prevent competing writers and uses a force-with-lease update for its dedicated automation branch.
+The daily upstream workflow follows the same procedure with a freshly downloaded mise binary whose SHA-256 is verified before it regenerates the lock. It gates new `ruff`, `pytest` and `pre-commit` PyPI candidates on **24 hours since the newest non-yanked distribution file**, matching mise/uv's normal minimum-release-age cutoff. An immature release keeps only its previously reviewed pin; Python and other unrelated updates may proceed. The workflow regenerates Python CLI notices after lock generation and **before** running `validate-version-pins.sh`, and its dual-Python regression checks both original and already-updated pins ([PRs #292–#293](https://github.com/eXPerience83/remote-dev-containers/pull/293)). There is no automatic hotfix bypass; an urgent exception would require a separate explicit security review and aligned resolver policy. A plain `mise lock` refreshes artifact metadata for the already pinned versions, so the workflow may propose a lock-only change when an upstream provider publishes a newer artifact for an unchanged runtime version. The workflow is restricted to `main`, serialized to prevent competing writers and uses a force-with-lease update for its dedicated automation branch.
 
 ## Recovery
 

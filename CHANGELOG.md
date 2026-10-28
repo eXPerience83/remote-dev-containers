@@ -167,6 +167,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Changed successful project Select/Create actions to return directly to the calling Codex/Antigravity menu with the active project ready for Start/Resume/Continue, while Delete and recoverable invalid/failed/cancelled project actions remain in `Projects...`.
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
+### Fixed
+
+- 2026-10-28 — Repaired the automated upstream updater after three distinct failed runs: [#291](https://github.com/eXPerience83/remote-dev-containers/pull/291) bootstraps the exact administrative Python in isolated mise state before native uv/PyPI graph resolution; [#292](https://github.com/eXPerience83/remote-dev-containers/pull/292) defers only PyPI CLI releases younger than the 24-hour resolver cutoff instead of emitting incomplete locks; [#293](https://github.com/eXPerience83/remote-dev-containers/pull/293) removes stale fixed versions from post-update dual-Python regression fixtures and regenerates hashed Python CLI legal notices before strict validation. The subsequent reviewed [upstream PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) merged with the refreshed Python 3.14/3.15 lockfiles and other tool updates. No supply-chain bypass or new stable release was introduced.
+
 ### Security
 
 - Security fix #286 (2026-10-21): replaced both architecture-locked Python 3.14.8/3.15.0 standalone builds with upstream `20261020` packages carrying patched `pip 26.2.2` / `certifi 2026.10.19`, and repinned `uv` to patched 0.13.4. Both base/final Trivy reports now have **zero fixable CRITICAL** on the reviewed final-head CI. Verified four upstream Python archive digests, two uv digests, runtime notices and SPDX evidence; no scanner suppression or stable release.

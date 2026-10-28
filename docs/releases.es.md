@@ -16,7 +16,7 @@ dev -> edge -> stable = latest
 
 Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. Remote Dev **todavía no ha publicado una versión estable**; los despliegues públicos integrados actuales utilizan `edge`/`edge-amd64`.
 
-La base local de desarrollo del repositorio es `0.1.1-dev`. Ese valor es solo el predeterminado de código/build local: la publicación edge lo sustituye por una identidad edge fechada y únicamente la publicación estable utiliza SemVer exacto.
+La base local de desarrollo del repositorio es `0.1.1-dev`. Ese valor es solo el predeterminado de código/build local: la publicación edge lo sustituye por una identidad edge fechada y únicamente la publicación estable utiliza SemVer exacto. Una actualización normal de herramientas (como la [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), del changelog o de la documentación **no incrementa automáticamente `BASE_VERSION` ni crea una release versionada**. Cambiar la versión del proyecto requiere una decisión explícita de publicación, los controles correspondientes y una identidad de imagen coherente.
 
 ## Capas de identidad
 

@@ -1,6 +1,6 @@
 # Remote Dev Containers — inicio v0.1.1-dev
 
-PR2 ya está integrada en `edge`: seis herramientas de validación con versiones bloqueadas y 53 comandos públicos. Consulta el [contrato y las pruebas de PR2](docs/universal-validation-tools.es.md). La aceptación práctica en TrueNAS está pendiente.
+Tras la [actualización upstream #294](https://github.com/eXPerience83/remote-dev-containers/pull/294), `main` fija Python **3.14.10** (predeterminado) y **3.15.2** (selección explícita por proyecto), junto con nuevas versiones de Codex, Node, uv, mise y herramientas de validación. La [publicación edge AMD64](https://github.com/eXPerience83/remote-dev-containers/actions/runs/40773821457) de la PR #294 superó sus controles independientes de seguridad y promoción. Como `edge` es mutable, comprueba el SHA de origen y el digest exacto antes de desplegar. PR2 conserva seis CLI bloqueadas y una base pública de 53 comandos. Consulta el [contrato de herramientas](docs/universal-validation-tools.es.md) y [mantenimiento de locks](docs/runtime-locks.md). La aceptación práctica de PR2 en TrueNAS sigue pendiente.
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 

@@ -4,16 +4,18 @@ Status: **PR #273 is merged into main and shipped in experimental edge**. Owning
 
 ## Supported versions and selection
 
-- `PYTHON_VERSION=3.14.8` remains the image's default Python, both for unqualified `python`/`python3` in a neutral directory and for immutable administrative tooling. Maintenance updates stay within the reviewed 3.14.x line.
-- `PYTHON_315_VERSION=3.15.0` is independently bundled; only a compatible project explicitly selecting the exact 3.15.x interpreter uses it. Maintenance updates stay within the reviewed 3.15.x line. The next minor line is never adopted silently.
-- System `mise.toml` uses `python = ["3.14.8", "3.15.0"]` in that order. Project-owned `mise.toml` takes precedence; execution-capable project config remains subject to `mise trust`. Missing requested versions fail, without automatic downloads or fallback to the other Python.
+The exact patches below describe reviewed PR #294 (2026-10-28). For a newer source revision, `versions.env`, `mise.toml` and `mise.lock` are authoritative; do not assume these examples stay current after future automated maintenance PRs.
+
+- `PYTHON_VERSION=3.14.10` remains the image's default Python, both for unqualified `python`/`python3` in a neutral directory and for immutable administrative tooling. Maintenance updates stay within the reviewed 3.14.x line.
+- `PYTHON_315_VERSION=3.15.2` is independently bundled; only a compatible project explicitly selecting the exact 3.15.x interpreter uses it. Maintenance updates stay within the reviewed 3.15.x line. The next minor line is never adopted silently.
+- System `mise.toml` uses `python = ["3.14.10", "3.15.2"]` in that order. Project-owned `mise.toml` takes precedence; execution-capable project config remains subject to `mise trust`. Missing requested versions fail, without automatic downloads or fallback to the other Python.
 - No startup flags, automatic venv activation, passive network fetches, mutation of `/opt/remote-dev/mise`, role sharing, Docker socket, or change to read-only root/`/tmp` noexec are introduced.
 
 For a reviewed Python 3.15 project, use:
 
 ```toml
 [tools]
-python = "3.15.0"
+python = "3.15.2"
 ```
 
 After explicitly approving that project's configuration where trust is required, check `python --version`, `python3 --version`, and `mise which python`. To create an isolated project venv using the currently selected, **already installed** interpreter:
@@ -31,6 +33,16 @@ Do not imply `uv venv` activates a venv or installs packages into the image inte
 - A temporary **read-only** CI probe regenerated the two-runtime lock using the exact hash-verified `mise` binary; its output matched the candidate lock **byte-for-byte**. The temporary workflow was removed; this remains reproducible with `scripts/regenerate-mise-lock.sh`.
 - Python 3.15's upstream license and independent full-distribution legal metadata are kept under `third_party/components/python-315/` and `third_party/components/python-build-standalone-315/`. The corresponding Python 3.14 legal evidence is preserved separately. Both are checked by the inventory/notice gates.
 - `.github/workflows/check-upstream.yml` detects and preflights maintenance patches for 3.14 and 3.15 independently, using the fail-closed lockability rules from #257; one temporarily unavailable standalone artifact must not silently advance the affected line or block unrelated safe updates.
+
+## October 2026 updater recovery (PRs #291–#294)
+
+[PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) updated the reviewed pins on `main` to Python 3.14.10 and 3.15.2 without changing the supported 3.14-default / explicit-3.15 selection contract. The [updater repairs #291](https://github.com/eXPerience83/remote-dev-containers/pull/291), [#292](https://github.com/eXPerience83/remote-dev-containers/pull/292) and [#293](https://github.com/eXPerience83/remote-dev-containers/pull/293) made this unattended *proposal* path work end to end:
+
+- Regeneration first bootstraps the **exact reviewed Python 3.14 patch** through a validated, isolated mise lock/install. Native uv dependency graphs are then resolved with that interpreter available; inherited mise state or on-demand Python downloads are not trusted.
+- A GitHub-release candidate for `ruff`, `pytest` or `pre-commit` is deferred **per tool** while any non-yanked PyPI distribution is less than 24 hours old, matching mise/uv's normal minimum-release-age protection. Other runtimes still advance. This is a routine safety policy, not proof a hotfix is safe; no automatic emergency bypass exists.
+- The dual-Python updater regression derives fixture versions from the input it is actually validating (including an already-updated checkout). After the new `mise.lock` is generated, CLI wheel/license notices are regenerated **before** the strict pin and evidence checks.
+
+See [dependency automation](dependency-automation.md) and [runtime lock maintenance](runtime-locks.md) for workflow and recovery details. CI validates AMD64 execution and the AMD64/ARM64 lock metadata; real ARM64 runtime support and live TrueNAS acceptance must not be inferred.
 
 ## Regression and acceptance gates
 
