@@ -144,7 +144,7 @@ In the image containing #285, the notices directory must be `root:root 0755` and
 
 This defaults to **Codex-only**. Set `CHECK_ANTIGRAVITY=1` **when Antigravity is enabled** so its checks are not silently omitted. Base Verify checks the **53-command** canonical inventory from a neutral directory; the loop resolves the six new CLIs directly. CI already exercises the actual tools under both hardened role fixtures, but authenticated live-agent acceptance remains separate.
 
-Open the launcher at **http://PRIVATE-TRUENAS-IP:7680**, enter enabled agent terminals and **confirm old sessions resume**. Python 3.14 should remain the default; Python 3.15 is selected only in explicitly compatible projects. Do not mutate real project config just to prove a version. Check Doctor, private mounts and isolation without disclosing secrets.
+Open the launcher at **http://PRIVATE-TRUENAS-IP:7680**, enter enabled agent terminals and **confirm old sessions resume**. For images published from [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) or later, the reviewed default is Python **3.14.10** and the optional project-selected runtime is **3.15.2**; compare the deployed image's exact source SHA and current `versions.env` rather than assuming a mutable `edge` tag has already moved. Python 3.14 should remain the default; Python 3.15 is selected only in explicitly compatible projects. Do not mutate real project config just to prove a version. Check Doctor, private mounts and isolation without disclosing secrets.
 
 Record only sanitized SHA/digest and outcomes or errors in [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121). Keep that issue open until genuine host acceptance.
 
