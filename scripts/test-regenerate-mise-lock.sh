@@ -18,12 +18,56 @@ if [[ "${1:-}" == "--version" ]]; then
   exit 0
 fi
 
+# The lock helper must first admit and install its exact selected Python in a
+# disposable isolated project. Simulate the pinned mise without network access.
+if [[ "$PWD" == */bootstrap ]]; then
+  case "$*" in
+    "lock --platform linux-x64,linux-arm64")
+      if [[ "$FAKE_MISE_MODE" == bootstrap-fail ]]; then
+        echo "simulated bootstrap resolver failure" >&2
+        exit 47
+      fi
+      python3 - "$FAKE_SOURCE_LOCK" "$FAKE_PYTHON_VERSION" <<'PYTHON_LOCK'
+import re
+import sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+sections = re.findall(r"(?ms)^\\[\\[tools\\.python\\]\\]\\n.*?(?=^\\[\\[tools\\.|\\Z)", source)
+chosen = [section for section in sections if section.splitlines()[1] == f'version = "{sys.argv[2]}"']
+assert len(chosen) == 1
+Path("mise.lock").write_text("lockfile_version = 3\\n\\n" + chosen[0], encoding="utf-8")
+PYTHON_LOCK
+      exit 0
+      ;;
+    "install --locked python@$FAKE_PYTHON_VERSION")
+      if [[ "$FAKE_MISE_MODE" == install-fail ]]; then
+        echo "simulated locked interpreter installation failure" >&2
+        exit 48
+      fi
+      fake_python="$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION/bin/python3"
+      mkdir -p "$(dirname "$fake_python")"
+      printf '#!/bin/sh\\nprintf "Python %s\\\\n"\\n' "$FAKE_PYTHON_VERSION" > "$fake_python"
+      chmod 0755 "$fake_python"
+      exit 0
+      ;;
+    "where python@$FAKE_PYTHON_VERSION")
+      printf '%s\\n' "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION"
+      exit 0
+      ;;
+    *) echo "unexpected bootstrap invocation: $*" >&2; exit 79 ;;
+  esac
+fi
+
 if [[ "$#" -ne 3 || "$1" != "lock" || "$2" != "--platform" || "$3" != "linux-x64,linux-arm64" ]]; then
   echo "unexpected fake mise arguments: $*" >&2
   exit 80
 fi
 
 [[ "$PWD" == */workspace ]] || { echo "lock did not run in isolated workspace: $PWD" >&2; exit 81; }
+[[ "$UV_PYTHON_DOWNLOADS" == never ]] || { echo "uv may download unreviewed Python" >&2; exit 90; }
+[[ "$MISE_PYTHON_COMPILE" == false ]] || { echo "mise may compile unreviewed Python" >&2; exit 91; }
+[[ "$PATH" == "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION/bin:"* ]] \\
+  || { echo "locked administrative Python is not first on PATH" >&2; exit 92; }
 [[ "${MISE_SAFE:-}" == "1" ]] || { echo "MISE_SAFE was not forced" >&2; exit 82; }
 [[ "${MISE_HTTP_TIMEOUT:-}" == "7s" ]] || { echo "HTTP timeout override was not preserved" >&2; exit 83; }
 [[ -z "${MISE_ENV+x}" ]] || { echo "MISE_ENV leaked into regeneration" >&2; exit 84; }
@@ -103,6 +147,8 @@ run_helper_with_path() {
     PATH="$path_value" \
     FAKE_MISE_MODE="$mode" \
     FAKE_MISE_VERSION="$MISE_VERSION" \
+    FAKE_PYTHON_VERSION="$PYTHON_VERSION" \
+    FAKE_SOURCE_LOCK="$fixture_root/mise.lock" \
     FAKE_SCRATCH_RECORD="$record" \
     FORBIDDEN_MISE_CACHE_DIR="$forbidden_cache" \
     MISE_AQUA_REGISTRY_URL="https://example.invalid/registry" \
@@ -155,6 +201,23 @@ assert_no_temp_lock "$failure_root"
 failure_scratch="$(cat "$failure_record")"
 [[ ! -e "$failure_scratch" ]] || { echo "failed regeneration scratch was not removed" >&2; exit 1; }
 echo "OK preserve lock after failed regeneration"
+
+for mode in bootstrap-fail install-fail; do
+  case_root="$scratch/$mode-repo"
+  case_record="$scratch/$mode-record"
+  copy_fixture "$case_root"
+  if run_helper "$case_root" "$mode" "$case_record"; then
+    echo "ERROR: $mode was treated as success" >&2
+    exit 1
+  fi
+  cmp -s "$ROOT/mise.lock" "$case_root/mise.lock" \\
+    || { echo "ERROR: $mode changed the committed lock" >&2; exit 1; }
+  assert_no_temp_lock "$case_root"
+  case_scratch="$(cat "$case_record" 2>/dev/null || true)"
+  [[ -z "$case_scratch" || ! -e "$case_scratch" ]] \\
+    || { echo "ERROR: $mode temporary state was not cleaned" >&2; exit 1; }
+  echo "OK preserve lock after $mode"
+done
 
 fake_tools="$scratch/fake-tools"
 mkdir -p "$fake_tools"
