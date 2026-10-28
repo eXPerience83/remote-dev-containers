@@ -32,10 +32,10 @@ import re
 import sys
 from pathlib import Path
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-sections = re.findall(r"(?ms)^\\[\\[tools\\.python\\]\\]\\n.*?(?=^\\[\\[tools\\.|\\Z)", source)
+sections = re.findall(r"(?ms)^\[\[tools\.python\]\]\n.*?(?=^\[\[tools\.|\Z)", source)
 chosen = [section for section in sections if section.splitlines()[1] == f'version = "{sys.argv[2]}"']
 assert len(chosen) == 1
-Path("mise.lock").write_text("lockfile_version = 3\\n\\n" + chosen[0], encoding="utf-8")
+Path("mise.lock").write_text("lockfile_version = 3\n\n" + chosen[0], encoding="utf-8")
 PYTHON_LOCK
       exit 0
       ;;
@@ -46,12 +46,12 @@ PYTHON_LOCK
       fi
       fake_python="$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION/bin/python3"
       mkdir -p "$(dirname "$fake_python")"
-      printf '#!/bin/sh\\nprintf "Python %s\\\\n"\\n' "$FAKE_PYTHON_VERSION" > "$fake_python"
+      printf '#!/bin/sh\nprintf "Python %s\\n"\n' "$FAKE_PYTHON_VERSION" > "$fake_python"
       chmod 0755 "$fake_python"
       exit 0
       ;;
     "where python@$FAKE_PYTHON_VERSION")
-      printf '%s\\n' "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION"
+      printf '%s\n' "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION"
       exit 0
       ;;
     *) echo "unexpected bootstrap invocation: $*" >&2; exit 79 ;;
@@ -66,7 +66,7 @@ fi
 [[ "$PWD" == */workspace ]] || { echo "lock did not run in isolated workspace: $PWD" >&2; exit 81; }
 [[ "$UV_PYTHON_DOWNLOADS" == never ]] || { echo "uv may download unreviewed Python" >&2; exit 90; }
 [[ "$MISE_PYTHON_COMPILE" == false ]] || { echo "mise may compile unreviewed Python" >&2; exit 91; }
-[[ "$PATH" == "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION/bin:"* ]] \\
+[[ "$PATH" == "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION/bin:"* ]] \
   || { echo "locked administrative Python is not first on PATH" >&2; exit 92; }
 [[ "${MISE_SAFE:-}" == "1" ]] || { echo "MISE_SAFE was not forced" >&2; exit 82; }
 [[ "${MISE_HTTP_TIMEOUT:-}" == "7s" ]] || { echo "HTTP timeout override was not preserved" >&2; exit 83; }
