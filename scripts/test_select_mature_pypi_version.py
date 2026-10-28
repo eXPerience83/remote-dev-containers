@@ -96,6 +96,7 @@ class PyPIAgeSelectionTests(unittest.TestCase):
 
     def test_cli_outputs_only_selected_version_to_stdout(self):
         data = pypi_release("pytest", "9.2.0", (timedelta(hours=23),))
+        data["urls"][0]["upload_time_iso_8601"] = datetime.now(timezone.utc).isoformat()
         with tempfile.TemporaryDirectory() as tmp:
             metadata = Path(tmp) / "pypi.json"
             metadata.write_text(json.dumps(data), encoding="utf-8")
