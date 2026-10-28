@@ -1,5 +1,5 @@
 
-===== ruff-0.17.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl/ruff-0.17.1.dist-info/licenses/LICENSE =====
+===== ruff-0.17.3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl/ruff-0.17.3.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2022 Charles Marsh
@@ -432,7 +432,7 @@ are:
   """
 
 
-===== ruff-0.17.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl/ruff-0.17.1.dist-info/licenses/LICENSE =====
+===== ruff-0.17.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl/ruff-0.17.3.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2022 Charles Marsh

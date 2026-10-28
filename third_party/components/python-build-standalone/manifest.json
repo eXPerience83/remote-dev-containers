@@ -13,24 +13,24 @@
     {
       "arch": "amd64",
       "target": "x86_64-unknown-linux-gnu",
-      "python_version": "3.14.8",
-      "release": "20261020",
-      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8+20261020-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-      "full_asset_name": "cpython-3.14.8+20261020-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
-      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8%2B20261020-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
-      "full_asset_sha256": "1c891c5652f6ac56522baedba920064466cebbba7c3ccd1e35a0ff31aae68ef4",
-      "full_asset_size": 114456621
+      "python_version": "3.14.10",
+      "release": "20261026",
+      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10+20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "full_asset_name": "cpython-3.14.10+20261026-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+      "full_asset_sha256": "4a2823d5deacb631e21b3c8387a1ec9be57e1b0ed37b7770e2e71cfe7b94eb94",
+      "full_asset_size": 115054361
     },
     {
       "arch": "arm64",
       "target": "aarch64-unknown-linux-gnu",
-      "python_version": "3.14.8",
-      "release": "20261020",
-      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8+20261020-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-      "full_asset_name": "cpython-3.14.8+20261020-aarch64-unknown-linux-gnu-pgo+lto-full.tar.zst",
-      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8%2B20261020-aarch64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
-      "full_asset_sha256": "37736480b609b184e2710f263bc8f27b7c326d5446a13ce2753846c5b8990d04",
-      "full_asset_size": 99809172
+      "python_version": "3.14.10",
+      "release": "20261026",
+      "install_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10+20261026-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "full_asset_name": "cpython-3.14.10+20261026-aarch64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+      "full_asset_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-aarch64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+      "full_asset_sha256": "2c2b62b6e02a1717b408c30d49a8bf293b280b2b4a22bb948f9b85ecc1f5ce54",
+      "full_asset_size": 100234924
     }
   ]
 }

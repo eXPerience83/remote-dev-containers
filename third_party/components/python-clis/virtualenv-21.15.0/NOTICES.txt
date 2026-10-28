@@ -1,5 +1,5 @@
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv-21.14.8.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv-21.15.0.dist-info/licenses/LICENSE =====
 Copyright (c) 2020-present The virtualenv developers
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -22,7 +22,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/AUTHORS.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/AUTHORS.txt =====
 @Switch01
 A_Rog
 Aakanksha Agrawal
@@ -885,7 +885,7 @@ Zvezdan Petkovic
 Семён Марьясин
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/LICENSE.txt =====
 Copyright (c) 2008-present The pip developers (see AUTHORS.txt file)
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -908,7 +908,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt =====
 Copyright 2012-2021  Eric Larson
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -924,7 +924,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE =====
 This package contains a modified version of ca-bundle.crt:
 
 ca-bundle.crt -- Bundle of CA Root Certificates
@@ -947,7 +947,7 @@ one at http://mozilla.org/MPL/2.0/.
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/dependency_groups/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/dependency_groups/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2024-present Stephen Rosen <sirosen0@gmail.com>
@@ -959,7 +959,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt =====
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -1246,7 +1246,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE =====
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1451,7 +1451,7 @@ Apache License
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md =====
 BSD 3-Clause License
 
 Copyright (c) 2013-2025, Kim Davies and contributors.
@@ -1485,7 +1485,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING =====
 Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -1502,13 +1502,13 @@ Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -1688,7 +1688,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -1714,7 +1714,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -1734,7 +1734,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -1758,7 +1758,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE =====
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -1786,7 +1786,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2017 Thomas Kluyver
@@ -1810,7 +1810,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -1988,7 +1988,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE =====
 Copyright (c) 2018, Tzu-ping Chung <uranusjr@gmail.com>
 
 Permission to use, copy, modify, and distribute this software for any
@@ -2004,7 +2004,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE =====
 Copyright (c) 2020 Will McGugan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -2026,7 +2026,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -2050,7 +2050,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -2074,7 +2074,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2022 Seth Michael Larson
@@ -2098,7 +2098,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip-26.0.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors (see CONTRIBUTORS.txt)
@@ -2122,7 +2122,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt =====
 Copyright 2012-2021  Eric Larson
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -2138,7 +2138,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/certifi/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/certifi/LICENSE =====
 This package contains a modified version of ca-bundle.crt:
 
 ca-bundle.crt -- Bundle of CA Root Certificates
@@ -2161,7 +2161,7 @@ one at http://mozilla.org/MPL/2.0/.
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/dependency_groups/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/dependency_groups/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2024-present Stephen Rosen <sirosen0@gmail.com>
@@ -2173,7 +2173,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt =====
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -2460,7 +2460,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distro/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/distro/LICENSE =====
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -2665,7 +2665,7 @@ Apache License
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/idna/LICENSE.md =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/idna/LICENSE.md =====
 BSD 3-Clause License
 
 Copyright (c) 2013-2025, Kim Davies and contributors.
@@ -2699,7 +2699,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/msgpack/COPYING =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/msgpack/COPYING =====
 Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -2716,13 +2716,13 @@ Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -2902,7 +2902,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -2928,7 +2928,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -2948,7 +2948,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -2972,7 +2972,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pygments/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pygments/LICENSE =====
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -3000,7 +3000,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2017 Thomas Kluyver
@@ -3024,7 +3024,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/requests/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/requests/LICENSE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -3202,7 +3202,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE =====
 Copyright (c) 2018, Tzu-ping Chung <uranusjr@gmail.com>
 
 Permission to use, copy, modify, and distribute this software for any
@@ -3218,7 +3218,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/rich/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/rich/LICENSE =====
 Copyright (c) 2020 Will McGugan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -3240,7 +3240,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -3264,7 +3264,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -3288,7 +3288,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/truststore/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/truststore/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2022 Seth Michael Larson
@@ -3312,7 +3312,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors (see CONTRIBUTORS.txt)
@@ -3336,7 +3336,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/AUTHORS.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/AUTHORS.txt =====
 @Switch01
 A_Rog
 Aakanksha Agrawal
@@ -4227,7 +4227,7 @@ Zvezdan Petkovic
 Семён Марьясин
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/LICENSE.txt =====
 Copyright (c) 2008-present The pip developers (see AUTHORS.txt file)
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -4250,7 +4250,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt =====
 Copyright 2012-2021  Eric Larson
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -4266,7 +4266,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE =====
 This package contains a modified version of ca-bundle.crt:
 
 ca-bundle.crt -- Bundle of CA Root Certificates
@@ -4289,7 +4289,7 @@ one at http://mozilla.org/MPL/2.0/.
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt =====
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -4576,7 +4576,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE =====
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -4781,7 +4781,7 @@ Apache License
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md =====
 BSD 3-Clause License
 
 Copyright (c) 2013-2026, Kim Davies and contributors.
@@ -4815,7 +4815,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING =====
 Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -4832,13 +4832,13 @@ Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -5018,7 +5018,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -5044,7 +5044,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -5064,7 +5064,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -5088,7 +5088,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE =====
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -5116,7 +5116,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2017 Thomas Kluyver
@@ -5140,7 +5140,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -5318,7 +5318,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE =====
 Copyright (c) 2018, Tzu-ping Chung <uranusjr@gmail.com>
 
 Permission to use, copy, modify, and distribute this software for any
@@ -5334,7 +5334,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE =====
 Copyright (c) 2020 Will McGugan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -5356,7 +5356,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -5380,7 +5380,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -5404,7 +5404,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2022 Seth Michael Larson
@@ -5428,7 +5428,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip-26.2.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
@@ -5452,7 +5452,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/cachecontrol/LICENSE.txt =====
 Copyright 2012-2021  Eric Larson
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -5468,7 +5468,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/certifi/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/certifi/LICENSE =====
 This package contains a modified version of ca-bundle.crt:
 
 ca-bundle.crt -- Bundle of CA Root Certificates
@@ -5491,7 +5491,7 @@ one at http://mozilla.org/MPL/2.0/.
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/distlib/LICENSE.txt =====
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -5778,7 +5778,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/distro/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/distro/LICENSE =====
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -5983,7 +5983,7 @@ Apache License
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/idna/LICENSE.md =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/idna/LICENSE.md =====
 BSD 3-Clause License
 
 Copyright (c) 2013-2026, Kim Davies and contributors.
@@ -6017,7 +6017,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/msgpack/COPYING =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/msgpack/COPYING =====
 Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -6034,13 +6034,13 @@ Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/packaging/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/packaging/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -6220,7 +6220,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/packaging/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -6246,7 +6246,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/pkg_resources/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -6266,7 +6266,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/platformdirs/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -6290,7 +6290,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pygments/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/pygments/LICENSE =====
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -6318,7 +6318,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/pyproject_hooks/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2017 Thomas Kluyver
@@ -6342,7 +6342,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/requests/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/requests/LICENSE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -6520,7 +6520,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/resolvelib/LICENSE =====
 Copyright (c) 2018, Tzu-ping Chung <uranusjr@gmail.com>
 
 Permission to use, copy, modify, and distribute this software for any
@@ -6536,7 +6536,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/rich/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/rich/LICENSE =====
 Copyright (c) 2020 Will McGugan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -6558,7 +6558,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/tomli/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/tomli/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -6582,7 +6582,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/tomli_w/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -6606,7 +6606,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/truststore/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/truststore/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2022 Seth Michael Larson
@@ -6630,7 +6630,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.1-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/pip-26.2.2-py3-none-any.whl/pip/_vendor/urllib3/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
@@ -6654,7 +6654,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools-82.0.1.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools-82.0.1.dist-info/licenses/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -6674,7 +6674,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE =====
 GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -6843,7 +6843,7 @@ Library.
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -6863,7 +6863,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE =====
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -6939,7 +6939,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -6959,7 +6959,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2026 <copyright holders>
@@ -6980,7 +6980,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2025 <copyright holders>
@@ -7001,7 +7001,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE =====
 Copyright (c) 2012 Erik Rose
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -7023,13 +7023,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -7209,7 +7209,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -7235,7 +7235,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -7259,7 +7259,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -7283,7 +7283,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2012 Daniel Holth <dholth@fastmail.fm> and contributors
@@ -7307,7 +7307,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2025 <copyright holders>
@@ -7328,7 +7328,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/NOTICE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/NOTICE =====
 The following files include code from opensource projects
 (either as direct copies or modified versions):
 
@@ -7341,7 +7341,7 @@ The following files include code from opensource projects
       You can obtain one at https://mozilla.org/MPL/2.0/.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE =====
 The code contained in this directory was automatically generated using the
 following command:
 
@@ -7782,7 +7782,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
       the Mozilla Public License, v. 2.0.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools-84.0.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools-84.2.1.dist-info/licenses/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -7802,7 +7802,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE =====
 GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -7971,7 +7971,7 @@ Library.
 
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -7991,7 +7991,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE =====
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -8067,7 +8067,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -8087,7 +8087,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2026 <copyright holders>
@@ -8108,7 +8108,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2025 <copyright holders>
@@ -8129,7 +8129,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE =====
 Copyright (c) 2012 Erik Rose
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -8151,13 +8151,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/packaging-26.3.dist-info/licenses/LICENSE =====
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/packaging-26.3.dist-info/licenses/LICENSE.APACHE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -8337,7 +8337,7 @@ under the terms of *both* these licenses.
    END OF TERMS AND CONDITIONS
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/packaging-26.3.dist-info/licenses/LICENSE.BSD =====
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
 
@@ -8363,7 +8363,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -8387,7 +8387,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2021 Taneli Hukkinen
@@ -8411,7 +8411,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt =====
 MIT License
 
 Copyright (c) 2012 Daniel Holth <dholth@fastmail.fm> and contributors
@@ -8435,7 +8435,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE =====
 MIT License
 
 Copyright (c) 2025 <copyright holders>
@@ -8456,7 +8456,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/config/NOTICE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/config/NOTICE =====
 The following files include code from opensource projects
 (either as direct copies or modified versions):
 
@@ -8469,7 +8469,7 @@ The following files include code from opensource projects
       You can obtain one at https://mozilla.org/MPL/2.0/.
 
 
-===== virtualenv-21.14.8-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.0.0-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE =====
+===== virtualenv-21.15.0-py3-none-any.whl/virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl/setuptools/config/_validate_pyproject/NOTICE =====
 The code contained in this directory was automatically generated using the
 following command:
 

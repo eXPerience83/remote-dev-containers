@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "python_version": "3.14.8",
+  "python_version": "3.14.10",
   "target_triple": "x86_64-unknown-linux-gnu",
   "implementation_licenses": [
     "CNRI-Python",
