@@ -4,16 +4,16 @@ Estado: **PR #273 fusionada en main y distribuida en edge**. Issue [#270](https:
 
 ## Versiones y selección
 
-- `PYTHON_VERSION=3.14.8` sigue siendo el Python predeterminado de `python`/`python3` fuera de proyectos con otra selección, y el intérprete administrativo inmutable. Se mantiene dentro de la rama 3.14.x revisada.
-- `PYTHON_315_VERSION=3.15.0` se distribuye en paralelo y solo se selecciona expresamente desde un proyecto compatible. Sus parches se actualizan dentro de 3.15.x. Nunca se migra silenciosamente a otra rama menor.
-- El `mise.toml` del sistema declara `python = ["3.14.8", "3.15.0"]` en ese orden. Prevalece el `mise.toml` del repositorio; la configuración ejecutable exige confianza explícita mediante `mise trust`. Una versión no instalada falla sin descarga automática ni sustitución por la otra rama.
+- `PYTHON_VERSION=3.14.10` sigue siendo el Python predeterminado de `python`/`python3` fuera de proyectos con otra selección, y el intérprete administrativo inmutable. Se mantiene dentro de la rama 3.14.x revisada.
+- `PYTHON_315_VERSION=3.15.2` se distribuye en paralelo y solo se selecciona expresamente desde un proyecto compatible. Sus parches se actualizan dentro de 3.15.x. Nunca se migra silenciosamente a otra rama menor.
+- El `mise.toml` del sistema declara `python = ["3.14.10", "3.15.2"]` en ese orden. Prevalece el `mise.toml` del repositorio; la configuración ejecutable exige confianza explícita mediante `mise trust`. Una versión no instalada falla sin descarga automática ni sustitución por la otra rama.
 - No se introducen parámetros de arranque adicionales, activación automática de venv, descargas pasivas, modificaciones de `/opt/remote-dev/mise`, estado compartido entre agentes, socket Docker ni cambios en el root de solo lectura o el `noexec` de `/tmp`.
 
 Para un proyecto revisado y compatible con Python 3.15:
 
 ```toml
 [tools]
-python = "3.15.0"
+python = "3.15.2"
 ```
 
 Tras aprobar expresamente la configuración del proyecto si requiere confianza, comprueba `python --version`, `python3 --version` y `mise which python`. Para crear un entorno virtual aislado con el intérprete **ya instalado** que selecciona el proyecto:
@@ -31,6 +31,16 @@ UV_PYTHON_DOWNLOADS=never uv venv --offline --python "$(mise which python)" .ven
 - Una Action temporal de **solo lectura** regeneró el lock con el binario `mise` verificado por hash. El resultado coincidió **byte a byte** con el lock del PR; la Action temporal se eliminó. El procedimiento reproducible permanente es `scripts/regenerate-mise-lock.sh`.
 - La licencia de Python 3.15 y sus metadatos legales completos están separados en `third_party/components/python-315/` y `third_party/components/python-build-standalone-315/`; se conserva por separado la evidencia de 3.14. Ambas pasan por las verificaciones de inventario y avisos.
 - `.github/workflows/check-upstream.yml` busca y comprueba los parches de 3.14 y 3.15 independientemente mediante la política fail-closed de #257; un artefacto que todavía no esté publicado no debe actualizar silenciosamente esa rama ni impedir otras actualizaciones seguras.
+
+## Recuperación del actualizador de octubre de 2026 (PR #291–#294)
+
+La [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) actualizó los pines revisados de `main` a Python 3.14.10 y 3.15.2 sin cambiar el contrato: 3.14 es predeterminado y 3.15 solo se selecciona explícitamente por proyecto. Las correcciones [#291](https://github.com/eXPerience83/remote-dev-containers/pull/291), [#292](https://github.com/eXPerience83/remote-dev-containers/pull/292) y [#293](https://github.com/eXPerience83/remote-dev-containers/pull/293) resolvieron tres obstáculos distintos de la propuesta automática:
+
+- Antes de regenerar el lock completo, se instala el **Python 3.14 exacto** mediante un lock de arranque validado y un entorno mise aislado. Los grafos nativos de uv se resuelven con ese intérprete disponible, sin depender del estado heredado ni permitir descargas implícitas de Python.
+- Si la release GitHub de `ruff`, `pytest` o `pre-commit` tiene alguna distribución PyPI no retirada con menos de 24 horas, se **aplaza únicamente esa herramienta**, respetando el filtro habitual de mise/uv. Las demás actualizaciones continúan. No existe un bypass automático para hotfixes urgentes.
+- La prueba de los dos Python usa los pines reales del fichero que valida, incluso después de actualizarlo. Los avisos legales de las ruedas Python se regeneran **antes** de las comprobaciones estrictas de versiones e integridad.
+
+Consulta [automatización de dependencias](dependency-automation.md) y [mantenimiento de locks](runtime-locks.md). La CI prueba AMD64 y los metadatos de lock AMD64/ARM64, no soporte runtime ARM64 ni aceptación práctica en TrueNAS.
 
 ## Pruebas de regresión y aceptación
 
