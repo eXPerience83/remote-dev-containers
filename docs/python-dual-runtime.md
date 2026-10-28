@@ -4,6 +4,8 @@ Status: **PR #273 is merged into main and shipped in experimental edge**. Owning
 
 ## Supported versions and selection
 
+The exact patches below describe reviewed PR #294 (2026-10-28). For a newer source revision, `versions.env`, `mise.toml` and `mise.lock` are authoritative; do not assume these examples stay current after future automated maintenance PRs.
+
 - `PYTHON_VERSION=3.14.10` remains the image's default Python, both for unqualified `python`/`python3` in a neutral directory and for immutable administrative tooling. Maintenance updates stay within the reviewed 3.14.x line.
 - `PYTHON_315_VERSION=3.15.2` is independently bundled; only a compatible project explicitly selecting the exact 3.15.x interpreter uses it. Maintenance updates stay within the reviewed 3.15.x line. The next minor line is never adopted silently.
 - System `mise.toml` uses `python = ["3.14.10", "3.15.2"]` in that order. Project-owned `mise.toml` takes precedence; execution-capable project config remains subject to `mise trust`. Missing requested versions fail, without automatic downloads or fallback to the other Python.
