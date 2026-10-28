@@ -59,6 +59,8 @@ jobs:
             scripts/test_inspect_antigravity_cli.py \
             scripts/update-third-party-inventory.py \
             scripts/test_update_third_party_inventory.py \
+            scripts/select-mature-pypi-version.py \
+            scripts/test_select_mature_pypi_version.py \
             scripts/sync-python-runtime-notices.py \
             scripts/test_sync_python_runtime_notices.py \
             scripts/compact-python-runtime-notices.py \
@@ -92,6 +94,7 @@ jobs:
           python3 scripts/test-remote-dev-context7-ownership.py
           python3 scripts/test_update_upstream_changelog.py
           python3 scripts/test_update_third_party_inventory.py
+          python3 scripts/test_select_mature_pypi_version.py
           python3 scripts/test_sync_python_runtime_notices.py
           python3 scripts/test_compact_python_runtime_notices.py
           python3 scripts/test_sync_standalone_artifact_inspection.py
