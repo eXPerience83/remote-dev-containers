@@ -133,6 +133,7 @@ jobs:
           python3 scripts/test_update_upstream_changelog.py
           python3 scripts/test_update_context7_review.py
           python3 scripts/test_reconcile_antigravity_review_state.py
+          python3 scripts/test_select_mature_pypi_version.py
           source versions.env
 
           curl_args=(
