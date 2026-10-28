@@ -1,8 +1,8 @@
 
-===== platformdirs-4.13.3-py3-none-any.whl/platformdirs-4.13.3.dist-info/licenses/LICENSE =====
+===== filelock-4.2.4-py3-none-any.whl/filelock-4.2.4.dist-info/licenses/LICENSE =====
 MIT License
 
-Copyright (c) 2010-202x The platformdirs developers
+Copyright (c) 2025 Bernát Gábor and contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -49,20 +49,20 @@
         "NOTICES.txt": "d470d3117d22149ff3c5703a9f83ef88e960d10a09346473f884e416b5ec7b54"
       }
     },
-    "filelock-4.2.0": {
+    "filelock-4.2.4": {
       "name": "filelock",
-      "version": "4.2.0",
+      "version": "4.2.4",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/8e/a3/9bc26acff301fe1aaea1cc3d82a1d57e0a34df3e1cadbfa91ac2dbcdde5c/filelock-4.2.0-py3-none-any.whl",
-          "hash": "sha256:2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238",
-          "size": 135032,
-          "upload-time": "2026-10-14T20:57:11.349Z"
+          "url": "https://files.pythonhosted.org/packages/e0/1b/5e74289a1878e666bb4b65fe5805a04cafcac2aa5f519ef1ead67ef91c56/filelock-4.2.4-py3-none-any.whl",
+          "hash": "sha256:301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e",
+          "size": 162475,
+          "upload-time": "2026-10-19T01:57:49.419Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "8f536878ffa646251e50b3fb51b7b8f2869d07b3f7baba59fb3dcba6cf891c5f"
+        "NOTICES.txt": "f106bc987f9f63c9cdbbf2adfd26cab17d495bbb35f16ba90c045d482a0f529f"
       }
     },
     "identify-2.6.20": {
@@ -129,20 +129,20 @@
         "NOTICES.txt": "a06055b8b3b4206b19481ecf062c6cf56c80f97a388859ee8f75ec17ee59ccdd"
       }
     },
-    "platformdirs-4.13.3": {
+    "platformdirs-4.13.6": {
       "name": "platformdirs",
-      "version": "4.13.3",
+      "version": "4.13.6",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/45/b8/fd1af06b079af236f5423f7c1821264419cc8f6b4803f79353acbb8bfa53/platformdirs-4.13.3-py3-none-any.whl",
-          "hash": "sha256:f6ad7f447f24f8a3b82cce5976387428bff894a0eca6c3488f4a17f153c130c4",
-          "size": 32762,
-          "upload-time": "2026-10-16T01:16:15.051Z"
+          "url": "https://files.pythonhosted.org/packages/a8/24/b312a9466839b1f708eed42790b47e927dc7f774a528bb49b1cdf8b734b9/platformdirs-4.13.6-py3-none-any.whl",
+          "hash": "sha256:21fc198fb09f3e78cadcdfd8a6ae4fd65cadc64a3cba78b694321c2996114a3e",
+          "size": 32767,
+          "upload-time": "2026-10-27T08:19:10.405Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "4fdc039c7840ceb41942a7295d27ea501711fb92571049e50578df2c56f86d72"
+        "NOTICES.txt": "fea5a7f45a7393d52578dd12cdba6778038e413b5d3f126990022e8bfc70ee43"
       }
     },
     "pluggy-1.7.0": {
@@ -209,20 +209,20 @@
         "NOTICES.txt": "d3612b6674f25dd31b4c6575c79aef874030746ec370ea969ed643020c56c3d7"
       }
     },
-    "python-discovery-1.6.3": {
+    "python-discovery-1.6.6": {
       "name": "python-discovery",
-      "version": "1.6.3",
-      "license": "Permission is hereby granted, free of charge, to any person obtaining a\n        copy of this software and associated documentation files (the\n        \"Software\"), to deal in the Software without restriction, including\n        without limitation the rights to use, copy, modify, merge, publish,\n        distribute, sublicense, and/or sell copies of the Software, and to\n        permit persons to whom the Software is furnished to do so, subject to\n        the following conditions:\n        \n        The above copyright notice and this permission notice shall be included\n        in all copies or substantial portions of the Software.\n        \n        THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\n        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\n        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\n        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\n        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\n        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\n        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+      "version": "1.6.6",
+      "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/de/ec/643826e4d69b7bdce4213f221e8f5ed06d0a9dd69fa9b33342578d2cc8c8/python_discovery-1.6.3-py3-none-any.whl",
-          "hash": "sha256:cb7654125e3dcb594269a6feb56ac693f1f13b7c654493a93eba72dc22d18034",
-          "size": 39386,
-          "upload-time": "2026-10-16T03:54:28.237Z"
+          "url": "https://files.pythonhosted.org/packages/23/33/d594dde9e7f510216ca87707b575492a610100497db735ab0b54345c60e2/python_discovery-1.6.6-py3-none-any.whl",
+          "hash": "sha256:95e644ce8625c62dc195a603da9f8138ca5a35048224911b2cf7b3028025527a",
+          "size": 39043,
+          "upload-time": "2026-10-27T19:43:39.226Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "18d5f6d00c8b1147da73bd38c7a157df73d0c31f0f84923c679f3fb67bfe76e7"
+        "NOTICES.txt": "56e68df637404eaa3bccf1d1cb9a94a72aca74d425dedd478976ff9aef17096f"
       }
     },
     "pyyaml-6.0.3": {
@@ -247,42 +247,42 @@
         "NOTICES.txt": "146f4ac04efa3511a563394ad32e210bcfbd60197abd47da039645a371d8acd1"
       }
     },
-    "ruff-0.17.1": {
+    "ruff-0.17.3": {
       "name": "ruff",
-      "version": "0.17.1",
+      "version": "0.17.3",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/c0/8c/e075e9c917cb0575297880c96768304e881240171c870cbd8d9b7b54bec2/ruff-0.17.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
-          "hash": "sha256:872e03dd231744d6c5ec5c8af6be52b71323fc6ee096e4c8b34d9f844ee3b978",
-          "size": 9938300,
-          "upload-time": "2026-10-15T15:22:41.284Z"
+          "url": "https://files.pythonhosted.org/packages/3d/66/283e39734f66c8a5ebaa93c22eb7b7515779a0b1d5a5c0ad20e05c0edb41/ruff-0.17.3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+          "hash": "sha256:ab5fa7ed5ce18554ea69d850ad162cbaa0c85fc47c08d83a569f806681c9a6ad",
+          "size": 10094281,
+          "upload-time": "2026-10-27T00:33:38.216Z"
         },
         {
-          "url": "https://files.pythonhosted.org/packages/62/86/5566290219708ce2928f3a29c4f843a1185b341ec6111c4631a33c5ceced/ruff-0.17.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-          "hash": "sha256:a6ef98e51de8ef38082f90653ceeb84944bd7673783eea13e1647c5b9b064189",
-          "size": 10350811,
-          "upload-time": "2026-10-15T15:22:54.401Z"
+          "url": "https://files.pythonhosted.org/packages/f0/20/fecedea2209f574ab92033b344e01a7f0c2dc76c6d6d19a14c9f8141173f/ruff-0.17.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "hash": "sha256:7fa4b0f931cdbcb8a52044f370a3eb429fb42eb88807b0e800fcaa98dd42b24e",
+          "size": 10577491,
+          "upload-time": "2026-10-27T00:33:48.233Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "d4cf685fae3a49898cc43b48bd152a74b543aab2e43058eebba5c413ebc97c1b"
+        "NOTICES.txt": "03f9b6fd6e5c0c6801bf598d22493c822ef4639f34d14e68d649b008b3ae0701"
       }
     },
-    "virtualenv-21.14.8": {
+    "virtualenv-21.15.0": {
       "name": "virtualenv",
-      "version": "21.14.8",
+      "version": "21.15.0",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/14/01/cd63b97dd556293e1c74d76053936d9cef11a28eac605c735ae9f0ee324f/virtualenv-21.14.8-py3-none-any.whl",
-          "hash": "sha256:d2a347fdbc1a65e33c2c5e84dc767b4a3538a25749536a752744d4fe1f71c37a",
-          "size": 5487606,
-          "upload-time": "2026-10-16T00:09:07.441Z"
+          "url": "https://files.pythonhosted.org/packages/0f/25/fe570da03bdfda1bd489f3286ff9ca820e15ad8a1480d0d2c12871d58c84/virtualenv-21.15.0-py3-none-any.whl",
+          "hash": "sha256:013eb9c340466186ac8923ce920ae05becfa1390fdf3565b7eae0d191a2f4a2e",
+          "size": 5558480,
+          "upload-time": "2026-10-27T06:02:19.717Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "5ecbdd0979d0750b1c1e69d11b21ed5d1639ac8e8c51ea875ae0b57a32b59bdc"
+        "NOTICES.txt": "55e7fe78478c10248dcc9de9405f79237220eab2df7fcede6182eca8056ee7a6"
       }
     }
   }
