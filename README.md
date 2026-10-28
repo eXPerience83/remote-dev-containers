@@ -1,6 +1,6 @@
 # Remote Dev Containers — starter v0.1.1-dev
 
-After the reviewed [upstream refresh #294](https://github.com/eXPerience83/remote-dev-containers/pull/294), `main` pins Python **3.14.10** (default) and **3.15.2** (explicit project selection), alongside updated Codex, Node, uv, mise and validation tools. The public `edge` tag changes only after its separate publication gates succeed; check the image digest before deploying. PR2's six pinned validation CLIs and 53-command baseline remain in place. See the [tooling contract](docs/universal-validation-tools.md) and [lock maintenance guide](docs/runtime-locks.md). Live TrueNAS PR2 acceptance remains pending.
+After the reviewed [upstream refresh #294](https://github.com/eXPerience83/remote-dev-containers/pull/294), `main` pins Python **3.14.10** (default) and **3.15.2** (explicit project selection), alongside updated Codex, Node, uv, mise and validation tools. The corresponding [Publish edge AMD64 run](https://github.com/eXPerience83/remote-dev-containers/actions/runs/40773821457) passed its separate security and promotion gates for PR #294. Because `edge` is mutable, check the exact image source SHA and digest before deploying. PR2's six pinned validation CLIs and 53-command baseline remain in place. See the [tooling contract](docs/universal-validation-tools.md) and [lock maintenance guide](docs/runtime-locks.md). Live TrueNAS PR2 acceptance remains pending.
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
