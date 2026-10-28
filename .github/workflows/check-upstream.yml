@@ -512,9 +512,11 @@ jobs:
           export UV_BIN="$workdir/uv-x86_64-unknown-linux-gnu/uv"
           # Reuse the verified mise binary used for Python candidate admission.
           MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
-
-          bash scripts/validate-version-pins.sh
+          # A new PyPI graph changes the wheel/license closure. Refresh its
+          # hashed notices before the strict validate-version-pins check, which
+          # verifies that this evidence exactly matches the new uv.lock graphs.
           python3 scripts/sync-python-cli-notices.py --write
+          bash scripts/validate-version-pins.sh
           python3 scripts/update-third-party-inventory.py --write
           bash scripts/validate-third-party-inventory.sh
           python3 scripts/sync-standalone-artifact-inspection.py

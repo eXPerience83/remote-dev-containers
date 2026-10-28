@@ -28,6 +28,8 @@ REQUIRED_ONCE = (
     'git push --force-with-lease -u origin "$branch"',
     'gh pr create \\',
     'gh pr edit "$existing_pr" \\',
+    'python3 scripts/sync-python-cli-notices.py --write',
+    'bash scripts/validate-version-pins.sh',
 )
 
 
@@ -63,11 +65,20 @@ def validate_step(body: str) -> None:
         raise AssertionError("dual-Python guard must precede other mise updates")
     if body.index('git commit -m "chore: update upstream versions and review evidence"') > body.index('gh pr create \\'):
         raise AssertionError("updater must commit changes before proposing a PR")
+    # The refreshed PyPI uv.lock graph must have matching wheel/license evidence
+    # BEFORE validate-version-pins.sh checks the manifest's exact package set.
+    lock_pos = body.index('MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh')
+    notice_pos = body.index('python3 scripts/sync-python-cli-notices.py --write')
+    validate_pos = body.index('bash scripts/validate-version-pins.sh')
+    if not lock_pos < notice_pos < validate_pos:
+        raise AssertionError("updater must refresh CLI notices before strict validation")
 
 
 
-def simulate_version_updates(body: str, root: Path) -> None:
-    """Exercise the real Python guard and adjacent mise edits with offline fixtures."""
+def simulate_version_updates(
+    body: str, root: Path, *, fixture_content: str | None = None
+) -> None:
+    """Exercise the real updater against either reviewed or already-updated pins."""
     start_marker = "# Python deliberately carries two ordered exact versions in one mise tool."
     stop_marker = "python3 scripts/update-context7-review.py"
     if body.count(start_marker) != 1 or body.count(stop_marker) != 1:
@@ -75,8 +86,11 @@ def simulate_version_updates(body: str, root: Path) -> None:
     start = body.index(start_marker)
     end = body.index(stop_marker, start)
     patch = body[start:end]
-    with (root / "mise.toml").open("rb") as handle:
-        reviewed = tomllib.load(handle)
+    original = (
+        fixture_content if fixture_content is not None
+        else (root / "mise.toml").read_text(encoding="utf-8")
+    )
+    reviewed = tomllib.loads(original)
     old_tools = reviewed["tools"]
     old_python = old_tools["python"]
     if not isinstance(old_python, list) or len(old_python) != 2:
@@ -91,10 +105,27 @@ def simulate_version_updates(body: str, root: Path) -> None:
         "latest_node": "24.999.0",
         "latest_uv": "0.999.0",
     }
+    # Derive the simulated upstream results from the *input fixture*. The real
+    # workflow calls this test both before and after changing version pins:
+    # hard-coded old values would silently downgrade updated tools in the test.
+    simulated_versions = {
+        "RUFF": old_tools["pypi:ruff"]["version"],
+        "PYTEST": old_tools["pypi:pytest"]["version"],
+        "PRE_COMMIT": old_tools["pypi:pre-commit"]["version"],
+        "YQ": old_tools["yq"],
+        "SHFMT": old_tools["shfmt"],
+        "ACTIONLINT": old_tools["actionlint"],
+    }
+    for name, version in simulated_versions.items():
+        if not isinstance(version, str) or not version.replace(".", "").isdigit():
+            raise AssertionError(f"invalid {name} version in test fixture: {version!r}")
+    version_assignments = " ".join(
+        f"[{name}]={version}" for name, version in simulated_versions.items()
+    )
     setup = [
         "set -euo pipefail",
         'replace_env() { :; }',
-        'declare -A validation_versions=([RUFF]=0.17.1 [PYTEST]=9.1.1 [PRE_COMMIT]=4.7.0 [YQ]=4.54.1 [SHFMT]=3.14.1 [ACTIONLINT]=1.7.12)',
+        f"declare -A validation_versions=({version_assignments})",
         'replace_mise_tool() {',
         '  local name="$1" value="$2"',
         '  grep -q "^${name} = \\"" mise.toml',
@@ -107,7 +138,7 @@ def simulate_version_updates(body: str, root: Path) -> None:
 
     with tempfile.TemporaryDirectory(prefix="upstream-python-flow-") as tmp:
         config = Path(tmp) / "mise.toml"
-        shutil.copyfile(root / "mise.toml", config)
+        config.write_text(original, encoding="utf-8")
 
         def execute() -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -127,14 +158,19 @@ def simulate_version_updates(body: str, root: Path) -> None:
         for tool in ("ruff", "pytest", "pre-commit"):
             expected["pypi:" + tool] = dict(old_tools["pypi:" + tool], python=new_python[0])
         if updated["tools"] != expected or updated["settings"] != reviewed["settings"]:
-            raise AssertionError("updater failed to update both Python pins or changed unrelated settings")
+            different_tools = sorted(
+                key for key in expected if updated["tools"].get(key) != expected[key]
+            )
+            raise AssertionError(
+                "updater failed to preserve expected pins or Python update; "
+                f"mismatched tools: {different_tools}"
+            )
 
         # Malformed/reversed pins must fail closed before changing the other tools.
         for invalid in (
             f'python = ["{old_python[1]}", "{old_python[0]}"]',
             f'python = "{old_python[0]}"',
         ):
-            original = (root / "mise.toml").read_text(encoding="utf-8")
             broken = original.replace(
                 f'python = ["{old_python[0]}", "{old_python[1]}"]', invalid
             )
@@ -144,6 +180,33 @@ def simulate_version_updates(body: str, root: Path) -> None:
             result = execute()
             if result.returncode == 0 or config.read_text(encoding="utf-8") != broken:
                 raise AssertionError("updater modified a malformed dual-Python fixture")
+
+
+def simulate_post_update_pin_fixture(body: str, root: Path) -> None:
+    """The updater's version-pin test must also work after a real upstream bump."""
+    original = (root / "mise.toml").read_text(encoding="utf-8")
+    tools = tomllib.loads(original)["tools"]
+    fixture = original
+
+    # Reproduce a candidate update that has already changed both PyPI and
+    # Aqua tool versions, while pytest can still be held back by the age gate.
+    for tool in ("ruff", "pre-commit"):
+        pin = tools[f"pypi:{tool}"]
+        previous = pin["version"]
+        newer = previous.rsplit(".", 1)[0] + "." + str(int(previous.rsplit(".", 1)[1]) + 1)
+        old_line = f'"pypi:{tool}" = {{ version = "{previous}", python = "{pin["python"]}" }}'
+        new_line = f'"pypi:{tool}" = {{ version = "{newer}", python = "{pin["python"]}" }}'
+        if fixture.count(old_line) != 1:
+            raise AssertionError(f"missing fixture pin for pypi:{tool}")
+        fixture = fixture.replace(old_line, new_line, 1)
+
+    old_yq = tools["yq"]
+    new_yq = old_yq.rsplit(".", 1)[0] + "." + str(int(old_yq.rsplit(".", 1)[1]) + 1)
+    old_line = f'yq = "{old_yq}"'
+    if fixture.count(old_line) != 1:
+        raise AssertionError("missing fixture pin for yq")
+    fixture = fixture.replace(old_line, f'yq = "{new_yq}"', 1)
+    simulate_version_updates(body, root, fixture_content=fixture)
 
 
 def expect_rejection(body: str) -> None:
@@ -161,9 +224,17 @@ def main() -> int:
     body = shell_step((root / ".github/workflows/check-upstream.yml").read_text(encoding="utf-8"))
     validate_step(body)
     simulate_version_updates(body, root)
+    simulate_post_update_pin_fixture(body, root)
     expect_rejection(body.replace(GUARD, GUARD.replace("' mise.toml; then", ""), 1))
     expect_rejection(body + '\ngit commit -m "chore: update upstream versions and review evidence"\n')
     expect_rejection(body.replace('replace_env PYTHON_315_VERSION "$latest_python_315"', "# removed 3.15 update", 1))
+    expect_rejection(body.replace(
+        'python3 scripts/sync-python-cli-notices.py --write\n'
+        'bash scripts/validate-version-pins.sh',
+        'bash scripts/validate-version-pins.sh\n'
+        'python3 scripts/sync-python-cli-notices.py --write',
+        1,
+    ))
     print("Dual-Python updater shell, offline pin mutation and single-flow regressions: OK")
     return 0
 
