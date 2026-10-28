@@ -4,6 +4,8 @@ Estado: **PR #273 fusionada en main y distribuida en edge**. Issue [#270](https:
 
 ## Versiones y selección
 
+Los parches exactos siguientes corresponden a la PR #294 revisada (28/10/2026). Para revisiones posteriores, las fuentes autorizadas son `versions.env`, `mise.toml` y `mise.lock`; los ejemplos pueden quedar desactualizados después de futuras PR de mantenimiento.
+
 - `PYTHON_VERSION=3.14.10` sigue siendo el Python predeterminado de `python`/`python3` fuera de proyectos con otra selección, y el intérprete administrativo inmutable. Se mantiene dentro de la rama 3.14.x revisada.
 - `PYTHON_315_VERSION=3.15.2` se distribuye en paralelo y solo se selecciona expresamente desde un proyecto compatible. Sus parches se actualizan dentro de 3.15.x. Nunca se migra silenciosamente a otra rama menor.
 - El `mise.toml` del sistema declara `python = ["3.14.10", "3.15.2"]` en ese orden. Prevalece el `mise.toml` del repositorio; la configuración ejecutable exige confianza explícita mediante `mise trust`. Una versión no instalada falla sin descarga automática ni sustitución por la otra rama.
