@@ -5,10 +5,10 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 | Component | Version | Packaging | Legal files inside asset | Repository notices |
 |---|---:|---|---|---|
 | github-cli | `2.103.3` | tar.gz | LICENSE | LICENSE |
-| codex-cli | `rust-v0.165.0` | tar.gz | None | LICENSE, NOTICE |
-| codex-code-mode-host | `rust-v0.165.0` | tar.gz | None | LICENSE, NOTICE |
+| codex-cli | `rust-v0.166.0` | tar.gz | None | LICENSE, NOTICE |
+| codex-code-mode-host | `rust-v0.166.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
-| mise | `2026.10.21` | raw-binary | None | LICENSE |
+| mise | `2026.10.24` | raw-binary | None | LICENSE |
 | uv | `0.13.6` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
 | yq | `4.54.1` | raw-binary | None | LICENSE |
 | shfmt | `3.14.1` | raw-binary | None | LICENSE |

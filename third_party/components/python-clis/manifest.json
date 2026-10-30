@@ -193,20 +193,20 @@
         "NOTICES.txt": "76d5ed0de0cc3707230cab378a14cc751d6ff925947f7081cb706adcee70ee2e"
       }
     },
-    "pytest-9.1.1": {
+    "pytest-9.2.0": {
       "name": "pytest",
-      "version": "9.1.1",
+      "version": "9.2.0",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl",
-          "hash": "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
-          "size": 386536,
-          "upload-time": "2026-06-19T10:58:31.347Z"
+          "url": "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl",
+          "hash": "sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588",
+          "size": 411776,
+          "upload-time": "2026-10-27T21:30:19.131Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "d3612b6674f25dd31b4c6575c79aef874030746ec370ea969ed643020c56c3d7"
+        "NOTICES.txt": "1999c92a2fe8543295af05a6d819c28daf5db220e21f9df1eeddcf077877eeca"
       }
     },
     "python-discovery-1.6.6": {
