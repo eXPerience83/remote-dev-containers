@@ -1,5 +1,5 @@
 
-===== pytest-9.1.1-py3-none-any.whl/pytest-9.1.1.dist-info/licenses/LICENSE =====
+===== pytest-9.2.0-py3-none-any.whl/pytest-9.2.0.dist-info/licenses/LICENSE =====
 The MIT License (MIT)
 
 Copyright (c) 2004 Holger Krekel and others

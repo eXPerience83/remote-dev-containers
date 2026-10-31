@@ -42,10 +42,10 @@ uv = { path = ".mise/locks/pypi-pre-commit/4.7.0~ffc598aa", digest = "sha256:101
 python = "3.14.10"
 
 [[tools."pypi:pytest"]]
-version = "9.1.1"
+version = "9.2.0"
 backend = "pypi:pytest"
-specifiers = ["9.1.1"]
-uv = { path = ".mise/locks/pypi-pytest/9.1.1~ec7278a3", digest = "sha256:1ba9ceeb67abab3f98dc272c6a53dd7df54679ba2f982e2a3fdfe1b7588e9e17" }
+specifiers = ["9.2.0"]
+uv = { path = ".mise/locks/pypi-pytest/9.2.0~ec7278a3", digest = "sha256:bfba668237fd39a2c732a9ca0e9adb052e1ac0f946f7ae25b7c79d3d99065aeb" }
 
 [tools."pypi:pytest".options]
 python = "3.14.10"
