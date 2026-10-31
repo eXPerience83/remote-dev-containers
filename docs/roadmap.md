@@ -66,7 +66,7 @@ PR2 #281 (six locked pre-CI CLIs) was integrated and published to experimental e
 1. **Operator documentation and PR2 acceptance.** Maintain the bilingual first-install/update runbooks and validate the integrated 53-command `edge` build on TrueNAS with the two enabled agent roles.
 2. **#31 — tracker reconciliation.** Remove already completed gates from the pending lists and identify only blockers that genuinely remain for the support level claimed by the first stable release.
 3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, agent authentication, persistence, isolation, notices/SBOM and vulnerability gates.
-4. **Stable publication.** Only after the gates pass, create the dated changelog release section and exact `vMAJOR.MINOR.PATCH`; publish `stable` and `latest` as the same reviewed digest.
+4. **Stable publication.** Only after the gates pass, change the local prerelease `BASE_VERSION` and the two Dockerfile defaults to the approved final version in a reviewed PR, create the dated changelog release section, validate that exact new main revision and tag `v0.1.1`; publish `stable` and `latest` as the same reviewed digest.
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
 

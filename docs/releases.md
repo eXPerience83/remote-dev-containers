@@ -147,7 +147,7 @@ The `0.1.1-beta.1` source version denotes an **acceptance phase**, not a publish
 4. Execute same-revision `scripts/test-validation-tools.sh` for the six CLIs in a networkless, capability-free disposable container; require `remote-dev-base-verify`, notices, 53 commands, default Python 3.14 and explicit project Python 3.15 resolution. A `CAP_DAC_READ_SEARCH` workaround is **not** a beta acceptance pass.
 5. Check browser authentication, launcher navigation, role isolation, Codex Start/Resume, experimental Antigravity when enabled, persistent state and actual session continuity across stop/start/recreation; publish no tokens or session identifiers.
 6. Record objective evidence in #121 and reconcile #31, separating actual first-stable blockers from later features. Fix regressions via a new PR updated against current `main` and repeat exact-revision/digest acceptance.
-7. **Only after** the remaining checklist in this guide passes and the stable support scope is approved, prepare the dated changelog section and exact `v0.1.1` tag. The stable workflow will produce/scan its own exact digest before promoting `stable` and `latest`.
+7. **Only after** the remaining checklist in this guide passes and the stable support scope is approved, change the local source `BASE_VERSION` and both Dockerfile defaults to `0.1.1` through a new reviewed PR, prepare the dated changelog section, validate that final source revision again and create its exact `v0.1.1` tag. The stable workflow will produce/scan its own exact digest before promoting `stable` and `latest`.
 
 ## Stable and latest
 

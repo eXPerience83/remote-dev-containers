@@ -54,7 +54,7 @@ If the available GitHub interface cannot perform the required rebase/update or t
 
 ### Beta-to-stable release gate
 
-A source prerelease identifier such as `0.1.1-beta.1` is **not** a published GitHub prerelease, a new GHCR beta channel or a stable image. Until a separately reviewed publication workflow exists, test a published `edge-amd64` build pinned by its exact OCI digest and source SHA as the beta candidate. Preserve the previous working digest for rollback, and record the exact build/security results. Require genuine TrueNAS role/security/session/persistence acceptance (including #121) and the `docs/releases.md` checklist before creating an exact stable `vMAJOR.MINOR.PATCH` tag. Never move `stable` or `latest` for a beta.
+A source prerelease identifier such as `0.1.1-beta.1` is **not** a published GitHub prerelease, a new GHCR beta channel or a stable image. Until a separately reviewed publication workflow exists, test a published `edge-amd64` build pinned by its exact OCI digest and source SHA as the beta candidate. Preserve the previous working digest for rollback, and record the exact build/security results. Require genuine TrueNAS role/security/session/persistence acceptance (including #121) and the `docs/releases.md` checklist before creating an exact stable `vMAJOR.MINOR.PATCH` tag. Never move `stable` or `latest` for a beta. At the actual stable cut, explicitly update `BASE_VERSION` and both Dockerfile local defaults from the prerelease identifier to the approved release version, review the dated changelog, and rerun the exact-head build/security gates before creating a stable tag.
 
 ## Security invariants
 

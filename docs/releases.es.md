@@ -147,7 +147,7 @@ La versión de código `0.1.1-beta.1` identifica una **fase de aceptación**, no
 4. Ejecuta las pruebas herméticas de las seis CLI con `scripts/test-validation-tools.sh` de la misma revisión, sin red ni capacidades DAC; exige `remote-dev-base-verify`, notices, 53 comandos, Python 3.14 por defecto y 3.15 opcional con resolución de proyecto correcta. No declares aprobado un paso que requiera `CAP_DAC_READ_SEARCH`.
 5. Comprueba autenticación web, navegación del launcher, aislamiento de roles, Codex Start/Resume, Antigravity experimental si está habilitado, persistencia y conversaciones reales tras stop/start/recreación; nunca publiques tokens ni nombres de sesiones.
 6. Documenta los resultados verificables en #121 y actualiza #31, distinguiendo pendientes reales de mejoras futuras. Corrige cualquier regresión mediante PR nuevo, actualizado a `main` y con CI propio; repite la aceptación de la nueva revisión/digest.
-7. **Solo después** de superar `docs/releases.es.md`, cerrar los bloqueos del alcance estable y decidir la versión definitiva, prepara la sección fechada de changelog y el tag exacto `v0.1.1`. El workflow estable generará y verificará entonces su propio digest, que será la referencia de `stable` y `latest`.
+7. **Solo después** de superar la lista de esta guía, cerrar los bloqueos del alcance estable y decidir la versión definitiva, actualiza `BASE_VERSION` y los valores por defecto de ambos Dockerfile a `0.1.1` mediante un nuevo PR revisado, prepara la sección fechada del changelog, valida de nuevo esa revisión final y crea el tag exacto `v0.1.1`. El workflow estable generará y verificará entonces su propio digest, que será la referencia de `stable` y `latest`.
 
 ## Stable y latest
 
