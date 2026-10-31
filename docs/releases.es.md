@@ -16,7 +16,7 @@ dev -> edge -> stable = latest
 
 Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. Remote Dev **todavía no ha publicado una versión estable**; los despliegues públicos integrados actuales utilizan `edge`/`edge-amd64`.
 
-La base local de desarrollo del repositorio es `0.1.1-dev`. Ese valor es solo el predeterminado de código/build local: la publicación edge lo sustituye por una identidad edge fechada y únicamente la publicación estable utiliza SemVer exacto. Una actualización normal de herramientas (como la [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), del changelog o de la documentación **no incrementa automáticamente `BASE_VERSION` ni crea una release versionada**. Cambiar la versión del proyecto requiere una decisión explícita de publicación, los controles correspondientes y una identidad de imagen coherente.
+La base local de desarrollo del repositorio es `0.1.1-beta.1`. Ese valor es solo el predeterminado de código/build local: la publicación edge lo sustituye por una identidad edge fechada y únicamente la publicación estable utiliza SemVer exacto. Una actualización normal de herramientas (como la [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), del changelog o de la documentación **no incrementa automáticamente `BASE_VERSION` ni crea una release versionada**. Cambiar la versión del proyecto requiere una decisión explícita de publicación, los controles correspondientes y una identidad de imagen coherente.
 
 ## Capas de identidad
 
@@ -136,6 +136,18 @@ Renovate tiene un límite de propiedad separado.
 - Renovate continúa con `automerge: false`.
 
 El validador del repositorio obliga offline ambos límites de automatización. El texto humano del changelog fuera de sus marcadores explícitos no es objetivo de automatización.
+
+## Candidata beta 0.1.1-beta.1 → primera estable v0.1.1
+
+La versión de código `0.1.1-beta.1` identifica una **fase de aceptación**, no una release prerelease publicada, ni una etiqueta GHCR `:beta`, ni una promesa de estabilidad. No crees `v0.1.1-beta.1` con el workflow actual: solo acepta `vMAJOR.MINOR.PATCH` sin sufijo y publicaría al canal estable si se forzase otra ruta incorrecta. No cambies `stable` ni `latest` durante la beta.
+
+1. Congela el `main` de prueba después de integrar los PR previstos **actualizados/rebasados a su base y verificados con CI en su SHA exacto**, siguiendo `AGENTS.md`. No confundas verde de CI en una rama antigua con la validación de la combinación.
+2. Exige Build AMD64 y Publish edge AMD64 correctos **en la misma revisión**; registra el SHA completo, el digest OCI exacto publicado de `ghcr.io/experience83/remote-dev`, la identidad `edge-YYYY.MM.DD-<sha>` y los informes de notices, SBOM y Trivy de ese candidato. El tag mutable `edge` por sí solo no identifica la beta probada.
+3. Guarda digest anterior y configuración del Custom App antes de cambiar nada. En TrueNAS despliega los tres roles habilitados con **el mismo** `REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev@sha256:<digest>`, sin recrear datasets, cambiar ACL, ampliar capacidades ni usar montajes generales.
+4. Ejecuta las pruebas herméticas de las seis CLI con `scripts/test-validation-tools.sh` de la misma revisión, sin red ni capacidades DAC; exige `remote-dev-base-verify`, notices, 53 comandos, Python 3.14 por defecto y 3.15 opcional con resolución de proyecto correcta. No declares aprobado un paso que requiera `CAP_DAC_READ_SEARCH`.
+5. Comprueba autenticación web, navegación del launcher, aislamiento de roles, Codex Start/Resume, Antigravity experimental si está habilitado, persistencia y conversaciones reales tras stop/start/recreación; nunca publiques tokens ni nombres de sesiones.
+6. Documenta los resultados verificables en #121 y actualiza #31, distinguiendo pendientes reales de mejoras futuras. Corrige cualquier regresión mediante PR nuevo, actualizado a `main` y con CI propio; repite la aceptación de la nueva revisión/digest.
+7. **Solo después** de superar `docs/releases.es.md`, cerrar los bloqueos del alcance estable y decidir la versión definitiva, prepara la sección fechada de changelog y el tag exacto `v0.1.1`. El workflow estable generará y verificará entonces su propio digest, que será la referencia de `stable` y `latest`.
 
 ## Stable y latest
 

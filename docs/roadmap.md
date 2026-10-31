@@ -10,7 +10,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
-- Local development baseline is `0.1.1-dev`; published edge builds retain their dated edge identity and no stable release exists yet.
+- Local development baseline is `0.1.1-beta.1`; published edge builds retain their dated edge identity and no stable release exists yet.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -58,6 +58,8 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Hosted-service privacy/terms and credential boundaries are documented; Context7 remains outside the image SBOM/runtime bundle.
 
 ## Current milestone — first stable release preparation
+
+The current `0.1.1-beta.1` **source** baseline targets an eventual **`v0.1.1` stable** release. It is not a published beta registry tag. PR #296 (Ubuntu) and PR #297 (Codex/mise/pytest) are merged; the intended beta test artifact is a successful `edge-amd64` image **fixed by exact SHA and OCI digest**. Verify the publication and run the whole TrueNAS acceptance before approving stable. The existing stable-only tag workflow deliberately rejects prerelease tags.
 
 PR2 #281 (six locked pre-CI CLIs) was integrated and published to experimental edge on 2026-10-18; live TrueNAS acceptance is pending under #121. Remote Dev still has no stable release. The current work is to make the public/support surface match the implementation and then run the exact stable-release gates.
 

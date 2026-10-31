@@ -38,6 +38,24 @@ If issue prose and repository code disagree, resolve the discrepancy explicitly 
 
 A PR is ready to merge only when its **exact final head** has the required repository CI green, valid review findings are fixed, review conversations are resolved and the branch remains mergeable/up to date according to the repository's current merge policy. Use squash merge.
 
+### Sequential PR integration and freshness gate (mandatory)
+
+When integrating multiple PRs into `main`, treat each merge as a change to the base of every remaining PR. **Never squash-merge a PR that GitHub reports as `behind`**, even if GitHub says `mergeable: true` or an older exact-head CI run passed.
+
+Before **each** merge:
+
+1. Read the live `main` SHA, PR base SHA, PR head SHA, `mergeable_state`, reviews, unresolved threads and required Actions (including owner-dispatched builds). Do not treat an `action_required` PR event as a failure or a pass; inspect the associated exact-SHA workflow separately.
+2. If the target moved since the PR was last tested, **rebase the PR onto current `main`** (or explicitly update its branch with current `main` when rebasing is unsuitable). Recheck the diff, updated locks/notices, conflicts and branch head. A successful GitHub mergeability calculation alone does not count as an up-to-date base.
+3. Require the full applicable CI/build/smoke/SBOM/notices/security gate **on that refreshed head against that current base**. Old-head green checks, a sibling PR's checks and post-merge `main` Actions are not substitutes.
+4. Immediately before squash merge, reread current `main`, PR head/base, checks and reviews. If any SHA or check status changed, stop and repeat the refresh/validation. Use the merge API's `expected_head_sha` guard.
+5. After merge, verify resulting `main` and post-merge CI/publication; do not claim publication or deployment acceptance until they actually pass. Apply steps 1–4 again to the next PR.
+
+If the available GitHub interface cannot perform the required rebase/update or the necessary exact-head CI cannot be run/verified, **leave the PR open and report the blocker** rather than bypassing this gate. This is particularly important for grouped upstream version locks and Renovate base-image digest updates.
+
+### Beta-to-stable release gate
+
+A source prerelease identifier such as `0.1.1-beta.1` is **not** a published GitHub prerelease, a new GHCR beta channel or a stable image. Until a separately reviewed publication workflow exists, test a published `edge-amd64` build pinned by its exact OCI digest and source SHA as the beta candidate. Preserve the previous working digest for rollback, and record the exact build/security results. Require genuine TrueNAS role/security/session/persistence acceptance (including #121) and the `docs/releases.md` checklist before creating an exact stable `vMAJOR.MINOR.PATCH` tag. Never move `stable` or `latest` for a beta.
+
 ## Security invariants
 
 Never weaken these constraints merely to make a feature easier:

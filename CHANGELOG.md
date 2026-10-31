@@ -60,6 +60,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
 
+### Release preparation
+
+- Start first-stable acceptance for **source `0.1.1-beta.1`**, targeting eventual **`v0.1.1`** only after an exact-digest-pinned AMD64 edge image passes both-role TrueNAS persistence, security, toolchain and session checks (#121/#31). This change does **not** publish a SemVer beta, advance `stable`/`latest` or claim live acceptance.
+- Enforce sequential PR integration instructions in `AGENTS.md`: refresh/rebase every PR after `main` advances, validate the refreshed exact head against the new base and check freshness again before guarded squash merge. The post-merge CI remains a defense-in-depth check, not a substitute for pre-merge verification.
+
 ### Added
 
 - PR2 (#281): six pre-CI validation CLIs — Ruff 0.17.1, pytest 9.1.1 and pre-commit 4.7.0 in isolated hash-locked Python CLI environments, plus Aqua-locked Mike Farah yq 4.54.1, shfmt 3.14.1 and actionlint 1.7.12. The public baseline is now 53 commands; Python 3.14/3.15 project precedence, read-only root, private agent state and fail-closed behavior are intact. Exact-head CI and main-push AMD64 build/experimental edge publication succeeded on 2026-10-18. **Live TrueNAS PR2 acceptance is pending**. The project owner approved a targeted distribution/license review and +70.41 MiB base / +68.06 MiB final uncompressed soft-budget exception under #53. This is not a stable release.
