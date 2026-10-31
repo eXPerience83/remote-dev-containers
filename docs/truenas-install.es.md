@@ -1,6 +1,6 @@
 # TrueNAS SCALE: instalación, persistencia y actualización
 
-> **Pruebas beta previas a v0.1.1:** el código fuente `0.1.1-beta.1` no es un tag publicado. Fija por digest la imagen `edge-amd64` tras confirmar CI/publicación, conserva el digest anterior para rollback y sigue el [checklist de aceptación beta](releases.es.md) antes de plantear una estable.
+> **Pruebas beta previas a v1.0.0:** el código fuente `1.0.0-beta.1` no es un tag publicado. Fija por digest la imagen `edge-amd64` tras confirmar CI/publicación, conserva el digest anterior para rollback y sigue el [checklist de aceptación beta](releases.es.md) antes de plantear una estable.
 
 Esta guía describe el canal **edge experimental**; todavía no existe una release estable. La única definición de despliegue es [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
 

@@ -16,7 +16,7 @@ dev -> edge -> stable = latest
 
 These concepts stay separate from human-readable build identity and immutable provenance. Remote Dev has **not published a stable release yet**; current public integrated deployments use `edge`/`edge-amd64`.
 
-The repository's local development baseline is `0.1.1-beta.1`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer. Routine upstream pin refreshes (including [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), changelog updates and documentation corrections **do not automatically increment `BASE_VERSION` or create a versioned release**. Bumping the project version requires an explicit release decision, the appropriate gates and consistent image identity.
+The repository's local development baseline is `1.0.0-beta.1`. That value is a source/local-build default only: edge publication replaces it with a dated edge identity, and stable publication alone uses exact SemVer. Routine upstream pin refreshes (including [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294)), changelog updates and documentation corrections **do not automatically increment `BASE_VERSION` or create a versioned release**. Bumping the project version requires an explicit release decision, the appropriate gates and consistent image identity.
 
 ## Identity layers
 
@@ -137,9 +137,11 @@ Renovate has a separate ownership boundary.
 
 The repository validator enforces both automation boundaries offline. Human-authored changelog text outside their explicit markers is not an automation target.
 
-## Beta candidate 0.1.1-beta.1 → first stable v0.1.1
+## Beta candidate 1.0.0-beta.1 → first stable v1.0.0
 
-The `0.1.1-beta.1` source version denotes an **acceptance phase**, not a published prerelease, a GHCR `:beta` tag or a stable support promise. Do not create `v0.1.1-beta.1` using the current publisher: it only accepts exact `vMAJOR.MINOR.PATCH` tags. Neither `stable` nor `latest` moves during beta acceptance.
+**Intended v1.0.0 scope:** AMD64 single-user/private-network core with bundled Codex and persistent role state. Antigravity remains optional/experimental. v1.0.0 does not imply public Internet exposure, enterprise tenant isolation, ARM64 runtime support or automatic removal of compatibility aliases.
+
+The `1.0.0-beta.1` source version denotes an **acceptance phase**, not a published prerelease, a GHCR `:beta` tag or a stable support promise. Do not create `v1.0.0-beta.1` using the current publisher: it only accepts exact `vMAJOR.MINOR.PATCH` tags. Neither `stable` nor `latest` moves during beta acceptance.
 
 1. Freeze the intended `main` candidate only after planned PRs are **rebased/updated to current `main` and validated on their exact final heads**, per `AGENTS.md`. Green checks on an outdated PR head do not validate the combined tree.
 2. Require successful Build AMD64 **and** Publish edge AMD64 on the same source revision. Record the full source SHA, immutable published OCI digest of `ghcr.io/experience83/remote-dev`, dated `edge-YYYY.MM.DD-<sha>` image identity and candidate-specific notices, SBOM and Trivy evidence. The mutable `edge` tag alone is not sufficient.
@@ -147,7 +149,7 @@ The `0.1.1-beta.1` source version denotes an **acceptance phase**, not a publish
 4. Execute same-revision `scripts/test-validation-tools.sh` for the six CLIs in a networkless, capability-free disposable container; require `remote-dev-base-verify`, notices, 53 commands, default Python 3.14 and explicit project Python 3.15 resolution. A `CAP_DAC_READ_SEARCH` workaround is **not** a beta acceptance pass.
 5. Check browser authentication, launcher navigation, role isolation, Codex Start/Resume, experimental Antigravity when enabled, persistent state and actual session continuity across stop/start/recreation; publish no tokens or session identifiers.
 6. Record objective evidence in #121 and reconcile #31, separating actual first-stable blockers from later features. Fix regressions via a new PR updated against current `main` and repeat exact-revision/digest acceptance.
-7. **Only after** the remaining checklist in this guide passes and the stable support scope is approved, change the local source `BASE_VERSION` and both Dockerfile defaults to `0.1.1` through a new reviewed PR, prepare the dated changelog section, validate that final source revision again and create its exact `v0.1.1` tag. The stable workflow will produce/scan its own exact digest before promoting `stable` and `latest`.
+7. **Only after** the remaining checklist in this guide passes and the stable support scope is approved, change the local source `BASE_VERSION` and both Dockerfile defaults to `0.1.1` through a new reviewed PR, prepare the dated changelog section, validate that final source revision again and create its exact `v1.0.0` tag. The stable workflow will produce/scan its own exact digest before promoting `stable` and `latest`.
 
 ## Stable and latest
 
