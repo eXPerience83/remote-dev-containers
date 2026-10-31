@@ -1,6 +1,6 @@
-# Remote Dev Containers — candidata de código v1.0.0-beta.1
+# Remote Dev Containers — candidata de código v0.2.0-beta.1
 
-Tras integrar [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) (digest Ubuntu 26.04) y [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) (Codex 0.166.0, mise 2026.10.24 y pytest 9.2.0), preparamos **1.0.0-beta.1** como candidata a la primera estable **v1.0.0**. Python 3.14.10 sigue siendo el predeterminado y Python 3.15.2 se selecciona expresamente por proyecto. Se mantienen las seis herramientas aisladas y los 53 comandos de la imagen. El número beta es una **versión local de código/build**, no una beta SemVer publicada: para las pruebas TrueNAS se usará una imagen AMD64 `edge` publicada y fijada por digest inmutable. Consulta los [controles de publicación y aceptación](docs/releases.es.md) y el [contrato de herramientas](docs/universal-validation-tools.es.md). **La aceptación real PR2 en TrueNAS sigue pendiente.**
+Tras integrar [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) (digest Ubuntu 26.04) y [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) (Codex 0.166.0, mise 2026.10.24 y pytest 9.2.0), preparamos **0.2.0-beta.1** como candidata a la primera estable **v0.2.0**. Python 3.14.10 sigue siendo el predeterminado y Python 3.15.2 se selecciona expresamente por proyecto. Se mantienen las seis herramientas aisladas y los 53 comandos de la imagen. El número beta es una **versión local de código/build**, no una beta SemVer publicada: para las pruebas TrueNAS se usará una imagen AMD64 `edge` publicada y fijada por digest inmutable. Consulta los [controles de publicación y aceptación](docs/releases.es.md) y el [contrato de herramientas](docs/universal-validation-tools.es.md). **La aceptación real PR2 en TrueNAS sigue pendiente.**
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
@@ -267,7 +267,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-La versión base de desarrollo local es `1.0.0-beta.1`; las publicaciones edge usan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar de ese valor local predeterminado.
+La versión base de desarrollo local es `0.2.0-beta.1`; las publicaciones edge usan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar de ese valor local predeterminado.
 
 ## Pruebas públicas con edge
 
