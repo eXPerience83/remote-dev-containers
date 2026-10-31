@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-10-31 — mise 2026.10.24 → 2026.10.25.
+
 - 2026-10-30 — Codex CLI 0.165.0 → 0.166.0; mise 2026.10.21 → 2026.10.24; pytest 9.1.1 → 9.2.0.
 
 - 2026-10-28 — Codex CLI 0.163.0 → 0.165.0; GitHub CLI 2.102.1 → 2.103.3; mise 2026.10.17 → 2026.10.21; Python 3.14.8 → 3.14.10; Python 3.15 3.15.0 → 3.15.2; Node.js 24.22.0 → 24.22.2; uv 0.13.4 → 0.13.6; Ruff 0.17.1 → 0.17.3; Context7 CLI (transient) 0.8.1 → 0.8.2.
