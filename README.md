@@ -1,6 +1,6 @@
-# Remote Dev Containers — starter v0.1.1-dev
+# Remote Dev Containers — v0.2.0-beta.1 source candidate
 
-After the reviewed [upstream refresh #294](https://github.com/eXPerience83/remote-dev-containers/pull/294), `main` pins Python **3.14.10** (default) and **3.15.2** (explicit project selection), alongside updated Codex, Node, uv, mise and validation tools. The corresponding [Publish edge AMD64 run](https://github.com/eXPerience83/remote-dev-containers/actions/runs/40773821457) passed its separate security and promotion gates for PR #294. Because `edge` is mutable, check the exact image source SHA and digest before deploying. PR2's six pinned validation CLIs and 53-command baseline remain in place. See the [tooling contract](docs/universal-validation-tools.md) and [lock maintenance guide](docs/runtime-locks.md). Live TrueNAS PR2 acceptance remains pending.
+After merged [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) (Ubuntu 26.04 digest) and [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) (Codex 0.166.0, mise 2026.10.24, pytest 9.2.0), the repository is preparing **0.2.0-beta.1** for an eventual **v0.2.0** stable release. Python 3.14.10 stays the default; Python 3.15.2 remains opt-in per project. The six isolated validation CLIs and 53-command baseline remain included. The prerelease number is a **local source/build default**, not a published SemVer beta tag: use a successfully published, immutable-digest-pinned AMD64 `edge` image for TrueNAS beta acceptance. See [release/acceptance gates](docs/releases.md) and [tooling contract](docs/universal-validation-tools.md). **TrueNAS PR2 acceptance is still pending.**
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
@@ -275,7 +275,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-The local development baseline is `0.1.1-dev`; edge publications use their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of that local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
+The local development baseline is `0.2.0-beta.1`; edge publications use their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of that local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
 

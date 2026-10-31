@@ -10,7 +10,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
-- Local development baseline is `0.1.1-dev`; published edge builds retain their dated edge identity and no stable release exists yet.
+- Local development baseline is `0.2.0-beta.1`; published edge builds retain their dated edge identity and no stable release exists yet.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -59,12 +59,14 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 
 ## Current milestone — first stable release preparation
 
+The current `0.2.0-beta.1` **source** baseline targets an eventual **`v0.2.0` stable** release. The 0.2 scope is the Codex-centered AMD64, single-user/private-network core; Antigravity remains optional and explicitly experimental. Compatibility aliases are retained through 0.2.x; interfaces may still evolve between 0.x minors. Require separate review before removals. It is not a published beta registry tag. PR #296 (Ubuntu) and PR #297 (Codex/mise/pytest) are merged; the intended beta test artifact is a successful `edge-amd64` image **fixed by exact SHA and OCI digest**. Verify the publication and run the whole TrueNAS acceptance before approving stable. The existing stable-only tag workflow deliberately rejects prerelease tags.
+
 PR2 #281 (six locked pre-CI CLIs) was integrated and published to experimental edge on 2026-10-18; live TrueNAS acceptance is pending under #121. Remote Dev still has no stable release. The current work is to make the public/support surface match the implementation and then run the exact stable-release gates.
 
 1. **Operator documentation and PR2 acceptance.** Maintain the bilingual first-install/update runbooks and validate the integrated 53-command `edge` build on TrueNAS with the two enabled agent roles.
 2. **#31 — tracker reconciliation.** Remove already completed gates from the pending lists and identify only blockers that genuinely remain for the support level claimed by the first stable release.
 3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, agent authentication, persistence, isolation, notices/SBOM and vulnerability gates.
-4. **Stable publication.** Only after the gates pass, create the dated changelog release section and exact `vMAJOR.MINOR.PATCH`; publish `stable` and `latest` as the same reviewed digest.
+4. **Stable publication.** Only after the gates pass, change the local prerelease `BASE_VERSION` and the two Dockerfile defaults to the approved final version in a reviewed PR, create the dated changelog release section, validate that exact new main revision and tag `v0.2.0`; publish `stable` and `latest` as the same reviewed digest.
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
 

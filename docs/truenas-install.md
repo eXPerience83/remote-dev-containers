@@ -1,5 +1,7 @@
 # TrueNAS SCALE: installation, persistence, and upgrades
 
+> **Beta acceptance before v0.2.0:** source `0.2.0-beta.1` is not a published tag. Pin a successfully published `edge-amd64` image by digest, retain the old digest for rollback and follow the [beta acceptance checklist](releases.md) before considering stable.
+
 This guide describes the **experimental edge** channel; no stable release exists yet. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for deeper validation.
 
 ## 1. Root dataset and safety

@@ -60,6 +60,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
 
+### First release candidate — 0.2.0-beta.1
+
+This is the **0.2 release candidate for the AMD64 single-user/private-network core**, not a published GitHub prerelease or a stable GHCR image. The public compatibility contract may continue evolving between 0.x minor versions; a future `stable` image denotes tested operation, not 1.0 API compatibility. Until TrueNAS acceptance and release gates pass, images continue to ship through the tested `edge` channel with a dated identity and immutable OCI digest; the first stable tag will be **`v0.2.0`**. The project does not promise enterprise multi-tenancy, internet-facing ports or ARM64 support. Optional Google Antigravity remains explicitly **experimental**, unbundled and vendor-installed, even if the Codex-centered core reaches v0.2.0.
+
+Release-candidate highlights (see chronological Added/Changed/Fixed/Security entries below for the full history):
+
+- One canonical image reused by an isolated launcher, Codex and optional Antigravity role, with narrow private mounts, authenticated agent terminals, trusted-network launcher and recoverable browser/tmux sessions.
+- Deterministic TrueNAS SCALE installation, Generic/POSIX private-state ACL auditing, project-scoped workspaces, persistence and role isolation.
+- A locked **53-command universal baseline**, including Ruff, pytest, pre-commit, yq, shfmt and actionlint; Python 3.14.10 is default and Python 3.15.2 opt-in per compatible project. Current reviewed pins include Codex CLI 0.166.0, mise 2026.10.24 and pytest 9.2.0; `versions.env` is authoritative.
+- Reviewed supply-chain controls: immutable upstream digests/locks, notices, SPDX SBOMs, vulnerability scanning, exact-digest publication, experimental edge updates and a stable-only `latest` alias.
+- Remaining release blockers: pass the merged exact-revision/digest CI publication, complete live TrueNAS PR2 acceptance **without DAC capability workarounds** (#121), reconcile genuine stable blockers (#31, including #93 disposition), then bump source defaults to `0.2.0` and cut `v0.2.0` in a separate reviewed release PR.
+
+The current `0.1.0-dev → 0.1.1-dev` entry under Changed records a **historical** source-version step; it does not override the current candidate baseline. Previous tool patch versions in dated entries are historical integration evidence, not present-day pin claims. Compatibility wrappers and `CODEX_IMAGE` fallback remain supported throughout 0.2.x; warnings and documentation are updated consistently, and no compatibility alias is removed in this release.
+
+### Release preparation
+
+- Start first-stable acceptance for **source `0.2.0-beta.1`**, targeting eventual **`v0.2.0`** only after an exact-digest-pinned AMD64 edge image passes both-role TrueNAS persistence, security, toolchain and session checks (#121/#31). This change does **not** publish a SemVer beta, advance `stable`/`latest` or claim live acceptance.
+- Enforce sequential PR integration instructions in `AGENTS.md`: refresh/rebase every PR after `main` advances, validate the refreshed exact head against the new base and check freshness again before guarded squash merge. The post-merge CI remains a defense-in-depth check, not a substitute for pre-merge verification.
+
 ### Added
 
 - PR2 (#281): six pre-CI validation CLIs — Ruff 0.17.1, pytest 9.1.1 and pre-commit 4.7.0 in isolated hash-locked Python CLI environments, plus Aqua-locked Mike Farah yq 4.54.1, shfmt 3.14.1 and actionlint 1.7.12. The public baseline is now 53 commands; Python 3.14/3.15 project precedence, read-only root, private agent state and fail-closed behavior are intact. Exact-head CI and main-push AMD64 build/experimental edge publication succeeded on 2026-10-18. **Live TrueNAS PR2 acceptance is pending**. The project owner approved a targeted distribution/license review and +70.41 MiB base / +68.06 MiB final uncompressed soft-budget exception under #53. This is not a stable release.
@@ -118,7 +137,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Reference-image rebuilds (`remote-dev-base:pr2-before` and `remote-dev:pr2-before`) and four optional before-image SPDX/Trivy reports are performed by `scripts/measure-tooling-image-delta.sh`, invoked only on explicit `workflow_dispatch` with `compare_images=true`. Normal PR/main builds run the candidate-image checks without rebuilding previous images; mandatory smoke, notices, SPDX and Trivy gates remain unchanged.
-- Bumped the local development baseline from `0.1.0-dev` to `0.1.1-dev`. This does not create a stable release: edge publication keeps its dated `edge-YYYY.MM.DD-<short-sha>` identity and stable/latest remain reserved for an explicit SemVer release.
+- Earlier development advanced the local source baseline from `0.1.0-dev` to `0.1.1-dev` (historical, superseded by the 0.2.0 beta candidate). This does not create a stable release: edge publication keeps its dated `edge-YYYY.MM.DD-<short-sha>` identity and stable/latest remain reserved for an explicit SemVer release.
 - Clarified the current browser-password policy: Codex and enabled Antigravity require only a non-empty single-line configured value unless an explicit reviewed insecure override is used; Remote Dev does not enforce minimum length, composition or cross-agent uniqueness, and the two agent configuration entries may intentionally reuse the same password pending a future browser-access/security decision.
 - Clarified that the current launcher is a password-free navigation surface rather than the stack's central authentication boundary. Stronger single-entry launcher/gateway authentication remains future #181 work; the existing launcher-auth override is advanced/non-default and is not required for the normal deployment.
 - Synchronized the public/project documentation with the implemented single-stack topology: Antigravity is an optional experimental official-CLI integration with completed #29/#96/#106/#131 technical evidence and recorded #53 policy disposition; agent browser authentication uses configuration-backed `WEB_PASSWORD`; the TrueNAS reference host layout is Generic/POSIX with the read-only ACL audit; #83 review automation and #189 Renovate provenance are shipped rather than future work.
@@ -136,7 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Defined the permanent image-channel hierarchy as `dev -> edge -> stable = latest`; `latest` now has an explicit contract as a stable-only alias and must never follow `edge` or `dev`.
 - Updated project documentation to state clearly that no stable release exists yet.
 - Changed the generic and TrueNAS Compose defaults to `ghcr.io/experience83/remote-dev:edge-amd64` through the canonical `REMOTE_DEV_IMAGE` variable.
-- Retained `CODEX_IMAGE` as a lower-priority compatibility fallback throughout `v0.1.x`; it will not be removed before `v0.2.0`, but registry values should use the canonical `ghcr.io/experience83/remote-dev` package.
+- Retained `CODEX_IMAGE` as a lower-priority compatibility fallback throughout `v0.1.x` and extended support through `v0.2.x`; removal requires a separate reviewed migration. Registry values should use the canonical `ghcr.io/experience83/remote-dev` package.
 - Retired the legacy `ghcr.io/experience83/codex-remote-dev` GHCR package before the first stable release so publication maintains only `remote-dev-base` and the canonical `remote-dev` runtime package.
 - Updated the pinned Codex CLI from `0.144.4` to stable `0.145.0`.
 - Updated the reviewed stable toolchain to mise `2026.7.14`, Node.js `24.18.0` LTS, npm `12.0.1` and uv `0.11.32`; Python `3.14.6`, GitHub CLI `2.96.0` and ttyd `1.7.7` were already current.
@@ -157,7 +176,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Superseded the earlier separate child-image plan with a single-stack architecture that reuses one final image digest across fixed launcher and agent roles.
 - Changed `start-codex-web`, `codex-menu` and `codex-doctor` into compatibility wrappers around the canonical role-neutral implementation while retaining legacy `START_MODE=menu|codex|shell` behavior.
 - Limited persistent-state hardening for `REMOTE_DEV_ROLE=shell` to common GitHub, Git and SSH state so that the neutral shell role does not inspect or modify Codex state.
-- Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining local and variable compatibility aliases through `v0.1.x`.
+- Changed local build and CI references from `codex-remote-dev*` to the canonical `remote-dev*` names while retaining local and variable compatibility aliases through `v0.1.x`, with the fallback extended through `v0.2.x`.
 - Changed all public runtime publication paths to use the canonical `remote-dev` package only; legacy package tags are no longer created.
 - Changed the normal TrueNAS x-portal entry from the Codex terminal to the launcher while retaining the existing independently authenticated Codex port and data layout.
 - Changed the image healthcheck from Codex-specific process checks to a fixed role-aware command.
