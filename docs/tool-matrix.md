@@ -146,7 +146,7 @@ The image does not replace host-side TrueNAS administration. The supported YAML 
 
 ## Version/release identity
 
-The local development baseline is `0.1.1-dev`. It is a source/local-build default, not a stable release. Published edge builds use `edge-YYYY.MM.DD-<short-sha>` plus `Channel: edge`; explicit stable publication alone uses `vMAJOR.MINOR.PATCH` and moves `stable`/`latest`.
+The local development baseline is `0.2.0-beta.1`. It is a source/local-build default, not a stable release. Published edge builds use `edge-YYYY.MM.DD-<short-sha>` plus `Channel: edge`; explicit stable publication alone uses `vMAJOR.MINOR.PATCH` and moves `stable`/`latest`.
 
 ## Explicitly deferred
 

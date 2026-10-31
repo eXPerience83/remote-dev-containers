@@ -93,4 +93,4 @@ Accepted. Human-facing channels are permanently ordered `dev -> edge -> stable =
 
 An edge build may have a dated identity such as `edge-YYYY.MM.DD-<short-sha>`, but the separate channel remains `edge`; the full source SHA and OCI digest are stronger provenance. Stable publication continues to use exact SemVer and `latest` is only an alias of the same stable digest, never of `dev` or `edge`.
 
-The repository's local development baseline may advance independently between stable releases. It is `0.1.1-dev` after the current documentation/state synchronization and does not create a stable release or replace edge's dated identity.
+The repository's local development baseline may advance independently between stable releases. The current local source candidate is `0.2.0-beta.1` targeting `v0.2.0` after exact-digest TrueNAS acceptance; this is neither a published SemVer beta nor a stable release, and does not replace edge's dated identity.

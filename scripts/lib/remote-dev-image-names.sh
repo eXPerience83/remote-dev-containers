@@ -22,7 +22,7 @@ remote_dev_resolve_compatible_image() {
   fi
 
   if [[ -n "$legacy_value" ]]; then
-    printf 'WARNING: %s is deprecated; use %s instead (supported through v0.1.x)\n' \
+    printf 'WARNING: %s is deprecated; use %s instead (supported through v0.2.x)\n' \
       "$legacy_name" "$canonical_name" >&2
     printf '%s\n' "$legacy_value"
     return 0
