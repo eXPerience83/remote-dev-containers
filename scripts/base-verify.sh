@@ -29,6 +29,16 @@ if [[ ! -r /etc/os-release ]]; then
   exit 1
 fi
 
+ttyd_dir=/usr/share/remote-dev/ttyd
+if [[ ! -d "$ttyd_dir" || -L "$ttyd_dir" ]]; then
+  echo "ERROR: Remote Dev ttyd directory must be a real directory" >&2
+  exit 1
+fi
+if [[ "$(stat -c '%u:%g %a' "$ttyd_dir")" != "0:0 755" ]]; then
+  echo "ERROR: Remote Dev ttyd directory must be root-owned mode 0755" >&2
+  exit 1
+fi
+
 ttyd_index=/usr/share/remote-dev/ttyd/index.html
 expected_ttyd_index_sha=84724f4f4e63b559631ace65df3f21f2941b1dd8199b76f78ca3d5f9e07aadd8
 if [[ ! -f "$ttyd_index" || -L "$ttyd_index" ]]; then
