@@ -266,7 +266,10 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
     && remote-dev-notices --check
 
 COPY config/tmux.conf /etc/tmux.conf
-RUN install -d -o 0 -g 0 -m 0755 /usr/local/lib/remote-dev /usr/share/remote-dev
+RUN install -d -o 0 -g 0 -m 0755 \
+      /usr/local/lib/remote-dev \
+      /usr/share/remote-dev \
+      /usr/share/remote-dev/ttyd
 COPY --chown=0:0 --chmod=0444 config/common-tool-baseline.txt /usr/share/remote-dev/common-tool-baseline.txt
 COPY --chown=0:0 --chmod=0444 scripts/common-tool-baseline.sh /usr/local/lib/remote-dev/common-tool-baseline.sh
 COPY --chown=0:0 --chmod=0444 web/ttyd-osc52/dist/index.html /usr/share/remote-dev/ttyd/index.html
