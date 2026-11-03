@@ -1,0 +1,46 @@
+name: WeTTY research Gate 0 (isolated)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/wetty-gate0-spike.yml
+      - scripts/spike-wetty-build.sh
+      - docs/research/wetty-v4.2.1-gate0.md
+  workflow_dispatch:
+
+# No write capabilities, publishing credentials, caches or deployment environment.
+permissions:
+  contents: read
+
+jobs:
+  prototype:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pinned Remote Dev Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.22.2'
+          cache: ''
+
+      - name: Verify no repository credentials in process environment
+        run: |
+          for name in GITHUB_TOKEN GH_TOKEN NPM_TOKEN NODE_AUTH_TOKEN WEB_PASSWORD; do
+            if [[ -n "${!name:-}" ]]; then
+              echo "Unexpected secret-bearing environment variable: $name" >&2
+              exit 1
+            fi
+          done
+        shell: bash
+
+      - name: Exact WeTTY source, frozen dependency build, native PTY probe
+        env:
+          WETTY_RESEARCH_ISOLATED: '1'
+        run: bash scripts/spike-wetty-build.sh
+        shell: bash
