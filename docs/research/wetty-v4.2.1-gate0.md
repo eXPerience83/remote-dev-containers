@@ -32,9 +32,9 @@ Run **only in a disposable credential-free research environment** with Node exac
 WETTY_RESEARCH_ISOLATED=1 bash scripts/spike-wetty-build.sh
 ```
 
-The script refuses common credentials, checks exact upstream tag SHA and key lock entries, then installs the locked source dependencies using an exact pnpm version, builds the source and proves a native `node-pty` spawn. It cleans the temporary directory on exit. It does not launch a network listener or alter the image. It executes downloaded package build scripts, so **do not run it in the TrueNAS production instance or an authenticated development session**.
+The isolated Actions workflow `.github/workflows/wetty-gate0-spike.yml` runs it with read-only repository permission, without persisted checkout credentials or package caches. The script refuses common credentials, checks exact upstream tag SHA and key lock entries, then installs the locked source dependencies using an exact pnpm version, builds the source and proves a native `node-pty` spawn. It cleans the temporary directory on exit. It does not launch a network listener or alter the image. It executes downloaded package build scripts, so **do not run it in the TrueNAS production instance or an authenticated development session**.
 
-**Validation status:** script authored and subject to repository syntax/CI; third-party source build and native PTY probe are **not yet executed**, because this authoring environment cannot reach GitHub/npm. This is not evidence of WeTTY compatibility with the real image.
+**Validation status (2026-11-03):** the opt-in Gate 0 Actions job [41626293034](https://github.com/eXPerience83/remote-dev-containers/actions/runs/41626293034) **passed** on a disposable Ubuntu 24.04 runner with Node 24.22.2: tag/lock preflight, upstream source build and a native `node-pty` spawn/output probe. The Node setup action has subsequently been updated to its native Node 24 version; verify the refreshed exact-head run as well. This proves a first upstream build/PTY baseline, **not** integration with the Remote Dev image, authentication, clipboard, tmux or TrueNAS.
 
 ## Next acceptance gates (issue #247)
 
