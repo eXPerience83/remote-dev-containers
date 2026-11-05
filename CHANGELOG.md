@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-11-05 — npm 12.2.1 → 12.2.2.
+
 - 2026-11-03 — uv 0.13.6 → 0.13.7; Context7 CLI (transient) 0.8.2 → 0.9.0.
 
 - 2026-11-02 — mise 2026.10.24 → 2026.10.25.
