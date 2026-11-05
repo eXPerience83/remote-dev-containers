@@ -150,6 +150,11 @@ if [[ "$("$python_dir/bin/python3" --version)" != "Python $PYTHON_VERSION" ]]; t
   exit 1
 fi
 
+# The bootstrap system config must not influence the subsequent full project
+# resolution. Only the previously validated, installed Python remains on PATH.
+: > "$scratch/system/config.toml"
+rm -f -- "$scratch/system/config.lock"
+
 (
   cd "$workspace"
   run_isolated_mise env PATH="$python_dir/bin:$(dirname "$UV_BIN"):$PATH" \
