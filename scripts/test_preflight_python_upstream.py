@@ -25,8 +25,8 @@ def load_module():
 probe = load_module()
 
 
-def synthetic_python_lock(candidate: str, *, arm64: bool = True, provenance: bool = True) -> str:
-    lines = ['lockfile_version = 3', '', '[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"', f'specifiers = ["{candidate}"]']
+def synthetic_python_lock(candidate: str, *, arm64: bool = True, provenance: bool = True, format_version: int = 3) -> str:
+    lines = [f'lockfile_version = {format_version}', '', '[[tools.python]]', f'version = "{candidate}"', 'backend = "core:python"', f'specifiers = ["{candidate}"]']
     for platform, arch in (
         ("linux-arm64", "aarch64"),
         ("linux-x64", "x86_64"),
@@ -113,6 +113,12 @@ class PythonPreflightTests(unittest.TestCase):
     def test_both_platforms_available_selects_new_patch(self) -> None:
         self.assertEqual(
             self.run_probe(lock=synthetic_python_lock(self.next314)),
+            self.next314,
+        )
+
+    def test_new_mise_format_four_can_admit_both_platforms(self) -> None:
+        self.assertEqual(
+            self.run_probe(lock=synthetic_python_lock(self.next314, format_version=4)),
             self.next314,
         )
 

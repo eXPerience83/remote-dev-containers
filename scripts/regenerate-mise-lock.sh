@@ -121,25 +121,8 @@ run_isolated_mise() {
 
 # A bootstrap lock is deliberately Python-only, so the full validator cannot
 # check it. Reuse its exact locked-artifact policy before installing anything.
-python3 - "$ROOT/scripts/validate-mise-lock.py" "$scratch/bootstrap/mise.lock" "$PYTHON_VERSION" <<'PY'
-import importlib.util
-import sys
-import tomllib
-from pathlib import Path
-
-spec = importlib.util.spec_from_file_location("mise_lock_validator", sys.argv[1])
-assert spec is not None and spec.loader is not None
-validator = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(validator)
-with Path(sys.argv[2]).open("rb") as handle:
-    lock = tomllib.load(handle)
-validator.require_exact_keys(lock, {"lockfile_version", "tools"}, "bootstrap lock")
-if lock["lockfile_version"] != 3 or not isinstance(lock["tools"], dict):
-    validator.fail("bootstrap must use mise.lock version 3 with a tool mapping")
-validator.require_exact_keys(lock["tools"], {"python"}, "bootstrap tools")
-validator.validate_tool_entry("python", sys.argv[3], lock["tools"]["python"])
-PY
-
+python3 "$ROOT/scripts/validate-mise-bootstrap-lock.py" \
+  --lock "$scratch/bootstrap/mise.lock" --python-version "$PYTHON_VERSION"
 (
   cd "$scratch/bootstrap"
   # Install only the Python declared in this isolated project's mise.toml.

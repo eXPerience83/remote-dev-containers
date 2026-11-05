@@ -134,6 +134,7 @@ jobs:
           python3 scripts/test_update_context7_review.py
           python3 scripts/test_reconcile_antigravity_review_state.py
           python3 scripts/test_select_mature_pypi_version.py
+          python3 scripts/test_admit_mise_upstream.py
           source versions.env
 
           curl_args=(
@@ -342,6 +343,30 @@ jobs:
             -o "$mise_bin"
           printf '%s  %s\n' "$mise_amd64_sha256" "$mise_bin" | sha256sum -c -
           chmod 0755 "$mise_bin"
+
+          # Never move the mise pin to a release that cannot safely install
+          # the exact reviewed Python from its isolated, two-platform lock.
+          # A known new-release --locked lookup regression defers only mise;
+          # unrelated dependency updates must continue. All other errors
+          # (including checksum, provenance and network failures) remain fatal.
+          selected_mise="$(python3 scripts/admit-mise-upstream.py \
+            --current "$MISE_VERSION" --candidate "$latest_mise" \
+            --mise-bin "$mise_bin" --python-version "$PYTHON_VERSION")"
+          if [[ "$selected_mise" == "$MISE_VERSION" && "$latest_mise" != "$MISE_VERSION" ]]; then
+            echo "Deferring incompatible mise $latest_mise; retaining verified $MISE_VERSION."
+            latest_mise="$MISE_VERSION"
+            mise_amd64_sha256="$MISE_AMD64_SHA256"
+            mise_arm64_sha256="$MISE_ARM64_SHA256"
+            curl "${curl_args[@]}" \
+              "https://github.com/jdx/mise/releases/download/v${latest_mise}/mise-v${latest_mise}-linux-x64" \
+              -o "$mise_bin"
+            printf '%s  %s\n' "$mise_amd64_sha256" "$mise_bin" | sha256sum -c -
+            chmod 0755 "$mise_bin"
+          elif [[ "$selected_mise" != "$latest_mise" ]]; then
+            echo "ERROR: mise admission selected an unexpected version: $selected_mise" >&2
+            exit 1
+          fi
+
           latest_python="$(python3 scripts/preflight-python-upstream.py \
             --current "$PYTHON_VERSION" \
             --candidate "$latest_python" \
