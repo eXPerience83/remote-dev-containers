@@ -21,7 +21,7 @@ ARG PYTHON_VERSION=3.14.10
 ARG PYTHON_315_VERSION=3.15.2
 ARG NODE_VERSION=24.22.2
 ARG NPM_VERSION=12.2.1
-ARG UV_VERSION=0.13.6
+ARG UV_VERSION=0.13.7
 
 LABEL org.opencontainers.image.title="Remote Dev Base" \
       org.opencontainers.image.description="Community remote development base for browser-hosted coding agents" \
