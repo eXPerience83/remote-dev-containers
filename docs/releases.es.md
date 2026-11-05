@@ -14,7 +14,7 @@ El orden permanente de madurez es:
 dev -> edge -> stable = latest
 ```
 
-Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. Remote Dev **todavía no ha publicado una versión estable**; los despliegues públicos integrados actuales utilizan `edge`/`edge-amd64`.
+Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. **Antes** de que termine correctamente la publicación del tag estable `v0.2.0`, utiliza el canal probado `edge`/`edge-amd64`; **después**, `stable` y `latest` deben resolver al mismo digest OCI analizado. Preparar el código no publica una imagen.
 
 La versión local de código para el primer corte estable es `0.2.0`, tras aceptar la fase `0.2.0-beta.1`. Esa versión no identifica por sí sola una imagen pública: edge incorpora una identidad fechada y únicamente el workflow del tag estable puede publicar `v0.2.0` y mover `stable`/`latest`. Los cambios ordinarios de dependencias o documentación no generan por sí solos una nueva versión estable.
 
@@ -149,7 +149,7 @@ La fase histórica `0.2.0-beta.1` fue una aceptación local, no una prerelease S
 4. Ejecuta las pruebas herméticas de las seis CLI con `scripts/test-validation-tools.sh` de la misma revisión, sin red ni capacidades DAC; exige `remote-dev-base-verify`, notices, 53 comandos, Python 3.14 por defecto y 3.15 opcional con resolución de proyecto correcta. No declares aprobado un paso que requiera `CAP_DAC_READ_SEARCH`.
 5. Comprueba autenticación web, navegación del launcher, aislamiento de roles, Codex Start/Resume, Antigravity experimental si está habilitado, persistencia y conversaciones reales tras stop/start/recreación; nunca publiques tokens ni nombres de sesiones.
 6. Documenta los resultados verificables en #121 y actualiza #31, distinguiendo pendientes reales de mejoras futuras. Corrige cualquier regresión mediante PR nuevo, actualizado a `main` y con CI propio; repite la aceptación de la nueva revisión/digest.
-7. **Corte estable:** una vez aceptadas las pruebas funcionales reales de TrueNAS y revisados los demás controles, fija `BASE_VERSION` y ambos Dockerfile en `0.2.0` mediante una PR revisada (actualmente #307), prepara el changelog fechado, exige CI del SHA exacto y fusiona en main. Solo entonces crea el tag `v0.2.0` sobre ese commit; el workflow estable construirá y analizará su candidato y promocionará el mismo digest verificado a `v0.2.0`, `stable`, `stable-amd64` y `latest`.
+7. **Corte estable:** una vez aceptadas las pruebas funcionales reales de TrueNAS y revisados los demás controles, fija `BASE_VERSION` y ambos Dockerfile en `0.2.0` mediante una PR revisada (fusionada en #307), prepara el changelog fechado, exige CI del SHA exacto y fusiona en main. Solo entonces crea el tag `v0.2.0` sobre ese commit; el publicador rechaza cualquier tag distinto de `v${BASE_VERSION}` según el `versions.env` de la revisión, y el workflow estable construirá y analizará su candidato y promocionará el mismo digest verificado a `v0.2.0`, `stable`, `stable-amd64` y `latest`.
 
 ## Stable y latest
 
