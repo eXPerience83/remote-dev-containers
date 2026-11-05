@@ -158,7 +158,7 @@ class UpstreamChangelogTests(unittest.TestCase):
         self.assertEqual(twice.count("- 2026-09-03 — uv 0.12.9 → 0.13.0."), 1)
 
     def test_first_stable_archive_preserves_future_upstream_updates(self) -> None:
-        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        changelog = (ROOT.parent / "CHANGELOG.md").read_text(encoding="utf-8")
         first_release = "## [0.2.0] - 2026-11-05"
         self.assertIn(first_release, changelog)
         unreleased, archived = changelog.split(first_release, 1)
