@@ -25,7 +25,7 @@ echo "Live mise bootstrap compatibility: $version ($size bytes), Python $PYTHON_
 
 scratch="$(mktemp -d -t remote-dev-mise-canary.XXXXXXXX)"
 trap 'rm -rf -- "$scratch"' EXIT
-for dir in bootstrap config cache data home system tmp; do
+for dir in bootstrap runtime config cache data home system tmp; do
   install -d -m 0700 "$scratch/$dir"
 done
 : >"$scratch/config/global.toml"
@@ -73,8 +73,13 @@ run_mise() {
 )
 python3 "$ROOT/scripts/validate-mise-bootstrap-lock.py" \
   --lock "$scratch/bootstrap/mise.lock" --python-version "$PYTHON_VERSION"
+# Install exclusively from the validated private system lock, never an
+# untrusted project lock (mise 2026.11.x MISE_SAFE=1 URL restrictions).
+cp "$scratch/bootstrap/mise.toml" "$scratch/system/config.toml"
+cp "$scratch/bootstrap/mise.lock" "$scratch/system/config.lock"
+chmod 0600 "$scratch/system/config.toml" "$scratch/system/config.lock"
 (
-  cd "$scratch/bootstrap"
+  cd "$scratch/runtime"
   run_mise install --locked
   python_dir="$(run_mise where "python@$PYTHON_VERSION")"
   [[ "$python_dir" == "$scratch/data/installs/python/$PYTHON_VERSION" ]] || {
