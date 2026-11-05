@@ -1,8 +1,8 @@
 # TrueNAS SCALE: instalación, persistencia y actualización
 
-> **Pruebas beta previas a v0.2.0:** el código fuente `0.2.0-beta.1` no es un tag publicado. Fija por digest la imagen `edge-amd64` tras confirmar CI/publicación, conserva el digest anterior para rollback y sigue el [checklist de aceptación beta](releases.es.md) antes de plantear una estable.
+> **Corte de código v0.2.0:** se completó la aceptación real de herramientas, persistencia y roles de la fase `0.2.0-beta.1` en TrueNAS (#121). No reinicies los datasets ni repitas todas las pruebas únicamente por los metadatos de versión. Conserva un digest inmutable conocido para recuperación y utiliza la etiqueta estable solo tras verificar su publicación independiente.
 
-Esta guía describe el canal **edge experimental**; todavía no existe una release estable. La única definición de despliegue es [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
+Esta guía documenta el canal **edge experimental** y la recuperación mediante digest exacto. Las etiquetas estables solo son válidas después de la publicación satisfactoria de `v0.2.0`, no por cambiar el número de versión de código. El stack canónico está en [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
 
 ## 1. Dataset inicial y seguridad
 
