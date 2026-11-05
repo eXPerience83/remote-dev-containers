@@ -17,6 +17,7 @@ RUNTIME_LIB="$harness/remote-dev-runtime.sh"
 PATHS_LIB="$harness/antigravity-paths.sh"
 ANTIGRAVITY_LIB_DIR="$harness/antigravity-runtime"
 SECURE_SCRIPT="$harness/secure-persistent-state"
+POLICY_HELPER="$harness/remote-dev-antigravity-policy"
 mkdir -p "$harness" "$test_bin"
 mkdir -p "$ANTIGRAVITY_LIB_DIR"
 cp -R -- "$ANTIGRAVITY_LIB_SOURCE/." "$ANTIGRAVITY_LIB_DIR"
@@ -26,37 +27,34 @@ expect_failure() { if "$@"; then fail "command unexpectedly succeeded: $*"; fi; 
 
 cp -- "$RUNTIME_SOURCE" "$RUNTIME_LIB"
 chmod 0444 "$RUNTIME_LIB"
-python3 - "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" "$ANTIGRAVITY_LIB_DIR" "$test_bin" <<'PY'
+python3 "$ROOT/scripts/test_support/antigravity_manager.py" \
+  "$MANAGER_SOURCE" "$MANAGER" "$PATHS_LIB" "$RUNTIME_LIB" \
+  "$ANTIGRAVITY_LIB_DIR" "$test_bin"
+cat >"$POLICY_HELPER" <<'POLICY_FIXTURE'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status|check-guarded)
+    echo 'Antigravity guarded compatibility: OK (synthetic policy fixture)'
+    ;;
+  *) echo 'unexpected synthetic policy command' >&2; exit 2 ;;
+esac
+POLICY_FIXTURE
+chmod 0755 "$POLICY_HELPER"
+
+python3 - "$RUNNER_SOURCE" "$RUNNER" "$MANAGER" "$POLICY_HELPER" "$SECURE_SCRIPT" "$RUNTIME_LIB" <<'PY'
 from pathlib import Path
 import shlex
 import sys
-source, destination, paths_lib, runtime_lib, antigravity_lib_dir, test_bin = map(Path, sys.argv[1:])
-integrity = antigravity_lib_dir / "integrity.sh"
-integrity.write_text(integrity.read_text().replace("/usr/local/lib/remote-dev/python", sys.executable))
-text = source.read_text(encoding="utf-8")
-for old, new in {
-    "/usr/local/lib/remote-dev/antigravity-paths.sh": shlex.quote(str(paths_lib)),
-    "/usr/local/lib/remote-dev/remote-dev-runtime.sh": shlex.quote(str(runtime_lib)),
-    "/usr/local/lib/remote-dev/antigravity-runtime": shlex.quote(str(antigravity_lib_dir)),
-    "PATH=/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin":
-        f"PATH={shlex.quote(str(test_bin))}:/opt/remote-dev/mise/shims:/opt/remote-dev/mise/bin:/usr/local/bin:/usr/bin:/bin",
-}.items():
-    if text.count(old) != 1:
-        raise SystemExit(f"expected one canonical manager fixture anchor: {old}")
-    text = text.replace(old, new)
-destination.write_text(text, encoding="utf-8")
-PY
-python3 - "$RUNNER_SOURCE" "$RUNNER" "$MANAGER" "$SECURE_SCRIPT" "$RUNTIME_LIB" <<'PY'
-from pathlib import Path
-import shlex
-import sys
-source, destination, manager, secure_state, runtime_lib = map(Path, sys.argv[1:])
+source, destination, manager, policy_helper, secure_state, runtime_lib = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
 for old, new in {
     "readonly guidance_manager=/usr/local/bin/remote-dev-agent-guidance":
         f"readonly guidance_manager={Path('/usr/bin/true').resolve()}",
     "readonly manager=/usr/local/bin/remote-dev-antigravity":
         f"readonly manager={shlex.quote(str(manager))}",
+    "readonly policy_helper=/usr/local/bin/remote-dev-antigravity-policy":
+        f"readonly policy_helper={shlex.quote(str(policy_helper))}",
     "readonly secure_state=/usr/local/bin/secure-persistent-state":
         f"readonly secure_state={shlex.quote(str(secure_state))}",
     "readonly runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh":
@@ -137,6 +135,15 @@ export HOME="$ambient_home"
 export PATH="$test_bin:$ambient_bin:$PATH"
 export REMOTE_DEV_ROLE=antigravity
 export REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1
+
+# Reuse this fixture in both managed approval modes without rewriting the launcher
+# or weakening its real pre-launch verification. Mode semantics are independently
+# tested by test-run-antigravity-policy.sh.
+case "${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-autonomous}" in
+  autonomous) expected_managed_args=(--dangerously-skip-permissions) ;;
+  guarded) expected_managed_args=() ;;
+  *) fail "unsupported lifecycle fixture approval mode" ;;
+esac
 
 reset_runtime() {
   rm -rf -- "$temporary/runtime"
@@ -345,8 +352,13 @@ bash "$RUNNER" launch-probe
 test "$(grep -Fxc "$BINARY" "$REMOTE_DEV_TEST_SHA_LOG")" = 1 \
   || fail "launch did not hash the canonical executable exactly once"
 mapfile -t vendor_invocations <"$vendor_invocation_log"
-test "${#vendor_invocations[@]}" = 1 && test "${vendor_invocations[0]}" = launch-probe \
-  || fail "launch did not execute the vendor binary exactly once"
+expected_launch_args=("${expected_managed_args[@]}" launch-probe)
+test "${#vendor_invocations[@]}" = "${#expected_launch_args[@]}" \
+  || fail "launch did not preserve the managed-policy argument count"
+for index in "${!expected_launch_args[@]}"; do
+  test "${vendor_invocations[index]}" = "${expected_launch_args[index]}" \
+    || fail "launch changed managed policy or forwarded arguments"
+done
 
 # A manifest-bound executable that would fail if invoked proves that status and
 # explicit verification do not probe vendor --version at runtime.
@@ -417,9 +429,12 @@ bash "$RUNNER" 'literal space' "\$(touch $pwned)" ';echo injected'
 test -f "$REMOTE_DEV_TEST_SECURE_MARKER" || fail "runner did not harden state"
 test ! -e "$pwned" || fail "runner evaluated a literal argument"
 mapfile -t recorded_args <"$REMOTE_DEV_TEST_ARGS_FILE"
-test "${recorded_args[0]}" = 'literal space' || fail "runner changed argument one"
-test "${recorded_args[1]}" = "\$(touch $pwned)" || fail "runner changed argument two"
-test "${recorded_args[2]}" = ';echo injected' || fail "runner changed argument three"
+expected_recorded_args=("${expected_managed_args[@]}" 'literal space' "\$(touch $pwned)" ';echo injected')
+test "${#recorded_args[@]}" = "${#expected_recorded_args[@]}" || fail "runner changed argument count"
+for index in "${!expected_recorded_args[@]}"; do
+  test "${recorded_args[index]}" = "${expected_recorded_args[index]}" \
+    || fail "runner changed argument ${index}"
+done
 test "$(<"$REMOTE_DEV_TEST_AUTO_UPDATE_FILE")" = true || fail "runner did not disable auto-update"
 test "$(<"$REMOTE_DEV_TEST_CWD_FILE")" = "$WORKSPACE/project" || fail "runner did not use selected project cwd"
 export REMOTE_DEV_TEST_EXIT_CODE=23

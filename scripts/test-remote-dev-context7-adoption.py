@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import os
 from pathlib import Path
 import stat
 import subprocess
 import sys
 import tempfile
+
+from test_support.context7 import load_module, run_manager as run_context7_manager
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,32 +20,14 @@ MANAGER_TIMEOUT_SECONDS = 30
 
 
 def load_device_helper():
-    spec = importlib.util.spec_from_file_location("remote_dev_context7_device_adoption", DEVICE_HELPER)
-    if spec is None or spec.loader is None:
-        raise AssertionError(f"could not load {DEVICE_HELPER}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def manager_environment(codex_home: Path) -> dict[str, str]:
-    environment = os.environ.copy()
-    environment["CODEX_HOME"] = str(codex_home)
-    environment["REMOTE_DEV_ROLE"] = "codex"
-    return environment
+    return load_module(DEVICE_HELPER, module_name="remote_dev_context7_device_adoption")
 
 
 def run_manager(codex_home: Path, arguments: list[str], *, input_text: str | None = None) -> str:
     try:
-        result = subprocess.run(
-            [sys.executable, str(MANAGER), *arguments],
-            input=input_text,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=manager_environment(codex_home),
-            timeout=MANAGER_TIMEOUT_SECONDS,
-            check=False,
+        result = run_context7_manager(
+            MANAGER, codex_home, arguments,
+            input_text=input_text, timeout=MANAGER_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
         raise AssertionError(

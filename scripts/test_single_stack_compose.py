@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import tempfile
 from pathlib import Path
+
+from test_support.compose import render_compose
 
 ROOT = Path(__file__).resolve().parent.parent
 GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
@@ -54,49 +55,6 @@ ROLE_TMPFS = {
         )
     ),
 }
-
-
-def compose_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
-    environment = {
-        key: os.environ[key]
-        for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
-        if key in os.environ
-    }
-    if overrides:
-        environment.update(overrides)
-    return environment
-
-
-def compose_config(
-    paths: Path | tuple[Path, ...],
-    env_file: Path,
-    overrides: dict[str, str] | None = None,
-) -> dict[str, object]:
-    compose_paths = (paths,) if isinstance(paths, Path) else paths
-    command = [
-        "docker",
-        "compose",
-        "--profile",
-        "antigravity",
-        "--env-file",
-        str(env_file),
-    ]
-    for path in compose_paths:
-        command.extend(("-f", str(path)))
-    command.extend(("config", "--format", "json"))
-    completed = subprocess.run(
-        command,
-        cwd=ROOT,
-        env=compose_environment(overrides),
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if completed.returncode != 0:
-        rendered_paths = ", ".join(str(path) for path in compose_paths)
-        raise AssertionError(f"docker compose config failed for {rendered_paths}:\n{completed.stderr}")
-    return json.loads(completed.stdout)
 
 
 def require(condition: bool, message: str) -> None:
@@ -388,7 +346,7 @@ def validate(path: Path, config: dict[str, object]) -> None:
 def validate_direct_project_override(env_path: Path) -> None:
     override = {"REMOTE_DEV_PROJECT": "project-alpha"}
 
-    rendered = compose_config(GENERIC_COMPOSE, env_path, override)
+    rendered = render_compose(ROOT, GENERIC_COMPOSE, env_path, override)
     services = rendered["services"]
     launcher_env = services["launcher"]["environment"]
     codex_env = services["codex"]["environment"]
@@ -404,7 +362,7 @@ def validate_direct_project_override(env_path: Path) -> None:
         "Antigravity project override missing",
     )
 
-    rendered = compose_config(TRUENAS_COMPOSE, env_path, override)
+    rendered = render_compose(ROOT, TRUENAS_COMPOSE, env_path, override)
     services = rendered["services"]
     launcher_env = services["launcher"]["environment"]
     codex_env = services["codex"]["environment"]
@@ -422,12 +380,12 @@ def validate_direct_project_override(env_path: Path) -> None:
 
 
 def validate_auth_override_separation(env_path: Path) -> None:
-    relaxed = compose_config(GENERIC_COMPOSE, env_path, {"ALLOW_INSECURE_WEB": "1"})["services"]
+    relaxed = render_compose(ROOT, GENERIC_COMPOSE, env_path, {"ALLOW_INSECURE_WEB": "1"})["services"]
     require(str(relaxed["launcher"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "launcher changed")
     require(str(relaxed["codex"]["environment"]["ALLOW_INSECURE_WEB"]) == "1", "Codex override missing")
     require(str(relaxed["antigravity"]["environment"]["ALLOW_INSECURE_WEB"]) == "0", "Codex auth leaked")
 
-    default_auth = compose_config(
+    default_auth = render_compose(ROOT, 
         AUTH_COMPOSE_FILES,
         env_path,
         {"LAUNCHER_USERNAME": "test-launcher"},
@@ -439,7 +397,7 @@ def validate_auth_override_separation(env_path: Path) -> None:
     require("secrets" not in default_auth, "launcher auth retained Compose secrets")
 
     synthetic = f"synthetic-{os.getpid()}-{os.urandom(8).hex()}"
-    hardened = compose_config(
+    hardened = render_compose(ROOT, 
         AUTH_COMPOSE_FILES,
         env_path,
         {"LAUNCHER_PASSWORD": synthetic, "LAUNCHER_USERNAME": "test-launcher"},
@@ -458,7 +416,7 @@ def validate_auth_override_separation(env_path: Path) -> None:
 def validate_agent_password_independence(env_path: Path) -> None:
     codex_password = f"synthetic-codex-{os.urandom(8).hex()}"
     antigravity_password = f"synthetic-antigravity-{os.urandom(8).hex()}"
-    rendered = compose_config(
+    rendered = render_compose(ROOT, 
         GENERIC_COMPOSE,
         env_path,
         {
@@ -553,7 +511,7 @@ def main() -> int:
     with tempfile.NamedTemporaryFile() as empty_env:
         env_path = Path(empty_env.name)
         for path in COMPOSE_FILES:
-            validate(path, compose_config(path, env_path))
+            validate(path, render_compose(ROOT, path, env_path))
         validate_direct_project_override(env_path)
         validate_auth_override_separation(env_path)
         validate_agent_password_independence(env_path)

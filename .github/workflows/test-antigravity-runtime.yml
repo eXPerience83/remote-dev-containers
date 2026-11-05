@@ -13,6 +13,8 @@ on:
       - "scripts/run-antigravity.sh"
       - "scripts/secure-persistent-state.sh"
       - "scripts/test-antigravity-runtime.sh"
+      - "scripts/test_support/antigravity_manager.py"
+      - "scripts/test_test_support.py"
       - "scripts/test-antigravity-runtime-policy-neutral.sh"
       - "scripts/test-antigravity-security-regressions.sh"
       - "scripts/test-antigravity-redirects.sh"
@@ -62,7 +64,10 @@ jobs:
             scripts/remote-dev-antigravity-oauth.py \
             scripts/remote-dev-antigravity-policy.py \
             scripts/test-antigravity-oauth.py \
-            scripts/test-antigravity-approval-policy.py
+            scripts/test-antigravity-approval-policy.py \
+            scripts/test_support/antigravity_manager.py \
+            scripts/test_test_support.py
+          python3 scripts/test_test_support.py
 
       - name: Run controlled fixture lifecycle
         run: |
@@ -75,6 +80,7 @@ jobs:
           python scripts/test-antigravity-approval-policy.py
           REMOTE_DEV_RUN_ANTIGRAVITY=./scripts/run-antigravity.sh \
             bash scripts/test-run-antigravity-policy.sh
+          bash scripts/test-antigravity-runtime.sh
           bash scripts/test-antigravity-runtime-policy-neutral.sh
           bash scripts/test-antigravity-security-regressions.sh
           bash scripts/test-antigravity-redirects.sh

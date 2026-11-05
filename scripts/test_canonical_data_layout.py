@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -18,6 +17,7 @@ from lib.data_layout import (  # noqa: E402
     ANTIGRAVITY_DIRECTORY_SPECS,
     CODEX_DIRECTORY_SPECS,
 )
+from test_support.compose import render_compose  # noqa: E402
 
 GENERIC_COMPOSE = ROOT / "compose/docker-compose.yml"
 TRUENAS_COMPOSE = ROOT / "compose/truenas.yml"
@@ -35,39 +35,9 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def compose_environment() -> dict[str, str]:
-    return {
-        key: os.environ[key]
-        for key in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR")
-        if key in os.environ
-    }
-
-
 def compose_config(path: Path) -> dict[str, object]:
     with tempfile.NamedTemporaryFile() as empty_env:
-        completed = subprocess.run(
-            [
-                "docker",
-                "compose",
-                "--profile",
-                "antigravity",
-                "--env-file",
-                empty_env.name,
-                "-f",
-                str(path),
-                "config",
-                "--format",
-                "json",
-            ],
-            cwd=ROOT,
-            env=compose_environment(),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    if completed.returncode != 0:
-        raise AssertionError(f"docker compose config failed for {path}:\n{completed.stderr}")
-    return json.loads(completed.stdout)
+        return render_compose(ROOT, path, Path(empty_env.name))
 
 
 def volume_map(service: dict[str, object]) -> dict[str, dict[str, object]]:

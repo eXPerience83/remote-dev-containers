@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,6 +9,8 @@ import stat
 import subprocess
 import sys
 import tempfile
+
+from test_support.context7 import load_module, run_manager as run_context7_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,24 +26,8 @@ def run_manager(
     input_text: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    environment = os.environ.copy()
-    environment.update(
-        {
-            "CODEX_HOME": str(home),
-            "REMOTE_DEV_ROLE": "codex",
-        }
-    )
-    if extra_env:
-        environment.update(extra_env)
-    return subprocess.run(
-        [sys.executable, str(MANAGER), *arguments],
-        input=input_text,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=environment,
-        timeout=20,
-        check=False,
+    return run_context7_manager(
+        MANAGER, home, arguments, input_text=input_text, extra_env=extra_env, timeout=20
     )
 
 
@@ -59,12 +44,7 @@ def require_failure(result: subprocess.CompletedProcess[str], label: str) -> Non
 
 
 def load_manager_module():
-    spec = importlib.util.spec_from_file_location("remote_dev_context7", MANAGER)
-    if spec is None or spec.loader is None:
-        raise AssertionError(f"could not load {MANAGER}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_module(MANAGER, module_name="remote_dev_context7")
 
 
 def assert_private_file(path: Path) -> None:

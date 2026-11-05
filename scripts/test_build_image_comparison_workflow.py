@@ -127,6 +127,22 @@ class ComparisonContract(unittest.TestCase):
         with self.assertRaises(AssertionError):
             validate(self.text.replace('if-no-files-found: ignore', 'if-no-files-found: warn'))
 
+    def test_build_local_owns_prebuild_contracts(self):
+        """Build AMD64 must not rerun preflights already owned by build-local.sh."""
+        validation = steps(self.text)['Validate repository configuration']
+        build_step = steps(self.text)['Build and smoke test']
+        builder = (ROOT / 'scripts/build-local.sh').read_text(encoding='utf-8')
+
+        self.assertIn('run: PLATFORM=linux/amd64 ./scripts/build-local.sh', build_step)
+        for path in ('validate-version-pins.sh', 'test-image-name-compat.sh'):
+            with self.subTest(contract=path):
+                self.assertNotIn('scripts/' + path, validation)
+                self.assertEqual(builder.count('scripts/' + path), 1)
+                self.assertLess(
+                    builder.index('scripts/' + path),
+                    builder.index('docker build'),
+                )
+
     def test_mandatory_candidate_gates_stay_unconditional(self):
         for name in MANDATORY:
             with self.subTest(step=name), self.assertRaises(AssertionError):

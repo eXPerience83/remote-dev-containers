@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
+
+from test_support.context7 import load_module, run_manager as run_context7_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,24 +17,11 @@ END_MARKER = "# END REMOTE DEV MANAGED CONTEXT7"
 
 
 def run_manager(home: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(MANAGER), *arguments],
-        env={**os.environ, "CODEX_HOME": str(home), "REMOTE_DEV_ROLE": "codex"},
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=15,
-        check=False,
-    )
+    return run_context7_manager(MANAGER, home, arguments, timeout=15)
 
 
 def load_manager_module():
-    spec = importlib.util.spec_from_file_location("remote_dev_context7_ownership", MANAGER)
-    if spec is None or spec.loader is None:
-        raise AssertionError(f"could not load {MANAGER}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_module(MANAGER, module_name="remote_dev_context7_ownership")
 
 
 def assert_supported_python_pin() -> None:

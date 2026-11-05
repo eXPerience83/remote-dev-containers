@@ -53,6 +53,11 @@ jobs:
             scripts/inspect-antigravity-cli.py \
             scripts/remote-dev-antigravity-policy.py \
             scripts/test-antigravity-approval-policy.py \
+            scripts/test_support/__init__.py \
+            scripts/test_support/compose.py \
+            scripts/test_support/context7.py \
+            scripts/test_support/antigravity_manager.py \
+            scripts/test_test_support.py \
             scripts/test_single_stack_compose.py \
             scripts/test_canonical_data_layout.py \
             scripts/test_preflight_data_layout.py \
@@ -87,6 +92,7 @@ jobs:
           python3 web/ttyd-osc52/generate.py --check
           node web/ttyd-osc52/test_osc52.js
           python3 web/ttyd-osc52/test_generate.py
+          python3 scripts/test_test_support.py
           make agent-contract-tests
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
@@ -104,15 +110,12 @@ jobs:
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
           python3 scripts/validate-standalone-artifact-inspection.py
-          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
-            bash scripts/test-image-name-compat.sh
           bash scripts/test-compose-image-compat.sh
           REMOTE_DEV_LAUNCHER=./scripts/remote-dev-launcher.py \
             bash scripts/test-remote-dev-launcher.sh
           python3 scripts/test_single_stack_compose.py
           python3 scripts/test_canonical_data_layout.py
           python3 scripts/test_preflight_data_layout.py
-          bash scripts/validate-version-pins.sh
           bash scripts/validate-third-party-inventory.sh
           bash scripts/test-source-revision.sh
           jq -e . renovate.json >/dev/null
