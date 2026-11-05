@@ -20,9 +20,10 @@ fi
 
 # The lock helper must first admit and install its exact selected Python in a
 # disposable isolated project. Simulate the pinned mise without network access.
-if [[ "$PWD" == */bootstrap ]]; then
+if [[ "$PWD" == */bootstrap || "$PWD" == */runtime ]]; then
   case "$*" in
     "lock --platform linux-x64,linux-arm64")
+      [[ "$PWD" == */bootstrap ]] || { echo "unexpected lock directory" >&2; exit 98; }
       if [[ "$FAKE_MISE_MODE" == bootstrap-fail ]]; then
         echo "simulated bootstrap resolver failure" >&2
         exit 47
@@ -49,19 +50,22 @@ PYTHON_LOCK
       exit 0
       ;;
     "install --locked")
-      # Regression: an explicit CLI python@version request can bypass the
-      # generated project lock in mise 2026.11.0. Only install the isolated
-      # project's exact Python selection, in strict locked mode.
-      grep -Fxq "python = \"$FAKE_PYTHON_VERSION\"" mise.toml \
-        || { echo "bootstrap config does not pin the selected Python" >&2; exit 93; }
-      [[ "$(grep -c '^\[\[tools.python\]\]' mise.lock)" == 1 ]] \
-        || { echo "bootstrap lock must contain just one Python entry" >&2; exit 94; }
-      grep -Fq '[tools.python."platforms.linux-x64"]' mise.lock \
-        || { echo "bootstrap lock lacks linux-x64" >&2; exit 95; }
-      grep -Fq '[tools.python."platforms.linux-arm64"]' mise.lock \
-        || { echo "bootstrap lock lacks linux-arm64" >&2; exit 96; }
-      [[ "${MISE_SAFE:-}" == "1" && "${UV_PYTHON_DOWNLOADS:-}" == "never" ]] \
-        || { echo "bootstrap safety environment was lost" >&2; exit 97; }
+      # Install only from the verified private system config/lock, not project files.
+      [[ "$PWD" == */runtime ]] || { echo "install was not isolated from project" >&2; exit 93; }
+      [[ "$MISE_SYSTEM_CONFIG_FILE" == "$MISE_SYSTEM_DIR/config.toml" ]] \
+        || { echo "unexpected system config path" >&2; exit 94; }
+      [[ -f "$MISE_SYSTEM_CONFIG_FILE" && -f "$MISE_SYSTEM_DIR/config.lock" ]] \
+        || { echo "missing trusted bootstrap config/lock" >&2; exit 95; }
+      grep -Fxq "python = \"$FAKE_PYTHON_VERSION\"" "$MISE_SYSTEM_CONFIG_FILE" \
+        || { echo "trusted config does not pin the selected Python" >&2; exit 96; }
+      [[ "$(grep -c '^\[\[tools.python\]\]' "$MISE_SYSTEM_DIR/config.lock")" == 1 ]] \
+        || { echo "trusted bootstrap lock must contain one Python entry" >&2; exit 97; }
+      grep -Fq '[tools.python."platforms.linux-x64"]' "$MISE_SYSTEM_DIR/config.lock" \
+        || { echo "trusted bootstrap lock lacks linux-x64" >&2; exit 98; }
+      grep -Fq '[tools.python."platforms.linux-arm64"]' "$MISE_SYSTEM_DIR/config.lock" \
+        || { echo "trusted bootstrap lock lacks linux-arm64" >&2; exit 99; }
+      [[ "$MISE_SAFE" == "1" && "$UV_PYTHON_DOWNLOADS" == "never" ]] \
+        || { echo "safe mode or forbidden downloads policy lost" >&2; exit 100; }
       if [[ "$FAKE_MISE_MODE" == install-fail ]]; then
         echo "simulated locked interpreter installation failure" >&2
         exit 48
@@ -73,6 +77,7 @@ PYTHON_LOCK
       exit 0
       ;;
     "where python@$FAKE_PYTHON_VERSION")
+      [[ "$PWD" == */runtime ]] || { echo "where ran outside trusted runtime" >&2; exit 101; }
       printf '%s\n' "$MISE_DATA_DIR/installs/python/$FAKE_PYTHON_VERSION"
       exit 0
       ;;
