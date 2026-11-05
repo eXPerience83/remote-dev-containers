@@ -97,7 +97,7 @@ def validate_lock_header(lock: dict) -> None:
         fail(f"probe produced unexpected top-level mise.lock keys: {sorted(keys)}")
     if "lockfile_version" in lock:
         version = lock["lockfile_version"]
-        if type(version) is not int or version not in (1, 2, 3):
+        if type(version) is not int or version not in (1, 2, 3, 4):
             fail(f"probe lockfile version is not supported: {version!r}")
 
 
