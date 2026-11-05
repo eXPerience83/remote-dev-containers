@@ -130,6 +130,11 @@ jobs:
             echo "OK $file"
           done
 
+      - name: Verify latest upstream mise bootstrap compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/test-upstream-mise-bootstrap.sh
+
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
 
