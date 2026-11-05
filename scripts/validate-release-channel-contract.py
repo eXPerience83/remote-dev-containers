@@ -279,7 +279,11 @@ def validate_other_channels(root: Path) -> None:
     )
     require(
         stable_tag_validation,
-        ('if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',),
+        (
+            'if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',
+            "source versions.env",
+            'if [[ "$GITHUB_REF_NAME" != "v${BASE_VERSION}" ]]; then',
+        ),
         "stable tag validation",
     )
     stable_main_guard = active(
