@@ -31,11 +31,15 @@ jobs:
             echo "ERROR: stable publication requires an exact vMAJOR.MINOR.PATCH tag; got $GITHUB_REF_NAME" >&2
             exit 1
           fi
-          # A valid tag on main is not enough: never publish a mismatched
-          # source version (for example, v0.2.1 from BASE_VERSION=0.2.0).
-          source versions.env
-          if [[ "$GITHUB_REF_NAME" != "v${BASE_VERSION}" ]]; then
-            echo "ERROR: stable tag $GITHUB_REF_NAME does not match source BASE_VERSION=$BASE_VERSION" >&2
+          # Parse the exact literal source pin without executing tag-controlled
+          # versions.env before the main-ancestry guard has run.
+          source_version="$(sed -nE 's/^BASE_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' versions.env)"
+          if [[ ! "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: versions.env must contain exactly one stable BASE_VERSION" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_NAME" != "v${source_version}" ]]; then
+            echo "ERROR: stable tag $GITHUB_REF_NAME does not match source BASE_VERSION=$source_version" >&2
             exit 1
           fi
 
