@@ -159,6 +159,7 @@ python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
 python3 "$ROOT/scripts/sync-python-cli-notices.py"
 python3 "$ROOT/scripts/test-validate-mise-lock.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_preflight_python_upstream.py"
+python3 "$ROOT/scripts/test_admit_mise_upstream.py"
 bash "$ROOT/scripts/test-regenerate-mise-lock.sh"
 
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
