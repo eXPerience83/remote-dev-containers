@@ -130,7 +130,7 @@ jobs:
             echo "OK $file"
           done
 
-      - name: Verify latest upstream mise bootstrap compatibility
+      - name: Verify latest upstream mise admission or safe deferral
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/test-upstream-mise-bootstrap.sh
