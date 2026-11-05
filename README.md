@@ -1,11 +1,11 @@
-# Remote Dev Containers — v0.2.0-beta.1 source candidate
+# Remote Dev Containers — v0.2.0 source cut
 
-After merged [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) (Ubuntu 26.04 digest) and [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) (Codex 0.166.0, mise 2026.10.24, pytest 9.2.0), the repository is preparing **0.2.0-beta.1** for an eventual **v0.2.0** stable release. Python 3.14.10 stays the default; Python 3.15.2 remains opt-in per project. The six isolated validation CLIs and 53-command baseline remain included. The prerelease number is a **local source/build default**, not a published SemVer beta tag: use a successfully published, immutable-digest-pinned AMD64 `edge` image for TrueNAS beta acceptance. See [release/acceptance gates](docs/releases.md) and [tooling contract](docs/universal-validation-tools.md). **TrueNAS PR2 acceptance is still pending.**
+The **v0.2.0 source cut** follows the accepted `0.2.0-beta.1` phase: the [six new developer CLIs](docs/universal-validation-tools.md), default Python 3.14.10, opt-in 3.15.2, persistent Codex/Antigravity sessions and role isolation passed targeted TrueNAS acceptance ([#121](https://github.com/eXPerience83/remote-dev-containers/issues/121)). The source version **does not itself publish** stable images. The separately tagged publisher must still build, smoke-test, scan and promote an exact digest before `stable` and `latest` are valid. See [release checklist](docs/releases.md).
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **Active development / experimental.** There is no stable release yet. Public `edge` images are integrated development builds and may still change before the first stable release. Do not expose any Remote Dev web port directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+> **v0.2.0 AMD64 single-user/private-network scope.** `edge` remains experimental; only an explicitly tagged, verified stable publication may move `stable` and `latest`. Never expose Remote Dev web ports directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
 
 ## Goal
 
@@ -275,7 +275,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-The local development baseline is `0.2.0-beta.1`; edge publications use their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of that local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
+The local source version is `0.2.0`; edge publications retain their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of the local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
 
@@ -318,7 +318,7 @@ See [`docs/releases.md`](docs/releases.md).
 - Agent root is constrained by the outer role container and its mounts.
 - TrueNAS/Docker administrators can inspect deployment configuration and are inside the host trust boundary.
 - Antigravity remains experimental even though its technical lifecycle/admission gates are implemented.
-- `edge` remains experimental; no stable release exists yet.
+- `edge` remains experimental; `stable` exists only after the exact `v0.2.0` tag publisher successfully completes its review and digest gates.
 
 ## Documentation
 
