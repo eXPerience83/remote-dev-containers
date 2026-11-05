@@ -39,54 +39,19 @@ expected_sha="$(printf '%s' "$digest" | cut -d: -f2)"
 printf '%s  %s\n' "$expected_sha" "$scratch/mise" | sha256sum -c -
 chmod 0700 "$scratch/mise"
 
-cat >"$scratch/bootstrap/mise.toml" <<EOF
-[settings]
-lockfile = true
-locked_verify_provenance = true
-lockfile_platforms = ["linux-x64", "linux-arm64"]
-
-[tools]
-python = "$PYTHON_VERSION"
-EOF
-
-# Prevent a downloaded tool from inheriting CI GitHub credentials or user config.
-run_mise() {
-  timeout --signal=TERM --kill-after=30s 10m \
-    env -i \
-      PATH="$PATH" HOME="$scratch/home" \
-      MISE_CACHE_DIR="$scratch/cache" \
-      MISE_CONFIG_DIR="$scratch/config" \
-      MISE_DATA_DIR="$scratch/data" \
-      MISE_GLOBAL_CONFIG_FILE="$scratch/config/global.toml" \
-      MISE_SYSTEM_DIR="$scratch/system" \
-      MISE_SYSTEM_CONFIG_DIR="$scratch/system" \
-      MISE_SYSTEM_CONFIG_FILE="$scratch/system/config.toml" \
-      MISE_TMP_DIR="$scratch/tmp" \
-      MISE_SAFE=1 MISE_HTTP_TIMEOUT=60s MISE_PYTHON_COMPILE=false \
-      UV_PYTHON_DOWNLOADS=never \
-      "$scratch/mise" "$@"
-}
-
-(
-  cd "$scratch/bootstrap"
-  run_mise lock --platform linux-x64,linux-arm64
-)
-python3 "$ROOT/scripts/validate-mise-bootstrap-lock.py" \
-  --lock "$scratch/bootstrap/mise.lock" --python-version "$PYTHON_VERSION"
-# Install exclusively from the validated private system lock, never an
-# untrusted project lock (mise 2026.11.x MISE_SAFE=1 URL restrictions).
-cp "$scratch/bootstrap/mise.toml" "$scratch/system/config.toml"
-cp "$scratch/bootstrap/mise.lock" "$scratch/system/config.lock"
-chmod 0600 "$scratch/system/config.toml" "$scratch/system/config.lock"
-(
-  cd "$scratch/runtime"
-  run_mise install --locked
-  python_dir="$(run_mise where "python@$PYTHON_VERSION")"
-  [[ "$python_dir" == "$scratch/data/installs/python/$PYTHON_VERSION" ]] || {
-    echo "ERROR: canary installed Python outside isolated mise data" >&2; exit 1;
-  }
-  [[ "$("$python_dir/bin/python3" --version)" == "Python $PYTHON_VERSION" ]] || {
-    echo "ERROR: canary Python is not the reviewed version" >&2; exit 1;
-  }
-)
-echo "OK latest verified mise locks and installs Python in isolated safe mode."
+# Admission executes the real, checksum-verified CLI with no inherited tokens,
+# validates the generated two-platform lock, and attempts a strict locked install.
+# Known regressions defer the mise upgrade; unexpected failures still fail CI.
+candidate_version="$(printf '%s' "$version" | sed 's/^v//')"
+selected="$(python3 "$ROOT/scripts/admit-mise-upstream.py" \
+  --current "$MISE_VERSION" --candidate "$candidate_version" \
+  --mise-bin "$scratch/mise" --python-version "$PYTHON_VERSION")"
+if [[ "$selected" != "$MISE_VERSION" && "$selected" != "$candidate_version" ]]; then
+  echo "ERROR: mise admission returned an unexpected version: $selected" >&2
+  exit 1
+fi
+if [[ "$selected" == "$candidate_version" ]]; then
+  echo "OK latest verified mise $selected meets the strict bootstrap contract."
+else
+  echo "DEFER latest mise $candidate_version; pinned $MISE_VERSION remains in use."
+fi
