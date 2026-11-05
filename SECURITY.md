@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-This project is in active experimental development and has no stable release yet. Security fixes are applied to `main` and, when republished, to the current `edge` images. Older commit tags and digests are not updated in place.
+The supported release scope for `v0.2.0` is a single-user, private-network AMD64 environment. `edge` remains experimental; a version is considered stable only after an exact-tag publisher builds, scans and promotes the reviewed digest. Security fixes are applied to `main` and relevant current published images; historical immutable digests are not silently updated.
 
 ## Reporting a vulnerability
 
