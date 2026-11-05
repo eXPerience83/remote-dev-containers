@@ -157,6 +157,29 @@ class UpstreamChangelogTests(unittest.TestCase):
         self.assertEqual(twice, once)
         self.assertEqual(twice.count("- 2026-09-03 — uv 0.12.9 → 0.13.0."), 1)
 
+    def test_first_stable_archive_preserves_future_upstream_updates(self) -> None:
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        first_release = "## [0.2.0] - 2026-11-05"
+        self.assertIn(first_release, changelog)
+        unreleased, archived = changelog.split(first_release, 1)
+        self.assertIn("<!-- remote-dev-upstream-refreshes -->", unreleased)
+        self.assertIn("<!-- remote-dev-renovate-runtime-refreshes:start -->", unreleased)
+        self.assertIn("<!-- remote-dev-renovate-runtime-refreshes:end -->", unreleased)
+        self.assertIn("- 2026-11-05 — npm 12.2.1 → 12.2.2.", archived)
+        self.assertIn("#### Ubuntu LTS base-image digest history", archived)
+        self.assertNotIn("- 2026-11-05 — npm 12.2.1 → 12.2.2.", unreleased)
+
+        entry = "- 2026-11-06 — npm 12.2.2 → 12.2.3."
+        updated = MODULE.update_changelog(
+            changelog, "2026-11-06", ["npm 12.2.2 → 12.2.3"]
+        )
+        updated_unreleased, updated_release = updated.split(first_release, 1)
+        self.assertIn(entry, updated_unreleased)
+        self.assertNotIn(entry, updated_release)
+        self.assertEqual(updated_release, archived)
+        self.assertEqual(updated.count(entry), 1)
+        self.assertEqual(updated.count("<!-- remote-dev-upstream-refreshes -->"), 1)
+
     def test_missing_marker_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "ownership marker"):
             MODULE.update_changelog(
