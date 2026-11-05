@@ -14,7 +14,7 @@ The permanent maturity order is:
 dev -> edge -> stable = latest
 ```
 
-These concepts stay separate from human-readable build identity and immutable provenance. Remote Dev has **not published a stable release yet**; current public integrated deployments use `edge`/`edge-amd64`.
+These concepts stay separate from human-readable build identity and immutable provenance. **Before** the successful `v0.2.0` stable-tag publication, use the tested `edge`/`edge-amd64` channel; **after** that workflow passes, `stable` and `latest` must resolve to the same scanned OCI digest. Preparing a source version does not publish an image.
 
 The repository's local source version for the first stable cut is `0.2.0`, following an accepted `0.2.0-beta.1` phase. This source number is not the public image's channel/provenance: edge embeds a dated identity and only the tagged stable workflow can publish `v0.2.0` and promote `stable`/`latest`. Routine upstream updates and documentation changes do not independently bump `BASE_VERSION` or trigger a stable release.
 
@@ -149,7 +149,7 @@ The historical source `0.2.0-beta.1` was an acceptance phase, not a GitHub SemVe
 4. Execute same-revision `scripts/test-validation-tools.sh` for the six CLIs in a networkless, capability-free disposable container; require `remote-dev-base-verify`, notices, 53 commands, default Python 3.14 and explicit project Python 3.15 resolution. A `CAP_DAC_READ_SEARCH` workaround is **not** a beta acceptance pass.
 5. Check browser authentication, launcher navigation, role isolation, Codex Start/Resume, experimental Antigravity when enabled, persistent state and actual session continuity across stop/start/recreation; publish no tokens or session identifiers.
 6. Record objective evidence in #121 and reconcile #31, separating actual first-stable blockers from later features. Fix regressions via a new PR updated against current `main` and repeat exact-revision/digest acceptance.
-7. **Stable cut:** after accepting the real TrueNAS functional evidence and reviewing other gates, set `BASE_VERSION` and the two Dockerfile defaults to `0.2.0` in one reviewed release PR (currently #307), prepare the dated changelog, require its exact-head CI and merge into main. Only then tag that exact commit `v0.2.0`; the stable workflow must build and scan its candidate and promote one verified digest to `v0.2.0`, `stable`, `stable-amd64` and `latest`.
+7. **Stable cut:** after accepting the real TrueNAS functional evidence and reviewing other gates, set `BASE_VERSION` and the two Dockerfile defaults to `0.2.0` in one reviewed release PR (merged in #307), prepare the dated changelog, require its exact-head CI and merge into main. Only then tag that exact commit `v0.2.0`; the publisher rejects a tag that differs from `v${BASE_VERSION}` in its checked-out `versions.env`, and the stable workflow must build and scan its candidate and promote one verified digest to `v0.2.0`, `stable`, `stable-amd64` and `latest`.
 
 ## Stable and latest
 

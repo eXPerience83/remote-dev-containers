@@ -10,59 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
-- 2026-11-05 — npm 12.2.1 → 12.2.2.
-
-- 2026-11-03 — uv 0.13.6 → 0.13.7; Context7 CLI (transient) 0.8.2 → 0.9.0.
-
-- 2026-11-02 — mise 2026.10.24 → 2026.10.25.
-
-- 2026-10-30 — Codex CLI 0.165.0 → 0.166.0; mise 2026.10.21 → 2026.10.24; pytest 9.1.1 → 9.2.0.
-
-- 2026-10-28 — Codex CLI 0.163.0 → 0.165.0; GitHub CLI 2.102.1 → 2.103.3; mise 2026.10.17 → 2026.10.21; Python 3.14.8 → 3.14.10; Python 3.15 3.15.0 → 3.15.2; Node.js 24.22.0 → 24.22.2; uv 0.13.4 → 0.13.6; Ruff 0.17.1 → 0.17.3; Context7 CLI (transient) 0.8.1 → 0.8.2.
-
-- 2026-10-21 — GitHub CLI 2.102.0 → 2.102.1; mise 2026.10.13 → 2026.10.17; Context7 CLI (transient) 0.8.0 → 0.8.1.
-
-- 2026-10-18 — mise 2026.10.12 → 2026.10.13.
-
-- 2026-10-17 — Codex CLI 0.162.1 → 0.163.0; mise 2026.10.8 → 2026.10.12; Node.js 24.21.0 → 24.22.0; npm 12.2.0 → 12.2.1; uv 0.13.0 → 0.13.1; Context7 CLI (transient) 0.6.0 → 0.8.0.
-
-- 2026-10-13 — Codex CLI 0.160.1 → 0.162.1; mise 2026.10.3 → 2026.10.8; uv 0.12.23 → 0.13.0; Context7 CLI (transient) 0.5.13 → 0.6.0.
-
-- 2026-10-06 — Codex CLI 0.160.0 → 0.160.1; mise 2026.10.0 → 2026.10.3; uv 0.12.22 → 0.12.23; Context7 CLI (transient) 0.5.12 → 0.5.13.
-
-- 2026-10-02 — Codex CLI 0.159.2 → 0.160.0; mise 2026.9.18 → 2026.10.0; Python 3.14.7 → 3.14.8; npm 12.1.0 → 12.2.0; uv 0.12.21 → 0.12.22.
-
-- 2026-09-30 — Codex CLI 0.159.0 → 0.159.2; GitHub CLI 2.101.0 → 2.102.0; mise 2026.9.17 → 2026.9.18; uv 0.12.20 → 0.12.21.
-
-- 2026-09-29 — Codex CLI 0.155.1 → 0.159.0; mise 2026.9.11 → 2026.9.17; npm 12.0.2 → 12.1.0; uv 0.12.17 → 0.12.20; Context7 CLI (transient) 0.5.11 → 0.5.12.
-
-- 2026-09-19 — Codex CLI 0.154.0 → 0.155.1; mise 2026.9.9 → 2026.9.11; uv 0.12.15 → 0.12.17.
-
-- 2026-09-16 — GitHub CLI 2.100.0 → 2.101.0; mise 2026.9.6 → 2026.9.9; uv 0.12.13 → 0.12.15.
-
-- 2026-09-13 — mise 2026.9.5 → 2026.9.6.
-
-- 2026-09-12 — mise 2026.9.4 → 2026.9.5; uv 0.12.12 → 0.12.13.
-
-- 2026-09-10 — Codex CLI 0.153.4 → 0.154.0; mise 2026.9.3 → 2026.9.4; uv 0.12.11 → 0.12.12.
-
-- 2026-09-09 — mise 2026.9.1 → 2026.9.3; Node.js 24.20.0 → 24.21.0; uv 0.12.10 → 0.12.11; Context7 CLI (transient) 0.5.10 → 0.5.11.
-
-- 2026-09-05 — Codex CLI 0.153.2 → 0.153.4; uv 0.12.9 → 0.12.10; Context7 CLI (transient) 0.5.9 → 0.5.10.
-
-- 2026-09-04 — Codex CLI 0.152.1 → 0.153.2; GitHub CLI 2.99.0 → 2.100.0; mise 2026.9.0 → 2026.9.1; Context7 CLI (transient) 0.5.8 → 0.5.9.
-
 ### Renovate image refreshes
 
 <!-- remote-dev-renovate-runtime-refreshes:start -->
-- Ubuntu LTS base 26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b → 26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d.
-- Ubuntu LTS base 26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d → 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367.
-- Ubuntu LTS base 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367 → 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78.
-- Ubuntu LTS base 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 → 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e.
-- Ubuntu LTS base 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e → 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7.
-- Ubuntu LTS base 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 → 26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944.
-- Ubuntu LTS base 26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 → 26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd.
-- Ubuntu LTS base 26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd → 26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c.
 <!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
 
@@ -82,6 +32,45 @@ Release highlights (see chronological Added/Changed/Fixed/Security entries below
 - Periodic edge rebuilds passed actual scheduled runs on 2026-10-25 and 2026-11-01. #93 retains deferred fault-injection/rollback evidence, and does not change stable's strict exact-digest publication gate. The `v0.2.0` tag is gated on final source review, exact-head CI, tag-on-main and the stable publisher's own build/security/digest verification.
 
 The `0.1.0-dev → 0.1.1-dev` entry under Changed records a **historical** source-version step; it does not override this `0.2.0` release. Previous tool patch versions in dated entries are historical integration evidence, not present-day pin claims. Compatibility wrappers and `CODEX_IMAGE` fallback remain supported throughout 0.2.x; warnings and documentation are updated consistently, and no compatibility alias is removed in this release.
+
+### Dependency and base-image maintenance included in v0.2.0
+
+These are the reviewed maintenance updates that accumulated during the first beta and pre-stable development period. They are preserved here as release history; the exact shipped versions and artifact hashes are defined by `versions.env`, `mise.lock` and the other committed lockfiles. Future entries continue under the now-empty machine-owned `Unreleased` sections.
+
+#### Upstream tool version history
+
+- 2026-11-05 — npm 12.2.1 → 12.2.2.
+- 2026-11-03 — uv 0.13.6 → 0.13.7; Context7 CLI (transient) 0.8.2 → 0.9.0.
+- 2026-11-02 — mise 2026.10.24 → 2026.10.25.
+- 2026-10-30 — Codex CLI 0.165.0 → 0.166.0; mise 2026.10.21 → 2026.10.24; pytest 9.1.1 → 9.2.0.
+- 2026-10-28 — Codex CLI 0.163.0 → 0.165.0; GitHub CLI 2.102.1 → 2.103.3; mise 2026.10.17 → 2026.10.21; Python 3.14.8 → 3.14.10; Python 3.15 3.15.0 → 3.15.2; Node.js 24.22.0 → 24.22.2; uv 0.13.4 → 0.13.6; Ruff 0.17.1 → 0.17.3; Context7 CLI (transient) 0.8.1 → 0.8.2.
+- 2026-10-21 — GitHub CLI 2.102.0 → 2.102.1; mise 2026.10.13 → 2026.10.17; Context7 CLI (transient) 0.8.0 → 0.8.1.
+- 2026-10-18 — mise 2026.10.12 → 2026.10.13.
+- 2026-10-17 — Codex CLI 0.162.1 → 0.163.0; mise 2026.10.8 → 2026.10.12; Node.js 24.21.0 → 24.22.0; npm 12.2.0 → 12.2.1; uv 0.13.0 → 0.13.1; Context7 CLI (transient) 0.6.0 → 0.8.0.
+- 2026-10-13 — Codex CLI 0.160.1 → 0.162.1; mise 2026.10.3 → 2026.10.8; uv 0.12.23 → 0.13.0; Context7 CLI (transient) 0.5.13 → 0.6.0.
+- 2026-10-06 — Codex CLI 0.160.0 → 0.160.1; mise 2026.10.0 → 2026.10.3; uv 0.12.22 → 0.12.23; Context7 CLI (transient) 0.5.12 → 0.5.13.
+- 2026-10-02 — Codex CLI 0.159.2 → 0.160.0; mise 2026.9.18 → 2026.10.0; Python 3.14.7 → 3.14.8; npm 12.1.0 → 12.2.0; uv 0.12.21 → 0.12.22.
+- 2026-09-30 — Codex CLI 0.159.0 → 0.159.2; GitHub CLI 2.101.0 → 2.102.0; mise 2026.9.17 → 2026.9.18; uv 0.12.20 → 0.12.21.
+- 2026-09-29 — Codex CLI 0.155.1 → 0.159.0; mise 2026.9.11 → 2026.9.17; npm 12.0.2 → 12.1.0; uv 0.12.17 → 0.12.20; Context7 CLI (transient) 0.5.11 → 0.5.12.
+- 2026-09-19 — Codex CLI 0.154.0 → 0.155.1; mise 2026.9.9 → 2026.9.11; uv 0.12.15 → 0.12.17.
+- 2026-09-16 — GitHub CLI 2.100.0 → 2.101.0; mise 2026.9.6 → 2026.9.9; uv 0.12.13 → 0.12.15.
+- 2026-09-13 — mise 2026.9.5 → 2026.9.6.
+- 2026-09-12 — mise 2026.9.4 → 2026.9.5; uv 0.12.12 → 0.12.13.
+- 2026-09-10 — Codex CLI 0.153.4 → 0.154.0; mise 2026.9.3 → 2026.9.4; uv 0.12.11 → 0.12.12.
+- 2026-09-09 — mise 2026.9.1 → 2026.9.3; Node.js 24.20.0 → 24.21.0; uv 0.12.10 → 0.12.11; Context7 CLI (transient) 0.5.10 → 0.5.11.
+- 2026-09-05 — Codex CLI 0.153.2 → 0.153.4; uv 0.12.9 → 0.12.10; Context7 CLI (transient) 0.5.9 → 0.5.10.
+- 2026-09-04 — Codex CLI 0.152.1 → 0.153.2; GitHub CLI 2.99.0 → 2.100.0; mise 2026.9.0 → 2026.9.1; Context7 CLI (transient) 0.5.8 → 0.5.9.
+
+#### Ubuntu LTS base-image digest history
+
+- Ubuntu LTS base 26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b → 26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d.
+- Ubuntu LTS base 26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d → 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367.
+- Ubuntu LTS base 26.04@sha256:cd21a4f68a617580279d4b091cb18e3af9fa8a87500665f0ae5f7f757d17d367 → 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78.
+- Ubuntu LTS base 26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 → 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e.
+- Ubuntu LTS base 26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e → 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7.
+- Ubuntu LTS base 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 → 26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944.
+- Ubuntu LTS base 26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 → 26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd.
+- Ubuntu LTS base 26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd → 26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c.
 
 ### Release preparation (historical)
 
@@ -145,6 +134,8 @@ The `0.1.0-dev → 0.1.1-dev` entry under Changed records a **historical** sourc
 
 ### Changed
 
+- 2026-11-05 — Prepared the first `v0.2.0` source release from the accepted `0.2.0-beta.1` phase: synchronized `BASE_VERSION`, both image Dockerfile defaults, the dated changelog and bilingual release/TrueNAS documentation ([#307](https://github.com/eXPerience83/remote-dev-containers/pull/307)). The already validated TrueNAS roles, mounts and persistence were left intact; the tag-only stable publisher independently builds, scans and promotes an exact digest. The separately reviewed [#305](https://github.com/eXPerience83/remote-dev-containers/pull/305) corrected the version-cut instructions in both languages.
+
 - Reference-image rebuilds (`remote-dev-base:pr2-before` and `remote-dev:pr2-before`) and four optional before-image SPDX/Trivy reports are performed by `scripts/measure-tooling-image-delta.sh`, invoked only on explicit `workflow_dispatch` with `compare_images=true`. Normal PR/main builds run the candidate-image checks without rebuilding previous images; mandatory smoke, notices, SPDX and Trivy gates remain unchanged.
 - Earlier development advanced the local source baseline from `0.1.0-dev` to `0.1.1-dev` (historical, superseded by the 0.2.0 beta candidate). This does not create a stable release: edge publication keeps its dated `edge-YYYY.MM.DD-<short-sha>` identity and stable/latest remain reserved for an explicit SemVer release.
 - Clarified the current browser-password policy: Codex and enabled Antigravity require only a non-empty single-line configured value unless an explicit reviewed insecure override is used; Remote Dev does not enforce minimum length, composition or cross-agent uniqueness, and the two agent configuration entries may intentionally reuse the same password pending a future browser-access/security decision.
@@ -199,6 +190,8 @@ The `0.1.0-dev → 0.1.1-dev` entry under Changed records a **historical** sourc
 - Replaced Antigravity's menu-triggered prompt-text-dependent automatic `/resume` injection with a Codex-aligned two-action menu: Start opens the normal TUI and advertises in-TUI `/resume` for older conversations, while Continue latest uses the vendor-supported `--continue` path.
 
 ### Fixed
+
+- 2026-11-05 — Restored the real scheduled upstream updater after mise's 2026.11.x lockfile-format and strict safe-mode bootstrap incompatibilities. [#303](https://github.com/eXPerience83/remote-dev-containers/pull/303) corrected the isolated locked-install invocation; [#304](https://github.com/eXPerience83/remote-dev-containers/pull/304) admitted reviewed transient lock formats 3/4 and added a checksum-verified real-upstream compatibility probe that **defers only incompatible mise releases**, retaining `MISE_SAFE=1`, `--locked`, dual-platform URL/SHA-256/provenance validation and the approved `mise 2026.10.25` binary. Subsequent `Check upstream versions` [run #116](https://github.com/eXPerience83/remote-dev-containers/actions/runs/42005231715) succeeded and generated independently reviewed [#306](https://github.com/eXPerience83/remote-dev-containers/pull/306) (npm 12.2.2 plus metadata-only Antigravity candidate discovery). Runtime installation of the new Antigravity candidate remains excluded.
 
 - 2026-10-28 — Repaired the automated upstream updater after three distinct failed runs: [#291](https://github.com/eXPerience83/remote-dev-containers/pull/291) bootstraps the exact administrative Python in isolated mise state before native uv/PyPI graph resolution; [#292](https://github.com/eXPerience83/remote-dev-containers/pull/292) defers only PyPI CLI releases younger than the 24-hour resolver cutoff instead of emitting incomplete locks; [#293](https://github.com/eXPerience83/remote-dev-containers/pull/293) removes stale fixed versions from post-update dual-Python regression fixtures and regenerates hashed Python CLI legal notices before strict validation. The subsequent reviewed [upstream PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) merged with the refreshed Python 3.14/3.15 lockfiles and other tool updates. No supply-chain bypass or new stable release was introduced.
 

@@ -26,8 +26,20 @@ jobs:
 
       - name: Validate stable release tag
         run: |
+          set -euo pipefail
           if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "ERROR: stable publication requires an exact vMAJOR.MINOR.PATCH tag; got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          # Parse the exact literal source pin without executing tag-controlled
+          # versions.env before the main-ancestry guard has run.
+          source_version="$(sed -nE 's/^BASE_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' versions.env)"
+          if [[ ! "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: versions.env must contain exactly one stable BASE_VERSION" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_NAME" != "v${source_version}" ]]; then
+            echo "ERROR: stable tag $GITHUB_REF_NAME does not match source BASE_VERSION=$source_version" >&2
             exit 1
           fi
 
