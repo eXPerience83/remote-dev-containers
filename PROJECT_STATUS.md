@@ -1,6 +1,6 @@
 # Project status
 
-> Current maturity: **active development / experimental**. Public `edge` images are for integrated testing and homelab use; Remote Dev has not published its first stable release yet.
+> Release preparation: the **v0.2.0 source cut** is being validated; public edge remains experimental and stable/`latest` publication is only valid after the exact tagged workflow passes. The supported core is AMD64, one user and private network.
 
 ## Locked foundations
 
@@ -16,7 +16,7 @@
 
 ## First stable release candidate — 2026-10-31
 
-The current local source/build prerelease baseline is **`0.2.0-beta.1`**, with **`v0.2.0` proposed as the first stable release only after live acceptance**. This is not a GHCR beta channel, a published GitHub prerelease or a stable support claim. [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) refreshed the pinned Ubuntu 26.04 digest and [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) reviewed Codex CLI 0.166.0, mise 2026.10.24 and pytest 9.2.0, with locked dependencies and legal evidence. Both were merged on 2026-10-31. The integrated main-push AMD64 build passed for source `d4d5add09f7b703f5fa4dcee337af68ed52d213c`; `edge` publication, the release-preparation change's exact-head build and TrueNAS acceptance must be verified independently.
+The source baseline moves from the locally accepted `0.2.0-beta.1` to the reviewed `0.2.0` source cut. The live TrueNAS PR2 tools/session/persistence/mount acceptance was completed and recorded under closed #121 on 2026-11-05. The stable tag and GHCR channel remain separate publication outcomes of the exact reviewed main revision, not effects of changing `BASE_VERSION`.
 
 For beta testing, freeze one **successfully published** `edge-amd64` image by OCI digest and its embedded full source revision, retain the last-known-good image for rollback, run `scripts/test-validation-tools.sh` in a capability-free networkless disposable container, then complete both-role authentication, lifecycle and persistent-data acceptance on TrueNAS (#121). Reconcile #31 (including already closed #20 and still-open #93) and the [stable checklist](docs/releases.md) before authorizing `v0.2.0`. Never tag a prerelease with the stable-only publisher or move `stable`/`latest` before these gates.
 
@@ -24,11 +24,11 @@ For beta testing, freeze one **successfully published** `edge-amd64` image by OC
 
 The reviewed [PR #294](https://github.com/eXPerience83/remote-dev-containers/pull/294) is merged into `main` (source commit `03e7c650828f47482e12b568f4a6127e658ed1d6`), bringing default Python 3.14.10, optional Python 3.15.2, Node 24.22.2, Codex CLI 0.165.0, GitHub CLI 2.103.3, mise 2026.10.21, uv 0.13.6, Ruff 0.17.3 and reviewed transient Context7 0.8.2. `pytest` 9.1.1 and `pre-commit` 4.7.0 were retained. The corresponding [Build AMD64 run](https://github.com/eXPerience83/remote-dev-containers/actions/runs/40773821456) and [Publish edge AMD64 run](https://github.com/eXPerience83/remote-dev-containers/actions/runs/40773821457) **passed** for that exact source, including publication candidate smoke tests, SBOMs, the critical-vulnerability gate and promotion to the mutable `edge` tags. This is evidence of **published AMD64 edge**, not of live TrueNAS acceptance, stable release or supported ARM64 runtime execution.
 
-The [#291–#293](https://github.com/eXPerience83/remote-dev-containers/pull/293) updater repairs isolated the exact Python bootstrap for uv graph generation, deferred PyPI distributions younger than 24 hours per tool, removed stale hard-coded versions from the post-update dual-Python test and refreshed CLI notices before strict evidence validation. Exact upstream updates remain PR-only with human approval and fail-closed provenance/lock/security gates. The experimental local baseline stays `0.2.0-beta.1`; it does not denote a new stable release or replace the published digest.
+The [#291–#293](https://github.com/eXPerience83/remote-dev-containers/pull/293), [#303](https://github.com/eXPerience83/remote-dev-containers/pull/303) and [#304](https://github.com/eXPerience83/remote-dev-containers/pull/304) repairs hardened the upstream updater. The actual post-merge run #116 succeeded, safely deferred incompatible mise 2026.11.1, and generated reviewed npm 12.2.2 [PR #306](https://github.com/eXPerience83/remote-dev-containers/pull/306), merged with exact-head build/security checks. Source version updates do not imply a stable image exists.
 
 ## PR2 integrated — operational acceptance pending (#121)
 
-Security fix #286 (emSign CA trust) and the TrueNAS notice-directory traversal fix #285 are merged into `main` (2026-10-21), with the former exact-head build and post-merge experimental edge publication verified. The notice fix creates `/usr/share/doc/remote-dev` as `root:root 0755` and tests notices under a capability-free container. **Real TrueNAS acceptance of the new image, without restoring DAC capabilities, remains to be recorded in #121.** The release channel is still experimental; there is no stable tag.
+Image-owned security fixes #285/#286 are merged; TrueNAS notice permissions and live functional/role acceptance are recorded under closed #121. The agents use the reviewed six-capability profile after `CapDrop=[ALL]`, not a temporary broad DAC workaround. The separate host ZFS ACL audit beyond direct mount-source isolation remains optional hardening.
 
 PR #281 is squash-merged into `main` at `5a56c3006135d41c913bb09a7f3be37d35c2c4df` and passed main-push `Build AMD64` and experimental `Publish edge AMD64` (2026-10-18). Ruff, pytest, pre-commit, Mike Farah yq, shfmt and actionlint are bundled (53 public commands). Python CLIs use pinned mise/PyPI+uv graphs and administrative Python 3.14 without contaminating the shared interpreters. Owner-approved soft image-size exception and targeted distribution/licensing review are recorded under #53. **Live TrueNAS PR2 acceptance remains outstanding**; #121 is open. See `docs/universal-validation-tools.md` / `.es.md` and the first-install manuals `docs/truenas-install.md` / `.es.md`. PR3 and #180 remain separate.
 
@@ -91,13 +91,13 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 ## Release and update state
 
-There is **no stable release yet**. The local development baseline is now `0.2.0-beta.1`; published edge images continue to use dated `edge-YYYY.MM.DD-<short-sha>` identities rather than that local default.
+The `0.2.0` source release cut follows the accepted `0.2.0-beta.1` phase. Published edge images retain dated `edge-YYYY.MM.DD-<short-sha>` identities; only a completed exact `v0.2.0` tag publisher may establish stable/`latest`.
 
 Current channel semantics are:
 
 - `dev` / `dev-amd64` — explicitly published reviewed-but-unmerged candidate;
 - `edge` / `edge-amd64` — integrated `main`;
-- `stable` / `stable-amd64` — future explicit stable publication only;
+- `stable` / `stable-amd64` — explicit exact-commit, tag-gated stable publication only;
 - `latest` — exact alias of `stable`, never `dev` or `edge`.
 
 Edge publications embed a human-readable `edge-YYYY.MM.DD-<short-sha>` identity plus a separate `Channel: edge`; full source SHA and image digest remain stronger provenance.
@@ -115,11 +115,11 @@ Exact mutable component versions remain authoritative in `versions.env` and runt
 
 The main implementation foundations are already present. Before the first stable publication the repository still needs to satisfy the support level it actually claims, including:
 
-- complete real TrueNAS PR2/#121 acceptance for both agent roles, persistence, the six tools, project Python selection and session continuity;
-- reconcile #31 so only genuine stable-release blockers remain;
+- [done] TrueNAS PR2/#121 functional tools, both role sessions, private mounts and persistence accepted without repeating unnecessary deployment resets;
+- reconcile #31, explicitly deferring #93's unproven fault-injection scenarios while preserving its successful scheduled rebuild evidence;
 - pass the stable-release checklist in `docs/releases.md` on an exact `main` revision/digest;
 - complete any open maintenance/security item that #31 identifies as blocking the claimed stable support level;
-- create the dated stable changelog section and publish an exact SemVer release only after those gates pass.
+- validate the dated `v0.2.0` changelog/source cut on exact-head CI, then create the exact tag on reviewed main and verify the independent stable publisher and digest-alias equality.
 
 Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #180 persistent on-demand toolchains, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because PR2's universal baseline has been integrated.
 
