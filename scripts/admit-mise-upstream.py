@@ -30,7 +30,7 @@ def known_safe_mode_lookup_regression(output: str, python_version: str) -> bool:
     )
     errors: list[str] = []
     for line in output.splitlines():
-        if re.search(r"\bERROR (?:Version:|Run with)\b", line):
+        if re.search(r"\bERROR (?:Version:|Run with)", line):
             continue  # Mise's diagnostic footer, not a second failure.
         if re.search(r"\bERROR\b|\bfailed:", line, re.IGNORECASE):
             errors.append(line)
