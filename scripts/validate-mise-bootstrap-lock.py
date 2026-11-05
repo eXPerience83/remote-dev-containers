@@ -15,7 +15,7 @@ import tomllib
 from pathlib import Path
 
 SUPPORTED_BOOTSTRAP_FORMATS = frozenset({3, 4})
-PYTHON_VERSION_RE = re.compile(r"^3\\.(?:14|15)\\.[0-9]+$")
+PYTHON_VERSION_RE = re.compile(r"^3\.(?:14|15)\.[0-9]+$")
 
 
 def main() -> int:
