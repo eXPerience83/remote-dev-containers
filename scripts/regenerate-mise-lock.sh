@@ -68,8 +68,7 @@ mkdir -p \
   "$scratch/data" \
   "$scratch/system" \
   "$scratch/tmp" \
-  "$scratch/bootstrap" \
-  "$scratch/runtime"
+  "$scratch/bootstrap"
 cp "$ROOT/versions.env" "$ROOT/mise.toml" "$ROOT/mise.lock" "$workspace/"
 cp -R "$ROOT/.mise" "$workspace/.mise"
 : > "$scratch/config/global.toml"
@@ -109,8 +108,6 @@ run_isolated_mise() {
     MISE_PYTHON_COMPILE=false \
     MISE_SAFE=1 \
     MISE_SYSTEM_DIR="$scratch/system" \
-    MISE_SYSTEM_CONFIG_DIR="$scratch/system" \
-    MISE_SYSTEM_CONFIG_FILE="$scratch/system/config.toml" \
     MISE_TMP_DIR="$scratch/tmp" \
     UV_PYTHON_DOWNLOADS=never \
     "$@"
@@ -126,20 +123,16 @@ run_isolated_mise() {
 # check it. Reuse its exact locked-artifact policy before installing anything.
 python3 "$ROOT/scripts/validate-mise-bootstrap-lock.py" \
   --lock "$scratch/bootstrap/mise.lock" --python-version "$PYTHON_VERSION"
-
-# mise 2026.11.x restricts URLs in untrusted project locks under MISE_SAFE=1.
-# Copy ONLY the already validated Python-only configuration/lock to our private
-# system config; mirror the production /etc/mise/config.toml + config.lock setup.
-# The install runs in an empty directory, never from an untrusted project.
-cp "$scratch/bootstrap/mise.toml" "$scratch/system/config.toml"
-cp "$scratch/bootstrap/mise.lock" "$scratch/system/config.lock"
-chmod 0600 "$scratch/system/config.toml" "$scratch/system/config.lock"
 (
-  cd "$scratch/runtime"
+  cd "$scratch/bootstrap"
+  # Install only the Python declared in this isolated project's mise.toml.
+  # Passing an explicit CLI tool spec detaches the request from its lockfile
+  # with mise 2026.11.0, causing "No lockfile URL found" despite validated
+  # linux-x64/linux-arm64 entries. Keep --locked and MISE_SAFE enabled.
   run_isolated_mise timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
     "$MISE_BIN" install --locked
 )
-python_dir="$(cd "$scratch/runtime" && run_isolated_mise "$MISE_BIN" where "python@$PYTHON_VERSION")"
+python_dir="$(cd "$scratch/bootstrap" && run_isolated_mise "$MISE_BIN" where "python@$PYTHON_VERSION")"
 python_dir="$(realpath "$python_dir")"
 if [[ "$python_dir" != "$scratch/data/"* || ! -x "$python_dir/bin/python3" ]]; then
   echo "ERROR: locked administrative Python was not installed inside the isolated mise data directory" >&2
@@ -149,11 +142,6 @@ if [[ "$("$python_dir/bin/python3" --version)" != "Python $PYTHON_VERSION" ]]; t
   echo "ERROR: isolated Python interpreter does not match pinned $PYTHON_VERSION" >&2
   exit 1
 fi
-
-# The bootstrap system config must not influence the subsequent full project
-# resolution. Only the previously validated, installed Python remains on PATH.
-: > "$scratch/system/config.toml"
-rm -f -- "$scratch/system/config.lock"
 
 (
   cd "$workspace"
