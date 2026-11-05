@@ -1,11 +1,11 @@
-# Remote Dev Containers — candidata de código v0.2.0-beta.1
+# Remote Dev Containers — versión de código v0.2.0
 
-Tras integrar [PR #296](https://github.com/eXPerience83/remote-dev-containers/pull/296) (digest Ubuntu 26.04) y [PR #297](https://github.com/eXPerience83/remote-dev-containers/pull/297) (Codex 0.166.0, mise 2026.10.24 y pytest 9.2.0), preparamos **0.2.0-beta.1** como candidata a la primera estable **v0.2.0**. Python 3.14.10 sigue siendo el predeterminado y Python 3.15.2 se selecciona expresamente por proyecto. Se mantienen las seis herramientas aisladas y los 53 comandos de la imagen. El número beta es una **versión local de código/build**, no una beta SemVer publicada: para las pruebas TrueNAS se usará una imagen AMD64 `edge` publicada y fijada por digest inmutable. Consulta los [controles de publicación y aceptación](docs/releases.es.md) y el [contrato de herramientas](docs/universal-validation-tools.es.md). **La aceptación real PR2 en TrueNAS sigue pendiente.**
+El **corte de código v0.2.0** llega tras la aceptación de `0.2.0-beta.1` en TrueNAS: se verificaron las [seis herramientas de desarrollo](docs/universal-validation-tools.es.md), Python 3.14.10 por defecto y 3.15.2 opcional, las sesiones persistentes de Codex/Antigravity y el aislamiento de roles ([#121](https://github.com/eXPerience83/remote-dev-containers/issues/121)). La versión de código **no publica por sí sola** imágenes estables. El workflow del tag debe construir, probar, analizar y promocionar un digest exacto antes de activar `stable` y `latest`. Consulta los [controles de publicación](docs/releases.es.md).
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]
-> **Desarrollo activo / experimental.** Todavía no existe una release estable. Las imágenes públicas `edge` son builds integrados de desarrollo y aún pueden cambiar antes de la primera release estable. No expongas ningún puerto web de Remote Dev directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
+> **Alcance v0.2.0: AMD64, un usuario y red privada.** `edge` sigue siendo experimental; únicamente la publicación estable mediante tag, tras superar todas las verificaciones, puede mover `stable` y `latest`. No expongas los puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
 
 ## Objetivo
 
@@ -267,7 +267,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-La versión base de desarrollo local es `0.2.0-beta.1`; las publicaciones edge usan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar de ese valor local predeterminado.
+La versión local de código es `0.2.0`; las publicaciones edge conservan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar del valor local.
 
 ## Pruebas públicas con edge
 
@@ -310,7 +310,7 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 - El root del agente está limitado por el contenedor exterior y sus montajes.
 - Los administradores TrueNAS/Docker están dentro del límite de confianza.
 - Antigravity continúa experimental aunque sus gates técnicos estén implementados.
-- `edge` sigue siendo experimental; todavía no existe release estable.
+- `edge` sigue siendo experimental; `stable` solo se activa cuando termine correctamente el publicador del tag exacto `v0.2.0` y valide el digest.
 
 ## Documentación
 

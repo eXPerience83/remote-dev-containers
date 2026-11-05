@@ -1,6 +1,6 @@
 # PR2 local validation tools (#121)
 
-PR2 #281 was **squash-merged and published in experimental edge AMD64** on 2026-10-18. At the original PR2 integration it added six commands to the accepted PR1 baseline (47 → 53): Ruff **0.17.1**, pytest **9.1.1**, pre-commit **4.7.0**, Mike Farah yq **4.54.1**, shfmt **3.14.1**, actionlint **1.7.12**. Those are historical integration pins, not a promise that current `main` still uses them. Live TrueNAS acceptance remains pending under #121. Edge publication is not a stable release or an ARM64 runtime support claim.
+PR2 #281 was squash-merged and published to experimental AMD64 edge on 2026-10-18, adding six pre-CI commands to the accepted PR1 baseline (47 → 53): Ruff, pytest, pre-commit, Mike Farah yq, shfmt and actionlint. The **real TrueNAS PR2 acceptance was completed and documented under closed [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121)** on 2026-11-05, with both agents' 7/7 functional operations, notices, Python 3.14/3.15 selection, role-private persistence and resumed conversations. Use `versions.env` for current pins; published edge is not equivalent to stable or ARM64 runtime support.
 
 ## Installation and project precedence
 

@@ -1,6 +1,6 @@
 # Contrato de Python 3.14 / 3.15 en paralelo
 
-Estado: **PR #273 fusionada en main y distribuida en edge**. Issue [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270), cerrado tras la aceptación de su excepción de tamaño y la CI. La ampliación universal [PR2 #281](https://github.com/eXPerience83/remote-dev-containers/pull/281) también está integrada y publicada como edge desde el 18/10/2026, pero su aceptación operativa en TrueNAS sigue pendiente. El incidente de actualizaciones #257 se corrigió en PR #271. Esta guía describe el contrato implementado; no confunde CI con sesiones reales de agentes.
+Estado: la PR #273 de Python está integrada y aceptada. La ampliación universal PR2 #281 también se integró y superó la aceptación operativa real en TrueNAS recogida en el [#121 cerrado](https://github.com/eXPerience83/remote-dev-containers/issues/121) el 5/11/2026. Se comprobó la selección Python 3.14/3.15 en ambos agentes habilitados. Los pines exactos están en `versions.env`; esto no implica soporte runtime ARM64.
 
 ## Versiones y selección
 
@@ -59,7 +59,7 @@ La Action `Build AMD64` ejecuta `scripts/build-local.sh` y estos controles:
 | Retrasos de propagación y errores inesperados | `scripts/test_preflight_python_upstream.py` |
 | Licencias y vulnerabilidades | `scripts/validate-third-party-inventory.sh`, `remote-dev-notices --check`, SBOM SPDX, Trivy y bloqueo de críticos corregibles |
 
-CI demuestra ejecución AMD64 y metadatos de lock completos para AMD64/ARM64; **no** implica soporte de ejecución ARM64 (issue #112) ni sesiones reales autenticadas con los agentes. La aceptación operativa de cada nueva imagen sigue requiriendo comprobar en TrueNAS las interfaces de los agentes, sus historiales, la selección de intérprete y los límites del contenedor; la integración PR2 se valida por separado en #121.
+La CI demuestra ejecución AMD64 y metadatos completos de lock AMD64/ARM64, pero no soporte de ejecución ARM64 (#112). La aceptación conjunta de sesiones, agentes y roles en TrueNAS quedó registrada para la imagen edge ensayada en #121. Los cambios de mantenimiento posteriores requieren CI del SHA exacto y solo se repiten pruebas funcionales reales si afectan materialmente al contrato validado.
 
 ## Tamaño y decisión de publicación
 
@@ -68,5 +68,5 @@ Añadir el segundo intérprete tiene coste. Con los mismos pins de componentes, 
 ## Decisiones y seguimiento
 
 - PR #273 está fusionada, con CI de su revisión final validada y excepción de **+102,38 MiB** sin comprimir aceptada explícitamente por el propietario el 17/10/2026. No se interpreta como incremento de descarga comprimida.
-- PR2 #281, con las seis herramientas universales, se fusionó y publicó en edge el 18/10/2026. La aceptación de esa imagen en el TrueNAS real sigue pendiente en [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121).
+- La PR2 #281 de las seis herramientas universales se fusionó el 18/10/2026 y superó la aceptación real en TrueNAS. El issue #121 se cerró el 5/11/2026.
 - El estudio PR3 y los toolchains bajo demanda de #180 siguen siendo trabajo independiente. No introducir parámetros de arranque ni instalaciones pasivas para suplirlos.

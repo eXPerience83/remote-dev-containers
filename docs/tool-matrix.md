@@ -146,7 +146,7 @@ The image does not replace host-side TrueNAS administration. The supported YAML 
 
 ## Version/release identity
 
-The local development baseline is `0.2.0-beta.1`. It is a source/local-build default, not a stable release. Published edge builds use `edge-YYYY.MM.DD-<short-sha>` plus `Channel: edge`; explicit stable publication alone uses `vMAJOR.MINOR.PATCH` and moves `stable`/`latest`.
+The local source release cut is `0.2.0` after accepted TrueNAS PR2 evidence; it does not itself create a stable image. Published edge builds retain the dated `edge-YYYY.MM.DD-<short-sha>` and `Channel: edge`, while the exact `v0.2.0` tag publisher alone may move `stable` and `latest` after full release gates.
 
 ## Explicitly deferred
 

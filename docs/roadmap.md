@@ -10,7 +10,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
-- Local development baseline is `0.2.0-beta.1`; published edge builds retain their dated edge identity and no stable release exists yet.
+- The source release cut is `0.2.0` after successful TrueNAS PR2 acceptance; published edge builds retain dated edge identities and stable requires its independent tagged publisher.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -59,14 +59,14 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 
 ## Current milestone — first stable release preparation
 
-The current `0.2.0-beta.1` **source** baseline targets an eventual **`v0.2.0` stable** release. The 0.2 scope is the Codex-centered AMD64, single-user/private-network core; Antigravity remains optional and explicitly experimental. Compatibility aliases are retained through 0.2.x; interfaces may still evolve between 0.x minors. Require separate review before removals. It is not a published beta registry tag. PR #296 (Ubuntu) and PR #297 (Codex/mise/pytest) are merged; the intended beta test artifact is a successful `edge-amd64` image **fixed by exact SHA and OCI digest**. Verify the publication and run the whole TrueNAS acceptance before approving stable. The existing stable-only tag workflow deliberately rejects prerelease tags.
+The local `0.2.0-beta.1` source acceptance was completed for the AMD64 single-user/private-network Codex-centered core, with Antigravity optional/experimental and compatibility aliases retained across 0.2.x. The reviewed `0.2.0` source cut is prepared in PR #307; this alone does not promote `stable`/`latest`. #121 records the actual TrueNAS role, tools, sessions and persistence tests; the most recent npm/updater changes passed exact-head CI and edge publication. Stable still requires the release cut and the exact-tag publisher's own image/security/digest checks.
 
-PR2 #281 (six locked pre-CI CLIs) was integrated and published to experimental edge on 2026-10-18; live TrueNAS acceptance is pending under #121. Remote Dev still has no stable release. The current work is to make the public/support surface match the implementation and then run the exact stable-release gates.
+PR2 #281's six locked CLI additions and 53-command baseline were accepted on TrueNAS under closed #121, including role-scoped persistence/session recovery. Extra PR3/#180 tooling remains optional future work, not a first-stable blocker.
 
-1. **Operator documentation and PR2 acceptance.** Maintain the bilingual first-install/update runbooks and validate the integrated 53-command `edge` build on TrueNAS with the two enabled agent roles.
-2. **#31 — tracker reconciliation.** Remove already completed gates from the pending lists and identify only blockers that genuinely remain for the support level claimed by the first stable release.
-3. **Stable candidate validation.** Run the checklist in `docs/releases.md` on one exact `main` revision and immutable published digest, including image identity, TrueNAS deployment, agent authentication, persistence, isolation, notices/SBOM and vulnerability gates.
-4. **Stable publication.** Only after the gates pass, change the local prerelease `BASE_VERSION` and the two Dockerfile defaults to the approved final version in a reviewed PR, create the dated changelog release section, validate that exact new main revision and tag `v0.2.0`; publish `stable` and `latest` as the same reviewed digest.
+1. **PR2 TrueNAS evidence accepted.** #121 is complete for the functional/runtime scope; no repeat app reset or full tool-test run is required merely for the source-version cut.
+2. **#31 — release decision.** Keep the tested AMD64/private-network support scope narrow and explicitly defer #93 fault-injection/rollback acceptance beyond the already successful scheduled edge rebuilds.
+3. **Exact release-cut source CI.** Review PR #307 after rebasing to current main; require full Build AMD64, notices, SBOM and fixable-CRITICAL gate on the exact head, then merge.
+4. **Stable publisher.** Create tag `v0.2.0` only at that reviewed main commit; the stable workflow builds and scans its own candidate and must prove the version tag, `stable`, `stable-amd64` and `latest` resolve to the same tested OCI digest.
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
 

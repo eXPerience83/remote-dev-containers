@@ -3,7 +3,7 @@
 Thank you for helping improve Remote Dev Containers.
 
 > [!IMPORTANT]
-> This project is in active experimental development. There is no stable release yet, and compatibility, persistence paths and image contents may change before `v0.1.0`.
+> The v0.2.0 source cut targets an acceptance-tested AMD64, single-user/private-network stable channel; `edge` remains experimental and interfaces may still evolve through future 0.x minors. Stable images exist only after a reviewed exact-tag publisher succeeds. Keep security, persistence and image changes behind their established gates.
 
 ## Before opening a change
 

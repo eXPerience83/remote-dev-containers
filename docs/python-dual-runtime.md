@@ -1,6 +1,6 @@
 # Dual Python 3.14 / 3.15 runtime contract
 
-Status: **PR #273 is merged into main and shipped in experimental edge**. Owning issue [#270](https://github.com/eXPerience83/remote-dev-containers/issues/270) is closed following exact-head CI and owner acceptance of its image-size exception. Universal CLI [PR2 #281](https://github.com/eXPerience83/remote-dev-containers/pull/281) is also merged and published in edge as of 2026-10-18, with its real TrueNAS operational acceptance still pending. Python upstream issue #257 was addressed by PR #271. This document describes implemented behavior, not proof of authenticated real-agent sessions.
+Status: Python PR #273 is integrated and accepted; Universal CLI PR2 #281 was also integrated and completed its real TrueNAS operational acceptance under closed [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121) on 2026-11-05. The default/opt-in 3.14/3.15 behavior was tested on both enabled agent roles. The exact pins remain governed by `versions.env`; this is not a promise of ARM64 runtime support.
 
 ## Supported versions and selection
 
@@ -59,7 +59,7 @@ The CI `Build AMD64` workflow runs `scripts/build-local.sh` and the following gu
 | Patch propagation delays and unexpected failures | `scripts/test_preflight_python_upstream.py` |
 | Third-party notices and vulnerabilities | `scripts/validate-third-party-inventory.sh`, `remote-dev-notices --check`, SPDX SBOM, Trivy and no-fixable-CRITICAL gate |
 
-CI proves AMD64 execution and complete AMD64/ARM64 lock **metadata**; it does **not** claim ARM64 runtime support (tracked separately by #112) or genuine authenticated vendor-agent sessions. Each newly published image still requires appropriate TrueNAS operational validation (agent browser sessions, histories, project selections and security boundaries); PR2 acceptance is tracked separately under #121.
+CI proves AMD64 execution and complete AMD64/ARM64 lock **metadata**; it does not claim ARM64 runtime support (#112). The combined agent/session/role acceptance was recorded for the tested TrueNAS edge image in #121. Later maintenance changes need the relevant exact-head build/security gates, and only material changes to the tested role contracts warrant repeat live functional testing.
 
 ## Size and release decision
 
@@ -68,5 +68,5 @@ The candidate with both versions has a measurable cost. At identical pinned comp
 ## Decisions and remaining follow-up
 
 - PR #273 has merged with exact-head CI validated and an explicit owner-accepted **+102.38 MiB** uncompressed image-size exception (2026-10-17). This is not a measured compressed-pull delta.
-- PR2 #281 (six immutable validation CLIs) was merged and published in edge on 2026-10-18; live TrueNAS acceptance for that integrated image remains open under [#121](https://github.com/eXPerience83/remote-dev-containers/issues/121).
+- PR2 #281 (six immutable CLI tools) merged and published on 2026-10-18; live TrueNAS tests were accepted and issue #121 was closed on 2026-11-05.
 - PR3 agent-demand research and #180 persistent on-demand toolchains remain separate work. Neither should introduce extra startup parameters or passive downloads.
