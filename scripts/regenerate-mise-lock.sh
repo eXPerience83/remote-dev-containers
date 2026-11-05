@@ -142,8 +142,12 @@ PY
 
 (
   cd "$scratch/bootstrap"
+  # Install only the Python declared in this isolated project's mise.toml.
+  # Passing an explicit CLI tool spec detaches the request from its lockfile
+  # with mise 2026.11.0, causing "No lockfile URL found" despite validated
+  # linux-x64/linux-arm64 entries. Keep --locked and MISE_SAFE enabled.
   run_isolated_mise timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
-    "$MISE_BIN" install --locked "python@$PYTHON_VERSION"
+    "$MISE_BIN" install --locked
 )
 python_dir="$(cd "$scratch/bootstrap" && run_isolated_mise "$MISE_BIN" where "python@$PYTHON_VERSION")"
 python_dir="$(realpath "$python_dir")"

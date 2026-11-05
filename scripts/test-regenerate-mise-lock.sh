@@ -37,9 +37,27 @@ chosen = [section for section in sections if section.splitlines()[1] == f'versio
 assert len(chosen) == 1
 Path("mise.lock").write_text("lockfile_version = 3\n\n" + chosen[0], encoding="utf-8")
 PYTHON_LOCK
+      if [[ "$FAKE_MISE_MODE" == bootstrap-missing-url ]]; then
+        # Even a syntactically valid generated lock cannot skip its required
+        # platform-specific download URL before installing anything.
+        sed -i '/^url = .*x86_64.*$/d' mise.lock
+      fi
       exit 0
       ;;
-    "install --locked python@$FAKE_PYTHON_VERSION")
+    "install --locked")
+      # Regression: an explicit CLI python@version request can bypass the
+      # generated project lock in mise 2026.11.0. Only install the isolated
+      # project's exact Python selection, in strict locked mode.
+      grep -Fxq "python = \"$FAKE_PYTHON_VERSION\"" mise.toml \
+        || { echo "bootstrap config does not pin the selected Python" >&2; exit 93; }
+      [[ "$(grep -c '^\[\[tools.python\]\]' mise.lock)" == 1 ]] \
+        || { echo "bootstrap lock must contain just one Python entry" >&2; exit 94; }
+      grep -Fq '[tools.python."platforms.linux-x64"]' mise.lock \
+        || { echo "bootstrap lock lacks linux-x64" >&2; exit 95; }
+      grep -Fq '[tools.python."platforms.linux-arm64"]' mise.lock \
+        || { echo "bootstrap lock lacks linux-arm64" >&2; exit 96; }
+      [[ "${MISE_SAFE:-}" == "1" && "${UV_PYTHON_DOWNLOADS:-}" == "never" ]] \
+        || { echo "bootstrap safety environment was lost" >&2; exit 97; }
       if [[ "$FAKE_MISE_MODE" == install-fail ]]; then
         echo "simulated locked interpreter installation failure" >&2
         exit 48
@@ -202,7 +220,7 @@ failure_scratch="$(cat "$failure_record")"
 [[ ! -e "$failure_scratch" ]] || { echo "failed regeneration scratch was not removed" >&2; exit 1; }
 echo "OK preserve lock after failed regeneration"
 
-for mode in bootstrap-fail install-fail; do
+for mode in bootstrap-fail bootstrap-missing-url install-fail; do
   case_root="$scratch/$mode-repo"
   case_record="$scratch/$mode-record"
   copy_fixture "$case_root"
