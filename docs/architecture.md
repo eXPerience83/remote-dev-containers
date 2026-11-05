@@ -156,7 +156,7 @@ The stack does not require privileged mode, `SYS_ADMIN`, host PID/networking, un
 
 All enabled services use the same intended `REMOTE_DEV_IMAGE` reference. The image-bundled Codex release remains the reviewed fallback. Optional Codex and Antigravity runtimes persist only in their role-private state and are not immutable image contents.
 
-The local development baseline is `0.2.0-beta.1`; edge/stable workflows replace that local default with their channel-specific published identities.
+The local source cut is `0.2.0` following accepted `0.2.0-beta.1` TrueNAS functional evidence. Edge and stable publication workflows provide their own channel identity; only the separately verified stable tag can move `stable`/`latest`.
 
 Release maturity and build identity are separate:
 
