@@ -30,12 +30,16 @@ if [[ "$PWD" == */bootstrap ]]; then
       python3 - "$FAKE_SOURCE_LOCK" "$FAKE_PYTHON_VERSION" <<'PYTHON_LOCK'
 import re
 import sys
+import os
 from pathlib import Path
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 sections = re.findall(r"(?ms)^\[\[tools\.python\]\]\n.*?(?=^\[\[tools\.|\Z)", source)
 chosen = [section for section in sections if section.splitlines()[1] == f'version = "{sys.argv[2]}"']
 assert len(chosen) == 1
-Path("mise.lock").write_text("lockfile_version = 3\n\n" + chosen[0], encoding="utf-8")
+lock_format = 3 if os.environ["FAKE_MISE_MODE"] == "bootstrap-v3" else (
+    5 if os.environ["FAKE_MISE_MODE"] == "bootstrap-unknown-format" else 4
+)
+Path("mise.lock").write_text(f"lockfile_version = {lock_format}\n\n" + chosen[0], encoding="utf-8")
 PYTHON_LOCK
       if [[ "$FAKE_MISE_MODE" == bootstrap-missing-url ]]; then
         # Even a syntactically valid generated lock cannot skip its required
@@ -100,7 +104,7 @@ done
 
 printf '%s\n' "$(dirname "$MISE_CACHE_DIR")" > "$FAKE_SCRATCH_RECORD"
 case "$FAKE_MISE_MODE" in
-  success)
+  success|bootstrap-v3)
     printf '\n# fake regeneration marker\n' >> mise.lock
     ;;
   invalid)
@@ -133,6 +137,7 @@ copy_fixture() {
   cp \
     "$ROOT/scripts/regenerate-mise-lock.sh" \
     "$ROOT/scripts/validate-mise-lock.py" \
+    "$ROOT/scripts/validate-mise-bootstrap-lock.py" \
     "$ROOT/scripts/sync-python-runtime-notices.py" \
     "$ROOT/scripts/compact-python-runtime-notices.py" \
     "$destination/scripts/"
@@ -192,6 +197,16 @@ success_scratch="$(cat "$success_record")"
 [[ ! -e "$success_scratch" ]] || { echo "successful regeneration scratch was not removed" >&2; exit 1; }
 echo "OK isolated successful regeneration"
 
+# New mise generates a v4 bootstrap lock; retain v3 legacy compatibility.
+legacy_root="$scratch/legacy-v3-repo"
+legacy_record="$scratch/legacy-v3-record"
+copy_fixture "$legacy_root"
+run_helper "$legacy_root" bootstrap-v3 "$legacy_record"
+grep -Fq '# fake regeneration marker' "$legacy_root/mise.lock"
+assert_no_temp_lock "$legacy_root"
+[[ ! -e "$(cat "$legacy_record")" ]] || { echo "ERROR: v3 scratch was not removed" >&2; exit 1; }
+echo "OK accept bootstrap v3 and v4 without upgrading committed lock"
+
 invalid_root="$scratch/invalid-repo"
 invalid_record="$scratch/invalid-record"
 copy_fixture "$invalid_root"
@@ -220,7 +235,7 @@ failure_scratch="$(cat "$failure_record")"
 [[ ! -e "$failure_scratch" ]] || { echo "failed regeneration scratch was not removed" >&2; exit 1; }
 echo "OK preserve lock after failed regeneration"
 
-for mode in bootstrap-fail bootstrap-missing-url install-fail; do
+for mode in bootstrap-fail bootstrap-missing-url bootstrap-unknown-format install-fail; do
   case_root="$scratch/$mode-repo"
   case_record="$scratch/$mode-record"
   copy_fixture "$case_root"
