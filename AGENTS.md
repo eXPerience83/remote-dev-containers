@@ -144,7 +144,7 @@ See `docs/antigravity-runtime-admission.md` / `.es.md` and `docs/dependency-auto
 
 Run the narrowest relevant tests during development and the repository's complete required CI before merge.
 
-When changing the grouped upstream updater or mise bootstrap, require both its offline mutation/regression tests and the **real latest-upstream mise bootstrap canary** in Build AMD64 CI. The canary must verify the vendor binary digest, run without inherited CI credentials, validate the exact two-platform Python lock and install with `--locked`. Never infer compatibility with a newly released mise solely from an older pinned-version mock or from an already-built image. Keep disposable bootstrap lock-format admission separate from the committed full-project lock-format contract.
+When changing the grouped upstream updater or mise bootstrap, require both its offline mutation/regression tests and the **real latest-upstream mise bootstrap canary** in Build AMD64 CI. The canary must verify the vendor binary digest, run without inherited CI credentials, validate the exact two-platform Python lock and install with `--locked`. A precisely recognized **new upstream** locked lookup incompatibility may defer only that mise version while retaining the currently reviewed pinned mise; all unknown, integrity, provenance and network errors must fail closed. Never claim a deferred candidate passed the bootstrap. Never infer compatibility with a newly released mise solely from an older pinned-version mock or from an already-built image. Keep disposable bootstrap lock-format admission separate from the committed full-project lock-format contract.
 
 Runtime/deployment changes should preserve or extend coverage for, where affected:
 
