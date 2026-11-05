@@ -60,35 +60,18 @@ def isolated_env(root: Path) -> dict[str, str]:
     }
 
 
-def run_mise(binary: Path, root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+def run_mise(
+    binary: Path, root: Path, env: dict[str, str], args: list[str]
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(binary), *args],
         cwd=root / "bootstrap",
-        env=isolated_env_existing(root),
+        env=env,
         capture_output=True,
         text=True,
         check=False,
         timeout=TIMEOUT_SECONDS,
     )
-
-
-def isolated_env_existing(root: Path) -> dict[str, str]:
-    return {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": str(root / "home"),
-        "MISE_CACHE_DIR": str(root / "cache"),
-        "MISE_CONFIG_DIR": str(root / "config"),
-        "MISE_DATA_DIR": str(root / "data"),
-        "MISE_SYSTEM_DIR": str(root / "system"),
-        "MISE_SYSTEM_CONFIG_DIR": str(root / "system"),
-        "MISE_SYSTEM_CONFIG_FILE": str(root / "system" / "config.toml"),
-        "MISE_GLOBAL_CONFIG_FILE": str(root / "config" / "global.toml"),
-        "MISE_TMP_DIR": str(root / "tmp"),
-        "MISE_SAFE": "1",
-        "MISE_PYTHON_COMPILE": "false",
-        "MISE_HTTP_TIMEOUT": "60s",
-        "UV_PYTHON_DOWNLOADS": "never",
-    }
 
 
 def select_mise(current: str, candidate: str, mise_bin: Path, python_version: str) -> str:
@@ -168,7 +151,7 @@ def select_mise(current: str, candidate: str, mise_bin: Path, python_version: st
                 f"unexpected candidate mise installation failure "
                 f"(exit {installed.returncode}): {output[-1800:]}"
             )
-        where = run_mise(mise_bin, root, ["where", f"python@{python_version}"])
+        where = run_mise(mise_bin, root, env, ["where", f"python@{python_version}"])
         if where.returncode:
             raise RuntimeError("candidate mise cannot locate installed Python")
         py_dir = Path(where.stdout.strip()).resolve()
