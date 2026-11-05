@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-03",
+  "refreshed_on": "2026-11-05",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -165,7 +165,7 @@
       "name": "npm CLI and bundled dependencies",
       "image_scope": "both",
       "version_key": "NPM_VERSION",
-      "version": "12.2.1",
+      "version": "12.2.2",
       "source": "https://github.com/npm/cli",
       "license": "Artistic-2.0 plus dependency-specific terms",
       "notices": [
