@@ -1,8 +1,8 @@
 # TrueNAS SCALE: installation, persistence, and upgrades
 
-> **Beta acceptance before v0.2.0:** source `0.2.0-beta.1` is not a published tag. Pin a successfully published `edge-amd64` image by digest, retain the old digest for rollback and follow the [beta acceptance checklist](releases.md) before considering stable.
+> **v0.2.0 source cut:** the previous `0.2.0-beta.1` phase completed real TrueNAS tool, persistence and role acceptance (#121). Do not reset working datasets or repeat the full test cycle just for release metadata. Use a known-good immutable image digest for rollback; choose a stable tag only after its independent publisher has successfully verified the digest.
 
-This guide describes the **experimental edge** channel; no stable release exists yet. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for deeper validation.
+This guide documents the **experimental edge** deployment and the exact-digest rollback contract. Stable tags become valid only after an explicit successful `v0.2.0` publication, not when the source version is changed. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for optional deeper validation.
 
 ## 1. Root dataset and safety
 
