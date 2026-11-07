@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-05",
+  "refreshed_on": "2026-11-07",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -94,14 +94,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.10.25",
+      "version": "2026.11.3",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.10.25/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.11.3/LICENSE"
         }
       ]
     },
@@ -201,19 +201,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.166.0",
+      "version": "rust-v0.167.0",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.166.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.167.0/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.166.0/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.167.0/NOTICE"
         }
       ]
     },
@@ -222,14 +222,14 @@
       "name": "yq",
       "image_scope": "both",
       "version_key": "YQ_VERSION",
-      "version": "4.54.1",
+      "version": "4.54.2",
       "source": "https://github.com/mikefarah/yq",
       "license": "MIT",
       "notices": [
         {
           "path": "components/yq/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/mikefarah/yq/v4.54.1/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/mikefarah/yq/v4.54.2/LICENSE"
         }
       ]
     },
@@ -481,12 +481,12 @@
       "id": "python-cli-ruff",
       "name": "ruff",
       "image_scope": "both",
-      "version": "0.17.3",
-      "source": "https://pypi.org/project/ruff/0.17.3/",
+      "version": "0.17.4",
+      "source": "https://pypi.org/project/ruff/0.17.4/",
       "license": "MIT",
       "notices": [
         {
-          "path": "components/python-clis/ruff-0.17.3/",
+          "path": "components/python-clis/ruff-0.17.4/",
           "source": "artifact"
         }
       ],
