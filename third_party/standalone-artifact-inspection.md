@@ -5,12 +5,12 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 | Component | Version | Packaging | Legal files inside asset | Repository notices |
 |---|---:|---|---|---|
 | github-cli | `2.103.3` | tar.gz | LICENSE | LICENSE |
-| codex-cli | `rust-v0.166.0` | tar.gz | None | LICENSE, NOTICE |
-| codex-code-mode-host | `rust-v0.166.0` | tar.gz | None | LICENSE, NOTICE |
+| codex-cli | `rust-v0.167.0` | tar.gz | None | LICENSE, NOTICE |
+| codex-code-mode-host | `rust-v0.167.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
-| mise | `2026.10.25` | raw-binary | None | LICENSE |
+| mise | `2026.11.3` | raw-binary | None | LICENSE |
 | uv | `0.13.7` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
-| yq | `4.54.1` | raw-binary | None | LICENSE |
+| yq | `4.54.2` | raw-binary | None | LICENSE |
 | shfmt | `3.14.1` | raw-binary | None | LICENSE |
 | actionlint | `1.7.12` | tar.gz | LICENSE.txt | LICENSE.txt |
 
