@@ -31,7 +31,9 @@ class GuidanceTests(unittest.TestCase):
         self.canonical = self.root / 'rule.md'
         self.canonical.write_bytes(RULE.read_bytes())
         self.rule = self.canonical.read_bytes()
-        self.block = g.START + b'\n' + self.rule + g.END + b'\n'
+        self.extra = (RULE.parent / 'codex-openai-docs.md').read_bytes()
+        (self.root / 'codex-openai-docs.md').write_bytes(self.extra)
+        self.block = g.START + b'\n' + self.rule.rstrip(b'\n') + b'\n\n' + self.extra + g.END + b'\n'
         self.base = self.home / 'AGENTS.md'
         self.override = self.home / 'AGENTS.override.md'
         self.target = self.agy / 'rules' / g.ANTIGRAVITY_NAME
@@ -118,7 +120,7 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(self.run_guidance(reconcile=False), 'stale')
         self.assertEqual(self.run_guidance(), 'current')
         expected = g.START + b'\n' + self.canonical.read_bytes() + g.END + b'\n'
-        self.assertEqual(self.base.read_bytes(), before + expected + after)
+        self.assertEqual(self.base.read_bytes(), before + expected.replace(g.END, b'\n' + self.extra + g.END) + after)
 
     def test_crlf_managed_span_preserves_surrounding_bytes(self):
         old = self.block.replace(b'\n', b'\r\n')
@@ -255,7 +257,7 @@ class GuidanceTests(unittest.TestCase):
         for p in unrelated: p.write_bytes(b'private unrelated\r\n')
         self.assertEqual(self.run_guidance('antigravity'), 'current')
         self.assertEqual(self.target.relative_to(self.root).as_posix(), '.gemini/config/rules/remote-dev-development-environment.md')
-        self.assertEqual(self.target.read_bytes(), g.FRONTMATTER + self.block)
+        self.assertEqual(self.target.read_bytes(), g.FRONTMATTER + g.START + b'\n' + self.rule + g.END + b'\n')
         front = self.target.read_text().split('---\n')[1]
         self.assertEqual(front.splitlines(), ['trigger: always_on', 'description: "Remote Dev development environment guidance"'])
         first = self.target.stat()

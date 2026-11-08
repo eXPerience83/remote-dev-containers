@@ -6,6 +6,7 @@ import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass
 import errno
+import fcntl
 import os
 from pathlib import Path
 import secrets
@@ -262,6 +263,59 @@ def antigravity(fd: int, block: bytes, *, reconcile: bool) -> str:
     return state
 
 
+INITIAL_MARKER = '.remote-dev-initial-config-v1'
+INITIAL_STAGE = '.remote-dev-initial-config.toml'
+INITIAL_CONFIG = b'[mcp_servers.openaiDeveloperDocs]\nurl = "https://developers.openai.com/mcp"\nenabled = true\nrequired = false\nstartup_timeout_sec = 10\ntool_timeout_sec = 60\n'
+
+
+def initialize_codex() -> str:
+    """Offline, once per private home. Pending decisions recover after interruption."""
+    if os.environ.get('REMOTE_DEV_ROLE', 'codex') != 'codex':
+        return 'unsupported'
+    home = Path(os.environ.get('CODEX_HOME', str(CODEX_NATIVE_HOME)))
+    workspace = Path(os.environ.get('WORKSPACE', '/workspace'))
+    if home.is_relative_to(Path('/workspace')) or home.is_relative_to(workspace):
+        raise GuidanceError('unsafe')
+    with directory(home, private_root=CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None) as fd:
+        # Lock the pinned directory itself: no lock artifact can make an empty
+        # home look pre-existing. Cooperating initializers serialize here.
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        names = set(os.listdir(fd)) - {INITIAL_MARKER}
+        try:
+            os.mkdir(INITIAL_MARKER, mode=0o700, dir_fd=fd)
+            os.fsync(fd)
+            fresh = True
+        except FileExistsError:
+            fresh = False
+        transaction = home / INITIAL_MARKER
+        with directory(transaction, private_root=CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None) as tx:
+            done = read_file(tx, 'done')
+            if done.info is not None:
+                if done.data != b'done\n':
+                    raise GuidanceError('unsafe')
+                return 'current'
+            # Directory existence is a durable pending decision. All staging,
+            # including interrupted atomic-write temporaries, stays inside it.
+            if not names:
+                stage = read_file(tx, INITIAL_STAGE)
+                if stage.info is not None and stage.data != INITIAL_CONFIG:
+                    raise GuidanceError('unsafe')
+                atomic_write(tx, INITIAL_STAGE, stage, INITIAL_CONFIG)
+                try:
+                    os.link(INITIAL_STAGE, 'config.toml', src_dir_fd=tx,
+                            dst_dir_fd=fd, follow_symlinks=False)
+                except FileExistsError:
+                    pass
+                os.fsync(fd)
+            atomic_write(tx, 'done', done, b'done\n')
+            try:
+                os.unlink(INITIAL_STAGE, dir_fd=tx)
+            except FileNotFoundError:
+                pass
+            os.fsync(tx)
+    return 'existing' if fresh and names else 'current'
+
+
 def run(provider: str, *, reconcile: bool) -> str:
     # Check role before reading canonical or private state. Launcher gets neither.
     if provider not in {'codex', 'antigravity'} or os.environ.get('REMOTE_DEV_ROLE', 'codex') != provider:
@@ -270,6 +324,12 @@ def run(provider: str, *, reconcile: bool) -> str:
         rule = read_file(fd, CANONICAL.name, limit=MAX_RULE_BYTES, canonical=True).data
     if not rule or not codex_nonempty(rule) or IDENTITY in rule:
         raise GuidanceError('unsafe')
+    if provider == 'codex':
+        with directory(CANONICAL.parent) as fd:
+            extra = read_file(fd, 'codex-openai-docs.md', limit=MAX_RULE_BYTES, canonical=True).data
+        if not extra or IDENTITY in extra:
+            raise GuidanceError('unsafe')
+        rule = rule.rstrip(b'\n') + b'\n\n' + extra
     block = START + b'\n' + rule + (b'' if rule.endswith(b'\n') else b'\n') + END + b'\n'
     home = Path(os.environ.get('CODEX_HOME', str(CODEX_NATIVE_HOME))) if provider == 'codex' else ANTIGRAVITY_CONFIG
     workspace = Path(os.environ.get('WORKSPACE', '/workspace'))
@@ -288,11 +348,14 @@ def run(provider: str, *, reconcile: bool) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['reconcile', 'status'])
+    parser.add_argument('command', choices=['reconcile', 'status', 'initialize'])
     parser.add_argument('provider', choices=['codex', 'antigravity'])
     args = parser.parse_args()
     try:
-        state = run(args.provider, reconcile=args.command == 'reconcile')
+        if args.command == 'initialize':
+            state = initialize_codex() if args.provider == 'codex' else 'unsupported'
+        else:
+            state = run(args.provider, reconcile=args.command == 'reconcile')
     except GuidanceError as exc:
         state = exc.state
     except (OSError, UnicodeError, ValueError):

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Official OpenAI documentation MCP enabled for empty, new Codex state only, with offline recoverable initialization, native management and selective Codex-only global guidance. Existing installations and optional Context7 remain unchanged.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->

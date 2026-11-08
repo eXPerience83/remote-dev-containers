@@ -38,6 +38,7 @@ jobs:
           python3 -m py_compile \
             scripts/remote-dev-agent-guidance.py \
             scripts/test-agent-guidance.py \
+            scripts/test-initialize-codex-config.py \
             scripts/test-agent-guidance-lifecycle.py \
             scripts/remote-dev-launcher.py \
             scripts/remote-dev-codex-runtime.py \

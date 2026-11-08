@@ -58,6 +58,12 @@ elif [[ "$role" == antigravity ]]; then
     "$ANTIGRAVITY_CONFIG_STATE_DIR"
 fi
 /usr/local/bin/secure-persistent-state
+# Before any vendor invocation or global guidance creates Codex state.
+if [[ "$role" == codex ]]; then
+  if ! /usr/local/bin/remote-dev-agent-guidance initialize codex; then
+    echo 'WARNING: initial Codex configuration was preserved; inspect manually' >&2
+  fi
+fi
 
 # Shared-workspace defaults. Never trust every path globally.
 git config --global core.filemode false || true

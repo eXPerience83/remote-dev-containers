@@ -337,3 +337,5 @@ See [`docs/releases.md`](docs/releases.md).
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)
 - [`docs/roadmap.md`](docs/roadmap.md)
 - [`third_party/optional-agents.md`](third_party/optional-agents.md)
+
+OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](docs/openai-docs-codex.md).

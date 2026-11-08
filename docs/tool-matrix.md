@@ -164,3 +164,5 @@ The local source release cut is `0.2.0` after accepted TrueNAS PR2 evidence; it 
 - A virtual-machine distribution.
 
 Additions should be driven by real repositories or supported use cases and evaluated for image size, security, licensing, privacy and maintenance cost.
+
+OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](openai-docs-codex.md).

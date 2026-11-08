@@ -78,3 +78,7 @@ CI prueba determinísticamente los adaptadores y el ciclo de vida sin red, con e
 3. Solicitar validación de contenedores sin Docker/backend: observar una explicación de capacidad ausente en vez de instalaciones globales o debilitamiento del aislamiento.
 
 Registra revisión/digest del candidato, identidad del runtime admitido y observaciones sin contenido privado de prompts/credenciales. Estas observaciones dependientes del modelo complementan los tests deterministas y no condicionan CI. Un futuro adaptador debe revalidar su composición nativa, preservar contenido del usuario y reutilizar este texto canónico en su estado privado; aquí no se implementa ningún proveedor adicional.
+
+OpenAI Docs MCP: habilitado en estado Codex nuevo y vacío; instalaciones existentes mediante alta manual. Context7 sigue siendo opcional. [Documentation](openai-docs-codex.es.md).
+
+El fragmento exclusivo de Codex `codex-openai-docs.md` se compone dentro del bloque administrado existente. `initialize codex` configura solo un estado privado vacío al arrancar; no reconcilia instrucciones ni ejecuta Codex. La reconciliación de instrucciones sigue limitada a sesiones.

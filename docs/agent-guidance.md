@@ -15,7 +15,7 @@ Guidance is neither a policy engine nor a security boundary. Container hardening
 
 ## Source and lifecycle
 
-The only authored rule is [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), installed root-owned, mode `0444`, at `/usr/share/remote-dev/agent-rules/development-environment.md`. The immutable `/usr/local/bin/remote-dev-agent-guidance` helper derives both provider representations offline:
+The shared development rule is [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), installed root-owned, mode `0444`, at `/usr/share/remote-dev/agent-rules/development-environment.md`. The immutable `/usr/local/bin/remote-dev-agent-guidance` helper derives both provider representations offline:
 
 ```text
 remote-dev-agent-guidance reconcile codex
@@ -78,3 +78,7 @@ Deterministic CI tests the adapters and lifecycle offline with synthetic state, 
 3. Request container validation with no Docker/backend: observe a missing-capability explanation rather than global installs or weakening isolation.
 
 Record candidate revision/digest, admitted runtime identity and observations without private prompt/credential contents. These model-dependent observations supplement deterministic tests and do not gate CI. A future provider adapter must revalidate its native composition surface, preserve user content and reuse this canonical text in its own private state; no additional provider is implemented here.
+
+OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](openai-docs-codex.md).
+
+The Codex-only `codex-openai-docs.md` fragment is composed inside the existing managed block. The `initialize codex` command provisions only an empty private home at container startup; it does not reconcile instructions or invoke the vendor CLI. Instruction reconciliation remains session-only.
