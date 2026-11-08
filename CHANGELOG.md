@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-11-08 — Codex CLI 0.166.0 → 0.167.0; mise 2026.10.25 → 2026.11.4; Ruff 0.17.3 → 0.17.4; yq 4.54.1 → 4.54.2; Context7 CLI (transient) 0.9.0 → 0.10.0.
+
 ### Renovate image refreshes
 
 <!-- remote-dev-renovate-runtime-refreshes:start -->

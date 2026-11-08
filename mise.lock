@@ -51,10 +51,10 @@ uv = { path = ".mise/locks/pypi-pytest/9.2.0~ec7278a3", digest = "sha256:bfba668
 python = "3.14.10"
 
 [[tools."pypi:ruff"]]
-version = "0.17.3"
+version = "0.17.4"
 backend = "pypi:ruff"
-specifiers = ["0.17.3"]
-uv = { path = ".mise/locks/pypi-ruff/0.17.3~ac198ac5", digest = "sha256:401fcdd6896af668c8f7b683fadac4c54796596bcb5bf9ae73e5a1db6ee18f6f" }
+specifiers = ["0.17.4"]
+uv = { path = ".mise/locks/pypi-ruff/0.17.4~ac198ac5", digest = "sha256:54f2097a0f09c582bc9cefc670263787e0062064a824818f65f2d1969f1a33ab" }
 
 [tools."pypi:ruff".options]
 python = "3.14.10"
@@ -122,18 +122,18 @@ url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/704009823"
 provenance = "github-attestations"
 
 [[tools.yq]]
-version = "4.54.1"
+version = "4.54.2"
 backend = "aqua:mikefarah/yq"
-specifiers = ["4.54.1"]
+specifiers = ["4.54.2"]
 
 [tools.yq."platforms.linux-arm64"]
-checksum = "sha256:189088da0c6429ec5178dfaab1a114805f6cab0b61b165ab236efedf1d57a71b"
-url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_arm64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222603"
+checksum = "sha256:bd44211dcd29a5f0eb701d4b7eb5ccd0cfff3bd3966cb4f7f9bd5b13701d997e"
+url = "https://github.com/mikefarah/yq/releases/download/v4.54.2/yq_linux_arm64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/715419591"
 provenance = "cosign"
 
 [tools.yq."platforms.linux-x64"]
-checksum = "sha256:8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
-url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222595"
+checksum = "sha256:44c7759059b4910827a0059a2757b22001e59360cdecdb2ef8dedc4b6c7e9f32"
+url = "https://github.com/mikefarah/yq/releases/download/v4.54.2/yq_linux_amd64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/715419583"
 provenance = "cosign"
