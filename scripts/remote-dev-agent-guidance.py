@@ -301,7 +301,8 @@ def initialize_codex() -> str:
                 time.sleep(0.02)
         names = set(os.listdir(fd)) - {INITIAL_MARKER}
         if INITIAL_SKIPPED in names:
-            with directory(home / INITIAL_SKIPPED):
+            with directory(home / INITIAL_SKIPPED,
+                           private_root=CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None):
                 return 'existing'
         if INITIAL_MARKER not in os.listdir(fd) and names:
             # A distinct durable directory records a skipped existing home.

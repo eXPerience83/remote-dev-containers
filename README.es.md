@@ -329,4 +329,4 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)
 - [`docs/roadmap.md`](docs/roadmap.md)
 
-OpenAI Docs MCP: habilitado en estado Codex nuevo y vacío; instalaciones existentes mediante alta manual. Context7 sigue siendo opcional. [Documentation](docs/openai-docs-codex.es.md).
+OpenAI Docs MCP (Unreleased; requiere una revisión de imagen que incluya #312): habilitado en estado Codex nuevo y vacío; instalaciones existentes mediante alta manual. Context7 sigue siendo opcional. [Documentation](docs/openai-docs-codex.es.md).

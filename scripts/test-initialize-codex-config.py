@@ -21,6 +21,17 @@ sys.modules[spec.name] = g
 spec.loader.exec_module(g)
 
 
+CHILD_AUDIT = """import sys, runpy
+from pathlib import Path
+log = Path(sys.argv.pop(1))
+def deny_network(event, args):
+    if event.startswith('socket.') or event in {'subprocess.Popen', 'os.system', 'os.exec', 'os.posix_spawn'}:
+        log.write_text(event)
+        raise RuntimeError('initializer attempted network or external execution')
+sys.addaudithook(deny_network)
+"""
+
+
 def initialize(home):
     os.environ.update(CODEX_HOME=str(home), REMOTE_DEV_ROLE='codex')
     return g.initialize_codex()
@@ -162,7 +173,9 @@ class Initialization(unittest.TestCase):
                            "remote_dev_validate_workspace_root() { echo \"$1\"; }\n"
                            "remote_dev_prepare_development_environment() { :; }\n")
         helper = bin_dir / 'guidance'
-        helper.write_text(f'#!/bin/sh\nexec {sys.executable} {ROOT}/scripts/remote-dev-agent-guidance.py \"$@\"\n')
+        audit_log = bin_dir / 'network-attempt'
+        helper.write_text(f'#!{sys.executable}\n' + CHILD_AUDIT +
+                          f'runpy.run_path({str(ROOT / "scripts/remote-dev-agent-guidance.py")!r}, run_name="__main__")\n')
         for name, code in [('secure', ':'), ('git', ':'), ('gh', 'exit 1'),
                            ('ttyd', 'test -f "$CODEX_HOME/config.toml" && test -f "$CODEX_HOME/.remote-dev-initial-config-v1/done"')]:
             (bin_dir / name).write_text('#!/bin/sh\n' + code + '\n')
@@ -171,7 +184,7 @@ class Initialization(unittest.TestCase):
         source = (ROOT / 'scripts/start-remote-dev-web.sh').read_text()
         source = source.replace('/usr/local/lib/remote-dev/remote-dev-runtime.sh', str(library))
         source = source.replace('/usr/local/bin/secure-persistent-state', str(bin_dir / 'secure'))
-        source = source.replace('/usr/local/bin/remote-dev-agent-guidance', str(helper))
+        source = source.replace('/usr/local/bin/remote-dev-agent-guidance', str(helper) + " " + str(audit_log))
         source = source.replace('/root/.ssh', str(bin_dir / 'ssh'))
         startup.write_text(source)
         env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'],
@@ -180,7 +193,31 @@ class Initialization(unittest.TestCase):
         self.assertEqual(list(self.home.iterdir()), [])
         result = subprocess.run(['bash', str(startup)], env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(audit_log.exists(), "child initializer attempted network/external execution")
         self.assertEqual((self.home / 'config.toml').read_bytes(), g.INITIAL_CONFIG)
+
+    def test_child_audit_detects_attempts(self):
+        """Positive controls prove subprocess instrumentation actually detects attempts."""
+        for code in ('import socket; socket.socket()',
+                     'import subprocess; subprocess.run(["curl", "https://example.invalid"])'):
+            log = self.home / 'attempt'
+            log.unlink(missing_ok=True)
+            result = subprocess.run([sys.executable, '-c', CHILD_AUDIT + code, str(log)],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(log.exists())
+
+    @unittest.skipUnless(os.geteuid() == 0, 'synthetic host ownership requires root')
+    def test_native_skipped_home_owner_allowance(self):
+        """Native mounts accept the host owner; custom homes keep stricter checks."""
+        skipped = self.home / g.INITIAL_SKIPPED
+        skipped.mkdir(mode=0o700)
+        os.chown(self.home, 12345, 12345)
+        os.chown(skipped, 12345, 12345)
+        with patch.object(g, 'CODEX_NATIVE_HOME', self.home):
+            self.assertEqual(g.initialize_codex(), 'existing')
+        with self.assertRaises(g.GuidanceError):
+            g.initialize_codex()
 
     def test_startup_order(self):
         source = (ROOT / 'scripts/start-remote-dev-web.sh').read_text()
