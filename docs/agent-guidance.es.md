@@ -15,7 +15,7 @@ La guía no es un motor de políticas ni una frontera de seguridad. El hardening
 
 ## Fuente y ciclo de vida
 
-La única regla redactada es [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), instalada con propietario root y modo `0444` en `/usr/share/remote-dev/agent-rules/development-environment.md`. El helper inmutable `/usr/local/bin/remote-dev-agent-guidance` deriva ambas representaciones sin red:
+La regla común de desarrollo es [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), instalada con propietario root y modo `0444` en `/usr/share/remote-dev/agent-rules/development-environment.md`. El helper inmutable `/usr/local/bin/remote-dev-agent-guidance` deriva ambas representaciones sin red:
 
 ```text
 remote-dev-agent-guidance reconcile codex

@@ -11,6 +11,7 @@ from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import shutil
 import subprocess
+import fcntl
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +86,39 @@ class Initialization(unittest.TestCase):
                     with self.assertRaises(OSError): g.initialize_codex()
                 g.initialize_codex()
                 self.assertEqual((self.home / 'config.toml').read_bytes(), g.INITIAL_CONFIG)
+
+    def test_pending_decision_survives_new_guidance(self):
+        """Provider-created state after interruption must not cancel provisioning."""
+        (self.home / g.INITIAL_MARKER).mkdir(mode=0o700)
+        (self.home / 'AGENTS.md').write_text('user guidance\n')
+        g.initialize_codex()
+        self.assertEqual((self.home / 'config.toml').read_bytes(), g.INITIAL_CONFIG)
+        self.assertEqual((self.home / 'AGENTS.md').read_text(), 'user guidance\n')
+
+    def test_completed_transaction_removes_link(self):
+        """A completed marker must not retain a second link to private config."""
+        tx = self.home / g.INITIAL_MARKER
+        tx.mkdir(mode=0o700)
+        (tx / 'done').write_bytes(b'done\n')
+        stage = tx / g.INITIAL_STAGE
+        stage.write_bytes(b'private synthetic config')
+        os.link(stage, self.home / 'config.toml')
+        g.initialize_codex()
+        self.assertFalse(stage.exists())
+        self.assertEqual((self.home / 'config.toml').stat().st_nlink, 1)
+
+    def test_lock_contention_is_bounded(self):
+        """A stalled initializer cannot block web startup indefinitely."""
+        fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            with patch.object(g.time, 'monotonic', side_effect=[0, 3]):
+                with self.assertRaises(g.GuidanceError) as caught:
+                    g.initialize_codex()
+            self.assertEqual(caught.exception.state, 'busy')
+            self.assertEqual(list(self.home.iterdir()), [])
+        finally:
+            os.close(fd)
 
     def test_concurrent_user_config_wins(self):
         original = g.os.link

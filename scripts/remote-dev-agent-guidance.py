@@ -12,6 +12,7 @@ from pathlib import Path
 import secrets
 import stat
 import sys
+import time
 
 CANONICAL = Path('/usr/share/remote-dev/agent-rules/development-environment.md')
 CODEX_NATIVE_HOME = Path('/root/.codex')
@@ -264,8 +265,18 @@ def antigravity(fd: int, block: bytes, *, reconcile: bool) -> str:
 
 
 INITIAL_MARKER = '.remote-dev-initial-config-v1'
+INITIAL_SKIPPED = '.remote-dev-initial-config-skipped-v1'
 INITIAL_STAGE = '.remote-dev-initial-config.toml'
 INITIAL_CONFIG = b'[mcp_servers.openaiDeveloperDocs]\nurl = "https://developers.openai.com/mcp"\nenabled = true\nrequired = false\nstartup_timeout_sec = 10\ntool_timeout_sec = 60\n'
+
+
+def cleanup_initial_stage(fd: int) -> None:
+    """Remove the private staging link even after a completed publication crash."""
+    try:
+        os.unlink(INITIAL_STAGE, dir_fd=fd)
+    except FileNotFoundError:
+        pass
+    os.fsync(fd)
 
 
 def initialize_codex() -> str:
@@ -279,24 +290,44 @@ def initialize_codex() -> str:
     with directory(home, private_root=CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None) as fd:
         # Lock the pinned directory itself: no lock artifact can make an empty
         # home look pre-existing. Cooperating initializers serialize here.
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise GuidanceError('busy') from None
+                time.sleep(0.02)
         names = set(os.listdir(fd)) - {INITIAL_MARKER}
+        if INITIAL_SKIPPED in names:
+            with directory(home / INITIAL_SKIPPED):
+                return 'existing'
+        if INITIAL_MARKER not in os.listdir(fd) and names:
+            # A distinct durable directory records a skipped existing home.
+            # The normal marker therefore unambiguously means provision/retry.
+            os.mkdir(INITIAL_SKIPPED, mode=0o700, dir_fd=fd)
+            os.fsync(fd)
+            return 'existing'
         try:
             os.mkdir(INITIAL_MARKER, mode=0o700, dir_fd=fd)
             os.fsync(fd)
-            fresh = True
         except FileExistsError:
-            fresh = False
+            pass
         transaction = home / INITIAL_MARKER
         with directory(transaction, private_root=CODEX_NATIVE_HOME if home == CODEX_NATIVE_HOME else None) as tx:
             done = read_file(tx, 'done')
             if done.info is not None:
                 if done.data != b'done\n':
                     raise GuidanceError('unsafe')
+                cleanup_initial_stage(tx)
                 return 'current'
             # Directory existence is a durable pending decision. All staging,
             # including interrupted atomic-write temporaries, stays inside it.
-            if not names:
+            # Pending marker retains the original empty-home decision.
+            try:
+                os.stat('config.toml', dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
                 stage = read_file(tx, INITIAL_STAGE)
                 if stage.info is not None and stage.data != INITIAL_CONFIG:
                     raise GuidanceError('unsafe')
@@ -308,12 +339,8 @@ def initialize_codex() -> str:
                     pass
                 os.fsync(fd)
             atomic_write(tx, 'done', done, b'done\n')
-            try:
-                os.unlink(INITIAL_STAGE, dir_fd=tx)
-            except FileNotFoundError:
-                pass
-            os.fsync(tx)
-    return 'existing' if fresh and names else 'current'
+            cleanup_initial_stage(tx)
+    return 'current'
 
 
 def run(provider: str, *, reconcile: bool) -> str:
@@ -361,7 +388,7 @@ def main() -> int:
     except (OSError, UnicodeError, ValueError):
         state = 'unsafe'
     print(f'{args.provider.capitalize()} Remote Dev guidance: {state}')
-    degraded = state in {'unsafe', 'unowned-conflict', 'unsupported'}
+    degraded = state in {'unsafe', 'unowned-conflict', 'unsupported', 'busy'}
     if args.command == 'reconcile' and degraded:
         print('WARNING: Remote Dev guidance is degraded; unsafe or unowned content was not repaired. '
               'The provider session may continue; inspect global guidance manually.', file=sys.stderr)

@@ -132,6 +132,8 @@ Protected **agent** terminal endpoints use one runtime mechanism: `WEB_PASSWORD`
 
 Context7 is an external service operated by Upstash and is not part of the Remote Dev image SBOM. See `docs/context7-codex.md` and `.es.md` for the lifecycle, privacy/terms and credential boundaries.
 
+OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](openai-docs-codex.md).
+
 ## TrueNAS host tooling
 
 The image does not replace host-side TrueNAS administration. The supported YAML deployment uses repository scripts from the same source revision as the selected image/YAML:
@@ -164,5 +166,3 @@ The local source release cut is `0.2.0` after accepted TrueNAS PR2 evidence; it 
 - A virtual-machine distribution.
 
 Additions should be driven by real repositories or supported use cases and evaluated for image size, security, licensing, privacy and maintenance cost.
-
-OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](openai-docs-codex.md).
