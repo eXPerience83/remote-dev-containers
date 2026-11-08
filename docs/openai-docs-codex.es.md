@@ -21,7 +21,7 @@ codex mcp add openaiDeveloperDocs --url https://developers.openai.com/mcp
 codex mcp remove openaiDeveloperDocs
 ```
 
-En la sesión, usa `/mcp` y solicita una búsqueda y lectura documentales para comprobar funcionamiento real. Para deshabilitar sin eliminar, establece `enabled = false` en `[mcp_servers.openaiDeveloperDocs]`. No borres el marcador para reparar: inspecciona primero `codex mcp get` y añade manualmente solo si falta y deseas restaurarlo explícitamente; respeta las eliminaciones voluntarias y conserva entradas personalizadas o deshabilitadas. Reinicia la sesión para comprobar cambios.
+En la sesión, usa `/mcp` y solicita una búsqueda y lectura documentales para comprobar funcionamiento real. Para deshabilitar sin eliminar, establece `enabled = false` en `[mcp_servers.openaiDeveloperDocs]`. No borres el marcador para reparar: inspecciona primero `codex mcp get openaiDeveloperDocs` y añade manualmente solo si falta y deseas restaurarlo explícitamente; respeta las eliminaciones voluntarias y conserva entradas personalizadas o deshabilitadas. Reinicia la sesión para comprobar cambios.
 
 Sources: [Docs MCP](https://developers.openai.com/learn/docs-mcp), [Codex MCP configuration](https://developers.openai.com/codex/mcp/).
 

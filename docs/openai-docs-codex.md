@@ -21,7 +21,7 @@ codex mcp add openaiDeveloperDocs --url https://developers.openai.com/mcp
 codex mcp remove openaiDeveloperDocs
 ```
 
-In a session, use `/mcp` and request a documentation search and read to verify actual operation. To disable without removal, set `enabled = false` in `[mcp_servers.openaiDeveloperDocs]`. Do not delete the marker to repair: first inspect `codex mcp get`, then add manually only if absent and you explicitly want it restored; preserve intentional removals and preserve custom or disabled entries. Start a new session to verify changes.
+In a session, use `/mcp` and request a documentation search and read to verify actual operation. To disable without removal, set `enabled = false` in `[mcp_servers.openaiDeveloperDocs]`. Do not delete the marker to repair: first inspect `codex mcp get openaiDeveloperDocs`, then add manually only if absent and you explicitly want it restored; preserve intentional removals and preserve custom or disabled entries. Start a new session to verify changes.
 
 Sources: [Docs MCP](https://developers.openai.com/learn/docs-mcp), [Codex MCP configuration](https://developers.openai.com/codex/mcp/).
 
