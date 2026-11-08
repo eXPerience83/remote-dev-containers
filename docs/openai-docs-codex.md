@@ -26,3 +26,22 @@ In a session, use `/mcp` and request a documentation search and read to verify a
 Sources: [Docs MCP](https://developers.openai.com/learn/docs-mcp), [Codex MCP configuration](https://developers.openai.com/codex/mcp/).
 
 If `done` is malformed, stop the service before repair. Verify the transaction is a real private directory with safe ownership and no symlinks, and preserve config.toml and any disable/removal decision. Remove only the `.remote-dev-initial-config.toml` staging link inside the transaction if present; do not delete config.toml. Atomically replace only `done`, using a private temporary in that directory, with the bytes `done` followed by a newline, mode 0600 and the correct owner. This records completion without installing or reactivating the MCP. Unsafe paths/ownership require manual administrator repair; do not run provisioning against them.
+
+## Exact-candidate TrueNAS acceptance (pending)
+
+Use a separate test App and private ZFS-backed state/workspace paths, not production. After final CI/review, an owner may request `/publish-candidate <full-PR-head-SHA>` under the existing release procedure. Record the candidate workflow, immutable digest, source SHA and `remote-dev-version` output; all enabled services must use that same candidate image. Keep the previous test image digest for rollback. This guide does not authorize publication or deployment.
+
+All rows below remain pending until exercised on that exact candidate. Use synthetic state and never attach complete configuration, credentials or private instructions to evidence.
+
+| Scenario | Procedure and expected evidence |
+|---|---|
+| Empty first startup | Confirm the Codex state directory is truly empty before starting. Start the test App; verify `codex mcp get openaiDeveloperDocs` reports the official URL and enabled state, and Context7 is absent unless explicitly configured. Confirm initialization precedes vendor state creation. |
+| Existing state upgrade | In a separate fixture, retain existing custom MCP/configuration, instructions and synthetic state. Upgrade to the candidate; compare private local hashes/bytes without publishing them. Existing files and disabled entries must remain unchanged; no unsolicited Docs MCP registration. |
+| Recreation and image replacement | Recreate the test containers against the same state paths, then replace the test image while retaining those paths. Check mount identity, recorded initialization decision, MCP state and user content persist. Record source/digest on each side; a mounted path alone is insufficient evidence. |
+| Disable and remove | Set `enabled=false`, recreate and verify disabled. Separately remove the entry through the native command, recreate and verify absent. Repeat after image replacement. Neither action may reinstall the server. |
+| Live documentation | With network available, use `/mcp`, then request a narrowly scoped official-documentation search and page read with citations. Record successful tool names and public source URLs. Config inventory alone is not connectivity evidence. |
+| Network outage | In the disposable test deployment, deny access to the Docs MCP endpoint without changing runtime security or production. Exercise Start, Resume, tmux reconnect, health and session exit. Record delays, warnings and availability; the initialization/tool timeouts do not establish a total session-latency guarantee. Restore networking afterwards. |
+| Selective use | Ask an unfamiliar Codex configuration question and observe relevant documentation calls. Perform an unrelated coding task and observe no documentation query without a reason. Distinguish session handshake/catalog traffic from tool calls. |
+| Role/security regression | Verify separate role mounts, unchanged mandatory ttyd authentication/origin checks and optional Context7 behavior. Launcher and Antigravity must receive no Codex state or new documentation instruction fragment. |
+
+Attach the completed scenario matrix with SHA/digest and sanitized observations to #311/#312. Leave failures and untested rows explicit; do not mark persistence or offline acceptance complete from CI alone. Restore the previous test digest if acceptance fails, preserving the test state for diagnosis.
