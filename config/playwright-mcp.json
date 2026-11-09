@@ -6,8 +6,5 @@
       "headless": true,
       "chromiumSandbox": false
     }
-  },
-  "timeouts": {
-    "idle": 300000
   }
 }

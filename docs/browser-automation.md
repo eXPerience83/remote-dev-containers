@@ -20,7 +20,7 @@ private files are never replaced. Provisioning does not run for `--help` or
 passive vendor commands, and no provider configuration is shared across roles.
 
 The MCP server is spawned on-demand over **stdio**, uses an isolated browser
-profile, has a five-minute idle close, and does not expose a listening port.
+profile, does not expose a listening port, and stops with its agent session.
 `playwright --version` checks the image's CLI installation.
 
 ## Security and operational considerations

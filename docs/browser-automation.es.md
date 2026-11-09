@@ -19,8 +19,7 @@ está deshabilitada. Las demás opciones permanecen; no se sobrescriben archivos
 privados inválidos o inseguros. Los agentes no comparten configuraciones.
 Los comandos pasivos como `--help` no alteran estos archivos.
 
-El MCP se inicia bajo demanda mediante **stdio**, con perfil aislado y cierre
-tras cinco minutos de inactividad. No se abre ningún puerto. Se puede comprobar
+El MCP se inicia bajo demanda mediante **stdio**, con perfil aislado, y termina al cerrar la sesión del agente. No se abre ningún puerto. Se puede comprobar
 la herramienta común con `playwright --version`.
 
 ## Seguridad
