@@ -517,8 +517,9 @@
       "license": "Apache-2.0 (transitive npm dependencies retain their upstream licenses)",
       "notices": [
         {
-          "path": "/opt/remote-dev/playwright/node_modules/",
-          "source": "runtime"
+          "path": "components/playwright-mcp/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.84/LICENSE"
         }
       ]
     },
@@ -531,8 +532,9 @@
       "license": "BSD-3-Clause and additional Chromium third-party licenses",
       "notices": [
         {
-          "path": "/opt/remote-dev/playwright-browsers/",
-          "source": "runtime"
+          "path": "components/chromium/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/chromium/chromium/main/LICENSE"
         }
       ]
     }
