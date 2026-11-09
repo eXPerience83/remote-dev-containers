@@ -25,12 +25,18 @@ profile, does not expose a listening port, and stops with its agent session.
 
 ## Security and operational considerations
 
-The container runs its coding agents as root behind the outer container
-boundary. Chromium therefore uses `chromiumSandbox: false`; this does **not**
-provide a second browser isolation boundary. Only browse trusted destinations,
-avoid typing credentials into untrusted sites, and retain the existing hardened
-container deployment (no privileged mode or Docker socket). Any future
-sandboxed non-root browser needs a separate hardening review.
+The coding agents retain their container permissions, while the browser MCP
+supervisor launches Node and Chromium with dedicated UID/GID `61123`, no
+supplementary groups and a sanitized environment and FDs. A Landlock ruleset
+limits filesystem access for the MCP and descendants, and a separate guardian
+cleans its `/run` profile on unexpected supervisor exit.
+
+Chromium still uses `chromiumSandbox: false`; this does **not** enable an
+additional Chromium sandbox. Landlock ABI 7 cannot mediate every UNIX socket,
+so world-accessible sockets remain a residual risk. Internet and LAN access
+are intentionally retained; this is not a network sandbox. The launcher
+**requires actual Codex and AGY acceptance in hardened TrueNAS containers**
+before merge; CI-only fixtures cannot establish full isolation.
 
 Do not install browser binaries into `/tmp` or at runtime. Browser payloads
 live read-only in `/opt/remote-dev/playwright-browsers`, distinct from the

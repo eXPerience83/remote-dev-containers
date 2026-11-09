@@ -39,6 +39,8 @@ jobs:
             scripts/remote-dev-agent-guidance.py \
             scripts/remote-dev-browser-config.py \
             scripts/test-browser-config.py \
+            scripts/remote-dev-browser-sandbox.py \
+            scripts/test-browser-sandbox.py \
             scripts/test-agent-guidance.py \
             scripts/test-initialize-codex-config.py \
             scripts/test-agent-guidance-lifecycle.py \
@@ -92,6 +94,7 @@ jobs:
           python3 web/ttyd-osc52/test_generate.py
           make agent-contract-tests
           python3 scripts/test-browser-config.py
+          python3 scripts/test-browser-sandbox.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py

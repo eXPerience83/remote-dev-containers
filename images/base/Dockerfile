@@ -205,6 +205,11 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && admin_python="$(realpath "$(mise which python)")" \
     && test "${admin_python%/*}" = "$MISE_DATA_DIR/installs/python/$PYTHON_VERSION/bin" \
     && test -f "$admin_python" && test -x "$admin_python" \
+    && node_binary="$(realpath "$(mise which node)")" \
+    && test "${node_binary%/*}" = "$MISE_DATA_DIR/installs/node/$NODE_VERSION/bin" \
+    && test -x "$node_binary" \
+    && ln -s "$node_binary" /usr/local/lib/remote-dev/node \
+    && test -x /usr/local/lib/remote-dev/node \
     && test -x "$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" \
     && test "$("$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" --version)" = "Python $PYTHON_315_VERSION" \
     && ln -s "$admin_python" /usr/local/lib/remote-dev/python \
@@ -241,6 +246,7 @@ RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH" \
 
 RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev
 COPY --chown=0:0 --chmod=0444 config/playwright-mcp.json /usr/share/remote-dev/playwright-mcp.json
+COPY --chown=0:0 --chmod=0444 scripts/remote-dev-browser-sandbox.py /usr/local/lib/remote-dev/browser-sandbox.py
 COPY --chown=0:0 --chmod=0555 scripts/remote-dev-playwright-mcp.sh /usr/local/bin/remote-dev-playwright-mcp
 
 # Keep project and bundled-component terms inspectable in both the repository and

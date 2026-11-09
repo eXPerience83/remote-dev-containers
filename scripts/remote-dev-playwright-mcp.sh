@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
-set -euo pipefail
-# This server uses stdio per agent. No shared HTTP listener or runtime installs.
-export PLAYWRIGHT_BROWSERS_PATH=/opt/remote-dev/playwright-browsers
-export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-exec /opt/remote-dev/playwright/node_modules/.bin/playwright-mcp \
-  --config /usr/share/remote-dev/playwright-mcp.json "$@"
+#!/bin/sh
+# One preinstalled stdio MCP per agent; no runtime downloads or ports.
+# Image-owned interpreter, caller options rejected by the supervisor.
+role="${REMOTE_DEV_ROLE:-}"
+exec /usr/bin/env -i REMOTE_DEV_ROLE="$role" \
+  /usr/local/lib/remote-dev/python -I \
+  /usr/local/lib/remote-dev/browser-sandbox.py "$@"

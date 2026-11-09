@@ -24,12 +24,20 @@ la herramienta común con `playwright --version`.
 
 ## Seguridad
 
-Los agentes se ejecutan como root dentro del aislamiento exterior del
-contenedor. Chromium requiere aquí `chromiumSandbox: false`: **no equivale
-a disponer de un aislamiento adicional del navegador**. Evita introducir
-credenciales en páginas desconocidas y conserva el endurecimiento existente,
-sin modo privilegiado ni socket de Docker. Ejecutar el navegador como usuario
-sin privilegios necesitaría otra revisión.
+Los agentes mantienen su modelo de permisos dentro del contenedor, pero el
+lanzador del MCP inicia Node y Chromium con UID/GID `61123`, sin privilegios
+ni grupos complementarios, tras limpiar entorno y FDs y aplicar Landlock al
+proceso y descendientes. Un supervisor y un guardián separados eliminan el
+perfil efímero de `/run` al terminar. No se necesita instalar nada al iniciar.
+
+Chromium sigue con `chromiumSandbox: false`: **no es un sandbox de Chromium
+adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
+accesible para ese UID sigue siendo un riesgo residual. Se mantiene Internet
+y acceso a la LAN por decisión del operador, sin aislamiento de red.
+
+El nuevo lanzador **requiere aceptación real en Codex y AGY bajo el Compose
+correspondiente** antes de fusionar; las pruebas sintéticas en CI no prueban
+solas el aislamiento completo.
 
 Los binarios viven en `/opt/remote-dev/playwright-browsers`, no se instalan
 en `/tmp` ni en el arranque. La compilación AMD64 y las pruebas reales deben
