@@ -39,7 +39,8 @@ MK_BLOCK, MK_SYM, REFER, TRUNCATE, IOCTL_DEV = (
 HANDLED = (1 << 16) - 1
 READ_ONLY = READ | READDIR
 READ_EXEC = READ_ONLY | EXEC
-WRITE_DIR = HANDLED & ~(EXEC | IOCTL_DEV)
+WRITE_DIR = (READ_ONLY | WRITE | RM_DIR | RM_FILE | MK_DIR | MK_REG |
+             MK_SOCK | MK_FIFO | MK_SYM | REFER | TRUNCATE)
 DEVICE = READ | WRITE | IOCTL_DEV
 
 libc = ctypes.CDLL(None, use_errno=True)
@@ -210,6 +211,8 @@ def supervise() -> int:
     guard: subprocess.Popen[bytes] | None = None
     readfd = writefd = -1
     try:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, signal_exit)
         os.chown(scratch, UID, GID)
         runtime = scratch + "/runtime"
         os.mkdir(runtime, 0o700)
@@ -236,8 +239,6 @@ def supervise() -> int:
             preexec_fn=lambda: secure_preexec(node, scratch, supervisor_pid),
         )
         os.write(writefd, f"{child.pid}\n".encode("ascii"))
-        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-            signal.signal(sig, signal_exit)
         return child.wait()
     except Interrupted as stop:
         return 128 + stop.signum

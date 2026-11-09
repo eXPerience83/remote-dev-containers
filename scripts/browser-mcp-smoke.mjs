@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 
@@ -41,6 +42,36 @@ function request(method, params = {}) {
 function resultText(result, name) {
   if (result?.isError) throw new Error(name + " failed: " + JSON.stringify(result.content).slice(0, 700));
   return JSON.stringify(result?.content ?? []);
+}
+
+// The fixture must inspect the *real* sandboxed MCP Node process, not the
+// root supervisor. Linux /proc/<pid>/status is readable without ptrace rights.
+function assertSandboxedNode() {
+  const match = "/opt/remote-dev/playwright/node_modules/@playwright/mcp/cli.js";
+  const candidates = [];
+  for (const name of readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    try {
+      const cmdline = readFileSync("/proc/" + name + "/cmdline", "utf8");
+      if (!cmdline.includes(match)) continue;
+      const status = readFileSync("/proc/" + name + "/status", "utf8");
+      candidates.push(status);
+    } catch { /* Process exited between listing and inspection. */ }
+  }
+  if (candidates.length !== 1) {
+    throw new Error("Expected one sandboxed MCP Node process, got " + candidates.length);
+  }
+  const status = candidates[0];
+  const get = key => status.match(new RegExp("^" + key + ":\\s*([^\\n]+)", "m"))?.[1];
+  const uid = get("Uid")?.split(/\s+/)[0];
+  const gid = get("Gid")?.split(/\s+/)[0];
+  if (uid !== "61123" || gid !== "61123")
+    throw new Error("MCP Node process UID/GID was not dropped");
+  if (get("CapEff")?.trim() !== "0000000000000000" ||
+      get("CapPrm")?.trim() !== "0000000000000000")
+    throw new Error("MCP Node process still has Linux capabilities");
+  if (get("NoNewPrivs")?.trim() !== "1")
+    throw new Error("MCP Node process lost NoNewPrivs");
 }
 
 try {
@@ -94,6 +125,7 @@ try {
     arguments: { function: "async () => await new Promise((resolve, reject) => { const ws = new WebSocket('ws://' + location.host + '/ws'); ws.onmessage = event => { resolve(event.data); ws.close(); }; ws.onerror = () => reject(new Error('WebSocket failed')); setTimeout(() => reject(new Error('WebSocket timed out')), 4000); })" },
   }), "WebSocket");
   if (!websocket.includes("pong")) throw new Error("WebSocket mismatch");
+  assertSandboxedNode();
   resultText(await request("tools/call", { name: "browser_close", arguments: {} }), "browser_close");
   console.log("Playwright MCP stdio, tools, local HTTP, JavaScript and WebSocket: OK");
 } catch (error) {
