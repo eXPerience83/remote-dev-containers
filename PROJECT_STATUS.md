@@ -1,6 +1,6 @@
 # Project status
 
-> Release preparation: the **v0.2.0 source cut** is being validated; public edge remains experimental and stable/`latest` publication is only valid after the exact tagged workflow passes. The supported core is AMD64, one user and private network.
+> **Release state (2026-11-09):** `v0.2.0` is published stable. This `v0.2.1` source patch includes the official Codex-only OpenAI Docs MCP already merged in #312 and subsequent reviewed maintenance; the new stable image is not published until the independent tagged workflow succeeds. The supported core remains AMD64, one user and a private network. Browser automation #313 is excluded.
 
 ## Locked foundations
 
@@ -14,7 +14,7 @@
 - Image rebuild/update workflows for bundled components rather than broad in-container package mutation.
 - `dev -> edge -> stable = latest` release-channel contract; immutable digest remains the strongest reproduction/rollback identity.
 
-## First stable release candidate — 2026-10-31
+## Historical first stable acceptance — 2026-10-31
 
 The source baseline moves from the locally accepted `0.2.0-beta.1` to the reviewed `0.2.0` source cut. The live TrueNAS PR2 tools/session/persistence/mount acceptance was completed and recorded under closed #121 on 2026-11-05. The stable tag and GHCR channel remain separate publication outcomes of the exact reviewed main revision, not effects of changing `BASE_VERSION`.
 
@@ -91,7 +91,7 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 ## Release and update state
 
-The `0.2.0` source release cut follows the accepted `0.2.0-beta.1` phase. Published edge images retain dated `edge-YYYY.MM.DD-<short-sha>` identities; only a completed exact `v0.2.0` tag publisher may establish stable/`latest`.
+The `v0.2.0` stable image was published after its accepted beta phase. The current source patch `0.2.1` is independent of the already-published stable channel; experimental edge keeps dated identities and only a successful exact-tag `v0.2.1` publisher can advance `stable`/`latest`.
 
 Current channel semantics are:
 
@@ -111,9 +111,9 @@ Upstream ownership is split deliberately:
 
 Exact mutable component versions remain authoritative in `versions.env` and runtime diagnostics rather than this status page.
 
-## Remaining first-stable work
+## Historical first-stable checklist (completed for v0.2.0)
 
-The main implementation foundations are already present. Before the first stable publication the repository still needs to satisfy the support level it actually claims, including:
+The first-stable release checklist was reconciled and published for `v0.2.0`. The historical acceptance bullets below describe that first release; for `v0.2.1`, require a fresh exact-head CI and independent tagged build, scan, digest promotion and verification, without repeating unrelated TrueNAS reconstruction.
 
 - [done] TrueNAS PR2/#121 functional tools, both role sessions, private mounts and persistence accepted without repeating unnecessary deployment resets;
 - reconcile #31, explicitly deferring #93's unproven fault-injection scenarios while preserving its successful scheduled rebuild evidence;
