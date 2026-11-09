@@ -94,4 +94,9 @@ for command in ruff pytest pre-commit yq shfmt actionlint; do
 done
 gh --version | head -n 1
 ttyd --version
+# Browser binaries are immutable build assets; stdio MCP starts on demand.
+command -v playwright >/dev/null
+command -v remote-dev-playwright-mcp >/dev/null
+playwright --version
+/opt/remote-dev/playwright/node_modules/.bin/playwright-mcp --version
 mise --version

@@ -506,6 +506,35 @@
         }
       ],
       "distribution_notes": "MIT identifies virtualenv itself. Redistributed seed wheels and vendored components retain their own terms, preserved with exact member labels in NOTICES.txt."
+    },
+    {
+      "id": "playwright-mcp",
+      "name": "Playwright MCP and its Playwright library",
+      "image_scope": "base",
+      "version_key": "PLAYWRIGHT_MCP_VERSION",
+      "version": "0.0.84",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "license": "Apache-2.0 (transitive npm dependencies retain their upstream licenses)",
+      "notices": [
+        {
+          "path": "/opt/remote-dev/playwright/node_modules/",
+          "source": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "chromium-headless-shell",
+      "name": "Playwright-provisioned Chromium headless shell",
+      "image_scope": "base",
+      "version": "matching the installed Playwright version in @playwright/mcp 0.0.84",
+      "source": "https://chromium.googlesource.com/chromium/src",
+      "license": "BSD-3-Clause and additional Chromium third-party licenses",
+      "notices": [
+        {
+          "path": "/opt/remote-dev/playwright-browsers/",
+          "source": "runtime"
+        }
+      ]
     }
   ]
 }

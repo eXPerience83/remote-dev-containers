@@ -1,0 +1,13 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "isolated": true,
+    "launchOptions": {
+      "headless": true,
+      "chromiumSandbox": false
+    }
+  },
+  "timeouts": {
+    "idle": 300000
+  }
+}

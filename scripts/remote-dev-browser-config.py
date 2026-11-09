@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Add a missing Playwright MCP server to one provider's private config.
+
+Offline, idempotent and conservative: existing server definitions are user-owned.
+"""
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import secrets
+import stat
+import sys
+import tomllib
+
+BROWSER_COMMAND = "/usr/local/bin/remote-dev-playwright-mcp"
+CODEX_ENTRY = (
+    "\n[mcp_servers.playwright]\n"
+    f"command = \"{BROWSER_COMMAND}\"\n"
+    "enabled = true\n"
+    "required = false\n"
+    "startup_timeout_sec = 30\n"
+    "tool_timeout_sec = 90\n"
+)
+AGY_ENTRY = {"command": BROWSER_COMMAND, "timeoutSeconds": 90}
+MAX_BYTES = 1024 * 1024
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+FILE_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+
+
+class UnsafeConfig(Exception):
+    pass
+
+
+def validate_directory(path: Path) -> int:
+    if not path.is_absolute() or ".." in path.parts:
+        raise UnsafeConfig("invalid private config directory")
+    current = Path("/")
+    for part in path.parts[1:]:
+        current = current / part
+        info = current.lstat()
+        sticky_ancestor = (current != path and info.st_uid == 0 and
+                           bool(info.st_mode & stat.S_ISVTX))
+        if not stat.S_ISDIR(info.st_mode) or ((info.st_mode & 0o022) and not sticky_ancestor):
+            raise UnsafeConfig("unsafe directory: " + str(current))
+        if info.st_uid not in {0, os.geteuid()} and current != path:
+            raise UnsafeConfig("unexpected directory owner: " + str(current))
+    descriptor = os.open(path, DIR_FLAGS)
+    info = os.fstat(descriptor)
+    if info.st_mode & 0o022:
+        os.close(descriptor)
+        raise UnsafeConfig("writable private config directory")
+    return descriptor
+
+
+def read_config(directory_fd: int, filename: str):
+    try:
+        fd = os.open(filename, FILE_FLAGS, dir_fd=directory_fd)
+    except FileNotFoundError:
+        return b"", None
+    try:
+        info = os.fstat(fd)
+        dir_info = os.fstat(directory_fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid not in {0, os.geteuid(), dir_info.st_uid}
+                or (info.st_mode & 0o022) or info.st_size > MAX_BYTES):
+            raise UnsafeConfig("unsafe private config file")
+        chunks = []
+        remaining = MAX_BYTES + 1
+        while remaining:
+            data = os.read(fd, remaining)
+            if not data:
+                break
+            chunks.append(data)
+            remaining -= len(data)
+        content = b"".join(chunks)
+        if len(content) > MAX_BYTES:
+            raise UnsafeConfig("oversized private config file")
+        return content, info
+    finally:
+        os.close(fd)
+
+
+def same_file(before: os.stat_result | None, after: os.stat_result | None) -> bool:
+    if before is None or after is None:
+        return before is after
+    attrs = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink",
+             "st_size", "st_mtime_ns", "st_ctime_ns")
+    return all(getattr(before, name) == getattr(after, name) for name in attrs)
+
+
+def atomic_write(fd: int, filename: str, old: os.stat_result | None, data: bytes) -> None:
+    if len(data) > MAX_BYTES:
+        raise UnsafeConfig("oversized new config")
+    tempname = "." + filename + ".remote-dev-" + secrets.token_hex(8)
+    tmpfd = os.open(tempname, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                    os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=fd)
+    try:
+        with os.fdopen(tmpfd, "wb") as output:
+            output.write(data)
+            output.flush()
+            if old is not None:
+                os.fchown(output.fileno(), old.st_uid, old.st_gid)
+                os.fchmod(output.fileno(), stat.S_IMODE(old.st_mode))
+            os.fsync(output.fileno())
+        try:
+            current = os.stat(filename, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            current = None
+        if not same_file(old, current):
+            raise UnsafeConfig("concurrent config modification")
+        os.replace(tempname, filename, src_dir_fd=fd, dst_dir_fd=fd)
+        os.fsync(fd)
+    finally:
+        try:
+            os.unlink(tempname, dir_fd=fd)
+        except FileNotFoundError:
+            pass
+
+
+def new_content(provider: str, content: bytes) -> bytes | None:
+    if provider == "codex":
+        text = content.decode("utf-8")
+        parsed = tomllib.loads(text) if text.strip() else {}
+        servers = parsed.get("mcp_servers", {})
+        if not isinstance(servers, dict):
+            raise UnsafeConfig("invalid Codex MCP table")
+        if "playwright" in servers:
+            return None  # Respect an explicitly owned definition, even disabled.
+        return (text.rstrip("\n") + CODEX_ENTRY).encode("utf-8")
+    obj = json.loads(content) if content.strip() else {}
+    if not isinstance(obj, dict):
+        raise UnsafeConfig("invalid Antigravity MCP root")
+    servers = obj.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        raise UnsafeConfig("invalid Antigravity MCP servers")
+    if "playwright" in servers:
+        return None
+    servers["playwright"] = AGY_ENTRY
+    return (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def reconcile(provider: str, path: Path) -> str:
+    name = "config.toml" if provider == "codex" else "mcp_config.json"
+    fd = validate_directory(path)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        original, info = read_config(fd, name)
+        updated = new_content(provider, original)
+        if updated is None:
+            return "existing"
+        atomic_write(fd, name, info, updated)
+        return "configured"
+    finally:
+        os.close(fd)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("provider", choices=("codex", "antigravity"))
+    args = parser.parse_args()
+    if os.environ.get("REMOTE_DEV_ROLE", args.provider) != args.provider:
+        print("Browser MCP: wrong provider role", file=sys.stderr)
+        return 2
+    target = (Path(os.environ.get("CODEX_HOME", "/root/.codex"))
+              if args.provider == "codex" else Path("/root/.gemini/config"))
+    try:
+        result = reconcile(args.provider, target)
+    except (UnsafeConfig, ValueError, OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+        print(f"Browser MCP: configuration left untouched ({exc})", file=sys.stderr)
+        return 3
+    print(f"Browser MCP: {result}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

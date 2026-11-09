@@ -243,6 +243,7 @@ for variable in \
   PYTHON_315_VERSION \
   NODE_VERSION \
   NPM_VERSION \
+  PLAYWRIGHT_MCP_VERSION \
   UV_VERSION; do
   require_synced_arg "$variable" "$base_dockerfile"
 done

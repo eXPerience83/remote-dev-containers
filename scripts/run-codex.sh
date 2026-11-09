@@ -530,6 +530,11 @@ if (( guidance_session == 1 )); then
   elif ! "$guidance_manager" reconcile codex; then
     echo 'WARNING: Remote Dev guidance could not be reconciled; continuing the provider session' >&2
   fi
+  # Add only a missing browser MCP entry; never change user-owned definitions.
+  if [[ -x /usr/local/bin/remote-dev-browser-config ]]; then
+    /usr/local/bin/remote-dev-browser-config codex || \
+      echo 'WARNING: Browser MCP config was not reconciled; inspect provider configuration' >&2
+  fi
 fi
 
 # Narrow the remaining pathname race immediately before vendor execution. This

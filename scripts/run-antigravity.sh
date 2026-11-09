@@ -439,6 +439,10 @@ if (( guidance_session == 1 )); then
   elif ! "$guidance_manager" reconcile antigravity; then
     echo 'WARNING: Remote Dev guidance could not be reconciled; continuing the provider session' >&2
   fi
+  if [[ -x /usr/local/bin/remote-dev-browser-config ]]; then
+    /usr/local/bin/remote-dev-browser-config antigravity || \
+      echo 'WARNING: Browser MCP config was not reconciled; inspect provider configuration' >&2
+  fi
 fi
 
 # Revalidate the selected project after the prelaunch helpers have finished. A

@@ -87,6 +87,18 @@ for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
     docker exec "$name" remote-dev-healthcheck
+    # One real headless launch verifies the bundled browser, not just the CLI.
+    docker exec "$name" node -e '
+      const { chromium } = require("/opt/remote-dev/playwright/node_modules/playwright");
+      (async () => {
+        const browser = await chromium.launch({headless: true, chromiumSandbox: false});
+        try {
+          const page = await browser.newPage();
+          await page.goto("data:text/html,<title>remote-dev-browser-smoke</title>");
+          if (await page.title() !== "remote-dev-browser-smoke") throw Error("browser navigation failed");
+        } finally { await browser.close(); }
+      })().catch(error => { console.error(error); process.exit(1); });
+    '
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
       echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Bundled pinned Playwright MCP and a Chromium headless shell in the common image, with conservative per-role MCP enrollment for Codex and experimental Antigravity. Claude can reuse the same executable if installed later; no new HTTP endpoint or persistent browser profile.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->
