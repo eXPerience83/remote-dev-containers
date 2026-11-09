@@ -115,6 +115,7 @@ COPY scripts/lib/antigravity-runtime /usr/local/lib/remote-dev/antigravity-runti
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/lib/remote-dev-image-identity.sh /usr/local/lib/remote-dev/remote-dev-image-identity.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
+COPY --chown=0:0 --chmod=0444 scripts/browser-mcp-smoke.mjs /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 # Only these installed administrative Python programs use the image interpreter.

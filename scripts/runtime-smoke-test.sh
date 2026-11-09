@@ -100,6 +100,9 @@ for _ in $(seq 1 30); do
       })().catch(error => { console.error(error); process.exit(1); });
     '
 
+    # Exercise the actual local MCP stdio protocol, beyond launching Chromium directly.
+    docker exec "$name" node /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
       echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2
       exit 1
