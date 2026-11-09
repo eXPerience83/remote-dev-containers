@@ -192,16 +192,19 @@ def validate_repository(root: Path, config: dict[str, Any]) -> None:
     require(changelog.count(UBUNTU_CHANGELOG_START) == 1, "Renovate changelog start marker must appear exactly once")
     require(changelog.count(UBUNTU_CHANGELOG_END) == 1, "Renovate changelog end marker must appear exactly once")
     require(changelog.count("## [Unreleased]") == 1, "Unreleased changelog heading must appear exactly once")
-    require(changelog.count("### Added") == 1, "Added changelog heading must appear exactly once")
 
     unreleased_index = changelog.index("## [Unreleased]")
     heading_index = changelog.index(UBUNTU_CHANGELOG_HEADING)
     start_index = changelog.index(UBUNTU_CHANGELOG_START)
     anchor_index = changelog_matches[0].start()
     end_index = changelog.index(UBUNTU_CHANGELOG_END)
-    added_index = changelog.index("### Added")
+    next_release = re.search(r"^## \[", changelog[unreleased_index + len("## [Unreleased]"):], re.MULTILINE)
+    unreleased_end = (unreleased_index + len("## [Unreleased]") + next_release.start()
+                      if next_release else len(changelog))
     require(
-        unreleased_index < heading_index < start_index < anchor_index < end_index < added_index,
+        unreleased_index < heading_index < start_index < anchor_index < end_index
+        and changelog_matches[0].end() <= end_index
+        and end_index + len(UBUNTU_CHANGELOG_END) <= unreleased_end,
         "Renovate Ubuntu changelog state escaped its machine-owned Unreleased boundary",
     )
 

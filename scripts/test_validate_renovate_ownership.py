@@ -274,6 +274,50 @@ class RenovateOwnershipTests(unittest.TestCase):
             self.assertEqual(changelog.read_text(encoding="utf-8"), before)
             self.assertNotIn("GitHub Action", before.split(VALIDATOR.UBUNTU_CHANGELOG_START, 1)[1].split(VALIDATOR.UBUNTU_CHANGELOG_END, 1)[0])
 
+    def test_unreleased_human_entries_and_historical_sections(self) -> None:
+        """Human sections may surround automation without changing its ownership."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_fixture_repo(root)
+            changelog = root / "CHANGELOG.md"
+            text = changelog.read_text(encoding="utf-8")
+            text = text.replace("## [Unreleased]", "## [Unreleased]\n\n### Added\n\n- Human feature.", 1)
+            text += "\n## [0.1.0]\n\n### Added\n\n- Historical feature.\n"
+            changelog.write_text(text, encoding="utf-8")
+            VALIDATOR.validate(root)
+
+    def test_changelog_marker_uniqueness_and_order(self) -> None:
+        """Human headings cannot excuse duplicated or reordered owned markers."""
+        for mutation in ('duplicate-start', 'duplicate-end', 'reversed'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_fixture_repo(root)
+                changelog = root / 'CHANGELOG.md'
+                text = changelog.read_text(encoding='utf-8')
+                start, end = VALIDATOR.UBUNTU_CHANGELOG_START, VALIDATOR.UBUNTU_CHANGELOG_END
+                if mutation == 'reversed':
+                    text = text.replace(start, 'PLACEHOLDER').replace(end, start).replace('PLACEHOLDER', end)
+                else:
+                    text += '\n' + (start if mutation == 'duplicate-start' else end)
+                changelog.write_text(text, encoding='utf-8')
+                with self.assertRaises(VALIDATOR.OwnershipError):
+                    VALIDATOR.validate(root)
+
+    def test_renovate_block_must_not_move_to_release_history(self) -> None:
+        """Unique, synchronized markers still belong exclusively to Unreleased."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_fixture_repo(root)
+            changelog = root / "CHANGELOG.md"
+            text = changelog.read_text(encoding="utf-8")
+            start = text.index(VALIDATOR.UBUNTU_CHANGELOG_HEADING)
+            end = text.index(VALIDATOR.UBUNTU_CHANGELOG_END) + len(VALIDATOR.UBUNTU_CHANGELOG_END)
+            block = text[start:end]
+            text = text[:start] + text[end:] + "\n## [0.1.0]\n\n" + block
+            changelog.write_text(text, encoding="utf-8")
+            with self.assertRaises(VALIDATOR.OwnershipError):
+                VALIDATOR.validate(root)
+
     def test_changelog_anchor_must_stay_inside_machine_owned_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

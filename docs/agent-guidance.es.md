@@ -15,7 +15,7 @@ La guía no es un motor de políticas ni una frontera de seguridad. El hardening
 
 ## Fuente y ciclo de vida
 
-La única regla redactada es [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), instalada con propietario root y modo `0444` en `/usr/share/remote-dev/agent-rules/development-environment.md`. El helper inmutable `/usr/local/bin/remote-dev-agent-guidance` deriva ambas representaciones sin red:
+La regla común de desarrollo es [`config/agent-rules/development-environment.md`](../config/agent-rules/development-environment.md), instalada con propietario root y modo `0444` en `/usr/share/remote-dev/agent-rules/development-environment.md`. El helper inmutable `/usr/local/bin/remote-dev-agent-guidance` deriva ambas representaciones sin red:
 
 ```text
 remote-dev-agent-guidance reconcile codex
@@ -78,3 +78,7 @@ CI prueba determinísticamente los adaptadores y el ciclo de vida sin red, con e
 3. Solicitar validación de contenedores sin Docker/backend: observar una explicación de capacidad ausente en vez de instalaciones globales o debilitamiento del aislamiento.
 
 Registra revisión/digest del candidato, identidad del runtime admitido y observaciones sin contenido privado de prompts/credenciales. Estas observaciones dependientes del modelo complementan los tests deterministas y no condicionan CI. Un futuro adaptador debe revalidar su composición nativa, preservar contenido del usuario y reutilizar este texto canónico en su estado privado; aquí no se implementa ningún proveedor adicional.
+
+OpenAI Docs MCP: habilitado en estado Codex nuevo y vacío; instalaciones existentes mediante alta manual. Context7 sigue siendo opcional. [Documentation](openai-docs-codex.es.md).
+
+El fragmento exclusivo de Codex `codex-openai-docs.md` se compone dentro del bloque administrado existente. `initialize codex` configura solo un estado privado vacío al arrancar; no reconcilia instrucciones ni ejecuta Codex. La reconciliación de instrucciones sigue limitada a sesiones.

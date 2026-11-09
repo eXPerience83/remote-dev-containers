@@ -256,7 +256,10 @@ esac
     def test_no_startup_shell_launcher_or_menu_distribution(self):
         # All session routing is through existing wrappers. These entrypoints
         # must never call the manager independently (including Login shell).
-        for name in ('start-remote-dev-web.sh', 'attach-remote-dev-tmux.sh', 'run-direct-session.sh',
+        startup = (ROOT / 'scripts/start-remote-dev-web.sh').read_text()
+        self.assertIn('remote-dev-agent-guidance initialize codex', startup)
+        self.assertNotIn('reconcile codex', startup)
+        for name in ('attach-remote-dev-tmux.sh', 'run-direct-session.sh',
                      'remote-dev-menu.sh', 'remote-dev-launcher.py', 'remote-dev-healthcheck.sh'):
             self.assertNotIn('remote-dev-agent-guidance', (ROOT / 'scripts' / name).read_text())
 
@@ -265,7 +268,7 @@ esac
         self.assertIn('RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev/agent-rules', dockerfile)
         self.assertIn('COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md', dockerfile)
         self.assertIn('COPY --chown=0:0 --chmod=0555 scripts/remote-dev-agent-guidance.py /usr/local/bin/remote-dev-agent-guidance', dockerfile)
-        self.assertEqual(list((ROOT / 'config/agent-rules').glob('*.md')), [self.rule])
+        self.assertEqual(set((ROOT / 'config/agent-rules').glob('*.md')), {self.rule, self.rule.with_name('codex-openai-docs.md')})
         self.assertNotIn('urllib', self.manager.read_text())
         self.assertNotIn('subprocess', self.manager.read_text())
 

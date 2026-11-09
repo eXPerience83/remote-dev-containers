@@ -130,3 +130,5 @@ The selected reviewed versions and architecture-specific immutable identities li
 The Ubuntu base image, Dockerfile frontend, GitHub Actions and downloaded release assets use immutable digests or hashes where applicable. APT package resolution follows current security revisions in the selected Ubuntu repositories and is not claimed to be bit-for-bit reproducible without an APT snapshot service.
 
 Every image-affecting change must continue to pass repository validation, AMD64 build/smoke tests, notices/SBOM checks and the fixable-`CRITICAL` vulnerability gate before publication or merge according to its workflow boundary.
+
+OpenAI Docs MCP: enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [Documentation](docs/openai-docs-codex.md).
