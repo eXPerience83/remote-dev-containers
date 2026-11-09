@@ -239,6 +239,7 @@ RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH" \
     && playwright --version \
     && rm -rf /var/lib/apt/lists/*
 
+RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev
 COPY --chown=0:0 --chmod=0444 config/playwright-mcp.json /usr/share/remote-dev/playwright-mcp.json
 COPY --chown=0:0 --chmod=0555 scripts/remote-dev-playwright-mcp.sh /usr/local/bin/remote-dev-playwright-mcp
 
