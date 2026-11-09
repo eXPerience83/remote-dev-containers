@@ -8,9 +8,9 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 | codex-cli | `rust-v0.167.0` | tar.gz | None | LICENSE, NOTICE |
 | codex-code-mode-host | `rust-v0.167.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
-| mise | `2026.11.4` | raw-binary | None | LICENSE |
+| mise | `2026.11.5` | raw-binary | None | LICENSE |
 | uv | `0.13.7` | tar.gz | None | LICENSE-APACHE-2.0, LICENSE-MIT |
-| yq | `4.54.2` | raw-binary | None | LICENSE |
+| yq | `4.54.3` | raw-binary | None | LICENSE |
 | shfmt | `3.14.1` | raw-binary | None | LICENSE |
 | actionlint | `1.7.12` | tar.gz | LICENSE.txt | LICENSE.txt |
 

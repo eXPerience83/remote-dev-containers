@@ -144,7 +144,7 @@
     },
     {
       "id": "mise",
-      "version": "2026.11.4",
+      "version": "2026.11.5",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -156,16 +156,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.11.4/mise-v2026.11.4-linux-x64",
-          "asset_sha256": "0296d9cba9324106d4e0962bb94a2072902f3658813aeb3b09504947bb8ddc2b",
-          "asset_size": 177900448,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.11.5/mise-v2026.11.5-linux-x64",
+          "asset_sha256": "7a5b051d6f17d335c502f8047a5175cf3103f347d91942771c60da4e302ebcb0",
+          "asset_size": 178085456,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.11.4/mise-v2026.11.4-linux-arm64",
-          "asset_sha256": "219d1daa41d110ed004b6a9c4029000046b23b3498f45d17c7897a166177e80b",
-          "asset_size": 155360960,
+          "asset_url": "https://github.com/jdx/mise/releases/download/v2026.11.5/mise-v2026.11.5-linux-arm64",
+          "asset_sha256": "3cb907fc1d3f033afab40b4a8efca4fd71440bf91b63bfca3beb3302b0f3a6d5",
+          "asset_size": 155169120,
           "archive_member_count": null,
           "legal_members": []
         }
@@ -207,7 +207,7 @@
     },
     {
       "id": "yq",
-      "version": "4.54.2",
+      "version": "4.54.3",
       "packaging": "raw-binary",
       "repository_notices": [
         {
@@ -219,16 +219,16 @@
       "architecture_legal_sets_equal": true,
       "architectures": {
         "amd64": {
-          "asset_url": "https://github.com/mikefarah/yq/releases/download/v4.54.2/yq_linux_amd64",
-          "asset_sha256": "44c7759059b4910827a0059a2757b22001e59360cdecdb2ef8dedc4b6c7e9f32",
-          "asset_size": 15429792,
+          "asset_url": "https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_amd64",
+          "asset_sha256": "129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973",
+          "asset_size": 15499424,
           "archive_member_count": null,
           "legal_members": []
         },
         "arm64": {
-          "asset_url": "https://github.com/mikefarah/yq/releases/download/v4.54.2/yq_linux_arm64",
-          "asset_sha256": "bd44211dcd29a5f0eb701d4b7eb5ccd0cfff3bd3966cb4f7f9bd5b13701d997e",
-          "asset_size": 14287008,
+          "asset_url": "https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_arm64",
+          "asset_sha256": "89f69310b61b68d1245065a1241d1fc843f7a36cd6103ffd77ad987613bd1b67",
+          "asset_size": 14352544,
           "archive_member_count": null,
           "legal_members": []
         }

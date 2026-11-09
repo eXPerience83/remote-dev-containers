@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-11-09 — mise 2026.11.4 → 2026.11.5; yq 4.54.2 → 4.54.3; Context7 CLI (transient) 0.10.0 → 0.11.0.
+
 ### Renovate image refreshes
 
 <!-- remote-dev-renovate-runtime-refreshes:start -->
