@@ -1,6 +1,6 @@
 # OpenAI Docs MCP para Codex
 
-Estado: funcionalidad Unreleased de PR #312, aún no incluida en la imagen estable v0.2.0. Para probarla, verifica la revisión fuente con `remote-dev-version` y compárala con el SHA del candidato del PR que contiene este cambio; un contenedor antiguo no configura el MCP automáticamente aunque su estado esté vacío.
+Estado: funcionalidad integrada por PR #312 e incluida en el corte de código `v0.2.1`, no en la imagen estable anterior `v0.2.0`. La imagen `v0.2.1` solo estará disponible tras finalizar correctamente su publicador independiente. Para probarla, verifica la revisión fuente con `remote-dev-version` y compárala con el SHA del candidato del PR que contiene este cambio; un contenedor antiguo no configura el MCP automáticamente aunque su estado esté vacío.
 
 El MCP oficial de documentación OpenAI se habilita por defecto únicamente cuando el estado privado de Codex está vacío en el primer arranque. Las instalaciones existentes conservan todos sus archivos; Context7 sigue siendo opcional. No se añaden parámetros ni montajes.
 
