@@ -6,21 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Added
-
-- Official OpenAI documentation MCP enabled for empty, new Codex state only, with offline recoverable initialization, native management and selective Codex-only global guidance. Existing MCP configuration and optional Context7 remain unchanged; selective global guidance is updated on the next reconcilable managed session, including existing installations.
-
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->
-
-- 2026-11-08 — Codex CLI 0.166.0 → 0.167.0; mise 2026.10.25 → 2026.11.4; Ruff 0.17.3 → 0.17.4; yq 4.54.1 → 4.54.2; Context7 CLI (transient) 0.9.0 → 0.10.0.
 
 ### Renovate image refreshes
 
 <!-- remote-dev-renovate-runtime-refreshes:start -->
 <!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
+
+## [0.2.1] - 2026-11-09
+
+### Maintenance release — official OpenAI documentation MCP for Codex
+
+This patch release builds on the published `v0.2.0` AMD64, single-user/private-network stable core. It does **not** include a browser, Chromium, Playwright MCP, a new agent runtime, or changes to the TrueNAS persistent layout. The exact stable image is published only after the separate `v0.2.1` tag workflow succeeds.
+
+### Added
+
+- Official OpenAI documentation MCP enabled for empty, new Codex state only, with offline recoverable initialization, native management and selective Codex-only global guidance. Existing MCP configuration and optional Context7 remain unchanged; selective global guidance is updated on the next reconcilable managed session, including existing installations.
+- Codex can use the hosted, read-only `openaiDeveloperDocs` MCP endpoint (`https://developers.openai.com/mcp`) for official OpenAI API/documentation search and page retrieval. New empty Codex state is initialized offline before vendor execution; already populated state, custom MCP configurations, intentional disable/removal decisions and optional Context7 are preserved. No added credentials, startup flags or Compose mounts. See [PR #312](https://github.com/eXPerience83/remote-dev-containers/pull/312) and [documentation](docs/openai-docs-codex.md).
+
+### Changed
+
+- Reviewed toolchain patch refreshes included since `v0.2.0`:
+
+- 2026-11-08 — Codex CLI 0.166.0 → 0.167.0; mise 2026.10.25 → 2026.11.4; Ruff 0.17.3 → 0.17.4; yq 4.54.1 → 4.54.2; Context7 CLI (transient) 0.9.0 → 0.10.0.
+- Refreshed the pinned `docker/login-action` GitHub Action via [PR #310](https://github.com/eXPerience83/remote-dev-containers/pull/310); no container runtime/tooling change was attributed to that CI-only action update.
+- Updated the local source/image default version to `0.2.1`; bundled version pins remain authoritative in `versions.env`. The pending updater PR #314 (mise 2026.11.5, yq 4.54.3, Context7 CLI 0.11.0) is **not** included.
+
+### Verification and support boundary
+
+- [PR #312](https://github.com/eXPerience83/remote-dev-containers/pull/312) passed exact-head AMD64 build/smoke, Python initializer and agent-guidance regression tests, notices, SPDX SBOMs and Trivy critical-vulnerability gates, and published edge successfully after merge.
+- Live Codex acceptance reported by the operator on 2026-11-09: `codex mcp list` and `codex mcp get openaiDeveloperDocs --json` succeeded, with direct `search_openai_docs` and `fetch_openai_doc` calls on Responses API, function calling and MCP documentation. Configuration/MCP JSON hashes remained unchanged during the check. This establishes actual search/read connectivity on the tested Codex session, **not** exhaustive fresh-state, network-outage or recreated-container acceptance.
+- Experimental Antigravity remains optional, not a consumer of this Codex-only Docs MCP initializer. Chromium + Playwright MCP [PR #313](https://github.com/eXPerience83/remote-dev-containers/pull/313) is still in draft and specifically excluded pending a fail-closed Landlock implementation and real isolated TrueNAS acceptance. The separately planned full-repository transversal audit remains follow-up work.
 
 ## [0.2.0] - 2026-11-05
 
