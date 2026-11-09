@@ -1,6 +1,6 @@
 # OpenAI Docs MCP for Codex
 
-Status: Unreleased functionality in PR #312, not included in the v0.2.0 stable image. To test it, inspect the source revision with `remote-dev-version` and match it to a PR candidate SHA containing this change; an older container does not provision the MCP even with an empty home.
+Status: merged through [PR #312](https://github.com/eXPerience83/remote-dev-containers/pull/312) and included in the `v0.2.1` source release cut, not in the previously published `v0.2.0` stable image. A `v0.2.1` container is available only after its independent stable-tag publisher has passed. Inspect the actual image source revision with `remote-dev-version`; older images never auto-provision this MCP, even with empty Codex state.
 
 The official OpenAI documentation MCP is enabled by default only when private Codex state is empty at first startup. Existing installations keep every file; Context7 remains optional. No new parameters or mounts are needed.
 
