@@ -1,11 +1,11 @@
-# Remote Dev Containers — versión de código v0.2.0
+# Remote Dev Containers — versión de código v0.2.1
 
-El **corte de código v0.2.0** llega tras la aceptación de `0.2.0-beta.1` en TrueNAS: se verificaron las [seis herramientas de desarrollo](docs/universal-validation-tools.es.md), Python 3.14.10 por defecto y 3.15.2 opcional, las sesiones persistentes de Codex/Antigravity y el aislamiento de roles ([#121](https://github.com/eXPerience83/remote-dev-containers/issues/121)). La versión de código **no publica por sí sola** imágenes estables. El workflow del tag debe construir, probar, analizar y promocionar un digest exacto antes de activar `stable` y `latest`. Consulta los [controles de publicación](docs/releases.es.md).
+**v0.2.1** continúa la [primera versión estable v0.2.0](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.2.0) e incorpora el MCP oficial de documentación de OpenAI solo para Codex. Se configura automáticamente en estados nuevos y vacíos; se preserva la configuración MCP existente y Context7. Se ha verificado una búsqueda y lectura real en Codex, sin atribuirle la aceptación exhaustiva de primer arranque o red desconectada. Cambiar la versión del código **no publica una imagen**: el tag `v0.2.1` debe superar construcción, pruebas, seguridad y verificación del digest antes de mover `stable`/`latest`. Consulta el [changelog](CHANGELOG.md) y [controles de publicación](docs/releases.es.md).
 
 Entorno comunitario de agentes de programación accesible desde navegador para Docker, NAS y homelab.
 
 > [!WARNING]
-> **Alcance v0.2.0: AMD64, un usuario y red privada.** `edge` sigue siendo experimental; únicamente la publicación estable mediante tag, tras superar todas las verificaciones, puede mover `stable` y `latest`. No expongas los puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
+> **Alcance v0.2.x: AMD64, un usuario y red privada.** `edge` sigue siendo experimental; únicamente la publicación estable mediante tag, tras superar todas las verificaciones, puede mover `stable` y `latest`. No expongas los puertos web directamente a Internet. Este proyecto no está afiliado ni respaldado por OpenAI, Google o Anthropic.
 
 ## Objetivo
 
@@ -267,7 +267,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-La versión local de código es `0.2.0`; las publicaciones edge conservan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar del valor local.
+La versión local de código es `0.2.1`; las publicaciones edge conservan su identidad fechada `edge-YYYY.MM.DD-<short-sha>` en lugar del valor local.
 
 ## Pruebas públicas con edge
 
@@ -310,7 +310,7 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 - El root del agente está limitado por el contenedor exterior y sus montajes.
 - Los administradores TrueNAS/Docker están dentro del límite de confianza.
 - Antigravity continúa experimental aunque sus gates técnicos estén implementados.
-- `edge` sigue siendo experimental; `stable` solo se activa cuando termine correctamente el publicador del tag exacto `v0.2.0` y valide el digest.
+- `edge` sigue siendo experimental; `stable` y `latest` solo avanzan cuando termina correctamente un nuevo publicador de tag estable. La imagen `v0.2.0` se publicó el 5/11/2026; `v0.2.1` exige sus propias comprobaciones.
 
 ## Documentación
 
@@ -329,4 +329,4 @@ Consulta [`docs/releases.es.md`](docs/releases.es.md).
 - [`docs/dependency-automation.md`](docs/dependency-automation.md)
 - [`docs/roadmap.md`](docs/roadmap.md)
 
-OpenAI Docs MCP (Unreleased; requiere una revisión de imagen que incluya #312): habilitado en estado Codex nuevo y vacío; instalaciones existentes mediante alta manual. Context7 sigue siendo opcional. [Documentation](docs/openai-docs-codex.es.md).
+OpenAI Docs MCP (incluido en el corte de código v0.2.1; ya probado en la imagen edge): habilitado en estado Codex nuevo y vacío; se conserva la configuración existente y se puede activar manualmente. Context7 sigue siendo opcional. [Documentation](docs/openai-docs-codex.es.md).

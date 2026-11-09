@@ -1,11 +1,11 @@
-# Remote Dev Containers — v0.2.0 source cut
+# Remote Dev Containers — v0.2.1 release source
 
-The **v0.2.0 source cut** follows the accepted `0.2.0-beta.1` phase: the [six new developer CLIs](docs/universal-validation-tools.md), default Python 3.14.10, opt-in 3.15.2, persistent Codex/Antigravity sessions and role isolation passed targeted TrueNAS acceptance ([#121](https://github.com/eXPerience83/remote-dev-containers/issues/121)). The source version **does not itself publish** stable images. The separately tagged publisher must still build, smoke-test, scan and promote an exact digest before `stable` and `latest` are valid. See [release checklist](docs/releases.md).
+**v0.2.1** follows the [published v0.2.0 stable release](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.2.0) and adds Codex-only official OpenAI documentation MCP integration. New empty Codex state receives the optional read-only MCP configuration; existing MCP settings and Context7 remain unchanged. A live Codex search/read was verified, while exhaustive new-install/blocked-network acceptance remains separate. The source number **does not publish** an image by itself; the reviewed `v0.2.1` tag must pass its independent build, smoke, security and digest-promotion workflow. See [release notes](CHANGELOG.md) and [release checklist](docs/releases.md).
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **v0.2.0 AMD64 single-user/private-network scope.** `edge` remains experimental; only an explicitly tagged, verified stable publication may move `stable` and `latest`. Never expose Remote Dev web ports directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+> **v0.2.x AMD64 single-user/private-network scope.** `edge` remains experimental; only an explicitly tagged, verified stable publication may move `stable` and `latest`. Never expose Remote Dev web ports directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
 
 ## Goal
 
@@ -275,7 +275,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-The local source version is `0.2.0`; edge publications retain their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of the local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
+The local source version is `0.2.1`; edge publications retain their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of the local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
 
@@ -318,7 +318,7 @@ See [`docs/releases.md`](docs/releases.md).
 - Agent root is constrained by the outer role container and its mounts.
 - TrueNAS/Docker administrators can inspect deployment configuration and are inside the host trust boundary.
 - Antigravity remains experimental even though its technical lifecycle/admission gates are implemented.
-- `edge` remains experimental; `stable` exists only after the exact `v0.2.0` tag publisher successfully completes its review and digest gates.
+- `edge` remains experimental; `stable` and `latest` move only after a new exact stable-tag publisher succeeds. The `v0.2.0` stable image was published on 2026-11-05; `v0.2.1` requires its own release checks.
 
 ## Documentation
 
@@ -338,4 +338,4 @@ See [`docs/releases.md`](docs/releases.md).
 - [`docs/roadmap.md`](docs/roadmap.md)
 - [`third_party/optional-agents.md`](third_party/optional-agents.md)
 
-OpenAI Docs MCP (Unreleased; requires an image revision containing #312): enabled for empty new Codex state; existing installations use manual setup. Context7 remains optional. [English guide](docs/openai-docs-codex.md) / [Guía en español](docs/openai-docs-codex.es.md).
+OpenAI Docs MCP (included in the v0.2.1 source cut; already on the tested edge image): enabled for empty new Codex state; existing installations keep their MCP configuration, and may opt in manually. Context7 remains optional. [English guide](docs/openai-docs-codex.md) / [Guía en español](docs/openai-docs-codex.es.md).

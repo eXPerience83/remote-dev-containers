@@ -10,7 +10,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
-- The source release cut is `0.2.0` after successful TrueNAS PR2 acceptance; published edge builds retain dated edge identities and stable requires its independent tagged publisher.
+- The first stable image `v0.2.0` was published after TrueNAS PR2 acceptance; `v0.2.1` is the next reviewed source patch for Codex OpenAI Docs MCP, while Chromium/Playwright #313 remains draft. Every stable update requires its own tagged build, scans and digest verification.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -57,16 +57,16 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Optional device-code onboarding uses a reviewed transient `ctx7` CLI path and removes the vendor package/login/cache state afterwards.
 - Hosted-service privacy/terms and credential boundaries are documented; Context7 remains outside the image SBOM/runtime bundle.
 
-## Current milestone — first stable release preparation
+## Current milestone — v0.2.1 maintenance release
 
-The local `0.2.0-beta.1` source acceptance was completed for the AMD64 single-user/private-network Codex-centered core, with Antigravity optional/experimental and compatibility aliases retained across 0.2.x. The reviewed `0.2.0` source cut is prepared in PR #307; this alone does not promote `stable`/`latest`. #121 records the actual TrueNAS role, tools, sessions and persistence tests; the most recent npm/updater changes passed exact-head CI and edge publication. Stable still requires the release cut and the exact-tag publisher's own image/security/digest checks.
+The initial stable `v0.2.0` release shipped on 2026-11-05. This milestone is the maintenance patch `v0.2.1`, containing merged [#312](https://github.com/eXPerience83/remote-dev-containers/pull/312) OpenAI Docs MCP for Codex and reviewed dependency updates already on main. Live Codex search/fetch acceptance is recorded in #31; it does not imply exhaustive empty-state and offline TrueNAS acceptance. The draft Chromium/Playwright #313, the open updater #314 and the optional WeTTY prototype #301 are not part of this source cut. The next stable publisher must scan and promote its own verified digest.
 
 PR2 #281's six locked CLI additions and 53-command baseline were accepted on TrueNAS under closed #121, including role-scoped persistence/session recovery. Extra PR3/#180 tooling remains optional future work, not a first-stable blocker.
 
 1. **PR2 TrueNAS evidence accepted.** #121 is complete for the functional/runtime scope; no repeat app reset or full tool-test run is required merely for the source-version cut.
 2. **#31 — release decision.** Keep the tested AMD64/private-network support scope narrow and explicitly defer #93 fault-injection/rollback acceptance beyond the already successful scheduled edge rebuilds.
-3. **Exact release-cut source CI.** Review PR #307 after rebasing to current main; require full Build AMD64, notices, SBOM and fixable-CRITICAL gate on the exact head, then merge.
-4. **Stable publisher.** Create tag `v0.2.0` only at that reviewed main commit; the stable workflow builds and scans its own candidate and must prove the version tag, `stable`, `stable-amd64` and `latest` resolve to the same tested OCI digest.
+3. **Exact v0.2.1 source CI.** Review the new v0.2.1 patch PR against current main, require Build AMD64/smoke, notices, SPDX and no-fixable-critical gate on its exact head, then merge only while fresh.
+4. **Stable publisher.** Create tag `v0.2.1` on the reviewed source-cut merge SHA only after all gates; the publisher builds/scans its own candidate and must prove `v0.2.1`, `stable`, `stable-amd64` and `latest` resolve to the same tested OCI digest.
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
 

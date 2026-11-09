@@ -14,9 +14,9 @@ The permanent maturity order is:
 dev -> edge -> stable = latest
 ```
 
-These concepts stay separate from human-readable build identity and immutable provenance. **Before** the successful `v0.2.0` stable-tag publication, use the tested `edge`/`edge-amd64` channel; **after** that workflow passes, `stable` and `latest` must resolve to the same scanned OCI digest. Preparing a source version does not publish an image.
+These concepts stay separate from human-readable build identity and immutable provenance. The first stable `v0.2.0` was published on 2026-11-05. The prepared `0.2.1` source patch does **not** itself publish a new image: until its tag-triggered publisher passes, current `stable`/`latest` remain on the last successfully published stable digest. Continue using `edge`/`edge-amd64` only for experimental testing.
 
-The repository's local source version for the first stable cut is `0.2.0`, following an accepted `0.2.0-beta.1` phase. This source number is not the public image's channel/provenance: edge embeds a dated identity and only the tagged stable workflow can publish `v0.2.0` and promote `stable`/`latest`. Routine upstream updates and documentation changes do not independently bump `BASE_VERSION` or trigger a stable release.
+The repository's local source version for this patch cut is `0.2.1`. The checked-out source number is not proof of a published image: edge embeds a dated identity, and only the successfully completed `v0.2.1` stable-tag workflow can update `stable` and `latest`. Runtime pins, lockfile metadata and changelog history remain governed by their reviewed owners; routine upstream updates do not silently create a new stable release.
 
 ## Identity layers
 
