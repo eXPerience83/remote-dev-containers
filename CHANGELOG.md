@@ -29,8 +29,6 @@ This patch release builds on the published `v0.2.0` AMD64, single-user/private-n
 
 ### Changed
 
-- Reviewed toolchain patch refreshes included since `v0.2.0`:
-
 - 2026-11-08 — Codex CLI 0.166.0 → 0.167.0; mise 2026.10.25 → 2026.11.4; Ruff 0.17.3 → 0.17.4; yq 4.54.1 → 4.54.2; Context7 CLI (transient) 0.9.0 → 0.10.0.
 - Refreshed the pinned `docker/login-action` GitHub Action via [PR #310](https://github.com/eXPerience83/remote-dev-containers/pull/310); no container runtime/tooling change was attributed to that CI-only action update.
 - Updated the local source/image default version to `0.2.1`; bundled version pins remain authoritative in `versions.env`. The pending updater PR #314 (mise 2026.11.5, yq 4.54.3, Context7 CLI 0.11.0) is **not** included.
