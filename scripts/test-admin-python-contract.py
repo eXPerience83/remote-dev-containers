@@ -13,6 +13,7 @@ INTERPRETER = '/usr/local/lib/remote-dev/python'
 # validators, publisher scripts and project/test tools are deliberately excluded.
 PROGRAMS = {
     'remote-dev-agent-guidance.py': '/usr/local/bin/remote-dev-agent-guidance',
+    'remote-dev-browser-config.py': '/usr/local/bin/remote-dev-browser-config',
     'validate-codex-project-boundary.py': '/usr/local/bin/validate-codex-project-boundary',
     'remote-dev-codex-runtime.py': '/usr/local/bin/remote-dev-codex-runtime',
     'remote-dev-prepare-development-scratch.py': '/usr/local/bin/remote-dev-prepare-development-scratch',

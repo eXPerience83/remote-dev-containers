@@ -179,6 +179,7 @@ RUN --network=none \
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && sed -i '1c\#!/usr/local/lib/remote-dev/python -I' \
       /usr/local/bin/remote-dev-agent-guidance \
+      /usr/local/bin/remote-dev-browser-config \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \
@@ -190,6 +191,7 @@ RUN --network=none \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
     && /usr/local/lib/remote-dev/python -I -m py_compile \
       /usr/local/bin/remote-dev-agent-guidance \
+      /usr/local/bin/remote-dev-browser-config \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \
