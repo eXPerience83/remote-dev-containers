@@ -10,6 +10,6 @@ uv = "0.13.7"
 "pypi:ruff" = { version = "0.17.4", python = "3.14.10" }
 "pypi:pytest" = { version = "9.2.0", python = "3.14.10" }
 "pypi:pre-commit" = { version = "4.7.0", python = "3.14.10" }
-yq = "4.54.2"
+yq = "4.54.3"
 shfmt = "3.14.1"
 actionlint = "1.7.12"
