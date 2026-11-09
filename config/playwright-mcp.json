@@ -6,5 +6,7 @@
       "headless": true,
       "chromiumSandbox": false
     }
-  }
+  },
+  "webmcp": false,
+  "saveSession": false
 }

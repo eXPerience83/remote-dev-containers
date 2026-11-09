@@ -46,6 +46,15 @@ class BrowserConfigTests(unittest.TestCase):
         self.assertEqual(obj["mcpServers"]["playwright"]["command"], module.BROWSER_COMMAND)
         self.assertEqual(module.reconcile("antigravity", self.path), "existing")
 
+    def test_immutable_mcp_policy_disables_page_tool_registration(self):
+        policy = json.loads(
+            (SOURCE.parent.parent / "config" / "playwright-mcp.json").read_text()
+        )
+        self.assertEqual(policy["browser"]["browserName"], "chromium")
+        self.assertTrue(policy["browser"]["isolated"])
+        self.assertIs(policy["webmcp"], False)
+        self.assertIs(policy["saveSession"], False)
+
     def test_invalid_config_is_never_overwritten(self):
         config = self.path / "config.toml"
         config.write_text("[invalid\n")
