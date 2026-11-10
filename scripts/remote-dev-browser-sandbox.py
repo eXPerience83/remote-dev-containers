@@ -154,6 +154,7 @@ def safe_env(scratch: str) -> dict[str, str]:
         "XDG_RUNTIME_DIR": scratch + "/runtime",
         "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
         "PLAYWRIGHT_BROWSERS_PATH": BROWSER_ASSETS,
+        "PLAYWRIGHT_MCP_OUTPUT_DIR": scratch + "/output",
         "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1",
         "DO_NOT_TRACK": "1",
     }
@@ -217,6 +218,9 @@ def supervise() -> int:
         runtime = scratch + "/runtime"
         os.mkdir(runtime, 0o700)
         os.chown(runtime, UID, GID)
+        output = scratch + "/output"
+        os.mkdir(output, 0o700)
+        os.chown(output, UID, GID)
         env = safe_env(scratch)
         readfd, writefd = os.pipe()
         # A separate-session guardian survives SIGKILL of the MCP client and

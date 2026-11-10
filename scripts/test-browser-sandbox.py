@@ -42,6 +42,7 @@ class BrowserIsolationContract(unittest.TestCase):
         self.assertEqual(env["TMPDIR"], scratch)
         self.assertEqual(env["XDG_RUNTIME_DIR"], scratch + "/runtime")
         self.assertEqual(env["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"], "1")
+        self.assertEqual(env["PLAYWRIGHT_MCP_OUTPUT_DIR"], scratch + "/output")
         self.assertTrue(all("/workspace" not in v and "/root/" not in v
                             for v in env.values()))
 

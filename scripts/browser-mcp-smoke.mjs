@@ -109,7 +109,7 @@ try {
   });
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   const tools = new Set((await request("tools/list")).tools?.map(tool => tool.name));
-  for (const tool of ["browser_navigate", "browser_evaluate", "browser_close"]) {
+  for (const tool of ["browser_navigate", "browser_evaluate", "browser_take_screenshot", "browser_close"]) {
     if (!tools.has(tool)) throw new Error("MCP tool missing: " + tool);
   }
   resultText(await request("tools/call", {
@@ -126,6 +126,12 @@ try {
   }), "WebSocket");
   if (!websocket.includes("pong")) throw new Error("WebSocket mismatch");
   assertSandboxedNode();
+  const screenshot = await request("tools/call", {
+    name: "browser_take_screenshot", arguments: { type: "png" },
+  });
+  if (screenshot?.isError || !screenshot?.content?.some(item => item.type === "image")) {
+    throw new Error("MCP screenshot did not return an image");
+  }
   resultText(await request("tools/call", { name: "browser_close", arguments: {} }), "browser_close");
   console.log("Playwright MCP stdio, tools, local HTTP, JavaScript and WebSocket: OK");
 } catch (error) {
