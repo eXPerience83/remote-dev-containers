@@ -90,7 +90,7 @@ class BrowserIsolationContract(unittest.TestCase):
             os.write(write_fd, b"424242\n")
             os.close(write_fd)
             write_fd = -1
-            with (mock.patch.object(sandbox.os, "geteuid", return_value=sandbox.UID),
+            with (mock.patch.object(sandbox.os, "geteuid", return_value=0),
                   mock.patch.object(sandbox, "kill_group") as killer,
                   mock.patch.object(sandbox.shutil, "rmtree") as cleanup):
                 result = sandbox.guardian(read_fd, "/run/remote-dev-browser-fixture")
@@ -104,6 +104,17 @@ class BrowserIsolationContract(unittest.TestCase):
                 os.close(read_fd)
             if write_fd >= 0:
                 os.close(write_fd)
+
+    def test_browser_identity_cannot_run_cleanup_guardian(self):
+        with mock.patch.object(sandbox.os, "geteuid", return_value=sandbox.UID):
+            self.assertEqual(sandbox.guardian(-1, "/run/remote-dev-browser-fixture"), 2)
+
+    def test_guardian_has_non_dumpable_policy(self):
+        with (mock.patch.object(sandbox, "no_new_privileges") as nnp,
+              mock.patch.object(sandbox.libc, "prctl", return_value=0) as ctl):
+            sandbox.guardian_preexec()
+        nnp.assert_called_once_with()
+        ctl.assert_called_once_with(4, 0, 0, 0, 0)
 
     def test_no_user_supplied_mcp_flags(self):
         proc = subprocess.run(

@@ -28,8 +28,11 @@ profile, does not expose a listening port, and stops with its agent session.
 The coding agents retain their container permissions, while the browser MCP
 supervisor launches Node and Chromium with dedicated UID/GID `61123`, no
 supplementary groups and a sanitized environment and FDs. A Landlock ruleset
-limits filesystem access for the MCP and descendants, and a separate guardian
-cleans its `/run` profile on unexpected supervisor exit.
+limits filesystem access for the MCP and descendants, and a small trusted guardian
+cleans its `/run` profile on unexpected supervisor exit. The guardian keeps
+root cleanup rights already allowed by the outer container, but no inherited
+agent credentials, and is made non-dumpable. It does not share the browser UID
+so compromised Chromium cannot directly signal its cleanup guardian.
 
 Chromium still uses `chromiumSandbox: false`; this does **not** enable an
 additional Chromium sandbox. Landlock ABI 7 cannot mediate every UNIX socket,

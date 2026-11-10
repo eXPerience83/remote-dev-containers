@@ -168,7 +168,7 @@ def kill_group(group: int) -> None:
 
 
 def guardian(lifeline_fd: int, scratch: str) -> int:
-    if os.geteuid() != UID or not scratch.startswith(
+    if os.geteuid() != 0 or not scratch.startswith(
             "/run/remote-dev-browser-"):
         return 2
     try:
@@ -183,6 +183,15 @@ def guardian(lifeline_fd: int, scratch: str) -> int:
         return 0
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def guardian_preexec() -> None:
+    # The guardian is a small trusted root-only cleanup process. It does not
+    # inherit agent credentials and cannot be signalled or ptraced by the
+    # browser UID. It must retain the existing host-approved kill capability.
+    no_new_privileges()
+    if libc.prctl(4, 0, 0, 0, 0) != 0:  # PR_SET_DUMPABLE = 4
+        raise OSError(ctypes.get_errno(), "guardian non-dumpable failed")
 
 
 def signal_exit(signum: int, _frame: object) -> None:
@@ -223,14 +232,15 @@ def supervise() -> int:
         os.chown(output, UID, GID)
         env = safe_env(scratch)
         readfd, writefd = os.pipe()
-        # A separate-session guardian survives SIGKILL of the MCP client and
-        # supervisor; only the root supervisor retains the pipe writer.
+        # A separate-session, non-dumpable root guardian survives supervisor
+        # SIGKILL. Browser UID 61123 cannot signal it. Only the root
+        # supervisor retains the pipe writer; the guardian has a clean env.
         guard = subprocess.Popen(
             [IMAGE_PYTHON, "-I", __file__, "--guardian", str(readfd), scratch],
             cwd=scratch, env=env, stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=sys.stderr,
             pass_fds=(readfd,), close_fds=True, start_new_session=True,
-            preexec_fn=drop_privileges,
+            preexec_fn=guardian_preexec,
         )
         os.close(readfd)
         readfd = -1

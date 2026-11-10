@@ -102,6 +102,10 @@ for _ in $(seq 1 30); do
 
     # Exercise the actual local MCP stdio protocol, beyond launching Chromium directly.
     docker exec "$name" node /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+    # Verify filesystem denial, clean env, UID/caps and inherited FDs using
+    # a real sandboxed Node process with only synthetic secrets.
+    docker exec "$name" /usr/local/lib/remote-dev/python -I \
+      /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
 
     # TrueNAS-like least-privilege permissions and noexec /run.
     # AGY's own live session acceptance is separately required.
@@ -117,6 +121,20 @@ for _ in $(seq 1 30); do
       --env REMOTE_DEV_ROLE=antigravity \
       --entrypoint /usr/local/lib/remote-dev/node \
       "$image" /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+
+    # Repeat the negative security test under the AGY-like /run noexec layout.
+    docker run --rm \
+      --cap-drop ALL \
+      --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+      --cap-add KILL --cap-add SETGID --cap-add SETUID \
+      --security-opt no-new-privileges:true \
+      --read-only \
+      --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+      --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
+      --shm-size 256m \
+      --env REMOTE_DEV_ROLE=antigravity \
+      --entrypoint /usr/local/lib/remote-dev/python \
+      "$image" -I /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
 
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then

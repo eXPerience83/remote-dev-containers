@@ -40,6 +40,7 @@ jobs:
             scripts/remote-dev-browser-config.py \
             scripts/test-browser-config.py \
             scripts/remote-dev-browser-sandbox.py \
+            scripts/browser-sandbox-runtime-probe.py \
             scripts/test-browser-sandbox.py \
             scripts/test-agent-guidance.py \
             scripts/test-initialize-codex-config.py \

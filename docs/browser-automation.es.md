@@ -27,8 +27,11 @@ la herramienta común con `playwright --version`.
 Los agentes mantienen su modelo de permisos dentro del contenedor, pero el
 lanzador del MCP inicia Node y Chromium con UID/GID `61123`, sin privilegios
 ni grupos complementarios, tras limpiar entorno y FDs y aplicar Landlock al
-proceso y descendientes. Un supervisor y un guardián separados eliminan el
-perfil efímero de `/run` al terminar. No se necesita instalar nada al iniciar.
+proceso y descendientes. Un supervisor y un guardián de limpieza separados eliminan el
+perfil efímero de `/run` al terminar. El guardián es un proceso mínimo de
+confianza distinto del UID del navegador: conserva los permisos de limpieza
+ya permitidos por el contenedor, no hereda secretos y se marca no depurable
+para que Chromium no pueda detenerlo por compartir UID. No se necesita instalar nada al iniciar.
 
 Chromium sigue con `chromiumSandbox: false`: **no es un sandbox de Chromium
 adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
