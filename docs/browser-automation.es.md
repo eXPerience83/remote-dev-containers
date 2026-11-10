@@ -31,7 +31,9 @@ proceso y descendientes. Un supervisor y un guardián de limpieza separados elim
 perfil efímero de `/run` al terminar. El guardián es un proceso mínimo de
 confianza distinto del UID del navegador: conserva los permisos de limpieza
 ya permitidos por el contenedor, no hereda secretos y se marca no depurable
-para que Chromium no pueda detenerlo por compartir UID. No se necesita instalar nada al iniciar.
+para que Chromium no pueda detenerlo por compartir UID.
+Además es el **padre y subreaper** de Node: puede recoger Chromium incluso cuando
+Playwright crea grupos de procesos independientes y el supervisor recibe SIGKILL. No se necesita instalar nada al iniciar.
 
 Chromium sigue con `chromiumSandbox: false`: **no es un sandbox de Chromium
 adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket

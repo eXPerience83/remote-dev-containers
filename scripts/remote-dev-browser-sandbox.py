@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import ctypes
 import os
+import select
+import time
 from pathlib import Path
 import shutil
 import signal
@@ -28,6 +30,7 @@ TMP_ROOT = "/run"
 LL_CREATE, LL_ADD, LL_RESTRICT = 444, 445, 446  # x86_64 and aarch64
 LL_VERSION, LL_PATH_RULE = 1, 1
 PR_SET_PDEATHSIG, PR_SET_NO_NEW_PRIVS = 1, 38
+PR_SET_DUMPABLE, PR_SET_CHILD_SUBREAPER = 4, 36
 
 EXEC, WRITE, READ, READDIR = (1 << i for i in range(4))
 RM_DIR, RM_FILE, MK_CHAR, MK_DIR, MK_REG, MK_SOCK, MK_FIFO = (
@@ -167,22 +170,91 @@ def kill_group(group: int) -> None:
         pass
 
 
+def adopted_children() -> list[int]:
+    """Enumerate this subreaper's children, including adopted Chromium trees."""
+    # Linux /proc children is provided by TrueNAS's kernel and GitHub CI.
+    path = f"/proc/self/task/{os.getpid()}/children"
+    return [int(value) for value in Path(path).read_text().split()]
+
+
+def cleanup_browser_tree(child: subprocess.Popen[bytes] | None) -> None:
+    """Reap Node and all descendants, including detached Chrome process groups."""
+    if child is not None:
+        kill_group(child.pid)
+        try:
+            child.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=2)
+    deadline = time.monotonic() + 6
+    while True:
+        pending = adopted_children()
+        if not pending:
+            return
+        for pid in pending:
+            try:
+                group = os.getpgid(pid)
+                # Never target the trusted guardian's own session/group.
+                if group != os.getpgrp():
+                    kill_group(group)
+                else:
+                    os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        # Reap all descendants that have become direct children of this
+        # subreaper, including Chromium child processes that called setsid().
+        while True:
+            try:
+                reaped, _ = os.waitpid(-1, os.WNOHANG)
+            except ChildProcessError:
+                break
+            if reaped == 0:
+                break
+        if time.monotonic() >= deadline:
+            raise IsolationError("browser child process cleanup timed out")
+        time.sleep(0.05)
+
+
 def guardian(lifeline_fd: int, scratch: str) -> int:
+    """Trusted parent of MCP Node; subreaper for detached Chromium descendants."""
     if os.geteuid() != 0 or not scratch.startswith(
             "/run/remote-dev-browser-"):
         return 2
+    child: subprocess.Popen[bytes] | None = None
     try:
-        with os.fdopen(lifeline_fd, "rb", closefd=True) as pipe:
-            line = pipe.readline(32)
-            if not line.endswith(b"\n") or not line[:-1].isdigit():
-                return 2
-            pgid = int(line[:-1])
-            while pipe.read(8192):
-                pass
-        kill_group(pgid)
-        return 0
+        if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), "guardian subreaper unavailable")
+        # Do not spawn a browser without an observable orphan cleanup contract.
+        adopted_children()
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, signal_exit)
+        node = os.path.realpath(IMAGE_NODE)
+        parent_pid = os.getpid()
+        child = subprocess.Popen(
+            [node, MCP_ENTRY, "--config", MCP_CONFIG],
+            cwd=scratch, env=safe_env(scratch),
+            stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr,
+            close_fds=True, start_new_session=True,
+            preexec_fn=lambda: secure_preexec(node, scratch, parent_pid),
+        )
+        # Parent process keeps the lifeline writer. EOF means the supervisor
+        # exited, including SIGKILL; the guardian and Node have independent
+        # process groups, so an external client cannot kill them by accident.
+        while True:
+            code = child.poll()
+            if code is not None:
+                return code
+            ready, _, _ = select.select([lifeline_fd], [], [], 0.1)
+            if ready and not os.read(lifeline_fd, 4096):
+                return 143
+    except Interrupted as stop:
+        return 128 + stop.signum
     finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+        try:
+            cleanup_browser_tree(child)
+        finally:
+            os.close(lifeline_fd)
+            shutil.rmtree(scratch, ignore_errors=True)
 
 
 def guardian_preexec() -> None:
@@ -190,7 +262,7 @@ def guardian_preexec() -> None:
     # inherit agent credentials and cannot be signalled or ptraced by the
     # browser UID. It must retain the existing host-approved kill capability.
     no_new_privileges()
-    if libc.prctl(4, 0, 0, 0, 0) != 0:  # PR_SET_DUMPABLE = 4
+    if libc.prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0:
         raise OSError(ctypes.get_errno(), "guardian non-dumpable failed")
 
 
@@ -217,63 +289,49 @@ def supervise() -> int:
             os.stat(TMP_ROOT).st_mode):
         raise IsolationError("unsafe /run")
     scratch = tempfile.mkdtemp(prefix="remote-dev-browser-", dir=TMP_ROOT)
-    child: subprocess.Popen[bytes] | None = None
     guard: subprocess.Popen[bytes] | None = None
     readfd = writefd = -1
     try:
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, signal_exit)
         os.chown(scratch, UID, GID)
-        runtime = scratch + "/runtime"
-        os.mkdir(runtime, 0o700)
-        os.chown(runtime, UID, GID)
-        output = scratch + "/output"
-        os.mkdir(output, 0o700)
-        os.chown(output, UID, GID)
-        env = safe_env(scratch)
+        for leaf in ("runtime", "output"):
+            target = os.path.join(scratch, leaf)
+            os.mkdir(target, 0o700)
+            os.chown(target, UID, GID)
         readfd, writefd = os.pipe()
-        # A separate-session, non-dumpable root guardian survives supervisor
-        # SIGKILL. Browser UID 61123 cannot signal it. Only the root
-        # supervisor retains the pipe writer; the guardian has a clean env.
+        # The non-dumpable root guardian is a *parent* and subreaper of Node,
+        # not Node's sibling. It inherits only MCP stdio, the private lifeline
+        # read FD and a fixed safe environment; never the agent's credentials.
         guard = subprocess.Popen(
             [IMAGE_PYTHON, "-I", __file__, "--guardian", str(readfd), scratch],
-            cwd=scratch, env=env, stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=sys.stderr,
+            cwd=scratch, env=safe_env(scratch),
+            stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr,
             pass_fds=(readfd,), close_fds=True, start_new_session=True,
             preexec_fn=guardian_preexec,
         )
         os.close(readfd)
         readfd = -1
-        supervisor_pid = os.getpid()
-        child = subprocess.Popen(
-            [node, MCP_ENTRY, "--config", MCP_CONFIG],
-            cwd=scratch, env=env,
-            stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr,
-            close_fds=True, start_new_session=True,
-            preexec_fn=lambda: secure_preexec(node, scratch, supervisor_pid),
-        )
-        os.write(writefd, f"{child.pid}\n".encode("ascii"))
-        return child.wait()
+        return guard.wait()
     except Interrupted as stop:
         return 128 + stop.signum
     finally:
-        if child is not None:
-            kill_group(child.pid)
-            try:
-                child.wait(timeout=4)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait()
         if readfd >= 0:
             os.close(readfd)
+        # The close acts as a cancellation signal to the root subreaper,
+        # including on SIGTERM. It kills both Node and detached Chromium.
         if writefd >= 0:
             os.close(writefd)
         if guard is not None:
             try:
-                guard.wait(timeout=4)
+                guard.wait(timeout=9)
             except subprocess.TimeoutExpired:
-                guard.kill()
-                guard.wait()
+                guard.terminate()
+                try:
+                    guard.wait(timeout=4)
+                except subprocess.TimeoutExpired:
+                    guard.kill()
+                    guard.wait()
         shutil.rmtree(scratch, ignore_errors=True)
 
 
@@ -281,7 +339,7 @@ def main() -> int:
     if len(sys.argv) == 4 and sys.argv[1] == "--guardian":
         try:
             return guardian(int(sys.argv[2]), sys.argv[3])
-        except (ValueError, OSError):
+        except (ValueError, OSError, IsolationError, subprocess.SubprocessError):
             return 2
     if len(sys.argv) != 1:
         print("ERROR: browser MCP does not accept caller options", file=sys.stderr)

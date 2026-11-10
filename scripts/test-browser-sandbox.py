@@ -84,26 +84,31 @@ class BrowserIsolationContract(unittest.TestCase):
                 with self.assertRaises(sandbox.IsolationError):
                     sandbox.supervise()
 
-    def test_guardian_lifeline_kills_group_and_cleans(self):
-        read_fd, write_fd = os.pipe()
-        try:
-            os.write(write_fd, b"424242\n")
-            os.close(write_fd)
-            write_fd = -1
-            with (mock.patch.object(sandbox.os, "geteuid", return_value=0),
-                  mock.patch.object(sandbox, "kill_group") as killer,
-                  mock.patch.object(sandbox.shutil, "rmtree") as cleanup):
-                result = sandbox.guardian(read_fd, "/run/remote-dev-browser-fixture")
-            read_fd = -1
-            self.assertEqual(result, 0)
-            killer.assert_called_once_with(424242)
-            cleanup.assert_called_once_with("/run/remote-dev-browser-fixture",
-                                            ignore_errors=True)
-        finally:
-            if read_fd >= 0:
-                os.close(read_fd)
-            if write_fd >= 0:
-                os.close(write_fd)
+    def test_guardian_reaps_detached_browser_process_groups(self):
+        class NodeProcess:
+            pid = 777
+
+            def wait(self, timeout):
+                return 0
+
+        # A detached Chromium child is adopted by the guardian/subreaper
+        # after Node exits. It must be killed even though it is not in
+        # Node's own process group.
+        with (mock.patch.object(sandbox, "adopted_children",
+                                side_effect=[[888], []]) as adopted,
+              mock.patch.object(sandbox, "kill_group") as killer,
+              mock.patch.object(sandbox.os, "getpgid", return_value=888),
+              mock.patch.object(sandbox.os, "getpgrp", return_value=42),
+              mock.patch.object(sandbox.os, "waitpid", return_value=(0, 0)),
+              mock.patch.object(sandbox.time, "sleep")):
+            sandbox.cleanup_browser_tree(NodeProcess())
+        self.assertEqual(adopted.call_count, 2)
+        self.assertEqual(killer.call_args_list,
+                         [mock.call(777), mock.call(888)])
+
+    def test_subreaper_and_nondumpable_constants(self):
+        self.assertEqual(sandbox.PR_SET_CHILD_SUBREAPER, 36)
+        self.assertEqual(sandbox.PR_SET_DUMPABLE, 4)
 
     def test_browser_identity_cannot_run_cleanup_guardian(self):
         with mock.patch.object(sandbox.os, "geteuid", return_value=sandbox.UID):
