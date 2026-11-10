@@ -117,9 +117,12 @@ class BrowserIsolationContract(unittest.TestCase):
     def test_guardian_has_non_dumpable_policy(self):
         with (mock.patch.object(sandbox, "no_new_privileges") as nnp,
               mock.patch.object(sandbox.libc, "prctl", return_value=0) as ctl):
-            sandbox.guardian_preexec()
+            sandbox.guardian_runtime_hardening()
         nnp.assert_called_once_with()
-        ctl.assert_called_once_with(4, 0, 0, 0, 0)
+        self.assertEqual(ctl.call_args_list, [
+            mock.call(sandbox.PR_SET_DUMPABLE, 0, 0, 0, 0),
+            mock.call(sandbox.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0),
+        ])
 
     def test_no_user_supplied_mcp_flags(self):
         proc = subprocess.run(

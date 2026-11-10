@@ -222,8 +222,7 @@ def guardian(lifeline_fd: int, scratch: str) -> int:
         return 2
     child: subprocess.Popen[bytes] | None = None
     try:
-        if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
-            raise OSError(ctypes.get_errno(), "guardian subreaper unavailable")
+        guardian_runtime_hardening()
         # Do not spawn a browser without an observable orphan cleanup contract.
         adopted_children()
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -257,13 +256,21 @@ def guardian(lifeline_fd: int, scratch: str) -> int:
             shutil.rmtree(scratch, ignore_errors=True)
 
 
-def guardian_preexec() -> None:
-    # The guardian is a small trusted root-only cleanup process. It does not
-    # inherit agent credentials and cannot be signalled or ptraced by the
-    # browser UID. It must retain the existing host-approved kill capability.
+def guardian_runtime_hardening() -> None:
+    # Executing the immutable Python interpreter resets Linux dumpability.
+    # Apply this *after exec*, before starting any untrusted browser process.
     no_new_privileges()
     if libc.prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0:
         raise OSError(ctypes.get_errno(), "guardian non-dumpable failed")
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        raise OSError(ctypes.get_errno(), "guardian subreaper unavailable")
+
+
+def guardian_preexec() -> None:
+    # The trusted root guardian starts without agent credentials and with NNP.
+    # PR_SET_DUMPABLE must be applied again inside guardian_runtime_hardening
+    # because execve resets it for ordinary executables.
+    no_new_privileges()
 
 
 def signal_exit(signum: int, _frame: object) -> None:
