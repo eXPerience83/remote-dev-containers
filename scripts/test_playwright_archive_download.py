@@ -28,6 +28,8 @@ class ArchiveRedirectTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             self.assertNotIn("--location", command)
             self.assertEqual(command[:2], ["curl", "-q"])
+            self.assertIn("--globoff", command)
+            self.assertEqual(command.count("--globoff"), 1)
             self.assertIn("--write-out", command)
             code, redirect = next(pending)
             if code == 200:
@@ -66,6 +68,21 @@ class ArchiveRedirectTests(unittest.TestCase):
                 (302, "https://evil.invalid/archive.zip")) as run:
             with self.assertRaisesRegex(dl.ArchiveDownloadError, "destination"):
                 dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+            self.assertEqual(run.call_count, 1)
+
+    def test_globbed_storage_redirect_is_rejected_before_a_second_request(self):
+        # Without --globoff, curl could turn braces into multiple requests,
+        # including a URL outside the approved storage prefix.
+        redirect = (
+            "https://storage.googleapis.com/chrome-for-testing-public/"
+            "{../other-bucket,safe}/payload.zip"
+        )
+        with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
+                (302, redirect)) as run:
+            with self.assertRaisesRegex(dl.ArchiveDownloadError,
+                                        "unsafe redirect URL characters"):
+                dl.download_archive(
+                    CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, 1)
 
     def test_http_and_hostname_spoofing_rejected(self):
