@@ -65,7 +65,7 @@ def download_archive(url: str, destination: Path, component: str) -> None:
             "--proto", "=https", "--retry", "3",
             "--connect-timeout", "25", "--max-time", str(seconds),
             "--max-filesize", str(MAX_BYTES),
-            "--write-out", "%{http_code}\\n%{redirect_url}",
+            "--write-out", "%{http_code}\n%{redirect_url}",
             "--output", str(destination), url,
         ]
         response = subprocess.run(
