@@ -103,6 +103,7 @@ jobs:
           python3 scripts/validate-playwright-lock.py
           python3 scripts/test-validate-playwright-lock.py
           python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
           python3 scripts/test-install-verified-playwright-browser.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
