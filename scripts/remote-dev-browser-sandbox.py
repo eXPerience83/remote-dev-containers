@@ -85,7 +85,16 @@ def rules(node: str, scratch: str) -> list[tuple[str, int]]:
     return [
         ("/usr", READ_EXEC), ("/bin", READ_EXEC),
         ("/lib", READ_EXEC), ("/lib64", READ_EXEC),
-        ("/etc", READ_ONLY), ("/proc", READ_ONLY), ("/sys", READ_ONLY),
+        ("/etc", READ_ONLY), ("/sys", READ_ONLY),
+        # /proc contains other processes' argv. ttyd carries its Basic Auth
+        # credential in argv, so never grant READ_FILE on all of /proc.
+        # Node may inspect its own proc entry and these innocuous global stats.
+        ("/proc", READDIR),
+        ("/proc/self", READ_ONLY),
+        ("/proc/thread-self", READ_ONLY),
+        ("/proc/cpuinfo", READ), ("/proc/meminfo", READ),
+        ("/proc/stat", READ), ("/proc/uptime", READ),
+        ("/proc/loadavg", READ), ("/proc/version", READ),
         (os.path.dirname(target), READ_EXEC),
         ("/opt/remote-dev/playwright", READ_EXEC),
         (BROWSER_ASSETS, READ_EXEC),

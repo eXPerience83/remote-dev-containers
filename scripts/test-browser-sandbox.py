@@ -55,6 +55,11 @@ class BrowserIsolationContract(unittest.TestCase):
         self.assertIn("/run/remote-dev-browser-fixture", allowed)
         self.assertNotIn("/workspace", allowed)
         self.assertNotIn("/root", allowed)
+        proc_rights = dict(rules)["/proc"]
+        self.assertFalse(proc_rights & sandbox.READ)
+        self.assertTrue(proc_rights & sandbox.READDIR)
+        self.assertIn("/proc/self", allowed)
+        self.assertIn("/proc/cpuinfo", allowed)
         self.assertFalse(any(path.startswith("/root/") or
                              path.startswith("/workspace/") for path in allowed))
         self.assertFalse(sandbox.READ_ONLY & sandbox.WRITE)

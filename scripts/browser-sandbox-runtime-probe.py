@@ -57,6 +57,12 @@ assert(fs.readFileSync("/etc/passwd", "utf8").includes("root"), "system files no
 denied(() => fs.readdirSync("/workspace"), "workspace directory");
 denied(() => fs.readdirSync("/root"), "agent root directory");
 denied(() => fs.readdirSync("/tmp"), "global temporary directory");
+const otherPid = process.argv[1];
+assert(/^\d+$/.test(otherPid), "no synthetic ttyd PID");
+denied(() => fs.readFileSync("/proc/" + otherPid + "/cmdline"),
+       "synthetic ttyd credential in /proc");
+denied(() => fs.readFileSync("/proc/" + otherPid + "/environ"),
+       "synthetic ttyd environment in /proc");
 try { fs.fstatSync(99); throw Error("inherited FD still usable"); }
 catch (error) { if (error.code !== "EBADF") throw error; }
 const probe = process.env.TMPDIR + "/write-probe";
@@ -78,6 +84,14 @@ def run_probe() -> int:
         raise RuntimeError("Landlock ABI is insufficient")
     temp_dir = tempfile.mkdtemp(prefix="remote-dev-browser-", dir="/run")
     fd = -1
+    # Synthetic root process imitates ttyd's argv credentials. Never use any
+    # real password or access the real ttyd process.
+    synthetic_ttyd = subprocess.Popen(
+        [sys.executable, "-I", "-c", "import time; time.sleep(45)",
+         "synthetic-ttyd-user:synthetic-not-a-secret"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, close_fds=True,
+    )
     try:
         os.chown(temp_dir, sandbox.UID, sandbox.GID)
         for leaf in ("runtime", "output"):
@@ -102,7 +116,7 @@ def run_probe() -> int:
                     "REMOTE_DEV_SYNTHETIC_SECRET"):
             os.environ[key] = "synthetic-probe-only"
         result = subprocess.run(
-            [binary, "-e", JS_PROBE],
+            [binary, "-e", JS_PROBE, str(synthetic_ttyd.pid)],
             cwd=temp_dir,
             env=env,
             close_fds=True,
@@ -123,6 +137,12 @@ def run_probe() -> int:
     finally:
         if fd >= 0:
             os.close(fd)
+        synthetic_ttyd.terminate()
+        try:
+            synthetic_ttyd.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            synthetic_ttyd.kill()
+            synthetic_ttyd.wait()
         shutil.rmtree(temp_dir)
 
 
