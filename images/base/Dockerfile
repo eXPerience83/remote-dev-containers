@@ -238,6 +238,7 @@ RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH" \
 COPY --chown=0:0 --chmod=0444 config/playwright-package.json /opt/remote-dev/playwright/package.json
 COPY --chown=0:0 --chmod=0444 config/playwright-package-lock.json /opt/remote-dev/playwright/package-lock.json
 COPY --chown=0:0 --chmod=0444 config/playwright-browser-archives.json /usr/share/remote-dev/browser-archives.json
+COPY --chown=0:0 --chmod=0444 scripts/playwright_archive_download.py /usr/local/bin/playwright_archive_download.py
 COPY --chown=0:0 --chmod=0555 scripts/install-verified-playwright-browser.py /usr/local/bin/install-verified-playwright-browser
 RUN test "$(node -p 'require("/opt/remote-dev/playwright/package.json").dependencies["@playwright/mcp"]')" = "$PLAYWRIGHT_MCP_VERSION" \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci \
