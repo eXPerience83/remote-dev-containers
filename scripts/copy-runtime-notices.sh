@@ -23,7 +23,8 @@ copy_notice_files() {
 
   listing="$(mktemp)"
   find "$source_root" -maxdepth 8 -type f \
-    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \
+       -o -iname 'ThirdPartyNotices.txt' -o -iname '*.LICENSE' \) \
     -print0 > "$listing"
 
   while IFS= read -r -d '' source; do
@@ -63,3 +64,7 @@ copy_notice_files python-315 "$python315_root" optional
 
 copy_notice_files node "$node_root" required
 copy_notice_files npm "$npm_root" required
+
+# Keep notices actually redistributed inside the pinned Playwright npm tree,
+# including bundled *.js.LICENSE and ThirdPartyNotices.txt sidecars.
+copy_notice_files playwright /opt/remote-dev/playwright/node_modules required

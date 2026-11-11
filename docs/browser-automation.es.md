@@ -14,9 +14,12 @@ servidor MCP `playwright` a la configuración privada:
   comando: `claude mcp add --scope user playwright -- /usr/local/bin/remote-dev-playwright-mcp`.
   **Este cambio no instala ni configura Claude.**
 
-Si ya existe una definición `playwright` del usuario, se respeta incluso si
-está deshabilitada. Las demás opciones permanecen; no se sobrescriben archivos
-privados inválidos o inseguros. Los agentes no comparten configuraciones.
+Si ya existe una definición `playwright` personalizada o deshabilitada,
+se respeta. Solo se actualiza automáticamente una entrada de Codex que coincida
+exactamente con el formato generado por una versión anterior de Remote Dev,
+para añadir `REMOTE_DEV_ROLE=codex`. Las demás opciones permanecen; no se
+sobrescriben archivos privados inválidos o inseguros ni se genera TOML no válido.
+Los agentes no comparten configuraciones.
 Los comandos pasivos como `--help` no alteran estos archivos.
 
 El MCP se inicia bajo demanda mediante **stdio**, con perfil aislado, y termina al cerrar la sesión del agente. No se abre ningún puerto. Se puede comprobar
@@ -40,13 +43,14 @@ adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
 accesible para ese UID sigue siendo un riesgo residual. Se mantiene Internet
 y acceso a la LAN por decisión del operador, sin aislamiento de red.
 
-El nuevo lanzador **requiere aceptación real en Codex y AGY bajo el Compose
-correspondiente** antes de fusionar; las pruebas sintéticas en CI no prueban
-solas el aislamiento completo.
+**Estado:** funcionalidad experimental en desarrollo, no incluida en la
+imagen estable v0.2.1. Las pruebas de CI incluyen construcción AMD64,
+navegación HTTP/JavaScript/WebSocket, capturas, comprobaciones negativas
+de Landlock y limpieza de procesos. La aceptación con AGY real en TrueNAS
+sigue sin verificarse; los tests opcionales de integración no la sustituyen.
 
-Los binarios viven en `/opt/remote-dev/playwright-browsers`, no se instalan
-en `/tmp` ni en el arranque. La compilación AMD64 y las pruebas reales deben
-pasar antes de fusionar.
+Los binarios viven en `/opt/remote-dev/playwright-browsers` y no se instalan
+en `/tmp` ni se descargan al arrancar.
 
 ## Validación
 

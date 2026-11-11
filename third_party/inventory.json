@@ -520,6 +520,16 @@
           "path": "components/playwright-mcp/LICENSE",
           "source": "repository",
           "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.84/LICENSE"
+        },
+        {
+          "path": "components/playwright/ThirdPartyNotices.txt",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright/v1.65.0/packages/playwright/ThirdPartyNotices.txt"
+        },
+        {
+          "path": "components/playwright-core/ThirdPartyNotices.txt",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright/v1.65.0/packages/playwright-core/ThirdPartyNotices.txt"
         }
       ]
     },
