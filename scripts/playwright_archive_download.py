@@ -7,10 +7,10 @@ every subsequent hop before making the next network request.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import subprocess
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 MAX_HOPS = 6
