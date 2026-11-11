@@ -97,6 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
           python3 scripts/playwright-upstream.py discover \
             --arch "$PLAYWRIGHT_ARCH" --output "$PLAYWRIGHT_REPORT"
           jq -er '.schema_version == 1 and
@@ -194,6 +195,7 @@ jobs:
           python3 scripts/test_select_mature_pypi_version.py
           python3 scripts/test_admit_mise_upstream.py
           python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
           source versions.env
 
           curl_args=(
