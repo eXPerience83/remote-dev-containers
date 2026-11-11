@@ -26,7 +26,7 @@ class ArchiveDownloadError(ValueError):
 def validate_archive_url(url: str, component: str) -> None:
     if component not in COMPONENTS or not isinstance(url, str):
         raise ArchiveDownloadError("unsupported archive or URL")
-    if any(char in url for char in ("\\", "\r", "\n", "\t")):
+    if any(char in url for char in ("\\", "\r", "\n", "\t", "{", "}")):
         raise ArchiveDownloadError("unsafe redirect URL characters")
     parsed = urlsplit(url)
     if (parsed.scheme != "https" or parsed.username is not None
@@ -61,7 +61,7 @@ def download_archive(url: str, destination: Path, component: str) -> None:
             raise TimeoutError("archive download exceeded total deadline")
         seconds = min(700, max(1, int(remaining)))
         command = [
-            "curl", "-q", "--fail", "--silent", "--show-error",
+            "curl", "-q", "--globoff", "--fail", "--silent", "--show-error",
             "--proto", "=https", "--retry", "3",
             "--connect-timeout", "25", "--max-time", str(seconds),
             "--max-filesize", str(MAX_BYTES),
