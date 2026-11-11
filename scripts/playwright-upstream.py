@@ -14,7 +14,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -117,28 +116,6 @@ def validate_archives(arch: str, archives: dict, core_version: str) -> None:
         require(item["executable"] == expected_exe, "unexpected browser binary path")
     require(SEMVER.fullmatch(core_version.split("-")[0]) is not None,
             "unreviewed Playwright Core version")
-
-
-def package_metadata(version: str) -> dict:
-    require(SEMVER.fullmatch(version) is not None, "non-stable upstream version")
-    url = "https://registry.npmjs.org/@playwright%2fmcp/latest"
-    with urllib.request.urlopen(urllib.request.Request(
-        url, headers={"User-Agent": "remote-dev-playwright-upstream/1"},
-    ), timeout=30) as response:
-        require(response.geturl() == url, "unexpected npm metadata redirect")
-        payload = response.read(MAX_META_BYTES + 1)
-    require(len(payload) <= MAX_META_BYTES, "npm metadata too large")
-    data = json.loads(payload)
-    require(isinstance(data, dict) and data.get("version") == version,
-            "inconsistent upstream npm dist-tag")
-    require(data.get("license") == "Apache-2.0",
-            "unexpected Playwright MCP license")
-    dist = data.get("dist", {})
-    require(isinstance(dist, dict)
-            and isinstance(dist.get("integrity"), str)
-            and dist["integrity"].startswith("sha512-"),
-            "missing upstream npm integrity")
-    return data
 
 
 def npm_latest() -> str:
@@ -338,6 +315,9 @@ def reconcile(root: Path, amd64: dict, arm64: dict, *, write: bool) -> str:
         require(amd64["archives"][component]["revision"]
                 == arm64["archives"][component]["revision"],
                 "architecture-specific revisions disagree")
+        require(amd64["archives"][component].get("browserVersion")
+                == arm64["archives"][component].get("browserVersion"),
+                "architecture-specific browser versions disagree")
     version = amd64["version"]
     archive_manifest = {
         "schema_version": 1,

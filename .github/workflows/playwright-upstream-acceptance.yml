@@ -69,3 +69,57 @@ jobs:
           python3 scripts/playwright-upstream.py reconcile \
             --amd64 "$AMD64" --arm64 "$ARM64"
           python3 scripts/test_playwright_upstream.py
+
+          # Simulate exactly the writer-side source update on a separate
+          # scratch checkout. The repository remains read-only in this job.
+          stage="$RUNNER_TEMP/playwright-update-acceptance"
+          mkdir -p "$stage/images/base" "$stage/config"
+          cp versions.env "$stage/versions.env"
+          cp images/base/Dockerfile "$stage/images/base/Dockerfile"
+          cp config/playwright-package*.json "$stage/config/"
+          cp config/playwright-browser-archives.json "$stage/config/"
+          cp -a third_party "$stage/third_party"
+          python3 - "$stage" "$AMD64" "$ARM64" <<'PY'
+          import importlib.util
+          import json
+          from pathlib import Path
+          import sys
+
+          spec = importlib.util.spec_from_file_location(
+              "playwright_upstream_acceptance",
+              Path("scripts/playwright-upstream.py").resolve())
+          assert spec is not None and spec.loader is not None
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          root = Path(sys.argv[1])
+          amd64 = json.loads(Path(sys.argv[2]).read_text())
+          arm64 = json.loads(Path(sys.argv[3]).read_text())
+          result = module.reconcile(root, amd64, arm64, write=True)
+          assert result == "updated", result
+          assert module.baseline_version(root) == amd64["version"]
+          PY
+          python3 scripts/update-third-party-inventory.py \
+            --write --root "$stage"
+          python3 scripts/update-third-party-inventory.py \
+            --check --root "$stage"
+          python3 - "$stage" <<'PY'
+          import importlib.util
+          import json
+          from pathlib import Path
+          import sys
+          root = Path(sys.argv[1])
+          spec = importlib.util.spec_from_file_location(
+              "lock_validator",
+              Path("scripts/validate-playwright-lock.py").resolve())
+          assert spec is not None and spec.loader is not None
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          module.check_repo(root)
+          inventory = json.loads((root / "third_party/inventory.json").read_text())
+          version = module.checked_version((root / "versions.env").read_text())
+          component = next(x for x in inventory["components"] if x["id"] == "playwright-mcp")
+          assert component["version"] == version
+          assert (root / "third_party/components/playwright-mcp/LICENSE").is_file()
+          print("PASS: coherent package, browser, legal inventory and license source")
+          PY
+          git diff --exit-code

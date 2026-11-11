@@ -8,7 +8,7 @@ log_file="$(mktemp)"
 secret="synthetic-agent-password-${RANDOM}-$$"
 
 cleanup() {
-  docker rm -f "$name" "$malformed_name" >/dev/null 2>&1 || true
+  timeout --signal=TERM --kill-after=3s 12s docker rm -f "$name" "$malformed_name" >/dev/null 2>&1 || true
   rm -f "$log_file"
 }
 trap cleanup EXIT
