@@ -22,9 +22,12 @@ MANIFEST = json.loads((ROOT / "config/playwright-browser-archives.json").read_te
 PKG = json.loads((ROOT / "config/playwright-package.json").read_text())
 LOCK = json.loads((ROOT / "config/playwright-package-lock.json").read_text())
 BASE = up.baseline_version(ROOT)
+BASE_MAJOR, BASE_MINOR, BASE_PATCH = map(int, BASE.split("."))
+CANDIDATE_VERSION = f"{BASE_MAJOR}.{BASE_MINOR}.{BASE_PATCH + 2}"
+OTHER_CANDIDATE_VERSION = f"{BASE_MAJOR}.{BASE_MINOR}.{BASE_PATCH + 1}"
 
 
-def candidate(arch: str, version: str = "0.0.999") -> dict:
+def candidate(arch: str, version: str = CANDIDATE_VERSION) -> dict:
     lock = copy.deepcopy(LOCK)
     lock["packages"][""]["dependencies"]["@playwright/mcp"] = version
     lock["packages"]["node_modules/@playwright/mcp"]["version"] = version
@@ -123,14 +126,14 @@ class PlaywrightUpdaterContract(unittest.TestCase):
             self.assertEqual(up.reconcile(
                 root, candidate("amd64"), candidate("arm64"), write=True),
                 "updated")
-            self.assertIn("PLAYWRIGHT_MCP_VERSION=0.0.999",
+            self.assertIn(f"PLAYWRIGHT_MCP_VERSION={CANDIDATE_VERSION}",
                           (root / "versions.env").read_text())
-            self.assertIn("ARG PLAYWRIGHT_MCP_VERSION=0.0.999",
+            self.assertIn(f"ARG PLAYWRIGHT_MCP_VERSION={CANDIDATE_VERSION}",
                           (root / "images/base/Dockerfile").read_text())
             self.assertEqual(
                 json.loads((root / "config/playwright-package-lock.json").read_text())
                 ["packages"]["node_modules/@playwright/mcp"]["version"],
-                "0.0.999")
+                CANDIDATE_VERSION)
             a = json.loads((root / "config/playwright-browser-archives.json").read_text())
             self.assertEqual(set(a["archives"]), set(up.ARCHES))
 
@@ -142,7 +145,7 @@ class PlaywrightUpdaterContract(unittest.TestCase):
             up.reconcile(ROOT, candidate("amd64"), modified, write=False)
 
     def test_arch_release_mismatch_is_blocked(self):
-        x = candidate("arm64", version="0.0.998")
+        x = candidate("arm64", version=OTHER_CANDIDATE_VERSION)
         with self.assertRaises(up.CandidateError):
             up.reconcile(ROOT, candidate("amd64"), x, write=False)
 
