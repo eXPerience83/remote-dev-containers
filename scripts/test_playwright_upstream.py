@@ -100,7 +100,7 @@ class PlaywrightUpdaterContract(unittest.TestCase):
     def test_package_graph_changes_are_deferred(self):
         bad = candidate("amd64")
         bad["lock"]["packages"]["node_modules/extra"] = {"version": "1.0.0"}
-        with self.assertRaises(up.lock_validator().BadLock):
+        with self.assertRaisesRegex(ValueError, "unexpected or missing production"):
             up.check_report(bad, "amd64", BASE)
 
     def test_no_write_does_not_touch_files(self):
@@ -119,6 +119,7 @@ class PlaywrightUpdaterContract(unittest.TestCase):
                 dest = root / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes((ROOT / rel).read_bytes())
+            (root / "config").mkdir(parents=True)
             self.assertEqual(up.reconcile(
                 root, candidate("amd64"), candidate("arm64"), write=True),
                 "updated")

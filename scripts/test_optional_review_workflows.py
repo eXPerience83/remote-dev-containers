@@ -17,15 +17,16 @@ def require(text: str, fragment: str, label: str) -> None:
         raise AssertionError(f"missing {label}: {fragment!r}")
 
 
-def pinned_artifact_download_sha(text: str, label: str) -> str:
+def pinned_artifact_download_sha(text: str, label: str, expected_count: int = 1) -> str:
     """Require exactly one immutable official artifact-download action reference."""
     matches = re.findall(
         r"(?m)^[ \t]*uses:[ \t]*actions/download-artifact@([^\s#]+)(?:[ \t]+#[^\n]*)?$",
         text,
     )
-    if len(matches) != 1 or re.fullmatch(r"[0-9a-f]{40}", matches[0]) is None:
+    if (len(matches) != expected_count or len(set(matches)) != 1
+            or re.fullmatch(r"[0-9a-f]{40}", matches[0]) is None):
         raise AssertionError(
-            f"{label}: expected exactly one actions/download-artifact use pinned to a 40-character commit SHA"
+            f"{label}: expected {expected_count} actions/download-artifact uses sharing one 40-character commit SHA"
         )
     return matches[0]
 
@@ -67,7 +68,8 @@ def assert_scheduler_contract(text: str) -> None:
     """Lock the non-executing scheduled discovery and separate writer boundary."""
     require(text, 'cron: "17 5 * * *"', "daily review cadence")
     require(text, "group: check-upstream", "shared concurrency group")
-    detect = job_block(text, "antigravity-detect", "check")
+    detect = job_block(text, "antigravity-detect", "playwright-discover")
+    playwright = job_block(text, "playwright-discover", "check")
     writer = job_block(text, "check")
 
     require(detect, "permissions:\n      contents: read", "read-only Antigravity detector")
@@ -89,11 +91,26 @@ def assert_scheduler_contract(text: str) -> None:
     if "review-antigravity-candidate.yml" in text:
         raise AssertionError("scheduled upstream workflow must never dispatch the human Antigravity execution workflow")
 
-    require(writer, "needs: antigravity-detect", "writer dependency on read-only detector")
+    require(playwright, "permissions:\n      contents: read", "read-only Playwright discovery")
+    require(playwright, "persist-credentials: false", "no discovery credentials")
+    require(playwright, "ubuntu-24.04-arm", "native ARM64 discovery runner")
+    require(playwright, "ubuntu-24.04", "native AMD64 discovery runner")
+    require(playwright, "scripts/playwright-upstream.py discover", "separate package discovery")
+    if any(token in playwright for token in ("contents: write", "pull-requests: write",
+                                            "actions: write", "gh pr merge")):
+        raise AssertionError("Playwright detector must never write repository state")
+    require(writer, "needs: [antigravity-detect, playwright-discover]",
+            "writer depends on both read-only discovery jobs")
+    require(writer, "needs.antigravity-detect.result == 'success'",
+            "Antigravity review prerequisite retained")
+    require(writer, "needs.playwright-discover.result == 'success'",
+            "Playwright artifact download guarded on discovery success")
+    require(writer, "scripts/playwright-upstream.py reconcile", "bounded JSON-only update")
+    require(writer, 'branch="automation/update-upstreams"', "single grouped PR")
     require(writer, "actions: write", "writer action-dispatch permission")
     require(writer, "contents: write", "writer branch-maintenance permission")
     require(writer, "pull-requests: write", "writer PR-maintenance permission")
-    pinned_artifact_download_sha(writer, "scheduled writer")
+    pinned_artifact_download_sha(writer, "scheduled writer", expected_count=3)
     require(writer, "Revalidate Antigravity metadata after crossing into write-capable job", "second trust-boundary validation")
     require(writer, '--live-discovery "$ANTIGRAVITY_DISCOVERY"', "fresh static discovery reconciliation")
     require(writer, 'git diff --cached --quiet', "index-based no-change check")
@@ -169,7 +186,7 @@ def main() -> None:
     assert_scheduler_contract(upstream)
     assert_antigravity_manual_contract(antigravity)
     pins = {
-        pinned_artifact_download_sha(job_block(upstream, "check"), "scheduled writer"),
+        pinned_artifact_download_sha(job_block(upstream, "check"), "scheduled writer", expected_count=3),
         pinned_artifact_download_sha(job_block(antigravity, "maintain-pr"), "manual review writer"),
         pinned_artifact_download_sha(job_block(rescan, "reconcile-alert"), "rescan writer"),
     }
