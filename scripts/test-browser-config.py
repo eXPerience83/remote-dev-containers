@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import json
 import tempfile
+import tomllib
 import unittest
 
 SOURCE = Path(__file__).with_name("remote-dev-browser-config.py")
@@ -26,6 +27,11 @@ class BrowserConfigTests(unittest.TestCase):
         data = config.read_text()
         self.assertIn("mcp_servers.context7", data)
         self.assertIn("mcp_servers.playwright", data)
+        parsed = tomllib.loads(data)
+        self.assertEqual(parsed["mcp_servers"]["playwright"]["env"],
+                         {"REMOTE_DEV_ROLE": "codex"})
+        self.assertEqual(parsed["mcp_servers"]["context7"]["url"],
+                         "https://example.test/mcp")
         self.assertEqual(module.reconcile("codex", self.path), "existing")
         self.assertEqual(config.read_text(), data)
 
@@ -35,6 +41,46 @@ class BrowserConfigTests(unittest.TestCase):
         config.write_text(content)
         self.assertEqual(module.reconcile("codex", self.path), "existing")
         self.assertEqual(config.read_text(), content)
+
+    def test_codex_repairs_only_exact_legacy_generated_entry(self):
+        config = self.path / "config.toml"
+        original = '[mcp_servers.context7]\nurl = "https://example.test/mcp"\n'
+        original += module.CODEX_ENTRY_LEGACY
+        config.write_text(original)
+        self.assertEqual(module.reconcile("codex", self.path), "configured")
+        updated = config.read_text()
+        self.assertEqual(updated, original.replace(
+            module.CODEX_ENTRY_LEGACY, module.CODEX_ENTRY))
+        self.assertEqual(tomllib.loads(updated)["mcp_servers"]["playwright"]["env"],
+                         {"REMOTE_DEV_ROLE": "codex"})
+        self.assertEqual(module.reconcile("codex", self.path), "existing")
+
+    def test_codex_user_modified_legacy_entry_is_never_replaced(self):
+        config = self.path / "config.toml"
+        original = module.CODEX_ENTRY_LEGACY.replace(
+            "tool_timeout_sec = 90", "tool_timeout_sec = 180")
+        config.write_text(original)
+        self.assertEqual(module.reconcile("codex", self.path), "existing")
+        self.assertEqual(config.read_text(), original)
+
+    def test_codex_inline_table_is_not_corrupted(self):
+        config = self.path / "config.toml"
+        original = ('mcp_servers = { context7 = { url = '
+                    '"https://example.test/mcp" } }\n')
+        self.assertEqual(tomllib.loads(original)["mcp_servers"]["context7"]["url"],
+                         "https://example.test/mcp")
+        config.write_text(original)
+        with self.assertRaises(module.UnsafeConfig):
+            module.reconcile("codex", self.path)
+        self.assertEqual(config.read_text(), original)
+
+    def test_codex_inline_user_playwright_is_preserved(self):
+        config = self.path / "config.toml"
+        original = ('mcp_servers = { playwright = { command = '
+                    '"user-owned", enabled = false } }\n')
+        config.write_text(original)
+        self.assertEqual(module.reconcile("codex", self.path), "existing")
+        self.assertEqual(config.read_text(), original)
 
     def test_antigravity_preserves_existing_mcp_and_is_idempotent(self):
         config = self.path / "mcp_config.json"
