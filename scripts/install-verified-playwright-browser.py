@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -162,14 +163,13 @@ def install_one(root: Path, name: str, entry: dict) -> None:
     scratch = Path(tempfile.mkdtemp(dir=root, prefix=".verified-playwright-"))
     try:
         archive = scratch / "payload.zip"
-        subprocess.run(
-            ["curl", "--fail", "--show-error", "--silent", "--location",
-             "--proto", "=https", "--proto-redir", "=https",
-             "--retry", "3", "--connect-timeout", "25",
-             "--max-time", "700", "--max-filesize", str(MAX_ARCHIVE_BYTES),
-             "--output", str(archive), entry["url"]],
-            check=True, timeout=740,
-        )
+        helper = Path(__file__).with_name("playwright_archive_download.py")
+        spec = importlib.util.spec_from_file_location("playwright_archive_download", helper)
+        _check(spec is not None and spec.loader is not None,
+               "missing shared archive download policy")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.download_archive(entry["url"], archive, name)
         verify_sha256(archive, entry["sha256"])
         content = scratch / "unpacked"
         extract_verified_zip(archive, content, entry["executable"])
