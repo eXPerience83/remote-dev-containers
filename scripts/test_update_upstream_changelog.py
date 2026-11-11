@@ -39,6 +39,7 @@ PYTHON_VERSION=3.14.7
 PYTHON_315_VERSION=3.15.0
 NODE_VERSION=24.20.0
 NPM_VERSION=12.0.2
+PLAYWRIGHT_MCP_VERSION=0.0.84
 UV_VERSION=0.12.9
 CONTEXT7_CLI_VERSION=0.5.8
 RUFF_VERSION=0.17.1
@@ -66,6 +67,15 @@ class UpstreamChangelogTests(unittest.TestCase):
         )
         self.assertEqual(updated.count("2026-09-03 —"), 1)
         self.assertIn("- Human-authored entry.", updated)
+
+    def test_browser_mcp_version_is_recorded(self) -> None:
+        before = MODULE.parse_versions(self._write("before-playwright.env", BASE_VERSIONS))
+        after = MODULE.parse_versions(self._write(
+            "after-playwright.env",
+            BASE_VERSIONS.replace("PLAYWRIGHT_MCP_VERSION=0.0.84",
+                                  "PLAYWRIGHT_MCP_VERSION=0.0.85")))
+        self.assertEqual(MODULE.changed_components(before, after),
+                         ["Playwright MCP 0.0.84 → 0.0.85"])
 
     def test_single_change_lists_only_that_component(self) -> None:
         before = MODULE.parse_versions(self._write("before.env", BASE_VERSIONS))

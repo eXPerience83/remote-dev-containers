@@ -21,6 +21,7 @@ _COMPONENTS = (
     ("PYTHON_315_VERSION", "Python 3.15", lambda value: value),
     ("NODE_VERSION", "Node.js", lambda value: value),
     ("NPM_VERSION", "npm", lambda value: value),
+    ("PLAYWRIGHT_MCP_VERSION", "Playwright MCP", lambda value: value),
     ("UV_VERSION", "uv", lambda value: value),
     ("RUFF_VERSION", "Ruff", lambda value: value),
     ("PYTEST_VERSION", "pytest", lambda value: value),
