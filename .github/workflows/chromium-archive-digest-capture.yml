@@ -37,41 +37,59 @@ jobs:
           import re
           from pathlib import Path
           from urllib.parse import urlparse
-          lines = Path('dry-run.txt').read_text().splitlines()
-          urls = re.findall(r'^\s*Download url:\s*(https://\S+)\s*$', '\n'.join(lines), re.M)
-          locations = re.findall(r'^\s*Install location:\s*(\S+)\s*$', '\n'.join(lines), re.M)
-          assert len(urls) == 1 and len(locations) == 1, lines
-          browser = json.loads(Path('node_modules/playwright-core/browsers.json').read_text())
-          entries = [e for e in browser['browsers'] if e['name'] == 'chromium-headless-shell']
-          assert len(entries) == 1, entries
-          entry = entries[0]
-          assert Path(locations[0]).name == 'chromium_headless_shell-' + entry['revision'], (locations, entry)
-          url = urlparse(urls[0])
-          assert url.scheme == 'https' and not url.username and not url.password
-          assert 'chrome-headless-shell' in url.path, url.path
-          arch = os.environ['ARCH']
-          assert ('linux-arm64' if arch == 'arm64' else 'linux64') in url.path, url.path
-          info = dict(url=urls[0], revision=entry['revision'], browserVersion=entry['browserVersion'], arch=arch)
-          Path('metadata.json').write_text(json.dumps(info))
-          Path('browser-url.txt').write_text(urls[0])
-          print('Verified metadata:', json.dumps(info, sort_keys=True))
+
+          text = Path('dry-run.txt').read_text()
+          blocks = [s.strip().splitlines() for s in re.split(r'\n\s*\n', text) if s.strip()]
+          expected = {
+              'chromium-headless-shell': 'Chrome Headless Shell',
+              'ffmpeg': 'FFmpeg',
+          }
+          manifest = json.loads(Path('node_modules/playwright-core/browsers.json').read_text())
+          meta = {'arch': os.environ['ARCH'], 'archives': {}}
+          for name, title in expected.items():
+              matches = [lines for lines in blocks if lines[0].startswith(title + ' ')]
+              assert len(matches) == 1, (name, blocks)
+              lines = matches[0]
+              urls = re.findall(r'^\s*Download url:\s*(https://\S+)\s*$', '\n'.join(lines), re.M)
+              locations = re.findall(r'^\s*Install location:\s*(\S+)\s*$', '\n'.join(lines), re.M)
+              assert len(urls) == 1 and len(locations) == 1, lines
+              entry = next(e for e in manifest['browsers'] if e['name'] == name)
+              prefix = name.replace('-', '_') if name != 'ffmpeg' else 'ffmpeg'
+              assert Path(locations[0]).name == prefix + '-' + entry['revision'], (name, locations, entry)
+              url = urlparse(urls[0])
+              assert url.scheme == 'https' and not url.username and not url.password
+              if name == 'chromium-headless-shell':
+                  assert 'chrome-headless-shell' in url.path, url.path
+                  assert ('linux-arm64' if meta['arch'] == 'arm64' else 'linux64') in url.path
+              else:
+                  assert url.path.endswith('ffmpeg-linux-arm64.zip' if meta['arch'] == 'arm64' else 'ffmpeg-linux.zip')
+              meta['archives'][name] = dict(url=urls[0], revision=entry['revision'],
+                                            browserVersion=entry.get('browserVersion'))
+          Path('metadata.json').write_text(json.dumps(meta, sort_keys=True))
+          print('Reviewed metadata:', json.dumps(meta, sort_keys=True))
           PY
-          url="$(cat browser-url.txt)"
-          curl --fail --show-error --silent --location \
-            --retry 3 --connect-timeout 25 --max-time 700 \
-            --output chromium-headless-shell.zip "$url"
-          python3 - <<'PY'
+          for component in chromium-headless-shell ffmpeg; do
+            url="$(python3 -c 'import json,sys; print(json.load(open("metadata.json"))["archives"][sys.argv[1]]["url"])' "$component")"
+            curl --fail --show-error --silent --location \
+              --retry 3 --connect-timeout 25 --max-time 700 \
+              --output "$component.zip" "$url"
+            python3 - "$component" <<'PY'
+          import sys
           import zipfile
-          with zipfile.ZipFile('chromium-headless-shell.zip') as z:
+          component = sys.argv[1]
+          with zipfile.ZipFile(component + '.zip') as z:
               bad = z.testzip()
-              assert bad is None, bad
+              assert bad is None, (component, bad)
               members = z.namelist()
-              assert 4 <= len(members) <= 10000, len(members)
-              print('Archive entries:',len(members),'first:',members[:6])
+              assert 1 <= len(members) <= 10000, (component, len(members))
+              print('Archive:', component, 'entries:', len(members), 'first:', members[:8])
           PY
-          printf 'BEGIN_CHROMIUM_ARCHIVE_DIGEST_%s\n' "$ARCH"
-          sha256sum chromium-headless-shell.zip
+            printf 'BEGIN_REVIEWED_ARCHIVE_%s_%s\n' "$ARCH" "$component"
+            sha256sum "$component.zip"
+            printf 'END_REVIEWED_ARCHIVE_%s_%s\n' "$ARCH" "$component"
+          done
+          printf 'BEGIN_REVIEWED_METADATA_%s\n' "$ARCH"
           cat metadata.json
-          printf 'END_CHROMIUM_ARCHIVE_DIGEST_%s\n' "$ARCH"
+          printf '\nEND_REVIEWED_METADATA_%s\n' "$ARCH"
         env:
           ARCH: ${{ matrix.arch }}
