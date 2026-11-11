@@ -58,7 +58,9 @@ status="$(docker exec "$name" curl --silent --output /dev/null --write-out '%{ht
 # A client with valid HTTP Basic auth can send an invalid ttyd AuthToken.
 # ttyd 1.7.7 logs the rejected token at WARN level. Exercise that path with
 # synthetic data, and ensure it cannot reappear in the container log stream.
-docker exec -i "$name" node - "$secret" <<'NODE'
+# Bound the *host-side* Docker invocation as well as the Node-side timer;
+# an unresponsive docker exec can otherwise stall the entire smoke job.
+if timeout --signal=TERM --kill-after=3s 20s docker exec -i "$name" node - "$secret" <<'NODE'
 "use strict";
 const net = require("node:net");
 const crypto = require("node:crypto");
@@ -165,6 +167,11 @@ socket.on("close", () => {
 });
 socket.on("error", error => fail("WebSocket fixture socket error: " + error.code));
 NODE
+then
+  :
+else
+  fail "ttyd WebSocket fixture failed or exceeded the 20-second host timeout"
+fi
 
 # The server may have buffered its warning before the connection closed.
 sleep 1

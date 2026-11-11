@@ -1,0 +1,75 @@
+name: Capture Chromium archive digests for review
+on:
+  pull_request:
+    paths:
+      - .github/workflows/chromium-archive-digest-capture.yml
+permissions:
+  contents: read
+jobs:
+  capture:
+    name: Verify source archive on ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve and hash pinned Playwright headless shell archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d "$RUNNER_TEMP/playwright-archive-verification"
+          cd "$RUNNER_TEMP/playwright-archive-verification"
+          cp "$GITHUB_WORKSPACE/config/playwright-package.json" package.json
+          cp "$GITHUB_WORKSPACE/config/playwright-package-lock.json" package-lock.json
+          npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+          node <<'JS' > metadata.json
+          const path = require('node:path');
+          const fs = require('node:fs');
+          const registry = require(path.join(process.cwd(),'node_modules/playwright-core/lib/server/registry/index.js')).registry;
+          const browser = registry.findExecutable('chromium-headless-shell');
+          const manifest = require('./node_modules/playwright-core/browsers.json');
+          const entry = manifest.browsers.find(b => b.name === 'chromium-headless-shell');
+          if (!browser || browser.downloadURLs.length === 0 || !entry) throw Error('Pinned browser download unavailable');
+          console.log(JSON.stringify({url:browser.downloadURLs[0],revision:entry.revision,browserVersion:entry.browserVersion,arch:process.arch,platform:process.platform}));
+          JS
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.parse import urlparse
+          info = json.load(open('metadata.json'))
+          expected = {'amd64':'x64','arm64':'arm64'}[os.environ['ARCH']]
+          assert info['arch'] == expected and info['platform'] == 'linux', info
+          url = urlparse(info['url'])
+          assert url.scheme == 'https' and not url.username and not url.password
+          assert info['revision'].isdigit()
+          assert 'chrome-headless-shell' in url.path, url.path
+          print('Verified metadata:',json.dumps(info,sort_keys=True))
+          with open('browser-url.txt','w') as f:
+              f.write(info['url'])
+          PY
+          url="$(cat browser-url.txt)"
+          curl --fail --show-error --silent --location \
+            --retry 3 --connect-timeout 25 --max-time 700 \
+            --output chromium-headless-shell.zip "$url"
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('chromium-headless-shell.zip') as z:
+              bad = z.testzip()
+              assert bad is None, bad
+              members = z.namelist()
+              assert 4 <= len(members) <= 10000, len(members)
+              print('Archive entries:',len(members),'first:',members[:6])
+          PY
+          printf 'BEGIN_CHROMIUM_ARCHIVE_DIGEST_%s\n' "$ARCH"
+          sha256sum chromium-headless-shell.zip
+          cat metadata.json
+          printf 'END_CHROMIUM_ARCHIVE_DIGEST_%s\n' "$ARCH"
+        env:
+          ARCH: ${{ matrix.arch }}
