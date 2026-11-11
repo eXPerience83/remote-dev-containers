@@ -69,6 +69,7 @@ const socket = net.connect({ host: "127.0.0.1", port: 7681 });
 let done = false;
 let upgraded = false;
 let requestBuffer = Buffer.alloc(0);
+let frameBuffer = Buffer.alloc(0);
 const timeout = setTimeout(() => fail("WebSocket auth fixture timed out"), 5000);
 
 function fail(message) {
@@ -99,6 +100,33 @@ function writeMaskedFrame(payload) {
   socket.write(Buffer.concat([header, mask, body]));
 }
 
+function handleServerFrames(data) {
+  frameBuffer = Buffer.concat([frameBuffer, data]);
+  while (frameBuffer.length >= 2) {
+    const opcode = frameBuffer[0] & 0x0f;
+    const masked = (frameBuffer[1] & 0x80) !== 0;
+    let length = frameBuffer[1] & 0x7f;
+    let headerLength = 2;
+    if (masked) return fail("Server sent an invalid masked WebSocket frame");
+    if (length === 126) {
+      if (frameBuffer.length < 4) return;
+      length = frameBuffer.readUInt16BE(2);
+      headerLength = 4;
+    } else if (length === 127) {
+      // The expected close frame is tiny; no 64-bit frame is needed.
+      return fail("Unexpected oversized WebSocket frame");
+    }
+    if (frameBuffer.length < headerLength + length) return;
+    const payload = frameBuffer.subarray(headerLength, headerLength + length);
+    frameBuffer = frameBuffer.subarray(headerLength + length);
+    if (opcode !== 0x8) continue; // Ignore ttyd's normal control/data frames.
+    if (payload.length < 2 || payload.readUInt16BE(0) !== 1008) {
+      return fail("ttyd did not reject invalid WebSocket auth with code 1008");
+    }
+    return succeed();
+  }
+}
+
 socket.on("connect", () => {
   const key = crypto.randomBytes(16).toString("base64");
   socket.write([
@@ -115,7 +143,7 @@ socket.on("connect", () => {
   ].join("\r\n"));
 });
 socket.on("data", data => {
-  if (upgraded) return;
+  if (upgraded) return handleServerFrames(data);
   requestBuffer = Buffer.concat([requestBuffer, data]);
   const end = requestBuffer.indexOf("\r\n\r\n");
   if (end < 0) return;
@@ -124,15 +152,16 @@ socket.on("data", data => {
     return fail("WebSocket fixture failed authentication/handshake");
   }
   upgraded = true;
+  const trailingFrame = requestBuffer.subarray(end + 4);
+  requestBuffer = Buffer.alloc(0);
   writeMaskedFrame(invalidToken);
+  if (trailingFrame.length) handleServerFrames(trailingFrame);
 });
 socket.on("end", () => {
-  if (!upgraded) fail("WebSocket closed before reaching AuthToken check");
-  else succeed();
+  if (!done) fail("WebSocket ended without rejection code 1008");
 });
 socket.on("close", () => {
-  if (!done && upgraded) succeed();
-  else if (!done) fail("WebSocket closed before upgrade");
+  if (!done) fail("WebSocket closed without rejection code 1008");
 });
 socket.on("error", error => fail("WebSocket fixture socket error: " + error.code));
 NODE
