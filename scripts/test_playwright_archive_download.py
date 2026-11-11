@@ -27,6 +27,7 @@ class ArchiveRedirectTests(unittest.TestCase):
 
         def fake_run(command, **kwargs):
             self.assertNotIn("--location", command)
+            self.assertEqual(command[:2], ["curl", "-q"])
             self.assertIn("--write-out", command)
             code, redirect = next(pending)
             if code == 200:
