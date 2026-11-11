@@ -86,7 +86,8 @@ function succeed() {
   socket.destroy();
 }
 function writeMaskedFrame(payload) {
-  const data = Buffer.from("0" + JSON.stringify({
+  // ttyd JSON_DATA is an ASCII opening brace, not the INPUT command zero.
+  const data = Buffer.from(JSON.stringify({
     AuthToken: payload, columns: 80, rows: 24,
   }), "utf8");
   const header = data.length < 126
