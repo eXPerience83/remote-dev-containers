@@ -103,6 +103,7 @@ fi
 
 cmd=(
   ttyd
+  --debug 3
   --writable
   --interface "${WEB_BIND:-0.0.0.0}"
   --port "${WEB_PORT:-7681}"

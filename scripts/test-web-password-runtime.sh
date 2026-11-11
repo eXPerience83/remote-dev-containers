@@ -55,6 +55,14 @@ status="$(docker exec "$name" curl --silent --output /dev/null --write-out '%{ht
   || fail "authenticated ttyd request could not be evaluated"
 [[ "$status" == 200 ]] || fail "authenticated ttyd request returned $status"
 
+# ttyd 1.7.7 logs the Base64-encoded credential at NOTICE (debug bit 4).
+# Debug mask 3 retains ERR/WARN, suppressing NOTICE on this public endpoint.
+docker logs "$name" >"$log_file" 2>&1
+encoded_credential="$(printf 'codex:%s' "$secret" | base64 | tr -d '\n')"
+if grep -Fq "$secret" "$log_file" || grep -Fq "$encoded_credential" "$log_file"; then
+  fail "ttyd authentication material leaked into container logs"
+fi
+
 docker rm -f "$name" >/dev/null
 
 # CR/LF values must fail before ttyd starts, and error output must not echo any
