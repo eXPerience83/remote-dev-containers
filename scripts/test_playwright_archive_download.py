@@ -34,7 +34,7 @@ class ArchiveRedirectTests(unittest.TestCase):
                 path = Path(command[command.index("--output") + 1])
                 path.write_bytes(b"synthetic archive only")
             return subprocess.CompletedProcess(
-                command, 0, stdout=f"{code}\\n{redirect}", stderr="")
+                command, 0, stdout=f"{code}\n{redirect}", stderr="")
         return mock.patch.object(dl.subprocess, "run", side_effect=fake_run)
 
     def test_direct_https_archive(self):
@@ -75,7 +75,7 @@ class ArchiveRedirectTests(unittest.TestCase):
                     "https://storage.googleapis.com/private/x.zip",
                     "https://cdn.playwright.dev:8443/x.zip",
                     "https://cdn.playwright.dev/x.zip?token=hidden",
-                    "https://cdn.playwright.dev/x.zip\\nX-Injected: true"):
+                    "https://cdn.playwright.dev/x.zip\nX-Injected: true"):
             with self.subTest(bad=bad), self.assertRaises(dl.ArchiveDownloadError):
                 dl.validate_archive_url(bad, "chromium-headless-shell")
 
