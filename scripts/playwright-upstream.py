@@ -173,19 +173,18 @@ def archive_urls(arch: str, browser_metadata: dict, dry_run: str) -> dict:
     return result
 
 
-def download_digest(url: str, temp: Path) -> str:
+def download_digest(url: str, temp: Path, component: str) -> str:
     parsed = urlsplit(url)
     require(parsed.scheme == "https" and parsed.hostname == "cdn.playwright.dev",
             "unreviewed archive host")
     archive = temp / "archive.zip"
-    subprocess.run(
-        ["curl", "--fail", "--show-error", "--silent", "--location",
-         "--proto", "=https", "--proto-redir", "=https",
-         "--retry", "3", "--connect-timeout", "25",
-         "--max-time", "700", "--max-filesize", str(MAX_ARCHIVE_BYTES),
-         "--output", str(archive), url],
-        check=True, timeout=740,
-    )
+    helper = ROOT / "scripts/playwright_archive_download.py"
+    spec = importlib.util.spec_from_file_location("playwright_archive_download", helper)
+    require(spec is not None and spec.loader is not None,
+            "missing shared archive download policy")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.download_archive(url, archive, component)
     require(0 < archive.stat().st_size <= MAX_ARCHIVE_BYTES,
             "oversized or empty browser archive")
     digest = hashlib.sha256()
@@ -244,7 +243,7 @@ def produce(root: Path, arch: str) -> dict:
         manifest["core_version"] = core
         archives = archive_urls(arch, manifest, dry_run)
         for name in COMPONENTS:
-            archives[name]["sha256"] = download_digest(archives[name]["url"], temp)
+            archives[name]["sha256"] = download_digest(archives[name]["url"], temp, name)
         validate_archives(arch, archives, core)
         return {
             "schema_version": 1, "status": "candidate", "arch": arch,
