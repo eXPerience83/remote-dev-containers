@@ -40,3 +40,32 @@ jobs:
           path: ${{ runner.temp }}/playwright-${{ matrix.arch }}.json
           retention-days: 2
           if-no-files-found: error
+
+  reconcile:
+    name: revalidate both real candidate artifacts without write permissions
+    needs: discovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: playwright-discovery-acceptance-amd64
+          path: ${{ runner.temp }}/playwright-candidates
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: playwright-discovery-acceptance-arm64
+          path: ${{ runner.temp }}/playwright-candidates
+      - name: Verify exactly one coherent group without writing to repository
+        env:
+          AMD64: ${{ runner.temp }}/playwright-candidates/playwright-amd64.json
+          ARM64: ${{ runner.temp }}/playwright-candidates/playwright-arm64.json
+        run: |
+          set -euo pipefail
+          python3 scripts/playwright-upstream.py reconcile \
+            --amd64 "$AMD64" --arm64 "$ARM64"
+          python3 scripts/test_playwright_upstream.py
