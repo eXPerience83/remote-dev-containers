@@ -33,8 +33,7 @@ jobs:
             (.status == "unchanged" or .status == "candidate" or .status == "deferred")' \
             "$REPORT" >/dev/null
           jq '{status,arch,baseline_version,version,reason,playwright_core_version,
-               archive_digests: (.archives // {} | with_entries(.value |=
-                 with_entries(.value |= {revision,sha256,url})))}' "$REPORT"
+               archive_digests: (.archives // {} | with_entries(.value |= {revision,sha256,url}))}' "$REPORT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: playwright-discovery-acceptance-${{ matrix.arch }}
