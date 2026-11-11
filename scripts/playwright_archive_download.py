@@ -61,7 +61,7 @@ def download_archive(url: str, destination: Path, component: str) -> None:
             raise TimeoutError("archive download exceeded total deadline")
         seconds = min(700, max(1, int(remaining)))
         command = [
-            "curl", "--fail", "--silent", "--show-error",
+            "curl", "-q", "--fail", "--silent", "--show-error",
             "--proto", "=https", "--retry", "3",
             "--connect-timeout", "25", "--max-time", str(seconds),
             "--max-filesize", str(MAX_BYTES),
