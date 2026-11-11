@@ -29,30 +29,32 @@ jobs:
           cp "$GITHUB_WORKSPACE/config/playwright-package.json" package.json
           cp "$GITHUB_WORKSPACE/config/playwright-package-lock.json" package-lock.json
           npm ci --ignore-scripts --omit=dev --no-audit --no-fund
-          node <<'JS' > metadata.json
-          const path = require('node:path');
-          const fs = require('node:fs');
-          const registry = require(path.join(process.cwd(),'node_modules/playwright-core/lib/server/registry/index.js')).registry;
-          const browser = registry.findExecutable('chromium-headless-shell');
-          const manifest = require('./node_modules/playwright-core/browsers.json');
-          const entry = manifest.browsers.find(b => b.name === 'chromium-headless-shell');
-          if (!browser || browser.downloadURLs.length === 0 || !entry) throw Error('Pinned browser download unavailable');
-          console.log(JSON.stringify({url:browser.downloadURLs[0],revision:entry.revision,browserVersion:entry.browserVersion,arch:process.arch,platform:process.platform}));
-          JS
+          ./node_modules/.bin/playwright install --dry-run --only-shell chromium > dry-run.txt
+          cat dry-run.txt
           python3 - <<'PY'
           import json
           import os
+          import re
+          from pathlib import Path
           from urllib.parse import urlparse
-          info = json.load(open('metadata.json'))
-          expected = {'amd64':'x64','arm64':'arm64'}[os.environ['ARCH']]
-          assert info['arch'] == expected and info['platform'] == 'linux', info
-          url = urlparse(info['url'])
+          lines = Path('dry-run.txt').read_text().splitlines()
+          urls = re.findall(r'^\s*Download url:\s*(https://\S+)\s*$', '\n'.join(lines), re.M)
+          locations = re.findall(r'^\s*Install location:\s*(\S+)\s*$', '\n'.join(lines), re.M)
+          assert len(urls) == 1 and len(locations) == 1, lines
+          browser = json.loads(Path('node_modules/playwright-core/browsers.json').read_text())
+          entries = [e for e in browser['browsers'] if e['name'] == 'chromium-headless-shell']
+          assert len(entries) == 1, entries
+          entry = entries[0]
+          assert Path(locations[0]).name == 'chromium_headless_shell-' + entry['revision'], (locations, entry)
+          url = urlparse(urls[0])
           assert url.scheme == 'https' and not url.username and not url.password
-          assert info['revision'].isdigit()
           assert 'chrome-headless-shell' in url.path, url.path
-          print('Verified metadata:',json.dumps(info,sort_keys=True))
-          with open('browser-url.txt','w') as f:
-              f.write(info['url'])
+          arch = os.environ['ARCH']
+          assert ('linux-arm64' if arch == 'arm64' else 'linux64') in url.path, url.path
+          info = dict(url=urls[0], revision=entry['revision'], browserVersion=entry['browserVersion'], arch=arch)
+          Path('metadata.json').write_text(json.dumps(info))
+          Path('browser-url.txt').write_text(urls[0])
+          print('Verified metadata:', json.dumps(info, sort_keys=True))
           PY
           url="$(cat browser-url.txt)"
           curl --fail --show-error --silent --location \
