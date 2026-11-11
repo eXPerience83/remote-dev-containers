@@ -1,0 +1,53 @@
+name: Capture Playwright npm lock for review
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/playwright-lock-capture.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Generate production lock snapshot from pinned MCP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-dev-playwright"
+          cd "$RUNNER_TEMP/remote-dev-playwright"
+          cat > package.json <<'JSON'
+          {
+            "name": "remote-dev-playwright-bundle",
+            "private": true,
+            "version": "0.0.0",
+            "dependencies": {
+              "@playwright/mcp": "0.0.84"
+            }
+          }
+          JSON
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --save-exact
+          node <<'JS'
+          const fs = require('node:fs');
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const expected = ['','node_modules/@playwright/mcp','node_modules/playwright','node_modules/playwright-core'];
+          if (JSON.stringify(Object.keys(lock.packages).sort()) !== JSON.stringify(expected.sort()))
+            throw Error('Unexpected production dependencies in npm lock');
+          const pkg = lock.packages['node_modules/@playwright/mcp'];
+          if (pkg.version !== '0.0.84') throw Error('Incorrect MCP pin');
+          for (const name of ['playwright','playwright-core']) {
+            if (lock.packages['node_modules/'+name].version !== '1.65.0-alpha-2026-10-30')
+              throw Error('Incorrect Playwright pin');
+          }
+          for (const name of expected.filter(Boolean)) {
+            const entry = lock.packages[name];
+            if (!entry.integrity?.startsWith('sha512-') || !entry.resolved?.startsWith('https://registry.npmjs.org/'))
+              throw Error('Package missing registry SRI: '+name);
+          }
+          console.log('BEGIN_REMOTE_DEV_REVIEWED_PACKAGE_LOCK');
+          console.log(JSON.stringify(lock, null, 2));
+          console.log('END_REMOTE_DEV_REVIEWED_PACKAGE_LOCK');
+          JS
