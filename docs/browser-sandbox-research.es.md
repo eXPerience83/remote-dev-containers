@@ -83,3 +83,9 @@ La fuente de Playwright indica que el navegador se lanza con `detached: true` en
 Este cambio no añade `SYS_ADMIN`, contenedores privilegiados ni acceso al socket Docker. En sistemas sin `/proc/.../children` o sin soporte `PR_SET_CHILD_SUBREAPER`, el guardián **no debe iniciar Node**. El test de ciclo de vida provoca `SIGKILL` del supervisor con Chromium ya abierto y verifica que desaparecen tanto el perfil como los procesos. No sustituye la aceptación con AGY propietario real en TrueNAS.
 
 Referencia upstream: https://github.com/microsoft/playwright/blob/main/packages/utils/processLauncher.ts.
+
+## Fijación de dependencias npm
+
+El proyecto registra el grafo de producción en `config/playwright-package.json` y `config/playwright-package-lock.json`. El lockfile fue generado por un trabajo aislado de GitHub Actions con `@playwright/mcp@0.0.84` y sus tres entradas de paquetes (`@playwright/mcp`, `playwright`, `playwright-core`). Las integridades SHA-512 de Playwright y Playwright Core se cotejaron con el `package-lock.json` oficial de la etiqueta `microsoft/playwright-mcp@v0.0.84`. La compilación usa `npm ci --ignore-scripts --omit=dev`; `validate-playwright-lock.py` bloquea cambios de versión, integridad, origen del tarball o grafo no revisados.
+
+**Límite pendiente:** el archivo ZIP de Chromium descargado por `playwright install --only-shell` no se verifica todavía contra un SHA-256 independiente, específico por arquitectura, conservado en el repositorio. El navegador no se descarga al iniciar el agente, pero el hecho de fijar su revisión de Playwright no supone por sí solo garantizar el contenido criptográfico del ZIP descargado durante la construcción. Se debe completar la comprobación del artefacto para cerrar esa observación de CodeRabbit.

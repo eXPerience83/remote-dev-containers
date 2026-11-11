@@ -96,6 +96,8 @@ jobs:
           make agent-contract-tests
           python3 scripts/test-browser-config.py
           python3 scripts/test-browser-sandbox.py
+          python3 scripts/validate-playwright-lock.py
+          python3 scripts/test-validate-playwright-lock.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py
