@@ -141,9 +141,15 @@ def new_content(provider: str, content: bytes) -> bytes | None:
             # A previous revision of this image enrolled a working but
             # role-less Codex MCP entry. Upgrade ONLY its exact legacy block.
             # Never overwrite disabled, customized or user-owned entries.
-            if (servers["playwright"] != LEGACY_CODEX_FIELDS or
-                    text.count(CODEX_ENTRY_LEGACY) != 1):
+            if servers["playwright"] != LEGACY_CODEX_FIELDS:
                 return None
+            if text.count(CODEX_ENTRY_LEGACY) != 1:
+                # Semantically matches our legacy entry but differs in raw
+                # formatting. Warn instead of silently preserving a broken
+                # MCP entry or altering possibly user-edited configuration.
+                raise UnsafeConfig(
+                    "legacy Playwright MCP entry lacks REMOTE_DEV_ROLE; "
+                    "manual review required")
             updated = text.replace(CODEX_ENTRY_LEGACY, CODEX_ENTRY)
         else:
             updated = text.rstrip("\n") + CODEX_ENTRY

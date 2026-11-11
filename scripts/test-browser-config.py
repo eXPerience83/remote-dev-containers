@@ -55,6 +55,18 @@ class BrowserConfigTests(unittest.TestCase):
                          {"REMOTE_DEV_ROLE": "codex"})
         self.assertEqual(module.reconcile("codex", self.path), "existing")
 
+    def test_codex_reformatted_legacy_entry_requires_manual_review(self):
+        config = self.path / "config.toml"
+        original = module.CODEX_ENTRY_LEGACY.replace(
+            "enabled = true", "enabled=true")
+        config.write_text(original)
+        self.assertEqual(tomllib.loads(original)["mcp_servers"]["playwright"],
+                         module.LEGACY_CODEX_FIELDS)
+        with self.assertRaisesRegex(
+                module.UnsafeConfig, "manual review required"):
+            module.reconcile("codex", self.path)
+        self.assertEqual(config.read_text(), original)
+
     def test_codex_user_modified_legacy_entry_is_never_replaced(self):
         config = self.path / "config.toml"
         original = module.CODEX_ENTRY_LEGACY.replace(
