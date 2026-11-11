@@ -42,6 +42,8 @@ jobs:
             scripts/remote-dev-browser-sandbox.py \
             scripts/browser-sandbox-runtime-probe.py \
             scripts/test-browser-sandbox.py \
+            scripts/install-verified-playwright-browser.py \
+            scripts/test-install-verified-playwright-browser.py \
             scripts/test-agent-guidance.py \
             scripts/test-initialize-codex-config.py \
             scripts/test-agent-guidance-lifecycle.py \
@@ -98,6 +100,7 @@ jobs:
           python3 scripts/test-browser-sandbox.py
           python3 scripts/validate-playwright-lock.py
           python3 scripts/test-validate-playwright-lock.py
+          python3 scripts/test-install-verified-playwright-browser.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py

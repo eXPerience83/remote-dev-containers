@@ -233,15 +233,20 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
 # chromium-browser APT package delegates to Snap and is unsuitable here.
 # The official Playwright installer resolves browser assets for TARGETARCH and
 # installs the matching native libraries. Never download at agent runtime.
-RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH"
+RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH" \
+    && install -d -m 0755 /usr/share/remote-dev
 COPY --chown=0:0 --chmod=0444 config/playwright-package.json /opt/remote-dev/playwright/package.json
 COPY --chown=0:0 --chmod=0444 config/playwright-package-lock.json /opt/remote-dev/playwright/package-lock.json
+COPY --chown=0:0 --chmod=0444 config/playwright-browser-archives.json /usr/share/remote-dev/browser-archives.json
+COPY --chown=0:0 --chmod=0555 scripts/install-verified-playwright-browser.py /usr/local/bin/install-verified-playwright-browser
 RUN test "$(node -p 'require("/opt/remote-dev/playwright/package.json").dependencies["@playwright/mcp"]')" = "$PLAYWRIGHT_MCP_VERSION" \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci \
       --prefix /opt/remote-dev/playwright --omit=dev --ignore-scripts \
       --no-audit --no-fund \
-    && /opt/remote-dev/playwright/node_modules/.bin/playwright install \
-      --with-deps --only-shell chromium \
+    && /opt/remote-dev/playwright/node_modules/.bin/playwright install-deps \
+      chromium-headless-shell ffmpeg \
+    && /usr/local/lib/remote-dev/python -I \
+      /usr/local/bin/install-verified-playwright-browser --arch "$TARGETARCH" \
     && test -x /opt/remote-dev/playwright/node_modules/.bin/playwright-mcp \
     && ln -s /opt/remote-dev/playwright/node_modules/.bin/playwright /usr/local/bin/playwright \
     && playwright --version \
