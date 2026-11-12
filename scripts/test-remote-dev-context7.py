@@ -328,7 +328,28 @@ def assert_missing_begin_repair_fails_closed(module, root: Path) -> None:
             'required = false\n', 1),
         "end-only": prefix + module.END_MARKER + '\n' + other,
         "two-end-markers": original + module.END_MARKER + '\n',
+        # Reproduces the observed TrueNAS structural layout: no BEGIN,
+        # Context7 contract differs, and two separate MCP tables precede END.
+        "other-mcps-before-end": (
+            prefix
+            + suffix.replace("required = false", "required = true").replace(
+                module.END_MARKER + "\n",
+                '[mcp_servers.playwright]\ncommand = "custom"\n'
+                '[mcp_servers.openaiDeveloperDocs]\n'
+                'url = "https://example.invalid/synthetic"\n'
+                + module.END_MARKER + "\n",
+            )
+        ),
     }
+    # No key, URL, custom MCP name or private text is ever returned by
+    # status --menu; the operator receives fixed structural categories only.
+    interleaved = bad_cases["other-mcps-before-end"]
+    with codex_environment(root / "unused"):
+        summary = module.missing_begin_layout_details(interleaved)
+    if ("Context7 contract differs" not in summary
+            or "other tables precede END" not in summary
+            or "example.invalid" in summary or "custom" in summary):
+        raise AssertionError("the interleaved TrueNAS regression did not give safe hints")
     for label, payload in bad_cases.items():
         unsafe_home = root / f"missing-begin-unsafe-{label}"
         unsafe_home.mkdir(mode=0o700)

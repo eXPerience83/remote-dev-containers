@@ -159,6 +159,29 @@ def marker_layout_reason(text: str) -> str:
     return "unrecognized marker layout"
 
 
+def missing_begin_layout_details(text: str) -> str:
+    """Add safe structural hints only; never print MCP names or TOML values."""
+    lines = text.splitlines()
+    heads = [i for i, line in enumerate(lines)
+             if line == "[mcp_servers.context7]"]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER]
+    if len(heads) != 1 or len(ends) != 1 or ends[0] <= heads[0]:
+        return ""
+    other_headers = sum(
+        line.startswith("[") for line in lines[heads[0] + 1:ends[0]]
+    )
+    try:
+        data = parse_toml(text, label="Codex config")
+    except Context7Error:
+        return ""
+    hints = []
+    if context7_table(data) != MANAGED_CONTRACT:
+        hints.append("Context7 contract differs")
+    if other_headers:
+        hints.append("other tables precede END")
+    return "; " + "; ".join(hints) if hints else ""
+
+
 def parse_toml(text: str, *, label: str) -> dict[str, object]:
     if not text.strip():
         return {}
@@ -599,8 +622,10 @@ def status_line(paths: Paths) -> tuple[str, int]:
         # Only print stable diagnostic categories. state.detail may contain
         # untrusted TOML or local path details, so never emit it in Doctor.
         if state.kind == "markers-malformed":
-            reason = ("Context7 ownership markers malformed: "
-                      + marker_layout_reason(state.text))
+            subtype = marker_layout_reason(state.text)
+            reason = ("Context7 ownership markers malformed: " + subtype)
+            if subtype == "missing BEGIN marker":
+                reason += missing_begin_layout_details(state.text)
         else:
             reason = {
                 "invalid": "Codex config unreadable or invalid",
