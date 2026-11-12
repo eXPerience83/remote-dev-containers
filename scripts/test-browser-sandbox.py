@@ -48,7 +48,8 @@ class BrowserIsolationContract(unittest.TestCase):
 
     def test_filesystem_allowlist_never_grants_workspace_or_agent_state(self):
         node = "/opt/remote-dev/mise/installs/node/24.22.2/bin/node"
-        rules = sandbox.rules(node, "/run/remote-dev-browser-fixture")
+        with mock.patch.object(sandbox, "valid_scratch", return_value=True):
+            rules = sandbox.rules(node, "/run/remote-dev-browser-fixture")
         allowed = [entry[0] for entry in rules]
         self.assertIn("/opt/remote-dev/playwright", allowed)
         self.assertIn("/opt/remote-dev/playwright-browsers", allowed)
@@ -66,16 +67,43 @@ class BrowserIsolationContract(unittest.TestCase):
         self.assertFalse(sandbox.WRITE_DIR & sandbox.EXEC)
 
     def test_rejects_untrusted_paths(self):
-        with self.assertRaises(sandbox.IsolationError):
-            sandbox.rules("/workspace/node", "/run/remote-dev-browser-fixture")
-        with self.assertRaises(sandbox.IsolationError):
-            sandbox.rules("/usr/bin/node", "/run/remote-dev-browser-fixture")
+        with mock.patch.object(sandbox, "valid_scratch", return_value=True):
+            with self.assertRaises(sandbox.IsolationError):
+                sandbox.rules("/workspace/node", "/run/remote-dev-browser-fixture")
+            with self.assertRaises(sandbox.IsolationError):
+                sandbox.rules("/usr/bin/node", "/run/remote-dev-browser-fixture")
         with self.assertRaises(sandbox.IsolationError):
             sandbox.rules("/opt/remote-dev/mise/installs/node/24/bin/node",
                           "/workspace/not-private")
         with self.assertRaises(sandbox.IsolationError):
             sandbox.rules("/opt/remote-dev/mise/installs/node/24/bin/node",
                           "/tmp/not-private")
+
+    def test_private_scratch_requires_canonical_child_and_expected_owner(self):
+        with tempfile.TemporaryDirectory() as tmp, (
+                mock.patch.object(sandbox, "TMP_ROOT", tmp),
+                mock.patch.object(sandbox, "UID", os.getuid())):
+            scratch = Path(tmp) / "remote-dev-browser-owned"
+            scratch.mkdir(mode=0o700)
+            self.assertTrue(sandbox.valid_scratch(str(scratch)))
+            for invalid in (str(scratch) + "/../remote-dev-browser-owned",
+                            str(scratch) + "/..",
+                            str(scratch / "nested"),
+                            str(Path(tmp) / "other-dir"),
+                            str(Path(tmp) / "remote-dev-browser-missing")):
+                with self.subTest(invalid=invalid):
+                    self.assertFalse(sandbox.valid_scratch(invalid))
+            symlink = Path(tmp) / "remote-dev-browser-symlink"
+            symlink.symlink_to(scratch, target_is_directory=True)
+            self.assertFalse(sandbox.valid_scratch(str(symlink)))
+            with mock.patch.object(sandbox, "UID", -1):
+                self.assertFalse(sandbox.valid_scratch(str(scratch)))
+
+    def test_guardian_rejects_scratch_traversal_before_root_cleanup(self):
+        with mock.patch.object(sandbox.os, "geteuid", return_value=0):
+            self.assertEqual(
+                sandbox.guardian(
+                    -1, "/run/remote-dev-browser-/../../workspace"), 2)
 
     def test_permissions_and_role_fail_closed(self):
         self.assertNotEqual(sandbox.UID, 0)
