@@ -56,7 +56,7 @@ class BrowserConfigTests(unittest.TestCase):
                 home = self.path / ("context7-first" if context7_first else "browser-first")
                 home.mkdir(mode=0o700)
                 config = home / "config.toml"
-                config.write_text('model = "test"\\n', encoding="utf-8")
+                config.write_text('model = "test"\n', encoding="utf-8")
                 with mock.patch.dict(os.environ, {"CODEX_HOME": str(home),
                                                   "REMOTE_DEV_ROLE": "codex"}):
                     paths = context7.Paths()
