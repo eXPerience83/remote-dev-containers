@@ -301,12 +301,63 @@ def append_managed_block(text: str) -> str:
     return text + separator + MANAGED_BLOCK
 
 
+def safe_missing_begin_candidate(state: ConfigState) -> str | None:
+    """Reclaim only a byte-for-byte intact managed block missing BEGIN.
+
+    Never guess ownership from a partial table. The missing-BEGIN case is
+    admitted only if the whole expected managed block (except its first
+    comment line) occurs exactly once, contains the expected Context7 MCP
+    contract and adding that one comment restores 'managed' status.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+    suffix = MANAGED_BLOCK[len(START_MARKER) + 1:]
+    if state.text.count(suffix) != 1:
+        return None
+    try:
+        original = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    if context7_table(original) != MANAGED_CONTRACT:
+        return None
+    at = state.text.index(suffix)
+    candidate = state.text[:at] + START_MARKER + "\n" + state.text[at:]
+    if inspect_config_candidate(candidate) != "managed":
+        return None
+    return candidate
+
+
+def inspect_config_candidate(text: str) -> str:
+    """Validate a proposed repair without reading or writing private files."""
+    try:
+        span = marker_span(text)
+        data = parse_toml(text, label="repaired Codex config")
+        if span is None or context7_table(data) != MANAGED_CONTRACT:
+            return "invalid"
+        start, end = span
+        if text[start:end] != MANAGED_BLOCK:
+            return "invalid"
+        outside = parse_toml(text[:start] + text[end:],
+                             label="repaired Codex config outside Context7")
+        if has_context7(outside):
+            return "invalid"
+    except Context7Error:
+        return "invalid"
+    return "managed"
+
+
 def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
     if state.kind == "unmanaged":
         raise Context7Error(
             "an unowned [mcp_servers.context7] entry already exists; Remote Dev will not overwrite it"
         )
-    if state.kind in {"invalid", "markers-malformed", "conflict"}:
+    if state.kind == "markers-malformed":
+        candidate = safe_missing_begin_candidate(state)
+        if candidate is None:
+            raise Context7Error("malformed Context7 ownership markers require manual review")
+        return candidate
+    if state.kind in {"invalid", "conflict"}:
         raise Context7Error(state.detail or f"cannot safely modify Context7 state: {state.kind}")
     if require_existing and state.kind == "absent":
         raise Context7Error("Context7 is not managed by Remote Dev; use install first")

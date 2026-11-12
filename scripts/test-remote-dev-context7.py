@@ -272,6 +272,82 @@ def assert_specific_marker_diagnostics(module, root: Path) -> None:
             raise AssertionError(f"diagnosis wrote private configuration for {label}")
 
 
+def assert_missing_begin_repair_fails_closed(module, root: Path) -> None:
+    """The observed TrueNAS defect is one END with no BEGIN.
+
+    Only an *otherwise intact* manager-owned Context7 block may be repaired;
+    preserve Playwright and other user-owned config byte-for-byte, backup the
+    original, do not change credentials and reject modified/partial blocks.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\n\n'
+    other = (
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        'enabled = true\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/official-docs"\n'
+    )
+    original = prefix + suffix + other
+    home = root / "missing-begin-safe-repair"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(original, encoding="utf-8")
+    with codex_environment(home):
+        state = module.inspect_config(module.Paths())
+        if state.kind != "markers-malformed":
+            raise AssertionError("missing-BEGIN fixture not detected")
+        candidate = module.safe_missing_begin_candidate(state)
+        expected = prefix + module.MANAGED_BLOCK + other
+        if candidate != expected:
+            raise AssertionError("missing-BEGIN recovery changed unrelated bytes")
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "exact missing-BEGIN repair")
+    if config.read_text(encoding="utf-8") != expected:
+        raise AssertionError("repair changed non-Context7 config")
+    with codex_environment(home):
+        if module.inspect_config(module.Paths()).kind != "managed":
+            raise AssertionError("safe repair did not restore managed status")
+    backup = home / "config.toml.remote-dev-context7.bak"
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("safe repair did not preserve original private config")
+    assert_private_file(backup)
+    first = config.read_bytes()
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "missing-BEGIN repair idempotence")
+    if config.read_bytes() != first:
+        raise AssertionError("second repair unexpectedly rewrote config")
+
+    bad_cases = {
+        "modified-url": original.replace(
+            module.CONTEXT7_ENDPOINT, "https://example.invalid/user-owned", 1),
+        "modified-fields": original.replace(
+            'required = false', 'required = true', 1),
+        "partial-contract": original.replace(
+            'enabled = true\nrequired = false\n',
+            'required = false\n', 1),
+        "end-only": prefix + module.END_MARKER + '\n' + other,
+        "two-end-markers": original + module.END_MARKER + '\n',
+    }
+    for label, payload in bad_cases.items():
+        unsafe_home = root / f"missing-begin-unsafe-{label}"
+        unsafe_home.mkdir(mode=0o700)
+        unsafe_config = unsafe_home / "config.toml"
+        unsafe_config.write_text(payload, encoding="utf-8")
+        with codex_environment(unsafe_home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "markers-malformed":
+                raise AssertionError(f"unsafe fixture {label} classified unexpectedly")
+            if module.safe_missing_begin_candidate(state) is not None:
+                raise AssertionError(f"unsafe fixture {label} was accepted")
+        result = run_manager(unsafe_home, "repair", "--yes")
+        require_failure(result, f"unsafe missing-BEGIN repair {label}")
+        if unsafe_config.read_text(encoding="utf-8") != payload:
+            raise AssertionError(f"unsafe missing-BEGIN {label} mutated config")
+        if (unsafe_home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"unsafe missing-BEGIN {label} wrote a backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -292,6 +368,7 @@ args = ["--safe"]
 
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
+        assert_missing_begin_repair_fails_closed(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
