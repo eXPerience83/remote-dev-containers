@@ -66,7 +66,7 @@ def generate(
             "FFmpeg archive revisions differ across architectures")
     require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) is not None,
             "missing SHA-256 provenance")
-    binary = browsers / ("ffmpeg_" + revision) / "ffmpeg-linux"
+    binary = browsers / ("ffmpeg-" + revision) / "ffmpeg-linux"
     require(binary.is_file() and not binary.is_symlink() and os.access(binary, os.X_OK),
             "verified FFmpeg executable missing")
     version = runner(binary, "-version")
