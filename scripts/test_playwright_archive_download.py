@@ -85,6 +85,28 @@ class ArchiveRedirectTests(unittest.TestCase):
                     CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, 1)
 
+    def test_dot_segment_redirect_is_rejected_before_following(self):
+        for component, redirect in (
+            ("chromium-headless-shell",
+             "https://storage.googleapis.com/chrome-for-testing-public/"
+             "../other-bucket/payload.zip"),
+            ("ffmpeg",
+             "https://playwright.download.prss.microsoft.com/"
+             "dbazure/download/playwright/../unreviewed/payload.zip"),
+        ):
+            with self.subTest(component=component), tempfile.TemporaryDirectory() as tmp:
+                with self.mock_requests((302, redirect)) as run:
+                    with self.assertRaisesRegex(dl.ArchiveDownloadError,
+                                                "unreviewed archive redirect path"):
+                        dl.download_archive(CDN, Path(tmp) / "a.zip", component)
+                    self.assertEqual(run.call_count, 1)
+
+    def test_percent_encoded_dot_segment_is_rejected(self):
+        url = ("https://storage.googleapis.com/chrome-for-testing-public/"
+               "%2e%2e/other-bucket/payload.zip")
+        with self.assertRaises(dl.ArchiveDownloadError):
+            dl.validate_archive_url(url, "chromium-headless-shell")
+
     def test_http_and_hostname_spoofing_rejected(self):
         for bad in ("http://cdn.playwright.dev/archive.zip",
                     "https://cdn.playwright.dev.evil.invalid/x.zip",
