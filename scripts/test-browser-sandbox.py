@@ -12,6 +12,11 @@ import unittest
 from unittest import mock
 
 SOURCE = Path(__file__).with_name("remote-dev-browser-sandbox.py")
+PROBE_SOURCE = Path(__file__).with_name("browser-sandbox-runtime-probe.py")
+probe_spec = importlib.util.spec_from_file_location("remote_dev_browser_runtime_probe", PROBE_SOURCE)
+assert probe_spec is not None and probe_spec.loader is not None
+probe = importlib.util.module_from_spec(probe_spec)
+probe_spec.loader.exec_module(probe)
 spec = importlib.util.spec_from_file_location("remote_dev_browser_sandbox", SOURCE)
 assert spec is not None and spec.loader is not None
 sandbox = importlib.util.module_from_spec(spec)
@@ -20,6 +25,21 @@ spec.loader.exec_module(sandbox)
 
 
 class BrowserIsolationContract(unittest.TestCase):
+    def test_process_identity_keeps_zombies_until_reaped(self):
+        # /proc/pid/stat field 2 may contain spaces; field 22 is starttime.
+        line = "42 (chrome renderer) Z " + "0 " * 18 + "123456 " + "0"
+        self.assertEqual(probe.parse_process_start_time(line), 123456)
+        with self.assertRaises(RuntimeError):
+            probe.parse_process_start_time("42 malformed")
+
+    def test_process_start_time_distinguishes_missing_and_reused_pid(self):
+        with mock.patch.object(probe.Path, "read_text", return_value=(
+                "42 (chrome) Z " + "0 " * 18 + "555 0")):
+            self.assertEqual(probe.process_start_time(42), 555)
+        with mock.patch.object(probe.Path, "read_text",
+                               side_effect=FileNotFoundError):
+            self.assertIsNone(probe.process_start_time(42))
+
     def test_environment_allowlist_excludes_agent_secrets(self):
         scratch = "/run/remote-dev-browser-fixture"
         with mock.patch.dict(os.environ, {

@@ -20,12 +20,18 @@ import sys
 import tempfile
 
 LIBRARY = Path("/usr/local/lib/remote-dev/browser-sandbox.py")
-MODULE = importlib.util.spec_from_file_location("remote_dev_browser_sandbox_probe", LIBRARY)
-if MODULE is None or MODULE.loader is None:
-    raise SystemExit("Missing immutable browser sandbox module")
-sandbox = importlib.util.module_from_spec(MODULE)
-sys.modules[MODULE.name] = sandbox
-MODULE.loader.exec_module(sandbox)
+
+
+def load_sandbox():
+    """Import the immutable runtime only during image execution, not unit import."""
+    module_spec = importlib.util.spec_from_file_location(
+        "remote_dev_browser_sandbox_probe", LIBRARY)
+    if module_spec is None or module_spec.loader is None:
+        raise SystemExit("Missing immutable browser sandbox module")
+    module = importlib.util.module_from_spec(module_spec)
+    sys.modules[module_spec.name] = module
+    module_spec.loader.exec_module(module)
+    return module
 
 JS_PROBE = r"""
 "use strict";
@@ -196,13 +202,26 @@ def descendants_of(pid: int) -> set[int]:
     return descendants
 
 
-def is_live(pid: int) -> bool:
+def parse_process_start_time(stat_line: str) -> int:
+    """Extract Linux /proc/pid/stat field 22 after the parenthesized comm."""
+    end = stat_line.rfind(") ")
+    if end < 0:
+        raise RuntimeError("malformed process identity")
+    fields = stat_line[end + 2:].split()  # state is field 3 at index zero.
+    if len(fields) < 20:
+        raise RuntimeError("short process identity")
+    return int(fields[19])
+
+
+def process_start_time(pid: int) -> int | None:
+    """Use PID + start ticks to distinguish reaping from PID reuse.
+
+    A zombie still has /proc/pid/stat, and must NOT be treated as gone.
+    """
     try:
-        status = Path(f"/proc/{pid}/status").read_text()
+        return parse_process_start_time(Path(f"/proc/{pid}/stat").read_text())
     except (FileNotFoundError, ProcessLookupError):
-        return False
-    return not any(line.startswith("State:") and
-                   "Z (zombie)" in line for line in status.splitlines())
+        return None
 
 
 def lifecycle_probe(target: str = "supervisor") -> int:
@@ -284,17 +303,24 @@ def lifecycle_probe(target: str = "supervisor") -> int:
             raise RuntimeError("browser navigation failed before SIGKILL")
         new_dirs = {p.name for p in Path("/run").glob("remote-dev-browser-*")} - before_dirs
         managed_pids = sandbox_processes() - before_pids
-        chromium_pids = {pid for pid in descendants_of(proc.pid)
-                         if pid in managed_pids and is_chromium(pid) and is_live(pid)}
-        if len(new_dirs) != 1 or not managed_pids or not chromium_pids:
-            raise RuntimeError("live Chromium descendant/profile absent before cleanup")
+        tree = descendants_of(proc.pid)
+        chromium_pids = {pid for pid in tree
+                         if pid in managed_pids and is_chromium(pid)
+                         and process_start_time(pid) is not None}
+        children = Path(
+            f"/proc/{proc.pid}/task/{proc.pid}/children").read_text().split()
+        if len(children) != 1:
+            raise RuntimeError("expected one direct guardian child")
+        guardian_pid = int(children[0])
+        if guardian_pid not in tree:
+            raise RuntimeError("guardian absent from supervisor process tree")
+        tracked = {pid: birth for pid in (tree | managed_pids | {guardian_pid})
+                   if (birth := process_start_time(pid)) is not None}
+        if len(new_dirs) != 1 or not chromium_pids or guardian_pid not in tracked:
+            raise RuntimeError("guardian/Chromium/profile absent before cleanup")
         # Deliberately do not close stdin: exercise the SIGKILL fallback.
         if target == "guardian":
-            children = Path(
-                f"/proc/{proc.pid}/task/{proc.pid}/children").read_text().split()
-            if len(children) != 1:
-                raise RuntimeError("expected one direct guardian child")
-            os.kill(int(children[0]), signal.SIGKILL)
+            os.kill(guardian_pid, signal.SIGKILL)
         else:
             proc.kill()
         proc.wait(timeout=12)
@@ -302,13 +328,15 @@ def lifecycle_probe(target: str = "supervisor") -> int:
         while time.monotonic() < deadline:
             remaining_dirs = {p.name for p in
                               Path("/run").glob("remote-dev-browser-*")}
-            remaining_pids = {pid for pid in (managed_pids | chromium_pids)
-                              if is_live(pid)}
+            # Any recorded /proc identity still present is a failure,
+            # INCLUDING a zombie. A recycled PID has different start ticks.
+            remaining_pids = {pid for pid, birth in tracked.items()
+                              if process_start_time(pid) == birth}
             if not (new_dirs & remaining_dirs) and not remaining_pids:
                 print(f"MCP SIGKILL {target} lifecycle: PASS")
                 return 0
             time.sleep(0.1)
-        raise RuntimeError("MCP guardian left live descendants or scratch")
+        raise RuntimeError("MCP guardian left unreaped descendants (including zombies) or scratch")
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -319,6 +347,7 @@ def lifecycle_probe(target: str = "supervisor") -> int:
 
 
 if __name__ == "__main__":
+    sandbox = load_sandbox()
     try:
         result = run_probe()
         if result == 0:

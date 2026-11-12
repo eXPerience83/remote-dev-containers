@@ -268,9 +268,10 @@ COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
-# Never execute the downloaded binary in the write-capable updater.
-# BuildKit disables networking; Python launches FFmpeg with dropped UID/GID
-# and a fixed, credential-free environment to capture the exact binary's terms.
+# Preserve license notices from the exact SHA-256-verified Chromium archive.
+# The updater only proposes metadata; its discovery step does not execute
+# newly downloaded Playwright binaries. The image build validates pinned
+# runtime metadata and retains the browser's full LICENSE.headless_shell.
 RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
     test "$(stat -c '%u:%g %a' /usr/share/doc/remote-dev)" = '0:0 755' \
     && locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \

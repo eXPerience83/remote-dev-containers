@@ -543,6 +543,10 @@
           "path": "components/chromium/LICENSE",
           "source": "repository",
           "reviewed_from": "https://raw.githubusercontent.com/chromium/chromium/main/LICENSE"
+        },
+        {
+          "path": "runtime/chromium/LICENSE.headless_shell",
+          "source": "runtime"
         }
       ]
     }

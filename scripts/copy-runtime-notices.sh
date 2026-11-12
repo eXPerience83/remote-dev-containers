@@ -69,3 +69,27 @@ copy_notice_files npm "$npm_root" required
 # including bundled *.js.LICENSE and ThirdPartyNotices.txt sidecars.
 copy_notice_files playwright /opt/remote-dev/playwright/node_modules required
 
+
+# The exact SHA-256-verified Chromium ZIP also carries its full multi-megabyte
+# LICENSE.headless_shell. Preserve that file under a stable, architecture-
+# independent notice path. Refuse any unexpected archive layout.
+case "$(uname -m)" in
+  x86_64) chromium_arch=amd64 ;;
+  aarch64) chromium_arch=arm64 ;;
+  *) echo "ERROR: unsupported Chromium notice architecture" >&2; exit 1 ;;
+esac
+chromium_metadata=/usr/share/remote-dev/browser-archives.json
+chromium_revision="$(jq -er --arg a "$chromium_arch" '.archives[$a]["chromium-headless-shell"].revision' "$chromium_metadata")"
+chromium_executable="$(jq -er --arg a "$chromium_arch" '.archives[$a]["chromium-headless-shell"].executable' "$chromium_metadata")"
+[[ "$chromium_revision" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid Chromium revision" >&2; exit 1; }
+case "$chromium_executable" in
+  chrome-headless-shell-linux64/chrome-headless-shell|chrome-headless-shell-linux-arm64/chrome-headless-shell) ;;
+  *) echo "ERROR: unsupported Chromium executable path" >&2; exit 1 ;;
+esac
+chromium_dir="/opt/remote-dev/playwright-browsers/chromium_headless_shell-$chromium_revision"
+chromium_license="$chromium_dir/${chromium_executable%/*}/LICENSE.headless_shell"
+if [[ ! -s "$chromium_license" || -L "$chromium_license" ]]; then
+  echo "ERROR: verified Chromium archive is missing its full license notice" >&2
+  exit 1
+fi
+install -D -m 0644 "$chromium_license" "$destination/chromium/LICENSE.headless_shell"

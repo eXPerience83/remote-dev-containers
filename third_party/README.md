@@ -54,7 +54,7 @@ Changed legal text and changed packaging evidence are never accepted silently: t
 
 CI compares distributed tool version keys in `versions.env` with the declarative image inventory. Explicitly documented non-distributed review metadata such as `CONTEXT7_CLI_VERSION` and `CONTEXT7_CLI_SRI_SHA512` is excluded from that equality check and validated by its owning feature tests. A new **distributed** pinned tool still requires an explicit inventory entry; the validator does not implement a general-purpose Docker or shell parser.
 
-Generated SPDX SBOM files are uploaded with CI artifacts as a supplementary omission check. They do not replace upstream notices and are not treated as a perfect detector for standalone binaries.
+Generated SPDX SBOM files are uploaded with CI artifacts as a supplementary omission check. Because Trivy does not identify the raw Playwright-provisioned Chromium executable as a package, `scripts/chromium-sbom-evidence.py` validates both built images and records an additional, explicitly labeled Chromium Headless Shell package and executable identity in each SPDX, with the browser version, source URL, pinned archive SHA-256 and the installed binary and full notice SHA-256. The evidence is also published separately as `chromium-evidence-*.json`. This is inventory/provenance metadata, **not** a vulnerability scan of Chromium and not proof that no browser CVEs exist. The exact ZIP's complete `LICENSE.headless_shell` is copied into `runtime/chromium/`, included in the inventory and protected by a negative notice test. Generated SPDX inventories do not replace upstream notices or the human review in #53.
 
 ## Distribution boundaries
 
