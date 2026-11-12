@@ -517,7 +517,19 @@ def status_line(paths: Paths) -> tuple[str, int]:
     if state.kind == "unmanaged":
         return "Context7: unmanaged configuration (Remote Dev will not modify)", 0
     if state.kind != "managed":
-        return "Context7: managed configuration damaged or Codex config invalid", 3
+        # Only print stable diagnostic categories. state.detail may contain
+        # untrusted TOML or local path details, so never emit it in Doctor.
+        reason = {
+            "invalid": "Codex config unreadable or invalid",
+            "markers-malformed": "Context7 ownership markers malformed",
+            "conflict": "Context7 ownership conflict",
+            "managed-drift": "managed Context7 contract drift",
+        }.get(state.kind, "unrecognized Context7 configuration state")
+        return (
+            "Context7: managed configuration damaged or Codex config invalid "
+            f"({reason})",
+            3,
+        )
     secret, _ = secret_status(paths)
     if secret == "safe":
         return "Context7: configured (API key stored)", 0

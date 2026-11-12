@@ -177,6 +177,46 @@ def assert_main_cancelled_prompt_handling(module, home: Path) -> None:
         module.sys.argv = original_argv
 
 
+def assert_passive_diagnostic_categories(module, root: Path) -> None:
+    # The doctor needs an actionable reason without reading or printing
+    # credential files or exposing untrusted TOML content.
+    scenarios = {
+        "invalid": (
+            '[mcp_servers.context7\\n',
+            "Codex config unreadable or invalid",
+        ),
+        "markers-malformed": (
+            'model = "synthetic"\\n' + START_MARKER + "\\n",
+            "Context7 ownership markers malformed",
+        ),
+        "conflict": (
+            'model = "synthetic"\\n' + START_MARKER + "\\n" + END_MARKER + "\\n",
+            "Context7 ownership conflict",
+        ),
+        "managed-drift": (
+            module.MANAGED_BLOCK.replace(
+                module.CONTEXT7_ENDPOINT, "https://private.invalid/synthetic-secret", 1
+            ),
+            "managed Context7 contract drift",
+        ),
+    }
+    for kind, (payload, reason) in scenarios.items():
+        home = root / f"diagnostic-{kind}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        config.write_text(payload, encoding="utf-8")
+        before = config.read_bytes()
+        with codex_environment(home):
+            line, code = module.status_line(module.Paths())
+            state = module.inspect_config(module.Paths())
+        if state.kind != kind or code != 3 or reason not in line:
+            raise AssertionError(f"Context7 diagnostic classification failed: {kind}, {state.kind}")
+        if "synthetic-secret" in line or "private.invalid" in line:
+            raise AssertionError("Context7 diagnosis leaked untrusted TOML values")
+        if config.read_bytes() != before:
+            raise AssertionError("passive Context7 diagnosis changed private configuration")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -194,6 +234,8 @@ command = "other-mcp"
 args = ["--safe"]
 '''
         config.write_text(original, encoding="utf-8")
+
+        assert_passive_diagnostic_categories(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
