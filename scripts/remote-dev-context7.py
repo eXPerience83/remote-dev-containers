@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import getpass
 import json
 import os
@@ -10,6 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -35,6 +38,7 @@ MANAGED_CONTRACT = {
     "required": False,
 }
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
+CONFIG_LOCK_WAIT_SECONDS = 2.0  # Match browser-config's directory flock timeout.
 MAX_KEY_BYTES = 16 * 1024
 MAX_PING_BYTES = 4096
 BUNDLED_CODEX = Path("/usr/local/bin/codex")
@@ -300,7 +304,44 @@ def atomic_write(path: Path, content: str, *, mode: int) -> None:
         raise
 
 
+@contextlib.contextmanager
+def locked_codex_config(paths: Paths):
+    """Serialize Context7 transactions with Playwright's Codex config writer.
+
+    Browser provisioning flocks the CODEX_HOME directory inode before reading,
+    checking, and replacing config.toml. Hold that same flock from the
+    Context7 snapshot through its backup and atomic replacement, with the
+    same bounded nonblocking wait used by the browser.
+    """
+    validate_home(paths, create=True)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    try:
+        fd = os.open(paths.home, flags)
+    except OSError as exc:
+        raise Context7Error("could not lock the Codex config directory") from exc
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o022:
+            raise Context7Error("unsafe Codex config directory permissions")
+        deadline = time.monotonic() + CONFIG_LOCK_WAIT_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise Context7Error("Codex configuration lock busy; retry") from exc
+                time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+        yield
+    finally:
+        os.close(fd)
+
+
 def backup_and_replace_config(paths: Paths, old: str, new: str) -> bool:
+    # Called only while holding locked_codex_config. Fail closed if an
+    # external writer changed the snapshot despite the advisory flock.
+    if read_regular_text(paths.config, max_bytes=MAX_CONFIG_BYTES) != old:
+        raise Context7Error("Codex config changed during the Context7 update; retry")
     if old == new:
         if paths.config.exists():
             os.chmod(paths.config, 0o600)
@@ -626,9 +667,10 @@ def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None]
 
 
 def apply_managed_config(paths: Paths, *, require_existing: bool) -> bool:
-    state = inspect_config(paths)
-    candidate = managed_candidate(state, require_existing=require_existing)
-    return backup_and_replace_config(paths, state.text, candidate)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        candidate = managed_candidate(state, require_existing=require_existing)
+        return backup_and_replace_config(paths, state.text, candidate)
 
 
 def command_install(paths: Paths, args: argparse.Namespace) -> int:
@@ -656,26 +698,27 @@ def command_update(paths: Paths, args: argparse.Namespace) -> int:
 
 
 def remove_managed_block(paths: Paths) -> bool:
-    state = inspect_config(paths)
-    if state.kind == "unmanaged":
-        raise Context7Error(
-            "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
-        )
-    if state.kind in {"markers-malformed", "invalid", "conflict"}:
-        raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
-    if state.span is None:
-        return False
-    start, end = state.span
-    candidate = state.text[:start] + state.text[end:]
-    before = parse_toml(state.text, label="Codex config before Context7 removal")
-    result = parse_toml(candidate, label="Codex config after Context7 removal")
-    if has_context7(result):
-        raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
-    if without_context7(before) != without_context7(result):
-        raise Context7Error(
-            "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
-        )
-    return backup_and_replace_config(paths, state.text, candidate)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        if state.kind == "unmanaged":
+            raise Context7Error(
+                "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
+            )
+        if state.kind in {"markers-malformed", "invalid", "conflict"}:
+            raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
+        if state.span is None:
+            return False
+        start, end = state.span
+        candidate = state.text[:start] + state.text[end:]
+        before = parse_toml(state.text, label="Codex config before Context7 removal")
+        result = parse_toml(candidate, label="Codex config after Context7 removal")
+        if has_context7(result):
+            raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
+        if without_context7(before) != without_context7(result):
+            raise Context7Error(
+                "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
+            )
+        return backup_and_replace_config(paths, state.text, candidate)
 
 
 def command_remove(paths: Paths, args: argparse.Namespace) -> int:

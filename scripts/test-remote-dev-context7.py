@@ -466,6 +466,74 @@ def assert_interleaved_legacy_recovery(module, root: Path) -> None:
             raise AssertionError(f"unsafe legacy case wrote backup: {name}")
 
 
+def assert_context7_browser_writer_serialization(module, root: Path) -> None:
+    # This must be a real second process: browser-config locks the same
+    # CODEX_HOME directory via a separate open file description.
+    browser = MANAGER.with_name("remote-dev-browser-config.py")
+    if not browser.is_file():
+        raise AssertionError("browser MCP provisioning script is missing")
+    home = root / "cross-provider-config-lock"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    original = 'model = "synthetic"\n'
+    config.write_text(original, encoding="utf-8")
+    env = {**os.environ, "CODEX_HOME": str(home),
+           "REMOTE_DEV_ROLE": "codex"}
+    with codex_environment(home):
+        paths = module.Paths()
+        with module.locked_codex_config(paths):
+            contender = subprocess.run(
+                [sys.executable, "-I", str(browser), "codex"],
+                env=env, capture_output=True, text=True, timeout=7)
+            if contender.returncode != 3 or "lock busy" not in contender.stderr:
+                raise AssertionError("browser writer bypassed Context7 directory lock")
+            if config.read_text(encoding="utf-8") != original:
+                raise AssertionError("contending browser changed a locked config")
+            state = module.inspect_config(paths)
+            candidate = module.managed_candidate(state, require_existing=False)
+            if not module.backup_and_replace_config(paths, state.text, candidate):
+                raise AssertionError("Context7 update unexpectedly became a no-op")
+
+    browser_after = subprocess.run(
+        [sys.executable, "-I", str(browser), "codex"],
+        env=env, capture_output=True, text=True, timeout=7)
+    if browser_after.returncode:
+        raise AssertionError("browser writer failed to configure after lock released")
+    final = config.read_text(encoding="utf-8")
+    if "[mcp_servers.playwright]" not in final:
+        raise AssertionError("subsequent browser provisioner was lost")
+    with codex_environment(home):
+        if module.inspect_config(module.Paths()).kind != "managed":
+            raise AssertionError("browser provisioning damaged managed Context7")
+
+
+def assert_stale_context7_snapshot_never_overwrites(module, root: Path) -> None:
+    # A non-cooperating writer may still edit the file. A stale snapshot
+    # must fail before writing even a backup, despite holding our flock.
+    home = root / "context7-stale-snapshot"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text('model = "original"\n', encoding="utf-8")
+    with codex_environment(home):
+        paths = module.Paths()
+        with module.locked_codex_config(paths):
+            state = module.inspect_config(paths)
+            candidate = module.managed_candidate(state, require_existing=False)
+            external = 'model = "other-writer"\n'
+            config.write_text(external, encoding="utf-8")
+            try:
+                module.backup_and_replace_config(paths, state.text, candidate)
+            except module.Context7Error as exc:
+                if "changed during" not in str(exc):
+                    raise AssertionError("unexpected stale snapshot rejection") from exc
+            else:
+                raise AssertionError("stale Context7 snapshot overwrote a concurrent edit")
+            if config.read_text(encoding="utf-8") != external:
+                raise AssertionError("external configuration edit was overwritten")
+    if (home / "config.toml.remote-dev-context7.bak").exists():
+        raise AssertionError("stale snapshot wrote a misleading backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -488,6 +556,8 @@ args = ["--safe"]
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
         assert_interleaved_legacy_recovery(load_manager_module(), root)
+        assert_context7_browser_writer_serialization(load_manager_module(), root)
+        assert_stale_context7_snapshot_never_overwrites(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
