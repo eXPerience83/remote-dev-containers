@@ -82,6 +82,15 @@ class PlaywrightUpdaterContract(unittest.TestCase):
         with self.assertRaises(up.CandidateError):
             up.check_report(bad, "amd64", BASE)
 
+    def test_chromium_url_must_match_its_recorded_browser_version(self):
+        bad = candidate("amd64")
+        entry = bad["archives"]["chromium-headless-shell"]
+        entry["url"] = entry["url"].replace(
+            "/" + entry["browserVersion"] + "/", "/999.0.0.0/", 1)
+        with self.assertRaisesRegex(up.CandidateError,
+                                    "unreviewed headless-shell URL"):
+            up.check_report(bad, "amd64", BASE)
+
     def test_unreviewed_browser_archive_is_blocked(self):
         bad = candidate("amd64")
         del bad["archives"]["ffmpeg"]
@@ -144,10 +153,17 @@ class PlaywrightUpdaterContract(unittest.TestCase):
                                     "architecture-specific browser versions disagree"):
             up.reconcile(ROOT, candidate("amd64"), modified, write=False)
 
-    def test_arch_release_mismatch_is_blocked(self):
+    def test_arch_release_mismatch_is_deferred_without_mutations(self):
         x = candidate("arm64", version=OTHER_CANDIDATE_VERSION)
-        with self.assertRaises(up.CandidateError):
-            up.reconcile(ROOT, candidate("amd64"), x, write=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "versions.env").write_bytes((ROOT / "versions.env").read_bytes())
+            original = (root / "versions.env").read_bytes()
+            self.assertEqual(
+                up.reconcile(root, candidate("amd64"), x, write=True),
+                "deferred")
+            self.assertEqual((root / "versions.env").read_bytes(), original)
+            self.assertEqual(list(root.iterdir()), [root / "versions.env"])
 
     def test_reduced_report_requires_exact_schema(self):
         report = {
