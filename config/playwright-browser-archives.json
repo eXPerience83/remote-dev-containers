@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "playwright_core_version": "1.65.0-alpha-2026-10-30",
+  "playwright_core_version": "1.66.0-alpha-2026-11-09",
   "archives": {
     "amd64": {
       "chromium-headless-shell": {
-        "revision": "1252",
-        "browserVersion": "157.0.8103.15",
-        "url": "https://cdn.playwright.dev/builds/cft/157.0.8103.15/linux64/chrome-headless-shell-linux64.zip",
-        "sha256": "563526b19c119adaad4fbc603395a905d6dd637541dd8ed70635b18ac1bb8a53",
+        "revision": "1254",
+        "browserVersion": "158.0.8127.18",
+        "url": "https://cdn.playwright.dev/builds/cft/158.0.8127.18/linux64/chrome-headless-shell-linux64.zip",
+        "sha256": "18352d22cb0cdf520cbff2ad8c41391f0e02a72886cb53b0fde4bdfc4bd075d6",
         "executable": "chrome-headless-shell-linux64/chrome-headless-shell"
       }
     },
     "arm64": {
       "chromium-headless-shell": {
-        "revision": "1252",
-        "browserVersion": "157.0.8103.15",
-        "url": "https://cdn.playwright.dev/builds/cft/157.0.8103.15/linux-arm64/chrome-headless-shell-linux-arm64.zip",
-        "sha256": "50534c3b82ad736134ff7a02ea5ce238616745759de334209f874c92bf201423",
+        "revision": "1254",
+        "browserVersion": "158.0.8127.18",
+        "url": "https://cdn.playwright.dev/builds/cft/158.0.8127.18/linux-arm64/chrome-headless-shell-linux-arm64.zip",
+        "sha256": "b136462898353d94c7fab50f9cdaa6d8f0d4c190153916936aa0a03353a26bf2",
         "executable": "chrome-headless-shell-linux-arm64/chrome-headless-shell"
       }
     }

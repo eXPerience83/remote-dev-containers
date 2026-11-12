@@ -3,6 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "dependencies": {
-    "@playwright/mcp": "0.0.84"
+    "@playwright/mcp": "0.0.85"
   }
 }
