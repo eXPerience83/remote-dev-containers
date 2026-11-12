@@ -37,6 +37,17 @@ jobs:
           done < <(find scripts -type f -name '*.sh' -print0)
           python3 -m py_compile \
             scripts/remote-dev-agent-guidance.py \
+            scripts/remote-dev-browser-config.py \
+            scripts/test-browser-config.py \
+            scripts/remote-dev-browser-sandbox.py \
+            scripts/browser-sandbox-runtime-probe.py \
+            scripts/test-browser-sandbox.py \
+            scripts/chromium-sbom-evidence.py \
+            scripts/test_chromium_sbom_evidence.py \
+            scripts/install-verified-playwright-browser.py \
+            scripts/test-install-verified-playwright-browser.py \
+            scripts/playwright-upstream.py \
+            scripts/test_playwright_upstream.py \
             scripts/test-agent-guidance.py \
             scripts/test-initialize-codex-config.py \
             scripts/test-agent-guidance-lifecycle.py \
@@ -89,6 +100,14 @@ jobs:
           node web/ttyd-osc52/test_osc52.js
           python3 web/ttyd-osc52/test_generate.py
           make agent-contract-tests
+          python3 scripts/test-browser-config.py
+          python3 scripts/test-browser-sandbox.py
+          python3 scripts/test_chromium_sbom_evidence.py
+          python3 scripts/validate-playwright-lock.py
+          python3 scripts/test-validate-playwright-lock.py
+          python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
+          python3 scripts/test-install-verified-playwright-browser.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py
@@ -162,6 +181,31 @@ jobs:
             remote-dev-base:local --check
           docker run --rm --entrypoint remote-dev-notices \
             remote-dev:local --check
+          # Prove inherited Playwright notices and the exact Chromium archive
+          # license are both required in final and base image scopes.
+          docker run --rm --entrypoint sh remote-dev:local -ec '
+            test -z "$(find /opt/remote-dev/playwright-browsers -maxdepth 1 -name "ffmpeg*" -print -quit)"
+            notice=/usr/share/doc/remote-dev/third_party/runtime/playwright/playwright/ThirdPartyNotices.txt
+            test -s "$notice"
+            rm "$notice"
+            if REMOTE_DEV_NOTICE_IMAGE_SCOPE=final remote-dev-notices --check > /tmp/notices-negative.log 2>&1; then
+              echo "ERROR: final image ignored missing Playwright notice" >&2
+              exit 1
+            fi
+            grep -F "required notice file is missing" /tmp/notices-negative.log
+          '
+          for image in remote-dev-base:local remote-dev:local; do
+            docker run --rm --entrypoint sh "$image" -ec '
+              notice=/usr/share/doc/remote-dev/third_party/runtime/chromium/LICENSE.headless_shell
+              test -s "$notice"
+              rm "$notice"
+              if remote-dev-notices --check > /tmp/chromium-notice-negative.log 2>&1; then
+                echo "ERROR: missing Chromium license was not rejected" >&2
+                exit 1
+              fi
+              grep -F "required notice file is missing" /tmp/chromium-notice-negative.log
+            '
+          done
 
       - name: Generate base image SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -176,6 +220,17 @@ jobs:
           image-ref: remote-dev:local
           format: spdx-json
           output: sbom-remote-dev.spdx.json
+
+      - name: Record exact Chromium identity and notices in both SPDX images
+        run: |
+          python3 scripts/chromium-sbom-evidence.py \
+            --image remote-dev-base:local \
+            --spdx sbom-base.spdx.json \
+            --evidence chromium-evidence-base.json
+          python3 scripts/chromium-sbom-evidence.py \
+            --image remote-dev:local \
+            --spdx sbom-remote-dev.spdx.json \
+            --evidence chromium-evidence-remote-dev.json
 
       - name: Scan base image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -243,6 +298,8 @@ jobs:
           path: |
             sbom-base.spdx.json
             sbom-remote-dev.spdx.json
+            chromium-evidence-base.json
+            chromium-evidence-remote-dev.json
             trivy-base.json
             trivy-remote-dev.json
             third_party/components/remote-dev-ttyd-osc52/remote-dev-ttyd-osc52.spdx.json

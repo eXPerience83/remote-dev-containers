@@ -8,7 +8,7 @@ log_file="$(mktemp)"
 secret="synthetic-agent-password-${RANDOM}-$$"
 
 cleanup() {
-  docker rm -f "$name" "$malformed_name" >/dev/null 2>&1 || true
+  timeout --signal=TERM --kill-after=3s 12s docker rm -f "$name" "$malformed_name" >/dev/null 2>&1 || true
   rm -f "$log_file"
 }
 trap cleanup EXIT
@@ -54,6 +54,134 @@ status="$(docker exec "$name" curl --silent --output /dev/null --write-out '%{ht
   --user "codex:$secret" http://127.0.0.1:7681/)" \
   || fail "authenticated ttyd request could not be evaluated"
 [[ "$status" == 200 ]] || fail "authenticated ttyd request returned $status"
+
+# A client with valid HTTP Basic auth can send an invalid ttyd AuthToken.
+# ttyd 1.7.7 logs the rejected token at WARN level. Exercise that path with
+# synthetic data, and ensure it cannot reappear in the container log stream.
+# Bound the *host-side* Docker invocation as well as the Node-side timer;
+# an unresponsive docker exec can otherwise stall the entire smoke job.
+if timeout --signal=TERM --kill-after=3s 20s docker exec -i "$name" node - "$secret" <<'NODE'
+"use strict";
+const net = require("node:net");
+const crypto = require("node:crypto");
+
+const token = Buffer.from("codex:" + process.argv[2]).toString("base64");
+const invalidToken = token + "-invalid";
+const socket = net.connect({ host: "127.0.0.1", port: 7681 });
+let done = false;
+let upgraded = false;
+let requestBuffer = Buffer.alloc(0);
+let frameBuffer = Buffer.alloc(0);
+const timeout = setTimeout(() => fail("WebSocket auth fixture timed out"), 5000);
+
+function fail(message) {
+  if (done) return;
+  done = true;
+  clearTimeout(timeout);
+  socket.destroy();
+  console.error(message);
+  process.exitCode = 1;
+}
+function succeed() {
+  if (done) return;
+  done = true;
+  clearTimeout(timeout);
+  socket.destroy();
+}
+function writeMaskedFrame(payload) {
+  // ttyd JSON_DATA is an ASCII opening brace, not the INPUT command zero.
+  const data = Buffer.from(JSON.stringify({
+    AuthToken: payload, columns: 80, rows: 24,
+  }), "utf8");
+  const header = data.length < 126
+    ? Buffer.from([0x81, 0x80 | data.length])
+    : Buffer.from([0x81, 0xfe, data.length >> 8, data.length & 255]);
+  const mask = crypto.randomBytes(4);
+  const body = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i++) body[i] = data[i] ^ mask[i % 4];
+  socket.write(Buffer.concat([header, mask, body]));
+}
+
+function handleServerFrames(data) {
+  frameBuffer = Buffer.concat([frameBuffer, data]);
+  while (frameBuffer.length >= 2) {
+    const opcode = frameBuffer[0] & 0x0f;
+    const masked = (frameBuffer[1] & 0x80) !== 0;
+    let length = frameBuffer[1] & 0x7f;
+    let headerLength = 2;
+    if (masked) return fail("Server sent an invalid masked WebSocket frame");
+    if (length === 126) {
+      if (frameBuffer.length < 4) return;
+      length = frameBuffer.readUInt16BE(2);
+      headerLength = 4;
+    } else if (length === 127) {
+      // The expected close frame is tiny; no 64-bit frame is needed.
+      return fail("Unexpected oversized WebSocket frame");
+    }
+    if (frameBuffer.length < headerLength + length) return;
+    const payload = frameBuffer.subarray(headerLength, headerLength + length);
+    frameBuffer = frameBuffer.subarray(headerLength + length);
+    if (opcode !== 0x8) continue; // Ignore ttyd's normal control/data frames.
+    if (payload.length < 2 || payload.readUInt16BE(0) !== 1008) {
+      return fail("ttyd did not reject invalid WebSocket auth with code 1008");
+    }
+    return succeed();
+  }
+}
+
+socket.on("connect", () => {
+  const key = crypto.randomBytes(16).toString("base64");
+  socket.write([
+    "GET /ws HTTP/1.1",
+    "Host: 127.0.0.1:7681",
+    "Upgrade: websocket",
+    "Connection: Upgrade",
+    "Sec-WebSocket-Key: " + key,
+    "Sec-WebSocket-Version: 13",
+    "Sec-WebSocket-Protocol: tty",
+    "Origin: http://127.0.0.1:7681",
+    "Authorization: Basic " + token,
+    "", "",
+  ].join("\r\n"));
+});
+socket.on("data", data => {
+  if (upgraded) return handleServerFrames(data);
+  requestBuffer = Buffer.concat([requestBuffer, data]);
+  const end = requestBuffer.indexOf("\r\n\r\n");
+  if (end < 0) return;
+  const headers = requestBuffer.subarray(0, end).toString("utf8");
+  if (!headers.startsWith("HTTP/1.1 101") && !headers.startsWith("HTTP/1.0 101")) {
+    return fail("WebSocket fixture failed authentication/handshake");
+  }
+  upgraded = true;
+  const trailingFrame = requestBuffer.subarray(end + 4);
+  requestBuffer = Buffer.alloc(0);
+  writeMaskedFrame(invalidToken);
+  if (trailingFrame.length) handleServerFrames(trailingFrame);
+});
+socket.on("end", () => {
+  if (!done) fail("WebSocket ended without rejection code 1008");
+});
+socket.on("close", () => {
+  if (!done) fail("WebSocket closed without rejection code 1008");
+});
+socket.on("error", error => fail("WebSocket fixture socket error: " + error.code));
+NODE
+then
+  :
+else
+  fail "ttyd WebSocket fixture failed or exceeded the 20-second host timeout"
+fi
+
+# The server may have buffered its warning before the connection closed.
+sleep 1
+# ttyd 1.7.7 logs the Base64 credential at NOTICE (bit 4), and the
+# rejected AuthToken at WARN (bit 2). Mask 1 retains only ERR (bit 1).
+docker logs "$name" >"$log_file" 2>&1
+encoded_credential="$(printf 'codex:%s' "$secret" | base64 | tr -d '\n')"
+if grep -Fq "$secret" "$log_file" || grep -Fq "$encoded_credential" "$log_file"; then
+  fail "ttyd authentication material leaked into container logs"
+fi
 
 docker rm -f "$name" >/dev/null
 

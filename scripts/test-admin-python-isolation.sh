@@ -19,7 +19,7 @@ cd "$scratch/neutral"
 image_identity="$("$admin_python" -I -c 'import sys; print(sys.version); print(sys.prefix)')"
 [[ "$(realpath "$admin_python")" == /opt/remote-dev/mise/installs/python/*/bin/* ]]
 [[ "$(stat -c '%u:%g %a' /usr/local/lib/remote-dev)" == '0:0 755' ]]
-for program in remote-dev-agent-guidance remote-dev-codex-runtime \
+for program in remote-dev-agent-guidance remote-dev-browser-config remote-dev-codex-runtime \
   remote-dev-prepare-development-scratch validate-codex-project-boundary \
   remote-dev-context7-device-login remote-dev-antigravity-oauth \
   remote-dev-antigravity-picker remote-dev-antigravity-policy remote-dev-launcher; do

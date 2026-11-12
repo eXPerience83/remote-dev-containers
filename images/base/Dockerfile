@@ -8,6 +8,7 @@ ARG UBUNTU_VERSION
 ARG UBUNTU_DIGEST
 ARG TARGETARCH
 ARG BASE_VERSION=0.2.1
+ARG PLAYWRIGHT_MCP_VERSION=0.0.85
 ARG GH_VERSION=2.103.3
 ARG GH_AMD64_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
 ARG GH_ARM64_SHA256=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63
@@ -51,7 +52,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GH_PAGER=cat \
     GH_NO_UPDATE_NOTIFIER=1 \
     GH_NO_EXTENSION_UPDATE_NOTIFIER=1 \
-    DO_NOT_TRACK=1
+    DO_NOT_TRACK=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/remote-dev/playwright-browsers
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -124,6 +126,7 @@ RUN --mount=type=bind,source=scripts,target=/src/scripts,ro \
     REMOTE_DEV_GH_VERSION="${GH_VERSION}" \
     REMOTE_DEV_TTYD_VERSION="${TTYD_VERSION}" \
     REMOTE_DEV_MISE_VERSION="${MISE_VERSION}" \
+    REMOTE_DEV_PLAYWRIGHT_MCP_VERSION="${PLAYWRIGHT_MCP_VERSION}" \
     REMOTE_DEV_PYTHON_VERSION="${PYTHON_VERSION}" \
     REMOTE_DEV_PYTHON_315_VERSION="${PYTHON_315_VERSION}" \
     bash /src/scripts/validate-third-party-inventory.sh
@@ -202,6 +205,11 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
     && admin_python="$(realpath "$(mise which python)")" \
     && test "${admin_python%/*}" = "$MISE_DATA_DIR/installs/python/$PYTHON_VERSION/bin" \
     && test -f "$admin_python" && test -x "$admin_python" \
+    && node_binary="$(realpath "$(mise which node)")" \
+    && test "${node_binary%/*}" = "$MISE_DATA_DIR/installs/node/$NODE_VERSION/bin" \
+    && test -x "$node_binary" \
+    && ln -s "$node_binary" /usr/local/lib/remote-dev/node \
+    && test -x /usr/local/lib/remote-dev/node \
     && test -x "$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" \
     && test "$("$MISE_DATA_DIR/installs/python/$PYTHON_315_VERSION/bin/python3.15" --version)" = "Python $PYTHON_315_VERSION" \
     && ln -s "$admin_python" /usr/local/lib/remote-dev/python \
@@ -221,6 +229,36 @@ RUN test "$(stat -c '%a' "$MISE_SYSTEM_CONFIG_DIR")" = 755 \
       done \
     && rm -rf "${MISE_CACHE_DIR:?}"/*
 
+# Bake a deterministic headless browser into the common image. Ubuntu's
+# chromium-browser APT package delegates to Snap and is unsuitable here.
+# The official Playwright installer resolves browser assets for TARGETARCH and
+# installs the matching native libraries. Never download at agent runtime.
+RUN install -d -m 0755 /opt/remote-dev/playwright "$PLAYWRIGHT_BROWSERS_PATH" \
+    && install -d -m 0755 /usr/share/remote-dev
+COPY --chown=0:0 --chmod=0444 config/playwright-package.json /opt/remote-dev/playwright/package.json
+COPY --chown=0:0 --chmod=0444 config/playwright-package-lock.json /opt/remote-dev/playwright/package-lock.json
+COPY --chown=0:0 --chmod=0444 config/playwright-browser-archives.json /usr/share/remote-dev/browser-archives.json
+COPY --chown=0:0 --chmod=0444 scripts/playwright_archive_download.py /usr/local/bin/playwright_archive_download.py
+COPY --chown=0:0 --chmod=0555 scripts/install-verified-playwright-browser.py /usr/local/bin/install-verified-playwright-browser
+RUN test "$(node -p 'require("/opt/remote-dev/playwright/package.json").dependencies["@playwright/mcp"]')" = "$PLAYWRIGHT_MCP_VERSION" \
+    && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci \
+      --prefix /opt/remote-dev/playwright --omit=dev --ignore-scripts \
+      --no-audit --no-fund \
+    && /opt/remote-dev/playwright/node_modules/.bin/playwright install-deps \
+      chromium-headless-shell \
+    && /usr/local/lib/remote-dev/python -I \
+      /usr/local/bin/install-verified-playwright-browser --arch "$TARGETARCH" \
+    && test -x /opt/remote-dev/playwright/node_modules/.bin/playwright-mcp \
+    && ln -s /opt/remote-dev/playwright/node_modules/.bin/playwright /usr/local/bin/playwright \
+    && playwright --version \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev
+COPY --chown=0:0 --chmod=0444 config/playwright-mcp.json /usr/share/remote-dev/playwright-mcp.json
+COPY --chown=0:0 --chmod=0444 scripts/remote-dev-browser-sandbox.py /usr/local/lib/remote-dev/browser-sandbox.py
+COPY --chown=0:0 --chmod=0444 scripts/browser-sandbox-runtime-probe.py /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
+COPY --chown=0:0 --chmod=0555 scripts/remote-dev-playwright-mcp.sh /usr/local/bin/remote-dev-playwright-mcp
+
 # Keep project and bundled-component terms inspectable in both the repository and
 # the built image. Runtime archives contribute their own license files here.
 # Create the parent explicitly: COPY --chmod=0444 otherwise creates it as 0444,
@@ -230,6 +268,10 @@ COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
+# Preserve license notices from the exact SHA-256-verified Chromium archive.
+# The updater only proposes metadata; its discovery step does not execute
+# newly downloaded Playwright binaries. The image build validates pinned
+# runtime metadata and retains the browser's full LICENSE.headless_shell.
 RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
     test "$(stat -c '%u:%g %a' /usr/share/doc/remote-dev)" = '0:0 755' \
     && locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \
@@ -258,6 +300,7 @@ RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/t
       "MISE_AMD64_SHA256=${MISE_AMD64_SHA256}" \
       "MISE_ARM64_SHA256=${MISE_ARM64_SHA256}" \
       "NPM_VERSION=${NPM_VERSION}" \
+      "PLAYWRIGHT_MCP_VERSION=${PLAYWRIGHT_MCP_VERSION}" \
       > /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \
     && printf '%s\n' "$locked_runtime_manifest" \
       >> /usr/share/doc/remote-dev/third_party/BUILD-VERSIONS.env \

@@ -7,3 +7,5 @@
 - Keep project dependencies out of immutable/global Python and global npm. Use the project's dependency mechanisms and inherited package-manager cache variables.
 - Distinguish an image/global tool, a project-local dependency or environment, an explicitly selected extra toolchain, and an absent external capability or backend before reporting a missing tool.
 - Do not weaken container hardening to make a tool work.
+- A local Chromium headless shell and Playwright MCP are preinstalled. Use the configured `playwright` MCP server for interactive browsing; the shared `playwright` CLI is also on PATH. Do not fetch browser binaries at agent runtime.
+- Browsing sessions are headless, ephemeral, and confined to the current agent container; do not send credentials to untrusted websites.

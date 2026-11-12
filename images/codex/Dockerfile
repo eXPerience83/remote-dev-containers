@@ -84,6 +84,7 @@ COPY scripts/start-codex-web.sh /usr/local/bin/start-codex-web
 COPY scripts/attach-remote-dev-tmux.sh /usr/local/bin/attach-remote-dev-tmux
 COPY scripts/run-direct-session.sh /usr/local/bin/run-direct-session
 COPY scripts/run-codex.sh /usr/local/bin/run-codex
+COPY --chown=0:0 --chmod=0555 scripts/remote-dev-browser-config.py /usr/local/bin/remote-dev-browser-config
 RUN install -d -o 0 -g 0 -m 0755 /usr/share/remote-dev/agent-rules
 COPY --chown=0:0 --chmod=0444 config/agent-rules/codex-openai-docs.md /usr/share/remote-dev/agent-rules/codex-openai-docs.md
 COPY --chown=0:0 --chmod=0444 config/agent-rules/development-environment.md /usr/share/remote-dev/agent-rules/development-environment.md
@@ -114,6 +115,7 @@ COPY scripts/lib/antigravity-runtime /usr/local/lib/remote-dev/antigravity-runti
 COPY scripts/lib/format-short-revision.sh /usr/local/lib/remote-dev/format-short-revision.sh
 COPY scripts/lib/remote-dev-image-identity.sh /usr/local/lib/remote-dev/remote-dev-image-identity.sh
 COPY scripts/secure-persistent-state.sh /usr/local/bin/secure-persistent-state
+COPY --chown=0:0 --chmod=0444 scripts/browser-mcp-smoke.mjs /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
 COPY scripts/smoke-test.sh /usr/local/bin/codex-smoke-test
 
 # Only these installed administrative Python programs use the image interpreter.
@@ -178,6 +180,7 @@ RUN --network=none \
       /usr/local/lib/remote-dev/antigravity-runtime/*.sh \
     && sed -i '1c\#!/usr/local/lib/remote-dev/python -I' \
       /usr/local/bin/remote-dev-agent-guidance \
+      /usr/local/bin/remote-dev-browser-config \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \
@@ -189,6 +192,7 @@ RUN --network=none \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
     && /usr/local/lib/remote-dev/python -I -m py_compile \
       /usr/local/bin/remote-dev-agent-guidance \
+      /usr/local/bin/remote-dev-browser-config \
       /usr/local/bin/remote-dev-launcher \
       /usr/local/bin/remote-dev-codex-runtime \
       /usr/local/bin/remote-dev-prepare-development-scratch \

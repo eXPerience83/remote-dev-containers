@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded contract for the known Build AMD64 comparison steps; no YAML dependency."""
 from pathlib import Path
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,19 @@ def steps(text):
             raise AssertionError('duplicate named step: ' + name)
         result[name] = body
     return result
+
+
+
+def notices_shell_script(workflow):
+    """Extract the exact mandatory notice-check script without executing Docker."""
+    block = steps(workflow)['Verify bundled notices']
+    header = '        run: |\n'
+    if not block.startswith(header):
+        raise AssertionError('notices gate must be a multiline shell script')
+    lines = block[len(header):].splitlines()
+    if any(line and not line.startswith('          ') for line in lines):
+        raise AssertionError('unexpected indentation in notices gate')
+    return '\n'.join(line[10:] if line else '' for line in lines) + '\n'
 
 
 def condition(body):
@@ -103,6 +117,20 @@ class ComparisonContract(unittest.TestCase):
                 self.assertEqual(event == 'workflow_dispatch' and enabled is True, expected)
         # Comparison failure must still allow evidence upload; default runs never do.
         self.assertEqual(condition(steps(self.text)[UPLOAD]), 'always() && ' + GUARD)
+
+    def test_mandatory_notices_gate_shell_syntax(self):
+        script = notices_shell_script(self.text)
+        checked = subprocess.run(['bash', '-n'], input=script, text=True,
+                                 capture_output=True, check=False)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        # Reproduce the 2026-11-12 regression: the first container shell
+        # quote swallowed the outer image loop and ended in a syntax error.
+        closing = '/tmp/notices-negative.log\n\'\nfor image in '
+        self.assertIn(closing, script)
+        malformed = script.replace(closing, '/tmp/notices-negative.log\nfor image in ', 1)
+        regression = subprocess.run(['bash', '-n'], input=malformed, text=True,
+                                    capture_output=True, check=False)
+        self.assertNotEqual(regression.returncode, 0, 'missing quote escaped syntax validation')
 
     def test_every_comparison_guard_is_required(self):
         for name in (*COMPARISON, UPLOAD):

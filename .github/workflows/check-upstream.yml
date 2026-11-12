@@ -71,9 +71,52 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  playwright-discover:
+    name: discover Playwright MCP and browser payloads (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      # Deliberately no write-scoped token and no persisted checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Discover stable release and hash both candidate ZIPs
+        env:
+          PLAYWRIGHT_ARCH: ${{ matrix.arch }}
+          PLAYWRIGHT_REPORT: ${{ runner.temp }}/playwright-discovery/${{ matrix.arch }}.json
+        run: |
+          set -euo pipefail
+          python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
+          python3 scripts/playwright-upstream.py discover \
+            --arch "$PLAYWRIGHT_ARCH" --output "$PLAYWRIGHT_REPORT"
+          jq -er '.schema_version == 1 and
+             (.status == "unchanged" or .status == "candidate" or .status == "deferred")' \
+             "$PLAYWRIGHT_REPORT" >/dev/null
+          echo "Playwright $PLAYWRIGHT_ARCH: $(jq -r .status "$PLAYWRIGHT_REPORT")"
+      - name: Export metadata only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-candidate-${{ matrix.arch }}
+          path: ${{ runner.temp }}/playwright-discovery/${{ matrix.arch }}.json
+          if-no-files-found: error
+          retention-days: 3
+
   check:
     name: maintain one human-reviewed upstream PR
-    needs: antigravity-detect
+    needs: [antigravity-detect, playwright-discover]
+    # A Playwright network/discovery failure must not block other updates.
+    if: ${{ always() && needs.antigravity-detect.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -94,6 +137,20 @@ jobs:
         with:
           name: antigravity-installer-detection
           path: ${{ runner.temp }}/antigravity-detection
+
+      - name: Download Playwright AMD64 read-only discovery
+        if: needs.playwright-discover.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: playwright-candidate-amd64
+          path: ${{ runner.temp }}/playwright-discovery
+
+      - name: Download Playwright ARM64 read-only discovery
+        if: needs.playwright-discover.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: playwright-candidate-arm64
+          path: ${{ runner.temp }}/playwright-discovery
 
       - name: Revalidate Antigravity metadata after crossing into write-capable job
         env:
@@ -128,6 +185,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ANTIGRAVITY_DETECTION: ${{ runner.temp }}/antigravity-detection/antigravity-cli-detection.json
           ANTIGRAVITY_DISCOVERY: ${{ runner.temp }}/antigravity-detection/antigravity-cli-payload-discovery.json
+          PLAYWRIGHT_AMD64: ${{ runner.temp }}/playwright-discovery/amd64.json
+          PLAYWRIGHT_ARM64: ${{ runner.temp }}/playwright-discovery/arm64.json
         run: |
           set -euo pipefail
           python3 scripts/test_update_upstream_changelog.py
@@ -135,6 +194,8 @@ jobs:
           python3 scripts/test_reconcile_antigravity_review_state.py
           python3 scripts/test_select_mature_pypi_version.py
           python3 scripts/test_admit_mise_upstream.py
+          python3 scripts/test_playwright_upstream.py
+          python3 scripts/test_playwright_archive_download.py
           source versions.env
 
           curl_args=(
@@ -483,6 +544,16 @@ jobs:
           replace_env NPM_VERSION "$latest_npm"
           replace_env UV_VERSION "$latest_uv"
 
+          # Only revalidated JSON crosses from read-only runners into this
+          # write-capable job. No vendor npm module or browser executable runs.
+          if [[ -s "$PLAYWRIGHT_AMD64" && -s "$PLAYWRIGHT_ARM64" ]]; then
+            python3 scripts/playwright-upstream.py reconcile \
+              --amd64 "$PLAYWRIGHT_AMD64" \
+              --arm64 "$PLAYWRIGHT_ARM64" --write
+          else
+            echo "::warning::Playwright discovery unavailable; retaining reviewed pins"
+          fi
+
           replace_arg images/codex/Dockerfile CODEX_RELEASE_TAG "$latest_codex"
           replace_arg images/codex/Dockerfile CODEX_AMD64_SHA256 "$codex_amd64_sha256"
           replace_arg images/codex/Dockerfile CODEX_ARM64_SHA256 "$codex_arm64_sha256"
@@ -554,6 +625,9 @@ jobs:
           tracked_files=(
             CHANGELOG.md
             versions.env
+            config/playwright-package.json
+            config/playwright-package-lock.json
+            config/playwright-browser-archives.json
             mise.toml
             mise.lock
             .mise/locks
@@ -604,7 +678,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
-          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus maintenance updates within Python 3.14 and 3.15, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and statically discovers the current Antigravity installer/payload pair in a read-only job. Installer, manifest and archive are treated only as bounded data; neither install.sh nor agy executes during scheduled discovery. Antigravity remains outside the image and build-time SBOM."
+          body="Automated human-reviewed upstream maintenance. Tracks final Codex, GitHub CLI, ttyd, mise and uv releases plus Playwright MCP (with read-only per-architecture SHA-256 and npm SHA-512 discovery) plus maintenance updates within Python 3.14 and 3.15, Node 24 LTS and npm 12; validates the latest transient Context7 CLI version/integrity from the fixed npm registry; and statically discovers the current Antigravity installer/payload pair in a read-only job. Installer, manifest and archive are treated only as bounded data; neither install.sh nor agy executes during scheduled discovery. Antigravity remains outside the image and build-time SBOM."
 
           antigravity_changed="$(jq -r '.changed' third_party/antigravity-cli-detection.json)"
           installer_sha="$(jq -er '.installer.sha256 | select(test("^[0-9a-f]{64}$"))' third_party/antigravity-cli-detection.json)"

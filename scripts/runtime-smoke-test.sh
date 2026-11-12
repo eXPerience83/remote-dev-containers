@@ -87,6 +87,55 @@ for _ in $(seq 1 30); do
   if docker exec "$name" curl -fsS http://127.0.0.1:7681/ >/dev/null 2>&1; then
     docker exec "$name" pgrep -x ttyd >/dev/null
     docker exec "$name" remote-dev-healthcheck
+    # One real headless launch verifies the bundled browser, not just the CLI.
+    timeout --kill-after=5s 90s docker exec "$name" node -e '
+      const { chromium } = require("/opt/remote-dev/playwright/node_modules/playwright");
+      (async () => {
+        const browser = await chromium.launch({headless: true, chromiumSandbox: false});
+        try {
+          const page = await browser.newPage();
+          await page.goto("data:text/html,<title>remote-dev-browser-smoke</title>");
+          if (await page.title() !== "remote-dev-browser-smoke") throw Error("browser navigation failed");
+        } finally { await browser.close(); }
+      })().catch(error => { console.error(error); process.exit(1); });
+    '
+
+    # Exercise the actual local MCP stdio protocol, beyond launching Chromium directly.
+    docker exec "$name" node /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+    # Verify filesystem denial, clean env, UID/caps and inherited FDs using
+    # a real sandboxed Node process with only synthetic secrets.
+    docker exec "$name" /usr/local/lib/remote-dev/python -I \
+      /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
+
+    # TrueNAS-like least-privilege permissions and noexec /run.
+    # AGY's own live session acceptance is separately required.
+    docker run --rm \
+      --cap-drop ALL \
+      --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+      --cap-add KILL --cap-add SETGID --cap-add SETUID \
+      --security-opt no-new-privileges:true \
+      --read-only \
+      --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+      --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
+      --shm-size 256m \
+      --env REMOTE_DEV_ROLE=antigravity \
+      --entrypoint /usr/bin/tini \
+      "$image" -- /usr/local/lib/remote-dev/node /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+
+    # Repeat the negative security test under the AGY-like /run noexec layout.
+    docker run --rm \
+      --cap-drop ALL \
+      --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+      --cap-add KILL --cap-add SETGID --cap-add SETUID \
+      --security-opt no-new-privileges:true \
+      --read-only \
+      --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+      --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
+      --shm-size 256m \
+      --env REMOTE_DEV_ROLE=antigravity \
+      --entrypoint /usr/bin/tini \
+      "$image" -- /usr/local/lib/remote-dev/python -I /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
+
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
       echo "ERROR: the system Bubblewrap executable is present in the default outer-isolation image" >&2

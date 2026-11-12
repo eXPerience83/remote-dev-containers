@@ -134,6 +134,37 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     atomic_write_bytes(path, content)
 
 
+def playwright_archive_inventory(
+    root: Path, inventory: dict[str, Any], versions: dict[str, str],
+) -> tuple[dict[str, Any], str] | None:
+    """Bind redistributed Chromium to the exact reviewed Playwright version."""
+    version = versions.get("PLAYWRIGHT_MCP_VERSION")
+    if not version or not any(c.get("id") == "playwright-mcp"
+                              for c in inventory["components"]):
+        return None
+    by_id = {c.get("id"): c for c in inventory["components"]}
+    chromium = by_id.get("chromium-headless-shell")
+    if not isinstance(chromium, dict) or "playwright-ffmpeg" in by_id:
+        fail("Playwright distribution requires Chromium-only inventory")
+    try:
+        metadata = json.loads(
+            (root / "config/playwright-browser-archives.json").read_text(encoding="utf-8"))
+        archives = metadata["archives"]
+        if (set(archives) != {"amd64", "arm64"} or
+                any(set(archives[arch]) != {"chromium-headless-shell"}
+                    for arch in ("amd64", "arm64"))):
+            fail("Playwright manifest includes an unshipped browser binary")
+        a = archives["amd64"]["chromium-headless-shell"]
+        b = archives["arm64"]["chromium-headless-shell"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        fail(f"cannot verify reviewed Chromium archive: {type(exc).__name__}")
+    if (not isinstance(a["revision"], str) or not a["revision"].isdecimal()
+            or a["revision"] != b["revision"]
+            or a["browserVersion"] != b["browserVersion"]):
+        fail("Playwright Chromium archive revisions or versions disagree")
+    return chromium, version
+
+
 def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, str]) -> None:
     """Check version alignment and repository-document source contracts."""
     seen_keys: set[str] = set()
@@ -173,6 +204,16 @@ def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, s
             notice_path = resolve_notice_path(root, relative, str(component_id))
             if not notice_path.is_file() or notice_path.stat().st_size == 0:
                 fail(f"repository notice is missing or empty: {notice_path}")
+
+
+    # Standalone browser archives are not npm packages. Verify their legal
+    # inventory identity against the same locked manifest used by the builder.
+    playwright = playwright_archive_inventory(root, inventory, versions)
+    if playwright is not None:
+        chromium, version = playwright
+        if (chromium.get("version") !=
+                f"matching the installed Playwright version in @playwright/mcp {version}"):
+            fail("stale Chromium version in legal inventory")
 
 
 def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, str]) -> bool:
@@ -243,6 +284,15 @@ def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, 
 
         component["version"] = new_version
         changed = True
+
+    playwright = playwright_archive_inventory(root, inventory, versions)
+    if playwright is not None:
+        chromium, version = playwright
+        expected_chromium = (
+            f"matching the installed Playwright version in @playwright/mcp {version}")
+        if chromium.get("version") != expected_chromium:
+            chromium["version"] = expected_chromium
+            changed = True
 
     if not changed:
         return False

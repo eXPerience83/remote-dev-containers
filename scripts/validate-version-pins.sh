@@ -156,6 +156,8 @@ if grep -Fq 'mise use --global' "$base_dockerfile"; then
   exit 1
 fi
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$ROOT"
+python3 "$ROOT/scripts/validate-playwright-lock.py"
+python3 "$ROOT/scripts/test_playwright_upstream.py"
 python3 "$ROOT/scripts/sync-python-cli-notices.py"
 python3 "$ROOT/scripts/test-validate-mise-lock.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_preflight_python_upstream.py"
@@ -243,6 +245,7 @@ for variable in \
   PYTHON_315_VERSION \
   NODE_VERSION \
   NPM_VERSION \
+  PLAYWRIGHT_MCP_VERSION \
   UV_VERSION; do
   require_synced_arg "$variable" "$base_dockerfile"
 done
