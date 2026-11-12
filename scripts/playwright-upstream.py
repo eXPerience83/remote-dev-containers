@@ -96,13 +96,14 @@ def validate_archives(arch: str, archives: dict, core_version: str) -> None:
         require(isinstance(item["sha256"], str)
                 and HASH.fullmatch(item["sha256"]) is not None, "missing browser SHA-256")
         if component == "chromium-headless-shell":
-            suffix = ("linux64/chrome-headless-shell-linux64.zip" if arch == "amd64"
-                      else "linux-arm64/chrome-headless-shell-linux-arm64.zip")
-            require(url.startswith("https://cdn.playwright.dev/builds/cft/")
-                    and url.endswith("/" + suffix), "unreviewed headless-shell URL")
             require(isinstance(item.get("browserVersion"), str)
                     and re.fullmatch(r"[0-9]+(\.[0-9]+){3}", item["browserVersion"]) is not None,
                     "unexpected Chromium version")
+            suffix = ("linux64/chrome-headless-shell-linux64.zip" if arch == "amd64"
+                      else "linux-arm64/chrome-headless-shell-linux-arm64.zip")
+            require(url == ("https://cdn.playwright.dev/builds/cft/"
+                            f"{item['browserVersion']}/{suffix}"),
+                    "unreviewed headless-shell URL")
             expected_exe = ("chrome-headless-shell-linux64/chrome-headless-shell"
                             if arch == "amd64" else
                             "chrome-headless-shell-linux-arm64/chrome-headless-shell")
@@ -305,7 +306,13 @@ def reconcile(root: Path, amd64: dict, arm64: dict, *, write: bool) -> str:
     if a != "candidate" or b != "candidate":
         print(f"Playwright candidate deferred: amd64={a}, arm64={b}")
         return "deferred"
-    for key in ("version", "package", "lock", "playwright_core_version"):
+    # Two read-only discovery jobs may observe a new npm release at different
+    # times. Each report is valid, but proposing mixed versions would break
+    # unrelated grouped upstream maintenance; defer only this benign race.
+    if amd64["version"] != arm64["version"]:
+        print("Playwright candidate deferred: architecture discovery version race")
+        return "deferred"
+    for key in ("package", "lock", "playwright_core_version"):
         require(amd64[key] == arm64[key], "architecture reports disagree: " + key)
     # Never accept identical archives masquerading as different architectures.
     for component in COMPONENTS:
