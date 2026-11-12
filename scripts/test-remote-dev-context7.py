@@ -534,6 +534,116 @@ def assert_stale_context7_snapshot_never_overwrites(module, root: Path) -> None:
         raise AssertionError("stale snapshot wrote a misleading backup")
 
 
+def assert_legacy_recovery_requires_explicit_permission(module, root: Path) -> None:
+    """Update --yes must never acquire a legacy Context7 block.
+    Only install/repair --yes can authorize this exceptional recovery.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\n\n'
+    interleaved = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/synthetic"\n'
+        + module.END_MARKER + '\n'
+    )
+    for label, payload in (
+        ("exact-block-missing-begin", prefix + suffix),
+        ("interleaved-legacy-missing-begin", prefix + interleaved),
+    ):
+        home = root / f"explicit-only-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = payload.encode("utf-8")
+        config.write_bytes(original)
+        with codex_environment(home):
+            paths = module.Paths()
+            state = module.inspect_config(paths)
+            if state.kind != "markers-malformed":
+                raise AssertionError(f"{label}: malformed markers not recognized")
+            try:
+                module.managed_candidate(state, require_existing=False)
+            except module.Context7Error:
+                pass
+            else:
+                raise AssertionError(f"{label}: implicit recovery unexpectedly allowed")
+            try:
+                module.apply_managed_config(paths, require_existing=False)
+            except module.Context7Error:
+                pass
+            else:
+                raise AssertionError(f"{label}: implicit apply unexpectedly allowed")
+        result = run_manager(home, "update", "--yes")
+        require_failure(result, f"{label}: update --yes must reject legacy recovery")
+        if config.read_bytes() != original:
+            raise AssertionError(f"{label}: unauthorized recovery modified config")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{label}: unauthorized recovery wrote backup")
+        # A successful repair requires an explicit opt-in on the command path.
+        result = run_manager(home, "repair", "--yes")
+        require_success(result, f"{label}: repair --yes")
+        with codex_environment(home):
+            if module.inspect_config(module.Paths()).kind != "managed":
+                raise AssertionError(f"{label}: explicit repair was not managed")
+
+
+def assert_repair_preserves_mixed_newlines(module, root: Path) -> None:
+    """Recover missing-BEGIN without normalizing unrelated CRLF/LF sections.
+
+    Compare the actual file bytes, including the private preimage backup.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\r\nprofile = "test"\r\n\r\n'
+    trailing = (
+        '\r\n[mcp_servers.playwright]\r\n'
+        'command = "custom-playwright"\r\n'
+        'enabled = false\r\n'
+    )
+    legacy = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+    )
+    docs = (
+        '\r\n[mcp_servers.playwright]\r\n'
+        'command = "custom-playwright"\r\n'
+        '[mcp_servers.openaiDeveloperDocs]\r\n'
+        'url = "https://example.invalid/synthetic-docs"\r\n'
+    )
+    cases = (
+        ("exact", prefix + suffix + trailing,
+         prefix + module.MANAGED_BLOCK + trailing),
+        ("interleaved", prefix + legacy + docs + module.END_MARKER + '\n',
+         prefix + module.MANAGED_BLOCK + docs),
+    )
+    for label, original, expected in cases:
+        home = root / f"mixed-newlines-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        before = original.encode("utf-8")
+        config.write_bytes(before)
+        with codex_environment(home):
+            parsed = module.inspect_config(module.Paths())
+            if parsed.kind != "markers-malformed":
+                raise AssertionError(f"{label}: mixed newlines not accepted as input")
+            if parsed.text.encode("utf-8") != before:
+                raise AssertionError(f"{label}: reader normalized original line endings")
+        result = run_manager(home, "repair", "--yes")
+        require_success(result, f"{label}: mixed newline repair")
+        if config.read_bytes() != expected.encode("utf-8"):
+            raise AssertionError(f"{label}: mixed newline bytes were normalized")
+        backup = home / "config.toml.remote-dev-context7.bak"
+        if backup.read_bytes() != before:
+            raise AssertionError(f"{label}: backup bytes did not match original")
+        assert_private_file(backup)
+        with codex_environment(home):
+            if module.inspect_config(module.Paths()).kind != "managed":
+                raise AssertionError(f"{label}: recovered block did not validate")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -558,6 +668,8 @@ args = ["--safe"]
         assert_interleaved_legacy_recovery(load_manager_module(), root)
         assert_context7_browser_writer_serialization(load_manager_module(), root)
         assert_stale_context7_snapshot_never_overwrites(load_manager_module(), root)
+        assert_legacy_recovery_requires_explicit_permission(load_manager_module(), root)
+        assert_repair_preserves_mixed_newlines(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")

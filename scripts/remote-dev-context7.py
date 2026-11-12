@@ -107,7 +107,10 @@ def read_regular_text(path: Path, *, max_bytes: int) -> str:
             raise Context7Error(f"refusing non-regular or symlinked file: {path}")
         if info.st_size > max_bytes:
             raise Context7Error(f"file exceeds the supported size limit: {path}")
-        return path.read_text(encoding="utf-8")
+        # newline="" keeps original CRLF and LF bytes; universal newline
+        # translation would silently rewrite unrelated MCP entries on repair.
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
     except UnicodeDecodeError as exc:
         raise Context7Error(f"file is not valid UTF-8: {path}") from exc
     except OSError as exc:
@@ -484,12 +487,19 @@ def inspect_config_candidate(text: str) -> str:
     return "managed"
 
 
-def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
+def managed_candidate(
+    state: ConfigState, *, require_existing: bool,
+    allow_legacy_recovery: bool = False,
+) -> str:
     if state.kind == "unmanaged":
         raise Context7Error(
             "an unowned [mcp_servers.context7] entry already exists; Remote Dev will not overwrite it"
         )
     if state.kind == "markers-malformed":
+        if not allow_legacy_recovery:
+            raise Context7Error(
+                "malformed Context7 ownership markers require explicit install/repair --yes"
+            )
         candidate = safe_missing_begin_candidate(state)
         if candidate is None:
             candidate = safe_interleaved_legacy_candidate(state)
@@ -666,10 +676,16 @@ def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None]
     return "anonymous", None
 
 
-def apply_managed_config(paths: Paths, *, require_existing: bool) -> bool:
+def apply_managed_config(
+    paths: Paths, *, require_existing: bool,
+    allow_legacy_recovery: bool = False,
+) -> bool:
     with locked_codex_config(paths):
         state = inspect_config(paths)
-        candidate = managed_candidate(state, require_existing=require_existing)
+        candidate = managed_candidate(
+            state, require_existing=require_existing,
+            allow_legacy_recovery=allow_legacy_recovery,
+        )
         return backup_and_replace_config(paths, state.text, candidate)
 
 
@@ -678,7 +694,9 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
     key_action, key_value = choose_key(paths, args)
     if key_action == "replace":
         ensure_state_dir(paths)
-    changed = apply_managed_config(paths, require_existing=False)
+    changed = apply_managed_config(
+        paths, require_existing=False, allow_legacy_recovery=args.yes,
+    )
     if key_action == "replace" and key_value is not None:
         store_key(paths, key_value)
     elif key_action == "anonymous":
@@ -691,7 +709,9 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
 
 def command_update(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Update/reapply", yes=args.yes)
-    changed = apply_managed_config(paths, require_existing=True)
+    changed = apply_managed_config(
+        paths, require_existing=True, allow_legacy_recovery=False,
+    )
     print("Context7 managed configuration: updated" if changed else "Context7 managed configuration: already current")
     print("Context7 update network: not used (hosted MCP contract only)")
     return 0
