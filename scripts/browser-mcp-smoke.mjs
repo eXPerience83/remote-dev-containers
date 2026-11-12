@@ -9,7 +9,11 @@ const server = createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end('<title>remote-dev-mcp-smoke</title><main id="marker">LOCAL-MCP-PASS</main>');
 });
+// An upgraded WebSocket is not covered by server.closeAllConnections().
+const upgradedSockets = new Set();
 server.on("upgrade", (req, socket) => {
+  upgradedSockets.add(socket);
+  socket.once("close", () => upgradedSockets.delete(socket));
   if (req.url !== "/ws" || !req.headers["sec-websocket-key"]) { socket.destroy(); return; }
   const key = createHash("sha1")
     .update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
@@ -147,6 +151,15 @@ try {
     if (child.exitCode === null) child.kill("SIGTERM");
   }
   rejectPending(new Error("Smoke test finished"));
+  for (const socket of upgradedSockets) socket.destroy();
   server.closeAllConnections();
-  await new Promise(resolve => server.close(resolve));
+  await new Promise((resolve, reject) => {
+    const deadline = setTimeout(
+      () => reject(new Error("MCP fixture server teardown timed out")), 5000);
+    server.close(error => {
+      clearTimeout(deadline);
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
