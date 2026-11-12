@@ -131,6 +131,34 @@ def marker_span(text: str) -> tuple[int, int] | None:
     return start_offset, end_offset
 
 
+def marker_layout_reason(text: str) -> str:
+    """Explain malformed ownership markers using only fixed, non-secret labels.
+
+    Preserve the exact marker-matching rule used by marker_span(). Never
+    include private config lines, paths or parser exception details.
+    """
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line == START_MARKER]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER]
+    if len(starts) > 1 and len(ends) > 1:
+        return "duplicate BEGIN and END markers"
+    if len(starts) > 1:
+        return "duplicate BEGIN marker"
+    if len(ends) > 1:
+        return "duplicate END marker"
+    if not starts:
+        if any(line.strip() == START_MARKER for line in lines):
+            return "BEGIN marker has extra whitespace"
+        return "missing BEGIN marker"
+    if not ends:
+        if any(line.strip() == END_MARKER for line in lines):
+            return "END marker has extra whitespace"
+        return "missing END marker"
+    if ends[0] <= starts[0]:
+        return "END marker precedes BEGIN marker"
+    return "unrecognized marker layout"
+
+
 def parse_toml(text: str, *, label: str) -> dict[str, object]:
     if not text.strip():
         return {}
@@ -519,12 +547,15 @@ def status_line(paths: Paths) -> tuple[str, int]:
     if state.kind != "managed":
         # Only print stable diagnostic categories. state.detail may contain
         # untrusted TOML or local path details, so never emit it in Doctor.
-        reason = {
-            "invalid": "Codex config unreadable or invalid",
-            "markers-malformed": "Context7 ownership markers malformed",
-            "conflict": "Context7 ownership conflict",
-            "managed-drift": "managed Context7 contract drift",
-        }.get(state.kind, "unrecognized Context7 configuration state")
+        if state.kind == "markers-malformed":
+            reason = ("Context7 ownership markers malformed: "
+                      + marker_layout_reason(state.text))
+        else:
+            reason = {
+                "invalid": "Codex config unreadable or invalid",
+                "conflict": "Context7 ownership conflict",
+                "managed-drift": "managed Context7 contract drift",
+            }.get(state.kind, "unrecognized Context7 configuration state")
         return (
             "Context7: managed configuration damaged or Codex config invalid "
             f"({reason})",

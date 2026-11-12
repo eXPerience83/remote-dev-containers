@@ -217,6 +217,61 @@ def assert_passive_diagnostic_categories(module, root: Path) -> None:
             raise AssertionError("passive Context7 diagnosis changed private configuration")
 
 
+def assert_specific_marker_diagnostics(module, root: Path) -> None:
+    # The exact reason is derived from fixed marker positions only, never
+    # from the content of unrelated MCPs, keys or TOML values.
+    cases = {
+        "missing-begin": (
+            END_MARKER + "\n",
+            "missing BEGIN marker",
+        ),
+        "missing-end": (
+            START_MARKER + "\n",
+            "missing END marker",
+        ),
+        "duplicate-begin": (
+            START_MARKER + "\n" + START_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate BEGIN marker",
+        ),
+        "duplicate-end": (
+            START_MARKER + "\n" + END_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate END marker",
+        ),
+        "reversed": (
+            END_MARKER + "\n" + START_MARKER + "\n",
+            "END marker precedes BEGIN marker",
+        ),
+        "begin-whitespace": (
+            START_MARKER + "  \n" + END_MARKER + "\n",
+            "BEGIN marker has extra whitespace",
+        ),
+        "end-whitespace": (
+            START_MARKER + "\n" + END_MARKER + " \n",
+            "END marker has extra whitespace",
+        ),
+        "duplicates-both": (
+            START_MARKER + "\n" + END_MARKER + "\n"
+            + START_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate BEGIN and END markers",
+        ),
+    }
+    for label, (text, reason) in cases.items():
+        home = root / f"marker-detail-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        config.write_text('model = "synthetic"\n' + text, encoding="utf-8")
+        before = config.read_bytes()
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            line, code = module.status_line(module.Paths())
+        if state.kind != "markers-malformed" or code != 3:
+            raise AssertionError(f"incorrect marker diagnosis for {label}")
+        if reason not in line or "synthetic" in line:
+            raise AssertionError(f"marker reason missing or content leaked for {label}")
+        if config.read_bytes() != before:
+            raise AssertionError(f"diagnosis wrote private configuration for {label}")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -236,6 +291,7 @@ args = ["--safe"]
         config.write_text(original, encoding="utf-8")
 
         assert_passive_diagnostic_categories(load_manager_module(), root)
+        assert_specific_marker_diagnostics(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
