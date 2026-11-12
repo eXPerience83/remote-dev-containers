@@ -351,6 +351,79 @@ def safe_missing_begin_candidate(state: ConfigState) -> str | None:
     return candidate
 
 
+def safe_interleaved_legacy_candidate(state: ConfigState) -> str | None:
+    """Recover a narrowly recognized legacy Context7 block on explicit repair.
+
+    A missing BEGIN and a displaced END may surround other MCP tables.
+    Never claim the intervening tables as managed Context7. Only accept the
+    exact reviewed two-field legacy Context7 table and rebuild it with
+    enabled=true / required=false. All unrelated TOML must remain unchanged.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+
+    lines = state.text.splitlines(keepends=True)
+    ctx_indices = [i for i, line in enumerate(lines)
+                   if line == "[mcp_servers.context7]\n"]
+    end_indices = [i for i, line in enumerate(lines)
+                   if line == END_MARKER + "\n"]
+    if len(ctx_indices) != 1 or len(end_indices) != 1:
+        return None
+    start, old_end = ctx_indices[0], end_indices[0]
+    if old_end <= start:
+        return None
+    later_headers = [
+        i for i in range(start + 1, old_end)
+        if lines[i].startswith("[") and lines[i].rstrip("\r\n").endswith("]")
+    ]
+    if not later_headers or any(
+        not lines[i].startswith("[mcp_servers.")
+        for i in later_headers
+    ):
+        return None
+    first_other = later_headers[0]
+    expected_legacy = [
+        "[mcp_servers.context7]\n",
+        f'url = "{CONTEXT7_ENDPOINT}"\n',
+        f'env_http_headers = {{ "CONTEXT7_API_KEY" = "{CONTEXT7_ENV}" }}\n',
+    ]
+    if lines[start:start + 3] != expected_legacy:
+        return None
+    # Forbid extra Context7 fields or comments that might express an
+    # intentional user setting. Only blank lines may separate MCP tables.
+    if any(line.strip() for line in lines[start + 3:first_other]):
+        return None
+    try:
+        before = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    table = context7_table(before)
+    if (not isinstance(table, dict)
+            or set(table) != {"url", "env_http_headers"}
+            or table["url"] != MANAGED_CONTRACT["url"]
+            or table["env_http_headers"] != MANAGED_CONTRACT["env_http_headers"]):
+        return None
+
+    # Replace only the two-field Context7 table at its original location,
+    # remove the displaced END comment, leave the other MCP tables byte-exact.
+    candidate = (
+        "".join(lines[:start])
+        + MANAGED_BLOCK
+        + "".join(lines[start + 3:old_end])
+        + "".join(lines[old_end + 1:])
+    )
+    try:
+        after = parse_toml(candidate, label="recovered Codex config")
+    except Context7Error:
+        return None
+    if (context7_table(after) != MANAGED_CONTRACT
+            or without_context7(before) != without_context7(after)
+            or inspect_config_candidate(candidate) != "managed"):
+        return None
+    return candidate
+
+
 def inspect_config_candidate(text: str) -> str:
     """Validate a proposed repair without reading or writing private files."""
     try:
@@ -377,6 +450,8 @@ def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
         )
     if state.kind == "markers-malformed":
         candidate = safe_missing_begin_candidate(state)
+        if candidate is None:
+            candidate = safe_interleaved_legacy_candidate(state)
         if candidate is None:
             raise Context7Error("malformed Context7 ownership markers require manual review")
         return candidate

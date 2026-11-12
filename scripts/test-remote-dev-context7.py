@@ -373,6 +373,99 @@ def assert_missing_begin_repair_fails_closed(module, root: Path) -> None:
             raise AssertionError(f"unsafe missing-BEGIN {label} wrote a backup")
 
 
+def assert_interleaved_legacy_recovery(module, root: Path) -> None:
+    """Live TrueNAS-inspired fixture: missing BEGIN, two legacy fields,
+    two unrelated MCP tables before a displaced END marker.
+    """
+    prefix = 'model = "synthetic"\n\n'
+    legacy = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+    )
+    other = (
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        'enabled = true\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/synthetic-docs"\n'
+    )
+    original = prefix + legacy + other + module.END_MARKER + '\n'
+    home = root / "interleaved-legacy-repair"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(original, encoding="utf-8")
+    with codex_environment(home):
+        paths = module.Paths()
+        state = module.inspect_config(paths)
+        if state.kind != "markers-malformed":
+            raise AssertionError("legacy test did not reproduce malformed markers")
+        proposed = module.safe_interleaved_legacy_candidate(state)
+        expected = prefix + module.MANAGED_BLOCK + other
+        if proposed != expected:
+            raise AssertionError("legacy recovery touched unrelated MCP table bytes")
+        old_parsed = module.parse_toml(original, label="before")
+        new_parsed = module.parse_toml(proposed, label="after")
+        if module.without_context7(old_parsed) != module.without_context7(new_parsed):
+            raise AssertionError("legacy recovery changed other TOML semantics")
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "explicit interleaved legacy repair")
+    if config.read_text(encoding="utf-8") != expected:
+        raise AssertionError("explicit repair did not preserve unrelated bytes")
+    with codex_environment(home):
+        paths = module.Paths()
+        if module.inspect_config(paths).kind != "managed":
+            raise AssertionError("legacy repair did not restore managed ownership")
+        if module.status_line(paths) != ("Context7: configured (anonymous)", 0):
+            raise AssertionError("recovered Context7 diagnostic not healthy")
+    backup = home / "config.toml.remote-dev-context7.bak"
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("legacy repair did not back up old user config")
+    assert_private_file(backup)
+    before_repeated = config.read_bytes()
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "legacy repair idempotence")
+    if config.read_bytes() != before_repeated:
+        raise AssertionError("repeating repair changed bytes")
+
+    bad = {
+        "url-drift": original.replace(
+            module.CONTEXT7_ENDPOINT, "https://example.invalid/other", 1),
+        "header-drift": original.replace(
+            '"CONTEXT7_API_KEY" = "CONTEXT7_API_KEY"',
+            '"OTHER" = "OTHER"', 1),
+        "already-disabled": original.replace(
+            legacy, legacy + 'enabled = false\n'),
+        "required-custom": original.replace(
+            legacy, legacy + 'required = true\n'),
+        "extra-field": original.replace(
+            legacy, legacy + 'startup_timeout_sec = 25\n'),
+        "extra-comment": original.replace(
+            legacy, legacy + '# user-managed option\n'),
+        "reformatted-field": original.replace(
+            'url = "' + module.CONTEXT7_ENDPOINT + '"',
+            'url="' + module.CONTEXT7_ENDPOINT + '"', 1),
+        "missing-END": original.replace(module.END_MARKER + '\n', ''),
+        "duplicate-END": original + module.END_MARKER + '\n',
+        "no-intervening-mcp": prefix + legacy + module.END_MARKER + '\n',
+    }
+    for name, payload in bad.items():
+        badhome = root / f"interleaved-rejected-{name}"
+        badhome.mkdir(mode=0o700)
+        config = badhome / "config.toml"
+        config.write_text(payload, encoding="utf-8")
+        with codex_environment(badhome):
+            state = module.inspect_config(module.Paths())
+            if module.safe_interleaved_legacy_candidate(state) is not None:
+                raise AssertionError(f"unsafe candidate accepted: {name}")
+        result = run_manager(badhome, "repair", "--yes")
+        require_failure(result, f"unsafe legacy case {name}")
+        if config.read_text(encoding="utf-8") != payload:
+            raise AssertionError(f"unsafe legacy case changed config: {name}")
+        if (badhome / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"unsafe legacy case wrote backup: {name}")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -394,6 +487,7 @@ args = ["--safe"]
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
+        assert_interleaved_legacy_recovery(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
