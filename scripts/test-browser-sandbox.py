@@ -159,6 +159,82 @@ class BrowserIsolationContract(unittest.TestCase):
         self.assertEqual(killer.call_args_list,
                          [mock.call(777), mock.call(888)])
 
+    def test_live_guardian_reaper_does_not_consume_node_exit_status(self):
+        # The guardian must never call waitpid on its main, still-running MCP.
+        # It can reap any adopted, already-exited Chromium descendants.
+        with (mock.patch.object(sandbox, "adopted_children",
+                                return_value=[777, 888, 889]),
+              mock.patch.object(sandbox.os, "waitpid",
+                                side_effect=[(888, 0), (0, 0)]) as waiter):
+            sandbox.reap_exited_browser_children(777)
+        self.assertEqual(waiter.call_args_list, [
+            mock.call(888, os.WNOHANG),
+            mock.call(889, os.WNOHANG),
+        ])
+
+    def test_live_guardian_reaper_tolerates_concurrent_reap(self):
+        with (mock.patch.object(sandbox, "adopted_children",
+                                return_value=[777, 888]),
+              mock.patch.object(sandbox.os, "waitpid",
+                                side_effect=ChildProcessError)):
+            sandbox.reap_exited_browser_children(777)
+
+    @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "fork"),
+                         "requires Linux subreaper adoption")
+    def test_live_guardian_reaper_collects_actual_orphaned_zombie(self):
+        # Isolated Python subprocess: never change the unittest runner's
+        # subreaper state, and never touch other running MCPs.
+        fixture = r"""
+import ctypes
+import importlib.util
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+spec = importlib.util.spec_from_file_location("sandbox_reaper_fixture", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
+spec.loader.exec_module(mod)
+assert ctypes.CDLL(None, use_errno=True).prctl(
+    mod.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0
+node = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(8)"])
+try:
+    maker = subprocess.Popen(
+        [sys.executable, "-c",
+         "import os; pid=os.fork(); "
+         "os._exit(0) if pid == 0 else print(pid, flush=True)"],
+        stdout=subprocess.PIPE, text=True)
+    assert maker.stdout is not None
+    zombie = int(maker.stdout.readline().strip())
+    maker.stdout.close()
+    maker.wait(timeout=3)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            stat = Path(f"/proc/{zombie}/stat").read_text()
+        except FileNotFoundError:
+            stat = ""
+        # Expected zombie, adopted by this isolated subreaper.
+        if stat and stat.rsplit(")", 1)[1].split()[:2] == ["Z", str(os.getpid())]:
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("fixture failed to create an adopted zombie")
+    assert node.poll() is None, "MCP stand-in exited too early"
+    mod.reap_exited_browser_children(node.pid)
+    assert not Path(f"/proc/{zombie}").exists(), "adopted zombie remained"
+    assert node.poll() is None, "reaper disrupted still-running MCP"
+finally:
+    node.terminate()
+    node.wait(timeout=3)
+"""
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", fixture, str(SOURCE)],
+            capture_output=True, text=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_supervisor_is_subreaper_before_spawning_guardian(self):
         with (mock.patch.object(sandbox.libc, "prctl", return_value=0) as ctl,
               mock.patch.object(sandbox, "adopted_children",

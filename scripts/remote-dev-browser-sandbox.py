@@ -200,6 +200,24 @@ def adopted_children() -> list[int]:
     return [int(value) for value in Path(path).read_text().split()]
 
 
+def reap_exited_browser_children(node_pid: int) -> None:
+    """Reap exited adopted Chromium children while the MCP Node stays active.
+
+    A live MCP may open and close many browser instances. As a subreaper,
+    the guardian adopts their orphaned children, which otherwise remain
+    zombies until the whole MCP session ends. Never reap the main Node PID:
+    subprocess.Popen owns its exit status and lifecycle.
+    """
+    for pid in adopted_children():
+        if pid == node_pid:
+            continue
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            # The child may have been reaped between /proc and waitpid.
+            pass
+
+
 def cleanup_browser_tree(child: subprocess.Popen[bytes] | None) -> None:
     """Reap Node and all descendants, including detached Chrome process groups."""
     if child is not None:
@@ -265,6 +283,10 @@ def guardian(lifeline_fd: int, scratch: str) -> int:
             code = child.poll()
             if code is not None:
                 return code
+            # Chromium exits after browser_close while its MCP Node remains
+            # alive. Reap adopted zombies during the session, not just here
+            # in the final cleanup when Node eventually exits.
+            reap_exited_browser_children(child.pid)
             ready, _, _ = select.select([lifeline_fd], [], [], 0.1)
             if ready and not os.read(lifeline_fd, 4096):
                 return 143
