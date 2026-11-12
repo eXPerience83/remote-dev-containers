@@ -148,7 +148,10 @@ class PlaywrightUpdaterContract(unittest.TestCase):
 
     def test_cross_arch_chromium_version_mismatch_is_blocked(self):
         modified = candidate("arm64")
-        modified["archives"]["chromium-headless-shell"]["browserVersion"] = "999.0.0.0"
+        entry = modified["archives"]["chromium-headless-shell"]
+        entry["url"] = entry["url"].replace(
+            "/" + entry["browserVersion"] + "/", "/999.0.0.0/", 1)
+        entry["browserVersion"] = "999.0.0.0"
         with self.assertRaisesRegex(up.CandidateError,
                                     "architecture-specific browser versions disagree"):
             up.reconcile(ROOT, candidate("amd64"), modified, write=False)
