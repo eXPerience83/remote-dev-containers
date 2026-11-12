@@ -81,17 +81,17 @@ def generate(
     with binary.open("rb") as stream:
         binary_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     report = (
-        "Playwright-provisioned FFmpeg: exact binary licensing evidence\\n"
-        f"Architecture: {arch}\\n"
-        f"Playwright archive revision: {revision}\\n"
-        f"Reviewed archive SHA-256: {digest}\\n"
-        f"Installed executable SHA-256: {binary_hash}\\n"
-        "Source: installed FFmpeg binary -version and -L output\\n"
-        "No substitute legal notice was supplied by the upstream ZIP.\\n"
-        "\\n=== ffmpeg -version (build options) ===\\n"
-        + version.rstrip() + "\\n"
-        "\\n=== ffmpeg -L (license) ===\\n"
-        + license_text.rstrip() + "\\n"
+        "Playwright-provisioned FFmpeg: exact binary licensing evidence\n"
+        f"Architecture: {arch}\n"
+        f"Playwright archive revision: {revision}\n"
+        f"Reviewed archive SHA-256: {digest}\n"
+        f"Installed executable SHA-256: {binary_hash}\n"
+        "Source: installed FFmpeg binary -version and -L output\n"
+        "No substitute legal notice was supplied by the upstream ZIP.\n"
+        "\n=== ffmpeg -version (build options) ===\n"
+        + version.rstrip() + "\n"
+        "\n=== ffmpeg -L (license) ===\n"
+        + license_text.rstrip() + "\n"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report, encoding="utf-8")
