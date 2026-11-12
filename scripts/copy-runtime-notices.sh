@@ -79,6 +79,6 @@ if [[ ! -s "$destination/ffmpeg/LICENSE-from-binary.txt" ]]; then
 fi
 inventory="/usr/share/doc/remote-dev/third_party/inventory.json"
 ffmpeg_revision="$(jq -er '.components[] | select(.id == "playwright-ffmpeg") | .version | select(test("^[0-9]+$"))' "$inventory")"
-ffmpeg_root="/opt/remote-dev/playwright-browsers/ffmpeg_${ffmpeg_revision}"
+ffmpeg_root="/opt/remote-dev/playwright-browsers/ffmpeg-${ffmpeg_revision}"
 # Also copy any future archive-supplied legal sidecars, if upstream adds them.
 copy_notice_files ffmpeg "$ffmpeg_root" optional
