@@ -55,8 +55,21 @@ class ChromiumSbomContract(unittest.TestCase):
                 self.assertEqual(len(result["files"]), 2)
                 self.assertEqual({f["SPDXID"] for f in result["files"]},
                                  {mod.EXEC_ID, mod.LICENSE_ID})
-                self.assertEqual(result["relationships"][-1]["relatedSpdxElement"],
-                                 mod.PACKAGE_ID)
+                # SPDX 2.3 forbids CONTAINS when filesAnalyzed=False.
+                # Selected digest evidence is independently document-described,
+                # not asserted to be a complete Chromium package file listing.
+                self.assertFalse(any(
+                    rel["spdxElementId"] == mod.PACKAGE_ID and
+                    rel["relationshipType"] == "CONTAINS"
+                    for rel in result["relationships"]
+                ))
+                self.assertEqual({
+                    rel["relatedSpdxElement"] for rel in result["relationships"]
+                    if rel["spdxElementId"] == result["SPDXID"]
+                    and rel["relationshipType"] == "DESCRIBES"
+                }, {mod.PACKAGE_ID, mod.EXEC_ID, mod.LICENSE_ID})
+                self.assertIn("not an exhaustive package file inventory",
+                              package["sourceInfo"])
                 self.assertIn("Trivy did not identify or vulnerability-scan Chromium",
                               result["annotations"][0]["comment"])
 
