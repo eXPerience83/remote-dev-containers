@@ -193,6 +193,7 @@ jobs:
               exit 1
             fi
             grep -F "required notice file is missing" /tmp/notices-negative.log
+          '
           for image in remote-dev-base:local remote-dev:local; do
             docker run --rm --entrypoint sh "$image" -ec '
               notice=/usr/share/doc/remote-dev/third_party/runtime/chromium/LICENSE.headless_shell
@@ -205,7 +206,6 @@ jobs:
               grep -F "required notice file is missing" /tmp/chromium-notice-negative.log
             '
           done
-          '
 
       - name: Generate base image SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
