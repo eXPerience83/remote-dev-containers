@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("update-third-party-inventory.py")
@@ -102,6 +104,64 @@ class UpdaterContractTests(unittest.TestCase):
                 "../outside.txt",
                 "tool",
             )
+
+    def test_playwright_license_and_archive_inventory_update_as_one_set(self) -> None:
+        version = "0.0.85"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            third_party = root / "third_party"
+            third_party.mkdir()
+            config = root / "config"
+            config.mkdir()
+            metadata = {
+                "archives": {
+                    arch: {"ffmpeg": {
+                        "revision": "1014",
+                        "url": ("https://cdn.playwright.dev/dbazure/download/playwright/"
+                                "builds/ffmpeg/1014/" +
+                                ("ffmpeg-linux.zip" if arch == "amd64"
+                                 else "ffmpeg-linux-arm64.zip")),
+                    }} for arch in ("amd64", "arm64")
+                }
+            }
+            (config / "playwright-browser-archives.json").write_text(
+                json.dumps(metadata), encoding="utf-8")
+            inventory = {"components": [
+                {"id": "playwright-mcp", "version_key": "PLAYWRIGHT_MCP_VERSION",
+                 "version": "0.0.84",
+                 "notices": [{"path": "components/playwright-mcp/LICENSE",
+                              "source": "repository",
+                              "reviewed_from": (
+                                  "https://raw.githubusercontent.com/microsoft/"
+                                  "playwright-mcp/v0.0.84/LICENSE")}]},
+                {"id": "chromium-headless-shell", "version":
+                 "matching the installed Playwright version in @playwright/mcp 0.0.84"},
+                {"id": "playwright-ffmpeg", "version": "1013", "source": "old-source"},
+            ]}
+            expected_license = b"synthetic upstream LICENSE"
+            with mock.patch.object(self.updater, "download_notice",
+                                   return_value=expected_license) as fetch:
+                self.assertTrue(self.updater.update_inventory(
+                    root, inventory, {"PLAYWRIGHT_MCP_VERSION": version}))
+            fetch.assert_called_once_with(
+                "https://raw.githubusercontent.com/microsoft/playwright-mcp/"
+                "v0.0.85/LICENSE")
+            result = self.updater.load_inventory(third_party / "inventory.json")
+            by_id = {c["id"]: c for c in result["components"]}
+            self.assertEqual(by_id["playwright-mcp"]["version"], version)
+            self.assertEqual(by_id["playwright-ffmpeg"]["version"], "1014")
+            self.assertEqual(by_id["playwright-ffmpeg"]["source"],
+                             metadata["archives"]["amd64"]["ffmpeg"]["url"])
+            self.assertIn(version, by_id["chromium-headless-shell"]["version"])
+            self.assertEqual(
+                (third_party / "components/playwright-mcp/LICENSE").read_bytes(),
+                expected_license)
+            self.updater.check_inventory(
+                root, result, {"PLAYWRIGHT_MCP_VERSION": version})
+            by_id["playwright-ffmpeg"]["version"] = "1013"
+            self.assert_rejected(
+                self.updater.check_inventory,
+                root, result, {"PLAYWRIGHT_MCP_VERSION": version})
 
     def test_update_rejects_duplicate_keys_before_downloads(self) -> None:
         inventory = {
