@@ -68,3 +68,15 @@ copy_notice_files npm "$npm_root" required
 # Keep notices actually redistributed inside the pinned Playwright npm tree,
 # including bundled *.js.LICENSE and ThirdPartyNotices.txt sidecars.
 copy_notice_files playwright /opt/remote-dev/playwright/node_modules required
+
+# FFmpeg is a separately downloaded, SHA-256-pinned executable, not part of
+# the npm runtime tree. Preserve only the license shipped by the exact ZIP.
+# Failing on an absent archive notice prevents silently distributing it.
+inventory="/usr/share/doc/remote-dev/third_party/inventory.json"
+ffmpeg_revision="$(jq -er '.components[] | select(.id == "playwright-ffmpeg") | .version | select(test("^[0-9]+$"))' "$inventory")"
+ffmpeg_root="/opt/remote-dev/playwright-browsers/ffmpeg_${ffmpeg_revision}"
+if [[ ! -s "$ffmpeg_root/COPYING.LGPLv2.1" ]]; then
+  echo "ERROR: verified FFmpeg archive did not include COPYING.LGPLv2.1" >&2
+  exit 1
+fi
+copy_notice_files ffmpeg "$ffmpeg_root" required
