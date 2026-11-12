@@ -21,6 +21,8 @@ are retained; invalid or unsafe private files are never replaced, and the
 generated Codex TOML is validated before writing. Provisioning does not run for `--help` or
 passive vendor commands, and no provider configuration is shared across roles.
 
+The image deliberately omits FFmpeg and session video recording, which are
+not required for MCP navigation, JavaScript, WebSockets or screenshots.
 The MCP server is spawned on-demand over **stdio**, uses an isolated browser
 profile, does not expose a listening port, and stops with its agent session.
 `playwright --version` checks the image's CLI installation.
