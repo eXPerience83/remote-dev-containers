@@ -182,15 +182,15 @@ def assert_passive_diagnostic_categories(module, root: Path) -> None:
     # credential files or exposing untrusted TOML content.
     scenarios = {
         "invalid": (
-            '[mcp_servers.context7\\n',
+            '[mcp_servers.context7\n',
             "Codex config unreadable or invalid",
         ),
         "markers-malformed": (
-            'model = "synthetic"\\n' + START_MARKER + "\\n",
+            'model = "synthetic"\n' + START_MARKER + "\n",
             "Context7 ownership markers malformed",
         ),
         "conflict": (
-            'model = "synthetic"\\n' + START_MARKER + "\\n" + END_MARKER + "\\n",
+            'model = "synthetic"\n' + START_MARKER + "\n" + END_MARKER + "\n",
             "Context7 ownership conflict",
         ),
         "managed-drift": (
