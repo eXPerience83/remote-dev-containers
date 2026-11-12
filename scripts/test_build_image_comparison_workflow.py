@@ -39,13 +39,13 @@ def steps(text):
 def notices_shell_script(workflow):
     """Extract the exact mandatory notice-check script without executing Docker."""
     block = steps(workflow)['Verify bundled notices']
-    header = '        run: |\\n'
+    header = '        run: |\n'
     if not block.startswith(header):
         raise AssertionError('notices gate must be a multiline shell script')
     lines = block[len(header):].splitlines()
     if any(line and not line.startswith('          ') for line in lines):
         raise AssertionError('unexpected indentation in notices gate')
-    return '\\n'.join(line[10:] if line else '' for line in lines) + '\\n'
+    return '\n'.join(line[10:] if line else '' for line in lines) + '\n'
 
 
 def condition(body):
@@ -125,9 +125,9 @@ class ComparisonContract(unittest.TestCase):
         self.assertEqual(checked.returncode, 0, checked.stderr)
         # Reproduce the 2026-11-12 regression: the first container shell
         # quote swallowed the outer image loop and ended in a syntax error.
-        closing = '/tmp/notices-negative.log\\n\'\\nfor image in '
+        closing = '/tmp/notices-negative.log\n\'\nfor image in '
         self.assertIn(closing, script)
-        malformed = script.replace(closing, '/tmp/notices-negative.log\\nfor image in ', 1)
+        malformed = script.replace(closing, '/tmp/notices-negative.log\nfor image in ', 1)
         regression = subprocess.run(['bash', '-n'], input=malformed, text=True,
                                     capture_output=True, check=False)
         self.assertNotEqual(regression.returncode, 0, 'missing quote escaped syntax validation')
