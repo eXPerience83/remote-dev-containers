@@ -118,7 +118,8 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
             "Supplemental inventory of Playwright-provisioned Chromium, "
             "revision " + revision + ", arch " + arch +
             ". Archive SHA-256 was pinned and verified before extraction. "
-            "Not evidence of Chromium vulnerability scanning."
+            "Only selected executable and license digests were inspected; "
+            "this is not an exhaustive package file inventory or a Chromium vulnerability scan."
         ),
         "externalRefs": [{
             "referenceCategory": "PACKAGE-MANAGER",
@@ -140,10 +141,13 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
             "licenseInfoInFiles": ["NOASSERTION"],
             "copyrightText": "NOASSERTION",
         })
+        # A metadata-only package (filesAnalyzed=False) cannot contain files
+        # under SPDX 2.3. Describe these selected image-evidence files
+        # independently, without asserting package membership/completeness.
         sbom["relationships"].append({
-            "spdxElementId": PACKAGE_ID,
+            "spdxElementId": sbom["SPDXID"],
             "relatedSpdxElement": file_id,
-            "relationshipType": "CONTAINS",
+            "relationshipType": "DESCRIBES",
         })
     sbom["relationships"].append({
         "spdxElementId": sbom["SPDXID"],
