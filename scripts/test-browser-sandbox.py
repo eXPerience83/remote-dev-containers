@@ -80,24 +80,24 @@ class BrowserIsolationContract(unittest.TestCase):
                           "/tmp/not-private")
 
     def test_private_scratch_requires_canonical_child_and_expected_owner(self):
-        with tempfile.TemporaryDirectory() as tmp, (
-                mock.patch.object(sandbox, "TMP_ROOT", tmp),
-                mock.patch.object(sandbox, "UID", os.getuid())):
-            scratch = Path(tmp) / "remote-dev-browser-owned"
-            scratch.mkdir(mode=0o700)
-            self.assertTrue(sandbox.valid_scratch(str(scratch)))
-            for invalid in (str(scratch) + "/../remote-dev-browser-owned",
-                            str(scratch) + "/..",
-                            str(scratch / "nested"),
-                            str(Path(tmp) / "other-dir"),
-                            str(Path(tmp) / "remote-dev-browser-missing")):
-                with self.subTest(invalid=invalid):
-                    self.assertFalse(sandbox.valid_scratch(invalid))
-            symlink = Path(tmp) / "remote-dev-browser-symlink"
-            symlink.symlink_to(scratch, target_is_directory=True)
-            self.assertFalse(sandbox.valid_scratch(str(symlink)))
-            with mock.patch.object(sandbox, "UID", -1):
-                self.assertFalse(sandbox.valid_scratch(str(scratch)))
+        with tempfile.TemporaryDirectory() as tmp:
+            with (mock.patch.object(sandbox, "TMP_ROOT", tmp),
+                  mock.patch.object(sandbox, "UID", os.getuid())):
+                scratch = Path(tmp) / "remote-dev-browser-owned"
+                scratch.mkdir(mode=0o700)
+                self.assertTrue(sandbox.valid_scratch(str(scratch)))
+                for invalid in (str(scratch) + "/../remote-dev-browser-owned",
+                                str(scratch) + "/..",
+                                str(scratch / "nested"),
+                                str(Path(tmp) / "other-dir"),
+                                str(Path(tmp) / "remote-dev-browser-missing")):
+                    with self.subTest(invalid=invalid):
+                        self.assertFalse(sandbox.valid_scratch(invalid))
+                symlink = Path(tmp) / "remote-dev-browser-symlink"
+                symlink.symlink_to(scratch, target_is_directory=True)
+                self.assertFalse(sandbox.valid_scratch(str(symlink)))
+                with mock.patch.object(sandbox, "UID", -1):
+                    self.assertFalse(sandbox.valid_scratch(str(scratch)))
 
     def test_guardian_rejects_scratch_traversal_before_root_cleanup(self):
         with mock.patch.object(sandbox.os, "geteuid", return_value=0):
