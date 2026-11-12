@@ -1,11 +1,14 @@
 name: Check upstream versions
 
 on:
-  # Run once when this workflow itself changes on main; avoids unrelated push churn.
+  # Re-evaluate the pinned Playwright/browser bundle and other dependencies
+  # after source versions change, without triggering on unrelated pushes.
   push:
     branches: [main]
     paths:
       - ".github/workflows/check-upstream.yml"
+      - "versions.env"
+      - "config/playwright-browser-archives.json"
   schedule:
     - cron: "17 5 * * *"
   workflow_dispatch:
