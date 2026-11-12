@@ -109,7 +109,7 @@ def validate_archives(arch: str, archives: dict, core_version: str) -> None:
         expected_exe = ("chrome-headless-shell-linux64/chrome-headless-shell"
                         if arch == "amd64" else
                         "chrome-headless-shell-linux-arm64/chrome-headless-shell")
-                require(item["executable"] == expected_exe, "unexpected browser binary path")
+        require(item["executable"] == expected_exe, "unexpected browser binary path")
     require(SEMVER.fullmatch(core_version.split("-")[0]) is not None,
             "unreviewed Playwright Core version")
 
