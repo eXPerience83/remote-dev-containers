@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import getpass
 import json
 import os
@@ -10,6 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -35,6 +38,7 @@ MANAGED_CONTRACT = {
     "required": False,
 }
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
+CONFIG_LOCK_WAIT_SECONDS = 2.0  # Match browser-config's directory flock timeout.
 MAX_KEY_BYTES = 16 * 1024
 MAX_PING_BYTES = 4096
 BUNDLED_CODEX = Path("/usr/local/bin/codex")
@@ -103,7 +107,10 @@ def read_regular_text(path: Path, *, max_bytes: int) -> str:
             raise Context7Error(f"refusing non-regular or symlinked file: {path}")
         if info.st_size > max_bytes:
             raise Context7Error(f"file exceeds the supported size limit: {path}")
-        return path.read_text(encoding="utf-8")
+        # newline="" keeps original CRLF and LF bytes; universal newline
+        # translation would silently rewrite unrelated MCP entries on repair.
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
     except UnicodeDecodeError as exc:
         raise Context7Error(f"file is not valid UTF-8: {path}") from exc
     except OSError as exc:
@@ -129,6 +136,57 @@ def marker_span(text: str) -> tuple[int, int] | None:
     start_offset = sum(len(line) for line in lines[: starts[0]])
     end_offset = sum(len(line) for line in lines[: ends[0] + 1])
     return start_offset, end_offset
+
+
+def marker_layout_reason(text: str) -> str:
+    """Explain malformed ownership markers using only fixed, non-secret labels.
+
+    Preserve the exact marker-matching rule used by marker_span(). Never
+    include private config lines, paths or parser exception details.
+    """
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line == START_MARKER]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER]
+    if len(starts) > 1 and len(ends) > 1:
+        return "duplicate BEGIN and END markers"
+    if len(starts) > 1:
+        return "duplicate BEGIN marker"
+    if len(ends) > 1:
+        return "duplicate END marker"
+    if not starts:
+        if any(line.strip() == START_MARKER for line in lines):
+            return "BEGIN marker has extra whitespace"
+        return "missing BEGIN marker"
+    if not ends:
+        if any(line.strip() == END_MARKER for line in lines):
+            return "END marker has extra whitespace"
+        return "missing END marker"
+    if ends[0] <= starts[0]:
+        return "END marker precedes BEGIN marker"
+    return "unrecognized marker layout"
+
+
+def missing_begin_layout_details(text: str) -> str:
+    """Add safe structural hints only; never print MCP names or TOML values."""
+    lines = text.splitlines()
+    heads = [i for i, line in enumerate(lines)
+             if line == "[mcp_servers.context7]"]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER]
+    if len(heads) != 1 or len(ends) != 1 or ends[0] <= heads[0]:
+        return ""
+    other_headers = sum(
+        line.startswith("[") for line in lines[heads[0] + 1:ends[0]]
+    )
+    try:
+        data = parse_toml(text, label="Codex config")
+    except Context7Error:
+        return ""
+    hints = []
+    if context7_table(data) != MANAGED_CONTRACT:
+        hints.append("Context7 contract differs")
+    if other_headers:
+        hints.append("other tables precede END")
+    return "; " + "; ".join(hints) if hints else ""
 
 
 def parse_toml(text: str, *, label: str) -> dict[str, object]:
@@ -249,7 +307,44 @@ def atomic_write(path: Path, content: str, *, mode: int) -> None:
         raise
 
 
+@contextlib.contextmanager
+def locked_codex_config(paths: Paths):
+    """Serialize Context7 transactions with Playwright's Codex config writer.
+
+    Browser provisioning flocks the CODEX_HOME directory inode before reading,
+    checking, and replacing config.toml. Hold that same flock from the
+    Context7 snapshot through its backup and atomic replacement, with the
+    same bounded nonblocking wait used by the browser.
+    """
+    validate_home(paths, create=True)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    try:
+        fd = os.open(paths.home, flags)
+    except OSError as exc:
+        raise Context7Error("could not lock the Codex config directory") from exc
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o022:
+            raise Context7Error("unsafe Codex config directory permissions")
+        deadline = time.monotonic() + CONFIG_LOCK_WAIT_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise Context7Error("Codex configuration lock busy; retry") from exc
+                time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+        yield
+    finally:
+        os.close(fd)
+
+
 def backup_and_replace_config(paths: Paths, old: str, new: str) -> bool:
+    # Called only while holding locked_codex_config. Fail closed if an
+    # external writer changed the snapshot despite the advisory flock.
+    if read_regular_text(paths.config, max_bytes=MAX_CONFIG_BYTES) != old:
+        raise Context7Error("Codex config changed during the Context7 update; retry")
     if old == new:
         if paths.config.exists():
             os.chmod(paths.config, 0o600)
@@ -273,12 +368,145 @@ def append_managed_block(text: str) -> str:
     return text + separator + MANAGED_BLOCK
 
 
-def managed_candidate(state: ConfigState, *, require_existing: bool) -> str:
+def safe_missing_begin_candidate(state: ConfigState) -> str | None:
+    """Reclaim only a byte-for-byte intact managed block missing BEGIN.
+
+    Never guess ownership from a partial table. The missing-BEGIN case is
+    admitted only if the whole expected managed block (except its first
+    comment line) occurs exactly once, contains the expected Context7 MCP
+    contract and adding that one comment restores 'managed' status.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+    suffix = MANAGED_BLOCK[len(START_MARKER) + 1:]
+    if state.text.count(suffix) != 1:
+        return None
+    try:
+        original = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    if context7_table(original) != MANAGED_CONTRACT:
+        return None
+    at = state.text.index(suffix)
+    candidate = state.text[:at] + START_MARKER + "\n" + state.text[at:]
+    if inspect_config_candidate(candidate) != "managed":
+        return None
+    return candidate
+
+
+def safe_interleaved_legacy_candidate(state: ConfigState) -> str | None:
+    """Recover a narrowly recognized legacy Context7 block on explicit repair.
+
+    A missing BEGIN and a displaced END may surround other MCP tables.
+    Never claim the intervening tables as managed Context7. Only accept the
+    exact reviewed two-field legacy Context7 table and rebuild it with
+    enabled=true / required=false. All unrelated TOML must remain unchanged.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+
+    lines = state.text.splitlines(keepends=True)
+    ctx_indices = [i for i, line in enumerate(lines)
+                   if line == "[mcp_servers.context7]\n"]
+    end_indices = [i for i, line in enumerate(lines)
+                   if line == END_MARKER + "\n"]
+    if len(ctx_indices) != 1 or len(end_indices) != 1:
+        return None
+    start, old_end = ctx_indices[0], end_indices[0]
+    if old_end <= start:
+        return None
+    later_headers = [
+        i for i in range(start + 1, old_end)
+        if lines[i].startswith("[") and lines[i].rstrip("\r\n").endswith("]")
+    ]
+    if not later_headers or any(
+        not lines[i].startswith("[mcp_servers.")
+        for i in later_headers
+    ):
+        return None
+    first_other = later_headers[0]
+    expected_legacy = [
+        "[mcp_servers.context7]\n",
+        f'url = "{CONTEXT7_ENDPOINT}"\n',
+        f'env_http_headers = {{ "CONTEXT7_API_KEY" = "{CONTEXT7_ENV}" }}\n',
+    ]
+    if lines[start:start + 3] != expected_legacy:
+        return None
+    # Forbid extra Context7 fields or comments that might express an
+    # intentional user setting. Only blank lines may separate MCP tables.
+    if any(line.strip() for line in lines[start + 3:first_other]):
+        return None
+    try:
+        before = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    table = context7_table(before)
+    if (not isinstance(table, dict)
+            or set(table) != {"url", "env_http_headers"}
+            or table["url"] != MANAGED_CONTRACT["url"]
+            or table["env_http_headers"] != MANAGED_CONTRACT["env_http_headers"]):
+        return None
+
+    # Replace only the two-field Context7 table at its original location,
+    # remove the displaced END comment, leave the other MCP tables byte-exact.
+    candidate = (
+        "".join(lines[:start])
+        + MANAGED_BLOCK
+        + "".join(lines[start + 3:old_end])
+        + "".join(lines[old_end + 1:])
+    )
+    try:
+        after = parse_toml(candidate, label="recovered Codex config")
+    except Context7Error:
+        return None
+    if (context7_table(after) != MANAGED_CONTRACT
+            or without_context7(before) != without_context7(after)
+            or inspect_config_candidate(candidate) != "managed"):
+        return None
+    return candidate
+
+
+def inspect_config_candidate(text: str) -> str:
+    """Validate a proposed repair without reading or writing private files."""
+    try:
+        span = marker_span(text)
+        data = parse_toml(text, label="repaired Codex config")
+        if span is None or context7_table(data) != MANAGED_CONTRACT:
+            return "invalid"
+        start, end = span
+        if text[start:end] != MANAGED_BLOCK:
+            return "invalid"
+        outside = parse_toml(text[:start] + text[end:],
+                             label="repaired Codex config outside Context7")
+        if has_context7(outside):
+            return "invalid"
+    except Context7Error:
+        return "invalid"
+    return "managed"
+
+
+def managed_candidate(
+    state: ConfigState, *, require_existing: bool,
+    allow_legacy_recovery: bool = False,
+) -> str:
     if state.kind == "unmanaged":
         raise Context7Error(
             "an unowned [mcp_servers.context7] entry already exists; Remote Dev will not overwrite it"
         )
-    if state.kind in {"invalid", "markers-malformed", "conflict"}:
+    if state.kind == "markers-malformed":
+        if not allow_legacy_recovery:
+            raise Context7Error(
+                "malformed Context7 ownership markers require explicit install/repair --yes"
+            )
+        candidate = safe_missing_begin_candidate(state)
+        if candidate is None:
+            candidate = safe_interleaved_legacy_candidate(state)
+        if candidate is None:
+            raise Context7Error("malformed Context7 ownership markers require manual review")
+        return candidate
+    if state.kind in {"invalid", "conflict"}:
         raise Context7Error(state.detail or f"cannot safely modify Context7 state: {state.kind}")
     if require_existing and state.kind == "absent":
         raise Context7Error("Context7 is not managed by Remote Dev; use install first")
@@ -448,10 +676,17 @@ def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None]
     return "anonymous", None
 
 
-def apply_managed_config(paths: Paths, *, require_existing: bool) -> bool:
-    state = inspect_config(paths)
-    candidate = managed_candidate(state, require_existing=require_existing)
-    return backup_and_replace_config(paths, state.text, candidate)
+def apply_managed_config(
+    paths: Paths, *, require_existing: bool,
+    allow_legacy_recovery: bool = False,
+) -> bool:
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        candidate = managed_candidate(
+            state, require_existing=require_existing,
+            allow_legacy_recovery=allow_legacy_recovery,
+        )
+        return backup_and_replace_config(paths, state.text, candidate)
 
 
 def command_install(paths: Paths, args: argparse.Namespace) -> int:
@@ -459,7 +694,9 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
     key_action, key_value = choose_key(paths, args)
     if key_action == "replace":
         ensure_state_dir(paths)
-    changed = apply_managed_config(paths, require_existing=False)
+    changed = apply_managed_config(
+        paths, require_existing=False, allow_legacy_recovery=args.yes,
+    )
     if key_action == "replace" and key_value is not None:
         store_key(paths, key_value)
     elif key_action == "anonymous":
@@ -472,33 +709,36 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
 
 def command_update(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Update/reapply", yes=args.yes)
-    changed = apply_managed_config(paths, require_existing=True)
+    changed = apply_managed_config(
+        paths, require_existing=True, allow_legacy_recovery=False,
+    )
     print("Context7 managed configuration: updated" if changed else "Context7 managed configuration: already current")
     print("Context7 update network: not used (hosted MCP contract only)")
     return 0
 
 
 def remove_managed_block(paths: Paths) -> bool:
-    state = inspect_config(paths)
-    if state.kind == "unmanaged":
-        raise Context7Error(
-            "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
-        )
-    if state.kind in {"markers-malformed", "invalid", "conflict"}:
-        raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
-    if state.span is None:
-        return False
-    start, end = state.span
-    candidate = state.text[:start] + state.text[end:]
-    before = parse_toml(state.text, label="Codex config before Context7 removal")
-    result = parse_toml(candidate, label="Codex config after Context7 removal")
-    if has_context7(result):
-        raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
-    if without_context7(before) != without_context7(result):
-        raise Context7Error(
-            "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
-        )
-    return backup_and_replace_config(paths, state.text, candidate)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        if state.kind == "unmanaged":
+            raise Context7Error(
+                "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
+            )
+        if state.kind in {"markers-malformed", "invalid", "conflict"}:
+            raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
+        if state.span is None:
+            return False
+        start, end = state.span
+        candidate = state.text[:start] + state.text[end:]
+        before = parse_toml(state.text, label="Codex config before Context7 removal")
+        result = parse_toml(candidate, label="Codex config after Context7 removal")
+        if has_context7(result):
+            raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
+        if without_context7(before) != without_context7(result):
+            raise Context7Error(
+                "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
+            )
+        return backup_and_replace_config(paths, state.text, candidate)
 
 
 def command_remove(paths: Paths, args: argparse.Namespace) -> int:
@@ -517,7 +757,24 @@ def status_line(paths: Paths) -> tuple[str, int]:
     if state.kind == "unmanaged":
         return "Context7: unmanaged configuration (Remote Dev will not modify)", 0
     if state.kind != "managed":
-        return "Context7: managed configuration damaged or Codex config invalid", 3
+        # Only print stable diagnostic categories. state.detail may contain
+        # untrusted TOML or local path details, so never emit it in Doctor.
+        if state.kind == "markers-malformed":
+            subtype = marker_layout_reason(state.text)
+            reason = ("Context7 ownership markers malformed: " + subtype)
+            if subtype == "missing BEGIN marker":
+                reason += missing_begin_layout_details(state.text)
+        else:
+            reason = {
+                "invalid": "Codex config unreadable or invalid",
+                "conflict": "Context7 ownership conflict",
+                "managed-drift": "managed Context7 contract drift",
+            }.get(state.kind, "unrecognized Context7 configuration state")
+        return (
+            "Context7: managed configuration damaged or Codex config invalid "
+            f"({reason})",
+            3,
+        )
     secret, _ = secret_status(paths)
     if secret == "safe":
         return "Context7: configured (API key stored)", 0

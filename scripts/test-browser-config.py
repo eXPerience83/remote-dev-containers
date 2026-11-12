@@ -40,6 +40,48 @@ class BrowserConfigTests(unittest.TestCase):
         self.assertEqual(module.reconcile("codex", self.path), "existing")
         self.assertEqual(config.read_text(), data)
 
+    def test_codex_playwright_and_managed_context7_remain_compatible(self):
+        # Exercise both real provisioning orders without touching any live
+        # Codex HOME or its existing managed MCP configurations.
+        manager_path = SOURCE.with_name("remote-dev-context7.py")
+        manager_spec = importlib.util.spec_from_file_location(
+            "context7_browser_integration_test", manager_path)
+        self.assertIsNotNone(manager_spec)
+        self.assertIsNotNone(manager_spec.loader)
+        context7 = importlib.util.module_from_spec(manager_spec)
+        manager_spec.loader.exec_module(context7)
+
+        for context7_first in (True, False):
+            with self.subTest(context7_first=context7_first):
+                home = self.path / ("context7-first" if context7_first else "browser-first")
+                home.mkdir(mode=0o700)
+                config = home / "config.toml"
+                config.write_text('model = "test"\n', encoding="utf-8")
+                with mock.patch.dict(os.environ, {"CODEX_HOME": str(home),
+                                                  "REMOTE_DEV_ROLE": "codex"}):
+                    paths = context7.Paths()
+                    if context7_first:
+                        self.assertTrue(context7.apply_managed_config(
+                            paths, require_existing=False))
+                        self.assertEqual(module.reconcile("codex", home), "configured")
+                    else:
+                        self.assertEqual(module.reconcile("codex", home), "configured")
+                        self.assertTrue(context7.apply_managed_config(
+                            paths, require_existing=False))
+                    self.assertEqual(context7.inspect_config(paths).kind, "managed")
+                    self.assertEqual(context7.status_line(paths),
+                                     ("Context7: configured (anonymous)", 0))
+                    parsed = tomllib.loads(config.read_text())
+                    self.assertEqual(parsed["mcp_servers"]["playwright"]["command"],
+                                     module.BROWSER_COMMAND)
+                    self.assertEqual(parsed["mcp_servers"]["context7"],
+                                     context7.MANAGED_CONTRACT)
+                    before = config.read_bytes()
+                    self.assertEqual(module.reconcile("codex", home), "existing")
+                    self.assertFalse(context7.apply_managed_config(
+                        paths, require_existing=True))
+                    self.assertEqual(config.read_bytes(), before)
+
     def test_codex_user_server_is_not_replaced(self):
         config = self.path / "config.toml"
         content = '[mcp_servers.playwright]\ncommand = "custom"\nenabled = false\n'

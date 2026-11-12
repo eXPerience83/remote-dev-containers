@@ -177,6 +177,473 @@ def assert_main_cancelled_prompt_handling(module, home: Path) -> None:
         module.sys.argv = original_argv
 
 
+def assert_passive_diagnostic_categories(module, root: Path) -> None:
+    # The doctor needs an actionable reason without reading or printing
+    # credential files or exposing untrusted TOML content.
+    scenarios = {
+        "invalid": (
+            '[mcp_servers.context7\n',
+            "Codex config unreadable or invalid",
+        ),
+        "markers-malformed": (
+            'model = "synthetic"\n' + START_MARKER + "\n",
+            "Context7 ownership markers malformed",
+        ),
+        "conflict": (
+            'model = "synthetic"\n' + START_MARKER + "\n" + END_MARKER + "\n",
+            "Context7 ownership conflict",
+        ),
+        "managed-drift": (
+            module.MANAGED_BLOCK.replace(
+                module.CONTEXT7_ENDPOINT, "https://private.invalid/synthetic-secret", 1
+            ),
+            "managed Context7 contract drift",
+        ),
+    }
+    for kind, (payload, reason) in scenarios.items():
+        home = root / f"diagnostic-{kind}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        config.write_text(payload, encoding="utf-8")
+        before = config.read_bytes()
+        with codex_environment(home):
+            line, code = module.status_line(module.Paths())
+            state = module.inspect_config(module.Paths())
+        if state.kind != kind or code != 3 or reason not in line:
+            raise AssertionError(f"Context7 diagnostic classification failed: {kind}, {state.kind}")
+        if "synthetic-secret" in line or "private.invalid" in line:
+            raise AssertionError("Context7 diagnosis leaked untrusted TOML values")
+        if config.read_bytes() != before:
+            raise AssertionError("passive Context7 diagnosis changed private configuration")
+
+
+def assert_specific_marker_diagnostics(module, root: Path) -> None:
+    # The exact reason is derived from fixed marker positions only, never
+    # from the content of unrelated MCPs, keys or TOML values.
+    cases = {
+        "missing-begin": (
+            END_MARKER + "\n",
+            "missing BEGIN marker",
+        ),
+        "missing-end": (
+            START_MARKER + "\n",
+            "missing END marker",
+        ),
+        "duplicate-begin": (
+            START_MARKER + "\n" + START_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate BEGIN marker",
+        ),
+        "duplicate-end": (
+            START_MARKER + "\n" + END_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate END marker",
+        ),
+        "reversed": (
+            END_MARKER + "\n" + START_MARKER + "\n",
+            "END marker precedes BEGIN marker",
+        ),
+        "begin-whitespace": (
+            START_MARKER + "  \n" + END_MARKER + "\n",
+            "BEGIN marker has extra whitespace",
+        ),
+        "end-whitespace": (
+            START_MARKER + "\n" + END_MARKER + " \n",
+            "END marker has extra whitespace",
+        ),
+        "duplicates-both": (
+            START_MARKER + "\n" + END_MARKER + "\n"
+            + START_MARKER + "\n" + END_MARKER + "\n",
+            "duplicate BEGIN and END markers",
+        ),
+    }
+    for label, (text, reason) in cases.items():
+        home = root / f"marker-detail-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        config.write_text('model = "synthetic"\n' + text, encoding="utf-8")
+        before = config.read_bytes()
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            line, code = module.status_line(module.Paths())
+        if state.kind != "markers-malformed" or code != 3:
+            raise AssertionError(f"incorrect marker diagnosis for {label}")
+        if reason not in line or "synthetic" in line:
+            raise AssertionError(f"marker reason missing or content leaked for {label}")
+        if config.read_bytes() != before:
+            raise AssertionError(f"diagnosis wrote private configuration for {label}")
+
+
+def assert_missing_begin_repair_fails_closed(module, root: Path) -> None:
+    """The observed TrueNAS defect is one END with no BEGIN.
+
+    Only an *otherwise intact* manager-owned Context7 block may be repaired;
+    preserve Playwright and other user-owned config byte-for-byte, backup the
+    original, do not change credentials and reject modified/partial blocks.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\n\n'
+    other = (
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        'enabled = true\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/official-docs"\n'
+    )
+    original = prefix + suffix + other
+    home = root / "missing-begin-safe-repair"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(original, encoding="utf-8")
+    with codex_environment(home):
+        state = module.inspect_config(module.Paths())
+        if state.kind != "markers-malformed":
+            raise AssertionError("missing-BEGIN fixture not detected")
+        candidate = module.safe_missing_begin_candidate(state)
+        expected = prefix + module.MANAGED_BLOCK + other
+        if candidate != expected:
+            raise AssertionError("missing-BEGIN recovery changed unrelated bytes")
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "exact missing-BEGIN repair")
+    if config.read_text(encoding="utf-8") != expected:
+        raise AssertionError("repair changed non-Context7 config")
+    with codex_environment(home):
+        if module.inspect_config(module.Paths()).kind != "managed":
+            raise AssertionError("safe repair did not restore managed status")
+    backup = home / "config.toml.remote-dev-context7.bak"
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("safe repair did not preserve original private config")
+    assert_private_file(backup)
+    first = config.read_bytes()
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "missing-BEGIN repair idempotence")
+    if config.read_bytes() != first:
+        raise AssertionError("second repair unexpectedly rewrote config")
+
+    bad_cases = {
+        "modified-url": original.replace(
+            module.CONTEXT7_ENDPOINT, "https://example.invalid/user-owned", 1),
+        "modified-fields": original.replace(
+            'required = false', 'required = true', 1),
+        "partial-contract": original.replace(
+            'enabled = true\nrequired = false\n',
+            'required = false\n', 1),
+        "end-only": prefix + module.END_MARKER + '\n' + other,
+        "two-end-markers": original + module.END_MARKER + '\n',
+        # Reproduces the observed TrueNAS structural layout: no BEGIN;
+        # both enabled/required disagree with managed defaults, and two
+        # separate MCP tables precede END. Never infer that disabling
+        # Context7 is accidental or overwrite a user-chosen setting.
+        "other-mcps-before-end": (
+            prefix
+            + suffix.replace("enabled = true", "enabled = false").replace(
+                "required = false", "required = true"
+            ).replace(
+                module.END_MARKER + "\n",
+                '[mcp_servers.playwright]\ncommand = "custom"\n'
+                '[mcp_servers.openaiDeveloperDocs]\n'
+                'url = "https://example.invalid/synthetic"\n'
+                + module.END_MARKER + "\n",
+            )
+        ),
+    }
+    # No key, URL, custom MCP name or private text is ever returned by
+    # status --menu; the operator receives fixed structural categories only.
+    interleaved = bad_cases["other-mcps-before-end"]
+    with codex_environment(root / "unused"):
+        summary = module.missing_begin_layout_details(interleaved)
+    if ("Context7 contract differs" not in summary
+            or "other tables precede END" not in summary
+            or "example.invalid" in summary or "custom" in summary):
+        raise AssertionError("the interleaved TrueNAS regression did not give safe hints")
+    for label, payload in bad_cases.items():
+        unsafe_home = root / f"missing-begin-unsafe-{label}"
+        unsafe_home.mkdir(mode=0o700)
+        unsafe_config = unsafe_home / "config.toml"
+        unsafe_config.write_text(payload, encoding="utf-8")
+        with codex_environment(unsafe_home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "markers-malformed":
+                raise AssertionError(f"unsafe fixture {label} classified unexpectedly")
+            if module.safe_missing_begin_candidate(state) is not None:
+                raise AssertionError(f"unsafe fixture {label} was accepted")
+        result = run_manager(unsafe_home, "repair", "--yes")
+        require_failure(result, f"unsafe missing-BEGIN repair {label}")
+        if unsafe_config.read_text(encoding="utf-8") != payload:
+            raise AssertionError(f"unsafe missing-BEGIN {label} mutated config")
+        if (unsafe_home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"unsafe missing-BEGIN {label} wrote a backup")
+
+
+def assert_interleaved_legacy_recovery(module, root: Path) -> None:
+    """Live TrueNAS-inspired fixture: missing BEGIN, two legacy fields,
+    two unrelated MCP tables before a displaced END marker.
+    """
+    prefix = 'model = "synthetic"\n\n'
+    legacy = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+    )
+    other = (
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        'enabled = true\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/synthetic-docs"\n'
+    )
+    original = prefix + legacy + other + module.END_MARKER + '\n'
+    home = root / "interleaved-legacy-repair"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(original, encoding="utf-8")
+    with codex_environment(home):
+        paths = module.Paths()
+        state = module.inspect_config(paths)
+        if state.kind != "markers-malformed":
+            raise AssertionError("legacy test did not reproduce malformed markers")
+        proposed = module.safe_interleaved_legacy_candidate(state)
+        expected = prefix + module.MANAGED_BLOCK + other
+        if proposed != expected:
+            raise AssertionError("legacy recovery touched unrelated MCP table bytes")
+        old_parsed = module.parse_toml(original, label="before")
+        new_parsed = module.parse_toml(proposed, label="after")
+        if module.without_context7(old_parsed) != module.without_context7(new_parsed):
+            raise AssertionError("legacy recovery changed other TOML semantics")
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "explicit interleaved legacy repair")
+    if config.read_text(encoding="utf-8") != expected:
+        raise AssertionError("explicit repair did not preserve unrelated bytes")
+    with codex_environment(home):
+        paths = module.Paths()
+        if module.inspect_config(paths).kind != "managed":
+            raise AssertionError("legacy repair did not restore managed ownership")
+        if module.status_line(paths) != ("Context7: configured (anonymous)", 0):
+            raise AssertionError("recovered Context7 diagnostic not healthy")
+    backup = home / "config.toml.remote-dev-context7.bak"
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("legacy repair did not back up old user config")
+    assert_private_file(backup)
+    before_repeated = config.read_bytes()
+    result = run_manager(home, "repair", "--yes")
+    require_success(result, "legacy repair idempotence")
+    if config.read_bytes() != before_repeated:
+        raise AssertionError("repeating repair changed bytes")
+
+    bad = {
+        "url-drift": original.replace(
+            module.CONTEXT7_ENDPOINT, "https://example.invalid/other", 1),
+        "header-drift": original.replace(
+            '"CONTEXT7_API_KEY" = "CONTEXT7_API_KEY"',
+            '"OTHER" = "OTHER"', 1),
+        "already-disabled": original.replace(
+            legacy, legacy + 'enabled = false\n'),
+        "required-custom": original.replace(
+            legacy, legacy + 'required = true\n'),
+        "extra-field": original.replace(
+            legacy, legacy + 'startup_timeout_sec = 25\n'),
+        "extra-comment": original.replace(
+            legacy, legacy + '# user-managed option\n'),
+        "reformatted-field": original.replace(
+            'url = "' + module.CONTEXT7_ENDPOINT + '"',
+            'url="' + module.CONTEXT7_ENDPOINT + '"', 1),
+        "missing-END": original.replace(module.END_MARKER + '\n', ''),
+        "duplicate-END": original + module.END_MARKER + '\n',
+        "no-intervening-mcp": prefix + legacy + module.END_MARKER + '\n',
+    }
+    for name, payload in bad.items():
+        badhome = root / f"interleaved-rejected-{name}"
+        badhome.mkdir(mode=0o700)
+        config = badhome / "config.toml"
+        config.write_text(payload, encoding="utf-8")
+        with codex_environment(badhome):
+            state = module.inspect_config(module.Paths())
+            if module.safe_interleaved_legacy_candidate(state) is not None:
+                raise AssertionError(f"unsafe candidate accepted: {name}")
+        result = run_manager(badhome, "repair", "--yes")
+        require_failure(result, f"unsafe legacy case {name}")
+        if config.read_text(encoding="utf-8") != payload:
+            raise AssertionError(f"unsafe legacy case changed config: {name}")
+        if (badhome / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"unsafe legacy case wrote backup: {name}")
+
+
+def assert_context7_browser_writer_serialization(module, root: Path) -> None:
+    # This must be a real second process: browser-config locks the same
+    # CODEX_HOME directory via a separate open file description.
+    browser = MANAGER.with_name("remote-dev-browser-config.py")
+    if not browser.is_file():
+        raise AssertionError("browser MCP provisioning script is missing")
+    home = root / "cross-provider-config-lock"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    original = 'model = "synthetic"\n'
+    config.write_text(original, encoding="utf-8")
+    env = {**os.environ, "CODEX_HOME": str(home),
+           "REMOTE_DEV_ROLE": "codex"}
+    with codex_environment(home):
+        paths = module.Paths()
+        with module.locked_codex_config(paths):
+            contender = subprocess.run(
+                [sys.executable, "-I", str(browser), "codex"],
+                env=env, capture_output=True, text=True, timeout=7)
+            if contender.returncode != 3 or "lock busy" not in contender.stderr:
+                raise AssertionError("browser writer bypassed Context7 directory lock")
+            if config.read_text(encoding="utf-8") != original:
+                raise AssertionError("contending browser changed a locked config")
+            state = module.inspect_config(paths)
+            candidate = module.managed_candidate(state, require_existing=False)
+            if not module.backup_and_replace_config(paths, state.text, candidate):
+                raise AssertionError("Context7 update unexpectedly became a no-op")
+
+    browser_after = subprocess.run(
+        [sys.executable, "-I", str(browser), "codex"],
+        env=env, capture_output=True, text=True, timeout=7)
+    if browser_after.returncode:
+        raise AssertionError("browser writer failed to configure after lock released")
+    final = config.read_text(encoding="utf-8")
+    if "[mcp_servers.playwright]" not in final:
+        raise AssertionError("subsequent browser provisioner was lost")
+    with codex_environment(home):
+        if module.inspect_config(module.Paths()).kind != "managed":
+            raise AssertionError("browser provisioning damaged managed Context7")
+
+
+def assert_stale_context7_snapshot_never_overwrites(module, root: Path) -> None:
+    # A non-cooperating writer may still edit the file. A stale snapshot
+    # must fail before writing even a backup, despite holding our flock.
+    home = root / "context7-stale-snapshot"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text('model = "original"\n', encoding="utf-8")
+    with codex_environment(home):
+        paths = module.Paths()
+        with module.locked_codex_config(paths):
+            state = module.inspect_config(paths)
+            candidate = module.managed_candidate(state, require_existing=False)
+            external = 'model = "other-writer"\n'
+            config.write_text(external, encoding="utf-8")
+            try:
+                module.backup_and_replace_config(paths, state.text, candidate)
+            except module.Context7Error as exc:
+                if "changed during" not in str(exc):
+                    raise AssertionError("unexpected stale snapshot rejection") from exc
+            else:
+                raise AssertionError("stale Context7 snapshot overwrote a concurrent edit")
+            if config.read_text(encoding="utf-8") != external:
+                raise AssertionError("external configuration edit was overwritten")
+    if (home / "config.toml.remote-dev-context7.bak").exists():
+        raise AssertionError("stale snapshot wrote a misleading backup")
+
+
+def assert_legacy_recovery_requires_explicit_permission(module, root: Path) -> None:
+    """Update --yes must never acquire a legacy Context7 block.
+    Only install/repair --yes can authorize this exceptional recovery.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\n\n'
+    interleaved = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+        '\n[mcp_servers.playwright]\n'
+        'command = "/usr/local/bin/remote-dev-playwright-mcp"\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/synthetic"\n'
+        + module.END_MARKER + '\n'
+    )
+    for label, payload in (
+        ("exact-block-missing-begin", prefix + suffix),
+        ("interleaved-legacy-missing-begin", prefix + interleaved),
+    ):
+        home = root / f"explicit-only-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = payload.encode("utf-8")
+        config.write_bytes(original)
+        with codex_environment(home):
+            paths = module.Paths()
+            state = module.inspect_config(paths)
+            if state.kind != "markers-malformed":
+                raise AssertionError(f"{label}: malformed markers not recognized")
+            try:
+                module.managed_candidate(state, require_existing=False)
+            except module.Context7Error:
+                pass
+            else:
+                raise AssertionError(f"{label}: implicit recovery unexpectedly allowed")
+            try:
+                module.apply_managed_config(paths, require_existing=False)
+            except module.Context7Error:
+                pass
+            else:
+                raise AssertionError(f"{label}: implicit apply unexpectedly allowed")
+        result = run_manager(home, "update", "--yes")
+        require_failure(result, f"{label}: update --yes must reject legacy recovery")
+        if config.read_bytes() != original:
+            raise AssertionError(f"{label}: unauthorized recovery modified config")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{label}: unauthorized recovery wrote backup")
+        # A successful repair requires an explicit opt-in on the command path.
+        result = run_manager(home, "repair", "--yes")
+        require_success(result, f"{label}: repair --yes")
+        with codex_environment(home):
+            if module.inspect_config(module.Paths()).kind != "managed":
+                raise AssertionError(f"{label}: explicit repair was not managed")
+
+
+def assert_repair_preserves_mixed_newlines(module, root: Path) -> None:
+    """Recover missing-BEGIN without normalizing unrelated CRLF/LF sections.
+
+    Compare the actual file bytes, including the private preimage backup.
+    """
+    suffix = module.MANAGED_BLOCK[len(module.START_MARKER) + 1:]
+    prefix = 'model = "synthetic"\r\nprofile = "test"\r\n\r\n'
+    trailing = (
+        '\r\n[mcp_servers.playwright]\r\n'
+        'command = "custom-playwright"\r\n'
+        'enabled = false\r\n'
+    )
+    legacy = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n'
+    )
+    docs = (
+        '\r\n[mcp_servers.playwright]\r\n'
+        'command = "custom-playwright"\r\n'
+        '[mcp_servers.openaiDeveloperDocs]\r\n'
+        'url = "https://example.invalid/synthetic-docs"\r\n'
+    )
+    cases = (
+        ("exact", prefix + suffix + trailing,
+         prefix + module.MANAGED_BLOCK + trailing),
+        ("interleaved", prefix + legacy + docs + module.END_MARKER + '\n',
+         prefix + module.MANAGED_BLOCK + docs),
+    )
+    for label, original, expected in cases:
+        home = root / f"mixed-newlines-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        before = original.encode("utf-8")
+        config.write_bytes(before)
+        with codex_environment(home):
+            parsed = module.inspect_config(module.Paths())
+            if parsed.kind != "markers-malformed":
+                raise AssertionError(f"{label}: mixed newlines not accepted as input")
+            if parsed.text.encode("utf-8") != before:
+                raise AssertionError(f"{label}: reader normalized original line endings")
+        result = run_manager(home, "repair", "--yes")
+        require_success(result, f"{label}: mixed newline repair")
+        if config.read_bytes() != expected.encode("utf-8"):
+            raise AssertionError(f"{label}: mixed newline bytes were normalized")
+        backup = home / "config.toml.remote-dev-context7.bak"
+        if backup.read_bytes() != before:
+            raise AssertionError(f"{label}: backup bytes did not match original")
+        assert_private_file(backup)
+        with codex_environment(home):
+            if module.inspect_config(module.Paths()).kind != "managed":
+                raise AssertionError(f"{label}: recovered block did not validate")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -194,6 +661,15 @@ command = "other-mcp"
 args = ["--safe"]
 '''
         config.write_text(original, encoding="utf-8")
+
+        assert_passive_diagnostic_categories(load_manager_module(), root)
+        assert_specific_marker_diagnostics(load_manager_module(), root)
+        assert_missing_begin_repair_fails_closed(load_manager_module(), root)
+        assert_interleaved_legacy_recovery(load_manager_module(), root)
+        assert_context7_browser_writer_serialization(load_manager_module(), root)
+        assert_stale_context7_snapshot_never_overwrites(load_manager_module(), root)
+        assert_legacy_recovery_requires_explicit_permission(load_manager_module(), root)
+        assert_repair_preserves_mixed_newlines(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")
