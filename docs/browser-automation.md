@@ -36,7 +36,10 @@ root cleanup rights already allowed by the outer container, but no inherited
 agent credentials, and is made non-dumpable. It does not share the browser UID
 so compromised Chromium cannot directly signal its cleanup guardian.
 The guardian is also Node's parent and a Linux child subreaper, so it can
-reap detached Chromium groups after abrupt supervisor termination.
+reap detached Chromium groups after abrupt supervisor termination. The
+supervisor also becomes a subreaper, reaping descendants if the guardian dies.
+A SIGKILL in the narrow startup gap before the guardian exists can leave a
+scratch directory under /run, but no Chromium process has started yet.
 
 Chromium still uses `chromiumSandbox: false`; this does **not** enable an
 additional Chromium sandbox. Landlock ABI 7 cannot mediate every UNIX socket,

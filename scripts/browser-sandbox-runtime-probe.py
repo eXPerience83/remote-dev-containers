@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 import select
+import signal
 import time
 from pathlib import Path
 import shutil
@@ -172,8 +173,10 @@ def is_live(pid: int) -> bool:
                    "Z (zombie)" in line for line in status.splitlines())
 
 
-def lifecycle_probe() -> int:
-    """Kill the active MCP supervisor and verify its guardian removes state."""
+def lifecycle_probe(target: str = "supervisor") -> int:
+    """Kill supervisor or guardian and verify descendant and scratch cleanup."""
+    if target not in {"supervisor", "guardian"}:
+        raise ValueError("unsupported lifecycle target")
     before_dirs = {p.name for p in Path("/run").glob("remote-dev-browser-*")}
     before_pids = sandbox_processes()
     role = os.environ.get("REMOTE_DEV_ROLE", "codex")
@@ -251,16 +254,23 @@ def lifecycle_probe() -> int:
         managed_pids = sandbox_processes() - before_pids
         if len(new_dirs) != 1 or not managed_pids:
             raise RuntimeError("browser tree/profile not ready for cleanup test")
-        # Deliberately do not close stdin: test the hard-kill/guardian path.
-        proc.kill()
-        proc.wait(timeout=5)
+        # Deliberately do not close stdin: exercise the SIGKILL fallback.
+        if target == "guardian":
+            children = Path(
+                f"/proc/{proc.pid}/task/{proc.pid}/children").read_text().split()
+            if len(children) != 1:
+                raise RuntimeError("expected one direct guardian child")
+            os.kill(int(children[0]), signal.SIGKILL)
+        else:
+            proc.kill()
+        proc.wait(timeout=12)
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
             remaining_dirs = {p.name for p in
                               Path("/run").glob("remote-dev-browser-*")}
             remaining_pids = {pid for pid in managed_pids if is_live(pid)}
             if not (new_dirs & remaining_dirs) and not remaining_pids:
-                print("MCP SIGKILL guardian lifecycle: PASS")
+                print(f"MCP SIGKILL {target} lifecycle: PASS")
                 return 0
             time.sleep(0.1)
         raise RuntimeError("MCP guardian left live descendants or scratch")
@@ -277,7 +287,9 @@ if __name__ == "__main__":
     try:
         result = run_probe()
         if result == 0:
-            result = lifecycle_probe()
+            result = lifecycle_probe("supervisor")
+        if result == 0:
+            result = lifecycle_probe("guardian")
         raise SystemExit(result)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print("Real Landlock negative probe: unavailable (" +

@@ -278,6 +278,14 @@ def guardian(lifeline_fd: int, scratch: str) -> int:
             shutil.rmtree(scratch, ignore_errors=True)
 
 
+def supervisor_runtime_hardening() -> None:
+    """Keep orphaned browser descendants when the guardian itself is killed."""
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        raise OSError(ctypes.get_errno(), "supervisor subreaper unavailable")
+    # Check the /proc children primitive before creating any untrusted process.
+    adopted_children()
+
+
 def guardian_runtime_hardening() -> None:
     # Executing the immutable Python interpreter resets Linux dumpability.
     # Apply this *after exec*, before starting any untrusted browser process.
@@ -317,6 +325,9 @@ def supervise() -> int:
     if os.path.islink(TMP_ROOT) or not stat.S_ISDIR(
             os.stat(TMP_ROOT).st_mode):
         raise IsolationError("unsafe /run")
+    # In addition to the guardian's subreaper, the root supervisor must be a
+    # subreaper to adopt and kill Chromium if the guardian dies (e.g. OOM).
+    supervisor_runtime_hardening()
     scratch = tempfile.mkdtemp(prefix="remote-dev-browser-", dir=TMP_ROOT)
     guard: subprocess.Popen[bytes] | None = None
     readfd = writefd = -1
@@ -361,7 +372,12 @@ def supervise() -> int:
                 except subprocess.TimeoutExpired:
                     guard.kill()
                     guard.wait()
-        shutil.rmtree(scratch, ignore_errors=True)
+        # A killed guardian cannot reap its own children. Once it exits,
+        # a supervisor subreaper adopts Node and detached Chromium groups.
+        try:
+            cleanup_browser_tree(None)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
 
 
 def main() -> int:

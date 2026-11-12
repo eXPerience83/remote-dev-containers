@@ -139,6 +139,14 @@ class BrowserIsolationContract(unittest.TestCase):
         self.assertEqual(killer.call_args_list,
                          [mock.call(777), mock.call(888)])
 
+    def test_supervisor_is_subreaper_before_spawning_guardian(self):
+        with (mock.patch.object(sandbox.libc, "prctl", return_value=0) as ctl,
+              mock.patch.object(sandbox, "adopted_children",
+                                return_value=[]) as children):
+            sandbox.supervisor_runtime_hardening()
+        ctl.assert_called_once_with(sandbox.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+        children.assert_called_once()
+
     def test_subreaper_and_nondumpable_constants(self):
         self.assertEqual(sandbox.PR_SET_CHILD_SUBREAPER, 36)
         self.assertEqual(sandbox.PR_SET_DUMPABLE, 4)

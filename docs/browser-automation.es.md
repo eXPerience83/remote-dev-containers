@@ -36,7 +36,11 @@ confianza distinto del UID del navegador: conserva los permisos de limpieza
 ya permitidos por el contenedor, no hereda secretos y se marca no depurable
 para que Chromium no pueda detenerlo por compartir UID.
 Además es el **padre y subreaper** de Node: puede recoger Chromium incluso cuando
-Playwright crea grupos de procesos independientes y el supervisor recibe SIGKILL. No se necesita instalar nada al iniciar.
+Playwright crea grupos de procesos independientes y el supervisor recibe SIGKILL.
+El propio supervisor también se marca subreaper y recoge los descendientes si
+muere el guardián. Como límite conocido, un SIGKILL durante el brevísimo tramo
+entre crear el scratch y arrancar el guardián puede dejar un directorio
+huérfano en /run, sin procesos Chromium iniciados. No se necesita instalar nada al iniciar.
 
 Chromium sigue con `chromiumSandbox: false`: **no es un sandbox de Chromium
 adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
