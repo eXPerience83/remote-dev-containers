@@ -136,32 +136,33 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 
 def playwright_archive_inventory(
     root: Path, inventory: dict[str, Any], versions: dict[str, str],
-) -> tuple[dict[str, Any], dict[str, Any], str, str, str] | None:
-    """Bind separately distributed FFmpeg and Chromium to the exact Playwright lock."""
+) -> tuple[dict[str, Any], str] | None:
+    """Bind redistributed Chromium to the exact reviewed Playwright version."""
     version = versions.get("PLAYWRIGHT_MCP_VERSION")
     if not version or not any(c.get("id") == "playwright-mcp"
                               for c in inventory["components"]):
         return None
     by_id = {c.get("id"): c for c in inventory["components"]}
     chromium = by_id.get("chromium-headless-shell")
-    ffmpeg = by_id.get("playwright-ffmpeg")
-    if not isinstance(chromium, dict) or not isinstance(ffmpeg, dict):
-        fail("Playwright distribution requires Chromium and FFmpeg inventory entries")
+    if not isinstance(chromium, dict) or "playwright-ffmpeg" in by_id:
+        fail("Playwright distribution requires Chromium-only inventory")
     try:
         metadata = json.loads(
             (root / "config/playwright-browser-archives.json").read_text(encoding="utf-8"))
-        a = metadata["archives"]["amd64"]["ffmpeg"]
-        b = metadata["archives"]["arm64"]["ffmpeg"]
-        revision, url = a["revision"], a["url"]
-        other_revision = b["revision"]
+        archives = metadata["archives"]
+        if (set(archives) != {"amd64", "arm64"} or
+                any(set(archives[arch]) != {"chromium-headless-shell"}
+                    for arch in ("amd64", "arm64"))):
+            fail("Playwright manifest includes an unshipped browser binary")
+        a = archives["amd64"]["chromium-headless-shell"]
+        b = archives["arm64"]["chromium-headless-shell"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        fail(f"cannot verify reviewed Playwright FFmpeg revision: {type(exc).__name__}")
-    if (not isinstance(revision, str) or not revision.isdecimal()
-            or other_revision != revision or not isinstance(url, str)
-            or url != ("https://cdn.playwright.dev/dbazure/download/playwright/"
-                       f"builds/ffmpeg/{revision}/ffmpeg-linux.zip")):
-        fail("Playwright FFmpeg archive revisions or source disagree")
-    return chromium, ffmpeg, version, revision, url
+        fail(f"cannot verify reviewed Chromium archive: {type(exc).__name__}")
+    if (not isinstance(a["revision"], str) or not a["revision"].isdecimal()
+            or a["revision"] != b["revision"]
+            or a["browserVersion"] != b["browserVersion"]):
+        fail("Playwright Chromium archive revisions or versions disagree")
+    return chromium, version
 
 
 def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, str]) -> None:
@@ -209,12 +210,10 @@ def check_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, s
     # inventory identity against the same locked manifest used by the builder.
     playwright = playwright_archive_inventory(root, inventory, versions)
     if playwright is not None:
-        chromium, ffmpeg, version, revision, url = playwright
-        if (chromium["version"] !=
+        chromium, version = playwright
+        if (chromium.get("version") !=
                 f"matching the installed Playwright version in @playwright/mcp {version}"):
             fail("stale Chromium version in legal inventory")
-        if ffmpeg.get("version") != revision or ffmpeg.get("source") != url:
-            fail("stale FFmpeg revision or source in legal inventory")
 
 
 def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, str]) -> bool:
@@ -288,17 +287,12 @@ def update_inventory(root: Path, inventory: dict[str, Any], versions: dict[str, 
 
     playwright = playwright_archive_inventory(root, inventory, versions)
     if playwright is not None:
-        chromium, ffmpeg, version, revision, url = playwright
+        chromium, version = playwright
         expected_chromium = (
             f"matching the installed Playwright version in @playwright/mcp {version}")
-        for record, updates in (
-            (chromium, {"version": expected_chromium}),
-            (ffmpeg, {"version": revision, "source": url}),
-        ):
-            for key, value in updates.items():
-                if record.get(key) != value:
-                    record[key] = value
-                    changed = True
+        if chromium.get("version") != expected_chromium:
+            chromium["version"] = expected_chromium
+            changed = True
 
     if not changed:
         return False

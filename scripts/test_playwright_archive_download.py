@@ -42,7 +42,7 @@ class ArchiveRedirectTests(unittest.TestCase):
     def test_direct_https_archive(self):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests((200, "")) as run:
             output = Path(tmp) / "a.zip"
-            dl.download_archive(CDN, output, "ffmpeg")
+            dl.download_archive(CDN, output, "chromium-headless-shell")
             self.assertEqual(output.read_bytes(), b"synthetic archive only")
             self.assertEqual(run.call_count, 1)
 
@@ -53,13 +53,13 @@ class ArchiveRedirectTests(unittest.TestCase):
             self.assertEqual(run.call_count, 2)
             self.assertEqual(run.call_args.args[0][-1], GOOGLE)
 
-    def test_official_cross_host_ffmpeg_redirect(self):
+    def test_official_cross_host_microsoft_redirect(self):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
                 (307, MICROSOFT), (200, "")) as run:
-            dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+            dl.download_archive(CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, 2)
 
-    def test_google_chromium_host_not_valid_for_ffmpeg(self):
+    def test_removed_ffmpeg_component_is_rejected(self):
         with self.assertRaises(dl.ArchiveDownloadError):
             dl.validate_archive_url(GOOGLE, "ffmpeg")
 
@@ -67,7 +67,7 @@ class ArchiveRedirectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
                 (302, "https://evil.invalid/archive.zip")) as run:
             with self.assertRaisesRegex(dl.ArchiveDownloadError, "destination"):
-                dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+                dl.download_archive(CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, 1)
 
     def test_globbed_storage_redirect_is_rejected_before_a_second_request(self):
@@ -90,7 +90,7 @@ class ArchiveRedirectTests(unittest.TestCase):
             ("chromium-headless-shell",
              "https://storage.googleapis.com/chrome-for-testing-public/"
              "../other-bucket/payload.zip"),
-            ("ffmpeg",
+            ("chromium-headless-shell",
              "https://playwright.download.prss.microsoft.com/"
              "dbazure/download/playwright/../unreviewed/payload.zip"),
         ):
@@ -122,7 +122,7 @@ class ArchiveRedirectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
                 (302, CDN)) as run:
             with self.assertRaisesRegex(dl.ArchiveDownloadError, "loop"):
-                dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+                dl.download_archive(CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, 1)
 
     def test_redirect_hops_are_bounded(self):
@@ -131,14 +131,14 @@ class ArchiveRedirectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
                 *redirects) as run:
             with self.assertRaisesRegex(dl.ArchiveDownloadError, "too many"):
-                dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+                dl.download_archive(CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
             self.assertEqual(run.call_count, dl.MAX_HOPS)
 
     def test_archive_size_is_bounded(self):
         with tempfile.TemporaryDirectory() as tmp, self.mock_requests(
                 (200, "")), mock.patch.object(dl, "MAX_BYTES", 4):
             with self.assertRaisesRegex(dl.ArchiveDownloadError, "oversized"):
-                dl.download_archive(CDN, Path(tmp) / "a.zip", "ffmpeg")
+                dl.download_archive(CDN, Path(tmp) / "a.zip", "chromium-headless-shell")
 
 
 if __name__ == "__main__":

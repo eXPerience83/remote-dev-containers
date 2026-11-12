@@ -69,16 +69,3 @@ copy_notice_files npm "$npm_root" required
 # including bundled *.js.LICENSE and ThirdPartyNotices.txt sidecars.
 copy_notice_files playwright /opt/remote-dev/playwright/node_modules required
 
-# The official FFmpeg 1013 ZIP has no separate COPYING file. The earlier
-# network-disabled, unprivileged image-build step preserves the exact pinned
-# executable's own -version (build configuration) and -L (license) output.
-# Refuse incomplete evidence rather than substituting a generic license.
-if [[ ! -s "$destination/ffmpeg/LICENSE-from-binary.txt" ]]; then
-  echo "ERROR: FFmpeg binary licensing evidence is absent" >&2
-  exit 1
-fi
-inventory="/usr/share/doc/remote-dev/third_party/inventory.json"
-ffmpeg_revision="$(jq -er '.components[] | select(.id == "playwright-ffmpeg") | .version | select(test("^[0-9]+$"))' "$inventory")"
-ffmpeg_root="/opt/remote-dev/playwright-browsers/ffmpeg-${ffmpeg_revision}"
-# Also copy any future archive-supplied legal sidecars, if upstream adds them.
-copy_notice_files ffmpeg "$ffmpeg_root" optional

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline contract tests for the verified Playwright Chromium/FFmpeg installer."""
+"""Offline contract tests for the verified Chromium-only browser installer."""
 from __future__ import annotations
 
 import copy
@@ -27,10 +27,7 @@ def dry_run(arch: str, root: Path) -> str:
     """Reproduce CLI dry-run metadata for an architecture without networking."""
     entries = MANIFEST["archives"][arch]
     lines = []
-    for name, title in (
-        ("chromium-headless-shell", "Chrome Headless Shell"),
-        ("ffmpeg", "FFmpeg"),
-    ):
+    for name, title in (("chromium-headless-shell", "Chrome Headless Shell"),):
         item = entries[name]
         directory = root / (name.replace("-", "_") + "-" + item["revision"])
         lines.extend([f"{title} (playwright {name} v{item['revision']})",
@@ -63,6 +60,17 @@ class BrowserArchiveContractTests(unittest.TestCase):
                 self.assertTrue(all(len(entry["sha256"]) == 64
                                     for entry in selection.values()))
 
+    def test_optional_ffmpeg_dry_run_is_not_installed(self):
+        output = dry_run("amd64", Path("/opt/remote-dev/playwright-browsers"))
+        output += ("\nFFmpeg (playwright ffmpeg v1013)\n"
+                   "  Install location: /opt/remote-dev/playwright-browsers/ffmpeg-1013\n"
+                   "  Download url: https://cdn.playwright.dev/ignored.zip\n")
+        result = installer.validate_selection(
+            MANIFEST, source_browser_manifest(),
+            MANIFEST["playwright_core_version"], "amd64", output,
+            Path("/opt/remote-dev/playwright-browsers"))
+        self.assertEqual(set(result), {"chromium-headless-shell"})
+
     def test_browser_version_drift_is_blocked(self):
         with self.assertRaises(installer.InvalidBrowserArchive):
             installer.validate_selection(
@@ -72,7 +80,7 @@ class BrowserArchiveContractTests(unittest.TestCase):
 
     def test_download_url_mismatch_is_blocked(self):
         damaged = copy.deepcopy(MANIFEST)
-        damaged["archives"]["amd64"]["ffmpeg"]["url"] = "https://example.invalid/x.zip"
+        damaged["archives"]["amd64"]["chromium-headless-shell"]["url"] = "https://example.invalid/x.zip"
         with self.assertRaises(installer.InvalidBrowserArchive):
             installer.validate_selection(
                 damaged, source_browser_manifest(),

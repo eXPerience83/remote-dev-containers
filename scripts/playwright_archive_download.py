@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 MAX_HOPS = 6
 MAX_SECONDS = 740
 MAX_BYTES = 600_000_000
-COMPONENTS = frozenset(("chromium-headless-shell", "ffmpeg"))
+COMPONENTS = frozenset(("chromium-headless-shell",))
 
 
 class ArchiveDownloadError(ValueError):

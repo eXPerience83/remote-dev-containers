@@ -22,7 +22,7 @@ sobrescriben archivos privados inválidos o inseguros ni se genera TOML no váli
 Los agentes no comparten configuraciones.
 Los comandos pasivos como `--help` no alteran estos archivos.
 
-El MCP se inicia bajo demanda mediante **stdio**, con perfil aislado, y termina al cerrar la sesión del agente. No se abre ningún puerto. Se puede comprobar
+La imagen no incluye FFmpeg: no se ofrece grabación de vídeo de sesión, pero sí navegación, JavaScript y capturas. El MCP se inicia bajo demanda mediante **stdio**, con perfil aislado, y termina al cerrar la sesión del agente. No se abre ningún puerto. Se puede comprobar
 la herramienta común con `playwright --version`.
 
 ## Seguridad

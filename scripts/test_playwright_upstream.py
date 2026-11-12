@@ -78,7 +78,7 @@ class PlaywrightUpdaterContract(unittest.TestCase):
 
     def test_unreviewed_download_host_is_blocked(self):
         bad = candidate("amd64")
-        bad["archives"]["ffmpeg"]["url"] = "https://example.invalid/ffmpeg.zip"
+        bad["archives"]["chromium-headless-shell"]["url"] = "https://example.invalid/chromium.zip"
         with self.assertRaises(up.CandidateError):
             up.check_report(bad, "amd64", BASE)
 
@@ -93,7 +93,7 @@ class PlaywrightUpdaterContract(unittest.TestCase):
 
     def test_unreviewed_browser_archive_is_blocked(self):
         bad = candidate("amd64")
-        del bad["archives"]["ffmpeg"]
+        bad["archives"]["ffmpeg"] = {"revision": "1013"}
         with self.assertRaises(up.CandidateError):
             up.check_report(bad, "amd64", BASE)
 

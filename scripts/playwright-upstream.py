@@ -21,15 +21,18 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 import zipfile
+import stat
+from pathlib import PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPONENTS = ("chromium-headless-shell", "ffmpeg")
+COMPONENTS = ("chromium-headless-shell",)
 ARCHES = ("amd64", "arm64")
 SEMVER = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 HASH = re.compile(r"[0-9a-f]{64}")
 BUNDLE_NAME = "remote-dev-playwright-bundle"
 MAX_META_BYTES = 2_000_000
 MAX_ARCHIVE_BYTES = 600_000_000
+MAX_UNPACKED_BYTES = 1_500_000_000
 
 
 class CandidateError(ValueError):
@@ -95,26 +98,18 @@ def validate_archives(arch: str, archives: dict, core_version: str) -> None:
                 and not parsed.fragment, "unreviewed browser download host")
         require(isinstance(item["sha256"], str)
                 and HASH.fullmatch(item["sha256"]) is not None, "missing browser SHA-256")
-        if component == "chromium-headless-shell":
-            require(isinstance(item.get("browserVersion"), str)
-                    and re.fullmatch(r"[0-9]+(\.[0-9]+){3}", item["browserVersion"]) is not None,
-                    "unexpected Chromium version")
-            suffix = ("linux64/chrome-headless-shell-linux64.zip" if arch == "amd64"
-                      else "linux-arm64/chrome-headless-shell-linux-arm64.zip")
-            require(url == ("https://cdn.playwright.dev/builds/cft/"
-                            f"{item['browserVersion']}/{suffix}"),
-                    "unreviewed headless-shell URL")
-            expected_exe = ("chrome-headless-shell-linux64/chrome-headless-shell"
-                            if arch == "amd64" else
-                            "chrome-headless-shell-linux-arm64/chrome-headless-shell")
-        else:
-            require("browserVersion" not in item, "unexpected FFmpeg browser version")
-            require(url == ("https://cdn.playwright.dev/dbazure/download/playwright/"
-                            f"builds/ffmpeg/{rev}/"
-                            + ("ffmpeg-linux.zip" if arch == "amd64" else
-                               "ffmpeg-linux-arm64.zip")), "unreviewed FFmpeg URL")
-            expected_exe = "ffmpeg-linux"
-        require(item["executable"] == expected_exe, "unexpected browser binary path")
+        require(isinstance(item.get("browserVersion"), str)
+                and re.fullmatch(r"[0-9]+(\.[0-9]+){3}", item["browserVersion"]) is not None,
+                "unexpected Chromium version")
+        suffix = ("linux64/chrome-headless-shell-linux64.zip" if arch == "amd64"
+                  else "linux-arm64/chrome-headless-shell-linux-arm64.zip")
+        require(url == ("https://cdn.playwright.dev/builds/cft/"
+                        f"{item['browserVersion']}/{suffix}"),
+                "unreviewed headless-shell URL")
+        expected_exe = ("chrome-headless-shell-linux64/chrome-headless-shell"
+                        if arch == "amd64" else
+                        "chrome-headless-shell-linux-arm64/chrome-headless-shell")
+                require(item["executable"] == expected_exe, "unexpected browser binary path")
     require(SEMVER.fullmatch(core_version.split("-")[0]) is not None,
             "unreviewed Playwright Core version")
 
@@ -164,14 +159,44 @@ def archive_urls(arch: str, browser_metadata: dict, dry_run: str) -> dict:
                if entry.get("browserVersion") is not None else {}),
             "url": actual["url"],
             "sha256": "0" * 64,  # replaced after hashing; never used for installation
-            "executable": ("ffmpeg-linux" if component == "ffmpeg"
-                           else ("chrome-headless-shell-linux64/chrome-headless-shell"
-                                 if arch == "amd64" else
-                                 "chrome-headless-shell-linux-arm64/chrome-headless-shell")),
+            "executable": ("chrome-headless-shell-linux64/chrome-headless-shell"
+                           if arch == "amd64" else
+                           "chrome-headless-shell-linux-arm64/chrome-headless-shell"),
         }
     core = browser_metadata.get("core_version", "1.0.0")
     validate_archives(arch, result, core)
     return result
+
+
+def inspect_archive_contents(archive: Path) -> None:
+    """Stream CRC verification with bounded expansion; do not extract ZIP."""
+    with zipfile.ZipFile(archive) as container:
+        entries = container.infolist()
+        require(1 <= len(entries) <= 20_000, "unreviewed browser ZIP entry count")
+        expanded = 0
+        declared = 0
+        names: set[str] = set()
+        for entry in entries:
+            name = entry.filename.rstrip("/")
+            member = PurePosixPath(name)
+            require(bool(name) and not member.is_absolute()
+                    and ".." not in member.parts and "\\" not in name
+                    and "\x00" not in name and name not in names,
+                    "unsafe browser archive member")
+            names.add(name)
+            kind = stat.S_IFMT(entry.external_attr >> 16)
+            require(kind in (0, stat.S_IFREG, stat.S_IFDIR),
+                    "unsupported browser archive member")
+            declared += entry.file_size
+            require(declared <= MAX_UNPACKED_BYTES,
+                    "browser ZIP declared expansion exceeds limit")
+            if entry.is_dir():
+                continue
+            with container.open(entry) as stream:
+                while chunk := stream.read(1024 * 1024):
+                    expanded += len(chunk)
+                    require(expanded <= MAX_UNPACKED_BYTES,
+                            "browser ZIP expansion exceeds limit")
 
 
 def download_digest(url: str, temp: Path, component: str) -> str:
@@ -192,10 +217,7 @@ def download_digest(url: str, temp: Path, component: str) -> str:
     with archive.open("rb") as stream:
         while block := stream.read(1024 * 1024):
             digest.update(block)
-    with zipfile.ZipFile(archive) as container:
-        require(1 <= len(container.infolist()) <= 20_000,
-                "unreviewed browser ZIP entry count")
-        require(container.testzip() is None, "browser ZIP checksum validation failed")
+    inspect_archive_contents(archive)
     archive.unlink()
     return digest.hexdigest()
 
@@ -299,7 +321,7 @@ def check_report(report: dict, arch: str, baseline: str) -> str:
 
 
 def reconcile(root: Path, amd64: dict, arm64: dict, *, write: bool) -> str:
-    """Propose a coherent atomic source set or leave Playwright unchanged."""
+    """Propose a coherent source set or leave Playwright unchanged."""
     baseline = baseline_version(root)
     a = check_report(amd64, "amd64", baseline)
     b = check_report(arm64, "arm64", baseline)
@@ -352,7 +374,7 @@ def reconcile(root: Path, amd64: dict, arm64: dict, *, write: bool) -> str:
     for path, data in edits.items():
         path.write_bytes(data)
     print(f"Playwright candidate proposed: {baseline} -> {version} "
-          "(npm SHA-512 and 4 browser SHA-256 hashes)")
+          "(npm SHA-512 and 2 Chromium SHA-256 hashes)")
     return "updated"
 
 

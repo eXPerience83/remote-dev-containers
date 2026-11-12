@@ -245,7 +245,7 @@ RUN test "$(node -p 'require("/opt/remote-dev/playwright/package.json").dependen
       --prefix /opt/remote-dev/playwright --omit=dev --ignore-scripts \
       --no-audit --no-fund \
     && /opt/remote-dev/playwright/node_modules/.bin/playwright install-deps \
-      chromium-headless-shell ffmpeg \
+      chromium-headless-shell \
     && /usr/local/lib/remote-dev/python -I \
       /usr/local/bin/install-verified-playwright-browser --arch "$TARGETARCH" \
     && test -x /opt/remote-dev/playwright/node_modules/.bin/playwright-mcp \
@@ -268,11 +268,9 @@ COPY --chmod=0444 LICENSE /usr/share/doc/remote-dev/LICENSE
 COPY third_party/ /usr/share/doc/remote-dev/third_party/
 COPY scripts/copy-runtime-notices.sh /usr/local/bin/copy-runtime-notices
 COPY scripts/remote-dev-notices.sh /usr/local/bin/remote-dev-notices
-COPY --chown=0:0 --chmod=0555 scripts/ffmpeg-license-evidence.py /usr/local/bin/remote-dev-ffmpeg-license-evidence
 # Never execute the downloaded binary in the write-capable updater.
 # BuildKit disables networking; Python launches FFmpeg with dropped UID/GID
 # and a fixed, credential-free environment to capture the exact binary's terms.
-RUN --network=none /usr/local/lib/remote-dev/python -I /usr/local/bin/remote-dev-ffmpeg-license-evidence
 RUN --mount=type=bind,source=scripts/print-locked-runtime-artifacts.py,target=/tmp/print-locked-runtime-artifacts.py,ro \
     test "$(stat -c '%u:%g %a' /usr/share/doc/remote-dev)" = '0:0 755' \
     && locked_runtime_manifest="$(python /tmp/print-locked-runtime-artifacts.py /etc/mise/mise.lock "${TARGETARCH}")" \

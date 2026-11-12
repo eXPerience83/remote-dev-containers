@@ -510,7 +510,7 @@
     {
       "id": "playwright-mcp",
       "name": "Playwright MCP and its Playwright library",
-      "image_scope": "base",
+      "image_scope": "both",
       "version_key": "PLAYWRIGHT_MCP_VERSION",
       "version": "0.0.84",
       "source": "https://github.com/microsoft/playwright-mcp",
@@ -534,7 +534,7 @@
     {
       "id": "chromium-headless-shell",
       "name": "Playwright-provisioned Chromium headless shell",
-      "image_scope": "base",
+      "image_scope": "both",
       "version": "matching the installed Playwright version in @playwright/mcp 0.0.84",
       "source": "https://chromium.googlesource.com/chromium/src",
       "license": "BSD-3-Clause and additional Chromium third-party licenses",
@@ -545,21 +545,6 @@
           "reviewed_from": "https://raw.githubusercontent.com/chromium/chromium/main/LICENSE"
         }
       ]
-    },
-    {
-      "id": "playwright-ffmpeg",
-      "name": "Playwright-provisioned FFmpeg binary",
-      "image_scope": "base",
-      "version": "1013",
-      "source": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
-      "license": "FFmpeg binary-reported terms (see exact installed binary -L output and build configuration)",
-      "notices": [
-        {
-          "path": "runtime/ffmpeg/LICENSE-from-binary.txt",
-          "source": "runtime"
-        }
-      ],
-      "distribution_notes": "AMD64 and ARM64 archives have distinct SHA-256 identities in config/playwright-browser-archives.json. The Playwright-provided FFmpeg ZIP contains no standalone COPYING file; the network-disabled build step captures -L and -version output from the exact verified binary with dropped privileges. Review matching-source obligations and binary licensing separately under #53."
     }
   ]
 }

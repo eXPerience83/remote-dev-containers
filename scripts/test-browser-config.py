@@ -3,9 +3,13 @@
 import importlib.util
 from pathlib import Path
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
+from unittest import mock
 
 SOURCE = Path(__file__).with_name("remote-dev-browser-config.py")
 spec = importlib.util.spec_from_file_location("browser_config", SOURCE)
@@ -127,6 +131,38 @@ class BrowserConfigTests(unittest.TestCase):
         with self.assertRaises(OSError):
             module.reconcile("codex", self.path)
         self.assertEqual(target.read_text(), "untouched")
+
+    def test_fifo_without_writer_fails_fast(self):
+        config = self.path / "config.toml"
+        os.mkfifo(config, 0o600)
+        child = subprocess.run(
+            [sys.executable, "-I", str(SOURCE), "codex"],
+            env={**os.environ, "CODEX_HOME": str(self.path),
+                 "REMOTE_DEV_ROLE": "codex"},
+            capture_output=True, text=True, timeout=4,
+        )
+        self.assertEqual(child.returncode, 3)
+        self.assertIn("configuration left untouched", child.stderr)
+        self.assertTrue(config.is_fifo())
+
+    def test_detects_concurrent_user_edit_before_replace(self):
+        config = self.path / "config.toml"
+        config.write_text('[mcp_servers.context7]\nurl="https://before.test"\n')
+        actual_stat = module.os.stat
+        replacement = '[mcp_servers.context7]\nurl="https://external.test"\n'
+        triggered = False
+        def inject_edit(*args, **kwargs):
+            nonlocal triggered
+            if (args and args[0] == "config.toml" and
+                    kwargs.get("follow_symlinks") is False and not triggered):
+                triggered = True
+                config.write_text(replacement)
+            return actual_stat(*args, **kwargs)
+        with mock.patch.object(module.os, "stat", side_effect=inject_edit):
+            with self.assertRaisesRegex(module.UnsafeConfig, "concurrent"):
+                module.reconcile("codex", self.path)
+        self.assertTrue(triggered)
+        self.assertEqual(config.read_text(), replacement)
 
     def test_new_provider_configuration(self):
         self.assertEqual(module.reconcile("codex", self.path), "configured")

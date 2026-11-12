@@ -105,7 +105,6 @@ jobs:
           python3 scripts/test_playwright_upstream.py
           python3 scripts/test_playwright_archive_download.py
           python3 scripts/test-install-verified-playwright-browser.py
-          python3 scripts/test_ffmpeg_license_evidence.py
           python3 scripts/test-remote-dev-codex-runtime.py
           python3 scripts/test-codex-runtime-code-mode-probe.py
           python3 scripts/test-remote-dev-context7.py
@@ -179,6 +178,19 @@ jobs:
             remote-dev-base:local --check
           docker run --rm --entrypoint remote-dev-notices \
             remote-dev:local --check
+          # Fail the final-scope check if an inherited Playwright notice is
+          # missing. Also prove FFmpeg is absent from the candidate image.
+          docker run --rm --entrypoint sh remote-dev:local -ec '
+            test -z "$(find /opt/remote-dev/playwright-browsers -maxdepth 1 -name "ffmpeg*" -print -quit)"
+            notice=/usr/share/doc/remote-dev/third_party/runtime/playwright/playwright/ThirdPartyNotices.txt
+            test -s "$notice"
+            rm "$notice"
+            if REMOTE_DEV_NOTICE_IMAGE_SCOPE=final remote-dev-notices --check > /tmp/notices-negative.log 2>&1; then
+              echo "ERROR: final image ignored missing Playwright notice" >&2
+              exit 1
+            fi
+            grep -F "required notice file is missing" /tmp/notices-negative.log
+          '
 
       - name: Generate base image SPDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

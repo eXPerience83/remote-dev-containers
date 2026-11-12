@@ -37,7 +37,8 @@ LEGACY_CODEX_FIELDS = {
 AGY_ENTRY = {"command": BROWSER_COMMAND, "timeoutSeconds": 90}
 MAX_BYTES = 1024 * 1024
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
-FILE_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+# O_NONBLOCK prevents malformed FIFO configs from hanging the agent launcher.
+FILE_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
 
 
 class UnsafeConfig(Exception):
@@ -101,7 +102,7 @@ def same_file(before: os.stat_result | None, after: os.stat_result | None) -> bo
     return all(getattr(before, name) == getattr(after, name) for name in attrs)
 
 
-def atomic_write(fd: int, filename: str, old: os.stat_result | None, data: bytes) -> None:
+def atomic_write(fd: int, filename: str, old: os.stat_result | None, data: bytes, original: bytes) -> None:
     if len(data) > MAX_BYTES:
         raise UnsafeConfig("oversized new config")
     tempname = "." + filename + ".remote-dev-" + secrets.token_hex(8)
@@ -121,6 +122,17 @@ def atomic_write(fd: int, filename: str, old: os.stat_result | None, data: bytes
             current = None
         if not same_file(old, current):
             raise UnsafeConfig("concurrent config modification")
+        if current is not None:
+            # Detect same-size edits that preserve timestamps before rename.
+            # Editors ignoring this directory flock can still race the rename;
+            # do not claim conflict-free transactions with such processes.
+            verify_fd = os.open(filename, FILE_FLAGS, dir_fd=fd)
+            try:
+                if (not same_file(current, os.fstat(verify_fd)) or
+                        os.read(verify_fd, MAX_BYTES + 1) != original):
+                    raise UnsafeConfig("concurrent config modification")
+            finally:
+                os.close(verify_fd)
         os.replace(tempname, filename, src_dir_fd=fd, dst_dir_fd=fd)
         os.fsync(fd)
     finally:
@@ -188,7 +200,7 @@ def reconcile(provider: str, path: Path) -> str:
         updated = new_content(provider, original)
         if updated is None:
             return "existing"
-        atomic_write(fd, name, info, updated)
+        atomic_write(fd, name, info, updated, original)
         return "configured"
     finally:
         os.close(fd)

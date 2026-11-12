@@ -113,17 +113,12 @@ class UpdaterContractTests(unittest.TestCase):
             third_party.mkdir()
             config = root / "config"
             config.mkdir()
-            metadata = {
-                "archives": {
-                    arch: {"ffmpeg": {
-                        "revision": "1014",
-                        "url": ("https://cdn.playwright.dev/dbazure/download/playwright/"
-                                "builds/ffmpeg/1014/" +
-                                ("ffmpeg-linux.zip" if arch == "amd64"
-                                 else "ffmpeg-linux-arm64.zip")),
-                    }} for arch in ("amd64", "arm64")
-                }
-            }
+            metadata = {"archives": {
+                arch: {"chromium-headless-shell": {
+                    "revision": "1253", "browserVersion": "158.0.8103.15",
+                    "url": "https://cdn.playwright.dev/builds/cft/158.0.8103.15/"}}
+                for arch in ("amd64", "arm64")
+            }}
             (config / "playwright-browser-archives.json").write_text(
                 json.dumps(metadata), encoding="utf-8")
             inventory = {"components": [
@@ -136,7 +131,6 @@ class UpdaterContractTests(unittest.TestCase):
                                   "playwright-mcp/v0.0.84/LICENSE")}]},
                 {"id": "chromium-headless-shell", "version":
                  "matching the installed Playwright version in @playwright/mcp 0.0.84"},
-                {"id": "playwright-ffmpeg", "version": "1013", "source": "old-source"},
             ]}
             expected_license = b"synthetic upstream LICENSE"
             with mock.patch.object(self.updater, "download_notice",
@@ -149,16 +143,13 @@ class UpdaterContractTests(unittest.TestCase):
             result = self.updater.load_inventory(third_party / "inventory.json")
             by_id = {c["id"]: c for c in result["components"]}
             self.assertEqual(by_id["playwright-mcp"]["version"], version)
-            self.assertEqual(by_id["playwright-ffmpeg"]["version"], "1014")
-            self.assertEqual(by_id["playwright-ffmpeg"]["source"],
-                             metadata["archives"]["amd64"]["ffmpeg"]["url"])
             self.assertIn(version, by_id["chromium-headless-shell"]["version"])
             self.assertEqual(
                 (third_party / "components/playwright-mcp/LICENSE").read_bytes(),
                 expected_license)
             self.updater.check_inventory(
                 root, result, {"PLAYWRIGHT_MCP_VERSION": version})
-            by_id["playwright-ffmpeg"]["version"] = "1013"
+            by_id["chromium-headless-shell"]["version"] = "outdated"
             self.assert_rejected(
                 self.updater.check_inventory,
                 root, result, {"PLAYWRIGHT_MCP_VERSION": version})

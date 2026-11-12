@@ -9,12 +9,6 @@
         "url": "https://cdn.playwright.dev/builds/cft/157.0.8103.15/linux64/chrome-headless-shell-linux64.zip",
         "sha256": "563526b19c119adaad4fbc603395a905d6dd637541dd8ed70635b18ac1bb8a53",
         "executable": "chrome-headless-shell-linux64/chrome-headless-shell"
-      },
-      "ffmpeg": {
-        "revision": "1013",
-        "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
-        "sha256": "ee986434d158f74fb5d9c5ff1092026ceedb63f324fe90b5be89460926b7b679",
-        "executable": "ffmpeg-linux"
       }
     },
     "arm64": {
@@ -24,12 +18,6 @@
         "url": "https://cdn.playwright.dev/builds/cft/157.0.8103.15/linux-arm64/chrome-headless-shell-linux-arm64.zip",
         "sha256": "50534c3b82ad736134ff7a02ea5ce238616745759de334209f874c92bf201423",
         "executable": "chrome-headless-shell-linux-arm64/chrome-headless-shell"
-      },
-      "ffmpeg": {
-        "revision": "1013",
-        "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux-arm64.zip",
-        "sha256": "457360e803a7d8d5f8f7f5ecf562b2d338f6b4f7f86339d0c31938a451e8878b",
-        "executable": "ffmpeg-linux"
       }
     }
   }

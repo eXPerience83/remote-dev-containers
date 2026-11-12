@@ -25,7 +25,7 @@ import zipfile
 
 BUNDLE = Path("/opt/remote-dev/playwright")
 MANIFEST = Path("/usr/share/remote-dev/browser-archives.json")
-EXPECTED = ("chromium-headless-shell", "ffmpeg")
+EXPECTED = ("chromium-headless-shell",)
 ARCH_MACHINE = {"amd64": "x86_64", "arm64": "aarch64"}
 MAX_ARCHIVE_BYTES = 600_000_000
 MAX_UNPACKED_BYTES = 1_500_000_000
@@ -54,8 +54,12 @@ def _metadata_blocks(output: str) -> dict[str, dict[str, str]]:
         locations = re.findall(r"^\s*Install location:\s*(\S+)\s*$", part, re.M)
         _check(len(urls) == len(locations) == 1, "ambiguous Playwright download metadata")
         result[name] = {"url": urls[0], "location": locations[0]}
-    _check(set(result) == set(EXPECTED), "Playwright added or removed a downloaded binary")
-    return result
+    # Optional FFmpeg may appear in the Playwright CLI dry-run. This
+    # navigation-only image intentionally does not install the video helper.
+    _check("chromium-headless-shell" in result and
+           set(result) <= {"chromium-headless-shell", "ffmpeg"},
+           "unexpected Playwright dry-run payload")
+    return {name: result[name] for name in EXPECTED}
 
 
 def validate_selection(
@@ -96,12 +100,10 @@ def validate_selection(
         _check(actual[name]["location"] == str(target),
                "Playwright installation path changed: " + name)
         executable = entry.get("executable")
-        _check(isinstance(executable, str) and
-               executable == (
-                   ("chrome-headless-shell-linux64/chrome-headless-shell"
-                    if arch == "amd64" else
-                    "chrome-headless-shell-linux-arm64/chrome-headless-shell")
-                   if name == "chromium-headless-shell" else "ffmpeg-linux"),
+        _check(executable ==
+               ("chrome-headless-shell-linux64/chrome-headless-shell"
+                if arch == "amd64" else
+                "chrome-headless-shell-linux-arm64/chrome-headless-shell"),
                "unexpected browser archive executable path")
     return expected_archives
 
