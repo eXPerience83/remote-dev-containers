@@ -19,7 +19,7 @@ spec.loader.exec_module(evidence)
 class FFmpegLicenseEvidenceContract(unittest.TestCase):
     def fixture(self, root: Path):
         browsers = root / "browsers"
-        binary = browsers / "ffmpeg_1013/ffmpeg-linux"
+        binary = browsers / "ffmpeg-1013/ffmpeg-linux"
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b"synthetic executable bytes")
         binary.chmod(0o755)
@@ -55,7 +55,7 @@ class FFmpegLicenseEvidenceContract(unittest.TestCase):
     def test_missing_binary_is_fatal(self):
         with tempfile.TemporaryDirectory() as tmp:
             manifest, browsers, output = self.fixture(Path(tmp))
-            (browsers / "ffmpeg_1013/ffmpeg-linux").unlink()
+            (browsers / "ffmpeg-1013/ffmpeg-linux").unlink()
             with self.assertRaises(evidence.LicenseEvidenceError):
                 evidence.generate(manifest, browsers, output, "amd64",
                                   self.synthetic_binary)
