@@ -328,11 +328,15 @@ def assert_missing_begin_repair_fails_closed(module, root: Path) -> None:
             'required = false\n', 1),
         "end-only": prefix + module.END_MARKER + '\n' + other,
         "two-end-markers": original + module.END_MARKER + '\n',
-        # Reproduces the observed TrueNAS structural layout: no BEGIN,
-        # Context7 contract differs, and two separate MCP tables precede END.
+        # Reproduces the observed TrueNAS structural layout: no BEGIN;
+        # both enabled/required disagree with managed defaults, and two
+        # separate MCP tables precede END. Never infer that disabling
+        # Context7 is accidental or overwrite a user-chosen setting.
         "other-mcps-before-end": (
             prefix
-            + suffix.replace("required = false", "required = true").replace(
+            + suffix.replace("enabled = true", "enabled = false").replace(
+                "required = false", "required = true"
+            ).replace(
                 module.END_MARKER + "\n",
                 '[mcp_servers.playwright]\ncommand = "custom"\n'
                 '[mcp_servers.openaiDeveloperDocs]\n'
