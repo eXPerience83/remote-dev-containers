@@ -119,8 +119,8 @@ for _ in $(seq 1 30); do
       --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
       --shm-size 256m \
       --env REMOTE_DEV_ROLE=antigravity \
-      --entrypoint /usr/local/lib/remote-dev/node \
-      "$image" /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
+      --entrypoint /usr/bin/tini \
+      "$image" -- /usr/local/lib/remote-dev/node /usr/local/lib/remote-dev/browser-mcp-smoke.mjs
 
     # Repeat the negative security test under the AGY-like /run noexec layout.
     docker run --rm \
@@ -133,8 +133,8 @@ for _ in $(seq 1 30); do
       --tmpfs /run:rw,noexec,nosuid,nodev,size=64m,mode=755 \
       --shm-size 256m \
       --env REMOTE_DEV_ROLE=antigravity \
-      --entrypoint /usr/local/lib/remote-dev/python \
-      "$image" -I /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
+      --entrypoint /usr/bin/tini \
+      "$image" -- /usr/local/lib/remote-dev/python -I /usr/local/lib/remote-dev/browser-sandbox-runtime-probe.py
 
 
     if docker exec "$name" sh -c 'command -v bwrap >/dev/null 2>&1'; then
