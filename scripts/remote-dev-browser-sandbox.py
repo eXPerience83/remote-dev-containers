@@ -75,12 +75,26 @@ def landlock_abi() -> int:
     return syscall(LL_CREATE, 0, 0, LL_VERSION)
 
 
+def valid_scratch(scratch: str) -> bool:
+    """Admit only the supervisor-created private directory directly under /run."""
+    if (not isinstance(scratch, str) or os.path.normpath(scratch) != scratch
+            or os.path.dirname(scratch) != TMP_ROOT
+            or not os.path.basename(scratch).startswith("remote-dev-browser-")
+            or os.path.realpath(scratch) != scratch):
+        return False
+    try:
+        entry = os.lstat(scratch)
+    except OSError:
+        return False
+    return stat.S_ISDIR(entry.st_mode) and entry.st_uid == UID
+
+
 def rules(node: str, scratch: str) -> list[tuple[str, int]]:
     target = os.path.realpath(node)
     if (not target.startswith("/opt/remote-dev/mise/installs/node/")
             or not target.endswith("/bin/node")):
         raise IsolationError("unexpected Node location")
-    if not scratch.startswith("/run/remote-dev-browser-"):
+    if not valid_scratch(scratch):
         raise IsolationError("unexpected scratch location")
     return [
         ("/usr", READ_EXEC), ("/bin", READ_EXEC),
@@ -226,8 +240,7 @@ def cleanup_browser_tree(child: subprocess.Popen[bytes] | None) -> None:
 
 def guardian(lifeline_fd: int, scratch: str) -> int:
     """Trusted parent of MCP Node; subreaper for detached Chromium descendants."""
-    if os.geteuid() != 0 or not scratch.startswith(
-            "/run/remote-dev-browser-"):
+    if os.geteuid() != 0 or not valid_scratch(scratch):
         return 2
     child: subprocess.Popen[bytes] | None = None
     try:
