@@ -43,6 +43,10 @@ supervisor also becomes a subreaper, reaping descendants if the guardian dies.
 A SIGKILL in the narrow startup gap before the guardian exists can leave a
 scratch directory under /run, but no Chromium process has started yet.
 
+The launcher requires **Landlock ABI 5 or newer** and fails closed before Node
+or Chromium starts if unavailable. Stderr identifies the exception class only,
+not private environment details.
+
 Chromium still uses `chromiumSandbox: false`; this does **not** enable an
 additional Chromium sandbox. Landlock ABI 7 cannot mediate every UNIX socket,
 so world-accessible sockets remain a residual risk. Internet and LAN access

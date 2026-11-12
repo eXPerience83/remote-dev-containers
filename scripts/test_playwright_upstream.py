@@ -7,6 +7,7 @@ import base64
 import importlib.util
 import json
 from pathlib import Path
+import zipfile
 import tempfile
 import unittest
 from unittest import mock
@@ -53,6 +54,30 @@ class PlaywrightUpdaterContract(unittest.TestCase):
         self.assertEqual(up.reconcile(ROOT, candidate("amd64"),
                                       candidate("arm64"), write=False),
                          "candidate")
+
+    def test_static_url_discovery_never_requires_candidate_cli(self):
+        for arch in up.ARCHES:
+            entry = MANIFEST["archives"][arch]["chromium-headless-shell"]
+            metadata = {"core_version": MANIFEST["playwright_core_version"],
+                        "browsers": [{"name": "chromium-headless-shell",
+                                      "revision": entry["revision"],
+                                      "browserVersion": entry["browserVersion"]}]}
+            result = up.archive_urls(arch, metadata)
+            self.assertEqual(result["chromium-headless-shell"]["url"], entry["url"])
+            self.assertEqual(result["chromium-headless-shell"]["executable"],
+                             entry["executable"])
+
+    def test_zip_discovery_rejects_missing_chromium_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "fixture.zip"
+            expected = MANIFEST["archives"]["amd64"]["chromium-headless-shell"]["executable"]
+            with zipfile.ZipFile(archive, "w") as f:
+                f.writestr("other/regular", b"test")
+            with self.assertRaisesRegex(up.CandidateError, "executable missing"):
+                up.inspect_archive_contents(archive, expected)
+            with zipfile.ZipFile(archive, "w") as f:
+                f.writestr(expected, b"synthetic executable")
+            up.inspect_archive_contents(archive, expected)
 
     def test_unmodified_baseline_is_never_a_candidate(self):
         x = candidate("amd64", version=BASE)

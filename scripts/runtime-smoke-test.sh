@@ -88,7 +88,7 @@ for _ in $(seq 1 30); do
     docker exec "$name" pgrep -x ttyd >/dev/null
     docker exec "$name" remote-dev-healthcheck
     # One real headless launch verifies the bundled browser, not just the CLI.
-    docker exec "$name" node -e '
+    timeout --kill-after=5s 90s docker exec "$name" node -e '
       const { chromium } = require("/opt/remote-dev/playwright/node_modules/playwright");
       (async () => {
         const browser = await chromium.launch({headless: true, chromiumSandbox: false});

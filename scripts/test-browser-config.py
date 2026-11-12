@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import json
+import fcntl
 import os
 import subprocess
 import sys
@@ -131,6 +132,17 @@ class BrowserConfigTests(unittest.TestCase):
         with self.assertRaises(OSError):
             module.reconcile("codex", self.path)
         self.assertEqual(target.read_text(), "untouched")
+
+    def test_locked_config_does_not_block_agent_indefinitely(self):
+        descriptor = os.open(self.path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with mock.patch.object(module, "LOCK_WAIT_SECONDS", 0.04):
+                with self.assertRaisesRegex(module.UnsafeConfig, "lock busy"):
+                    module.reconcile("codex", self.path)
+            self.assertFalse((self.path / "config.toml").exists())
+        finally:
+            os.close(descriptor)
 
     def test_fifo_without_writer_fails_fast(self):
         config = self.path / "config.toml"

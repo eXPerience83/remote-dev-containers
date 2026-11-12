@@ -13,6 +13,7 @@ from pathlib import Path
 import secrets
 import stat
 import sys
+import time
 import tomllib
 
 BROWSER_COMMAND = "/usr/local/bin/remote-dev-playwright-mcp"
@@ -36,6 +37,7 @@ LEGACY_CODEX_FIELDS = {
 }
 AGY_ENTRY = {"command": BROWSER_COMMAND, "timeoutSeconds": 90}
 MAX_BYTES = 1024 * 1024
+LOCK_WAIT_SECONDS = 2.0
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
 # O_NONBLOCK prevents malformed FIFO configs from hanging the agent launcher.
 FILE_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
@@ -191,11 +193,24 @@ def new_content(provider: str, content: bytes) -> bytes | None:
     return (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def acquire_lock(fd: int) -> None:
+    """Do not block an agent session behind a stuck or external config writer."""
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError as exc:
+            if time.monotonic() >= deadline:
+                raise UnsafeConfig("private configuration lock busy") from exc
+            time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+
 def reconcile(provider: str, path: Path) -> str:
     name = "config.toml" if provider == "codex" else "mcp_config.json"
     fd = validate_directory(path)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        acquire_lock(fd)
         original, info = read_config(fd, name)
         updated = new_content(provider, original)
         if updated is None:

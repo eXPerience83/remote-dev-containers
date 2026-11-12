@@ -134,12 +134,13 @@ def npm_latest() -> str:
     return latest, sri
 
 
-def parse_dry_run(text: str) -> dict:
-    return browser_validator()._metadata_blocks(text)
-
-
-def archive_urls(arch: str, browser_metadata: dict, dry_run: str) -> dict:
-    lines = parse_dry_run(dry_run)
+def archive_urls(arch: str, browser_metadata: dict) -> dict:
+    """Derive reviewed CfT URLs from data, never executing candidate package code."""
+    require(arch in ARCHES, "unsupported architecture")
+    # We deliberately support only this audited archive URL convention.
+    # A future layout change must be manually reviewed, not executed to discover it.
+    suffix = ("linux64/chrome-headless-shell-linux64.zip" if arch == "amd64"
+              else "linux-arm64/chrome-headless-shell-linux-arm64.zip")
     entries = {x["name"]: x for x in browser_metadata.get("browsers", [])
                if isinstance(x, dict) and isinstance(x.get("name"), str)}
     require(all(name in entries for name in COMPONENTS), "missing Playwright browser revision")
@@ -149,15 +150,19 @@ def archive_urls(arch: str, browser_metadata: dict, dry_run: str) -> dict:
         revision = entry.get("revision")
         require(isinstance(revision, str) and revision.isdecimal(),
                 "invalid upstream browser revision")
-        actual = lines[component]
-        expected_dir = ("/opt/remote-dev/playwright-browsers/"
-                        + component.replace("-", "_") + "-" + revision)
-        require(actual["location"] == expected_dir, "browser installed outside pinned image path")
+        version = entry.get("browserVersion")
+        require(isinstance(version, str) and
+                re.fullmatch(r"[0-9]+(\.[0-9]+){3}", version) is not None,
+                "unreviewed Chromium browserVersion")
+        # This URL is a strictly reviewed template, not a claim that the
+        # candidate's own CLI would emit it. The image build separately
+        # compares its actual --dry-run output before any extraction.
+        url = f"https://cdn.playwright.dev/builds/cft/{version}/{suffix}"
         result[component] = {
             "revision": revision,
             **({"browserVersion": entry["browserVersion"]}
                if entry.get("browserVersion") is not None else {}),
-            "url": actual["url"],
+            "url": url,
             "sha256": "0" * 64,  # replaced after hashing; never used for installation
             "executable": ("chrome-headless-shell-linux64/chrome-headless-shell"
                            if arch == "amd64" else
@@ -168,7 +173,7 @@ def archive_urls(arch: str, browser_metadata: dict, dry_run: str) -> dict:
     return result
 
 
-def inspect_archive_contents(archive: Path) -> None:
+def inspect_archive_contents(archive: Path, executable: str) -> None:
     """Stream CRC verification with bounded expansion; do not extract ZIP."""
     with zipfile.ZipFile(archive) as container:
         entries = container.infolist()
@@ -176,6 +181,7 @@ def inspect_archive_contents(archive: Path) -> None:
         expanded = 0
         declared = 0
         names: set[str] = set()
+        executable_found = False
         for entry in entries:
             name = entry.filename.rstrip("/")
             member = PurePosixPath(name)
@@ -190,6 +196,10 @@ def inspect_archive_contents(archive: Path) -> None:
             declared += entry.file_size
             require(declared <= MAX_UNPACKED_BYTES,
                     "browser ZIP declared expansion exceeds limit")
+            if name == executable:
+                require(not entry.is_dir() and kind in (0, stat.S_IFREG),
+                        "Chromium executable is not a regular ZIP member")
+                executable_found = True
             if entry.is_dir():
                 continue
             with container.open(entry) as stream:
@@ -197,9 +207,10 @@ def inspect_archive_contents(archive: Path) -> None:
                     expanded += len(chunk)
                     require(expanded <= MAX_UNPACKED_BYTES,
                             "browser ZIP expansion exceeds limit")
+        require(executable_found, "Chromium executable missing from archive")
 
 
-def download_digest(url: str, temp: Path, component: str) -> str:
+def download_digest(url: str, temp: Path, component: str, executable: str) -> str:
     parsed = urlsplit(url)
     require(parsed.scheme == "https" and parsed.hostname == "cdn.playwright.dev",
             "unreviewed archive host")
@@ -217,7 +228,7 @@ def download_digest(url: str, temp: Path, component: str) -> str:
     with archive.open("rb") as stream:
         while block := stream.read(1024 * 1024):
             digest.update(block)
-    inspect_archive_contents(archive)
+    inspect_archive_contents(archive, executable)
     archive.unlink()
     return digest.hexdigest()
 
@@ -257,16 +268,14 @@ def produce(root: Path, arch: str) -> dict:
         )
         core = lock["packages"]["node_modules/playwright-core"]["version"]
         manifest = read_json(temp / "node_modules/playwright-core/browsers.json")
-        dry_run = subprocess.run(
-            [str(temp / "node_modules/.bin/playwright"), "install",
-             "--dry-run", "--only-shell", "chromium"],
-            capture_output=True, text=True, check=True, timeout=90,
-            env=dict(env, PLAYWRIGHT_BROWSERS_PATH="/opt/remote-dev/playwright-browsers"),
-        ).stdout
+        # Never execute the candidate Playwright CLI, even for --dry-run.
+        # Only parse the npm-integrity-checked browsers.json manifest.
         manifest["core_version"] = core
-        archives = archive_urls(arch, manifest, dry_run)
+        archives = archive_urls(arch, manifest)
         for name in COMPONENTS:
-            archives[name]["sha256"] = download_digest(archives[name]["url"], temp, name)
+            entry = archives[name]
+            entry["sha256"] = download_digest(
+                entry["url"], temp, name, entry["executable"])
         validate_archives(arch, archives, core)
         return {
             "schema_version": 1, "status": "candidate", "arch": arch,

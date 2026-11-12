@@ -46,7 +46,7 @@ Las pruebas locales de CI deben ser sintéticas, sin sesiones autenticadas de te
 - La prueba previa de SOL en TrueNAS reportó Chromium/Playwright funcional con sandbox interno deshabilitado, librerías suministradas y Landlock. AGY reportó Landlock ABI v7 y cuatro riesgos: entorno heredado, FDs, TMPDIR dentro del workspace y acceso de red LAN/loopback.
 - En un entorno local distinto de TrueNAS, una sonda de landlock_create_ruleset devolvió ENOSYS. No se puede considerar una validación funcional; probablemente existe bloqueo del sistema anfitrión o del entorno contenedor. Dejar la verificación a los agentes con acceso real.
 - Codex usa ~/.codex/config.toml, tabla mcp_servers; AGY usa ~/.gemini/config/mcp_config.json, mapa mcpServers, comando local stdio y timeoutSeconds. Confirmado con documentación de proveedor.
-- La imagen actual del PR supera compilación AMD64 y smoke de Chromium, **no** prueba aún MCP real con agentes ni la protección de procesos. Mantener draft/no fusionar.
+- La revisión del commit `c8034763279156cf2d69338d566d188369017b06` pasó el [Build AMD64 con smoke real de Chromium, MCP y limpieza](https://github.com/eXPerience83/remote-dev-containers/actions/runs/43164968170). Las correcciones posteriores requieren su **propia** CI sobre el HEAD nuevo. Ninguna de estas pruebas acredita la carga del MCP por Codex o AGY reales en TrueNAS. Mantener draft/no fusionar.
 
 ## Referencias
 

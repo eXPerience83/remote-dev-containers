@@ -42,6 +42,11 @@ muere el guardián. Como límite conocido, un SIGKILL durante el brevísimo tram
 entre crear el scratch y arrancar el guardián puede dejar un directorio
 huérfano en /run, sin procesos Chromium iniciados. No se necesita instalar nada al iniciar.
 
+El lanzador exige **Landlock ABI 5 o superior** y no inicia Node ni Chromium
+si falta. Ante ese fallo, stderr comunica únicamente el tipo de excepción
+(`IsolationError`; en algunos hosts sin soporte puede ser `OSError`),
+sin imprimir credenciales ni variables privadas.
+
 Chromium sigue con `chromiumSandbox: false`: **no es un sandbox de Chromium
 adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
 accesible para ese UID sigue siendo un riesgo residual. Se mantiene Internet

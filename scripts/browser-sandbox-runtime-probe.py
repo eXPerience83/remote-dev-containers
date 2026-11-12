@@ -164,6 +164,38 @@ def sandbox_processes() -> set[int]:
     return found
 
 
+def is_chromium(pid: int) -> bool:
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except (FileNotFoundError, OSError, PermissionError):
+        return False
+    return b"/headless_shell" in cmdline or b"/chrome-headless-shell" in cmdline
+
+
+def descendants_of(pid: int) -> set[int]:
+    """Walk only children of this fixture supervisor, not unrelated MCPs."""
+    visited = {pid}
+    pending = [pid]
+    descendants: set[int] = set()
+    while pending:
+        parent = pending.pop()
+        try:
+            children = Path(f"/proc/{parent}/task/{parent}/children").read_text().split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        for child in children:
+            if not child.isdecimal():
+                raise RuntimeError("malformed process ancestry")
+            number = int(child)
+            if number not in visited:
+                visited.add(number)
+                descendants.add(number)
+                pending.append(number)
+                if len(visited) > 512:
+                    raise RuntimeError("unexpectedly large browser process tree")
+    return descendants
+
+
 def is_live(pid: int) -> bool:
     try:
         status = Path(f"/proc/{pid}/status").read_text()
@@ -252,8 +284,10 @@ def lifecycle_probe(target: str = "supervisor") -> int:
             raise RuntimeError("browser navigation failed before SIGKILL")
         new_dirs = {p.name for p in Path("/run").glob("remote-dev-browser-*")} - before_dirs
         managed_pids = sandbox_processes() - before_pids
-        if len(new_dirs) != 1 or not managed_pids:
-            raise RuntimeError("browser tree/profile not ready for cleanup test")
+        chromium_pids = {pid for pid in descendants_of(proc.pid)
+                         if pid in managed_pids and is_chromium(pid) and is_live(pid)}
+        if len(new_dirs) != 1 or not managed_pids or not chromium_pids:
+            raise RuntimeError("live Chromium descendant/profile absent before cleanup")
         # Deliberately do not close stdin: exercise the SIGKILL fallback.
         if target == "guardian":
             children = Path(
@@ -268,7 +302,8 @@ def lifecycle_probe(target: str = "supervisor") -> int:
         while time.monotonic() < deadline:
             remaining_dirs = {p.name for p in
                               Path("/run").glob("remote-dev-browser-*")}
-            remaining_pids = {pid for pid in managed_pids if is_live(pid)}
+            remaining_pids = {pid for pid in (managed_pids | chromium_pids)
+                              if is_live(pid)}
             if not (new_dirs & remaining_dirs) and not remaining_pids:
                 print(f"MCP SIGKILL {target} lifecycle: PASS")
                 return 0
