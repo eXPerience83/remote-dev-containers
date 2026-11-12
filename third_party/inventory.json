@@ -552,14 +552,14 @@
       "image_scope": "base",
       "version": "1013",
       "source": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
-      "license": "FFmpeg upstream LGPL-2.1-or-later; verify any extra compiled options and matching source obligations",
+      "license": "FFmpeg binary-reported terms (see exact installed binary -L output and build configuration)",
       "notices": [
         {
-          "path": "runtime/ffmpeg/COPYING.LGPLv2.1",
+          "path": "runtime/ffmpeg/LICENSE-from-binary.txt",
           "source": "runtime"
         }
       ],
-      "distribution_notes": "AMD64 and ARM64 archives have distinct SHA-256 identities in config/playwright-browser-archives.json. The license text must be preserved from the exact verified FFmpeg archive in each image; no substitute notice is accepted."
+      "distribution_notes": "AMD64 and ARM64 archives have distinct SHA-256 identities in config/playwright-browser-archives.json. The Playwright-provided FFmpeg ZIP contains no standalone COPYING file; the network-disabled build step captures -L and -version output from the exact verified binary with dropped privileges. Review matching-source obligations and binary licensing separately under #53."
     }
   ]
 }
