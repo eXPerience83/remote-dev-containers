@@ -34,6 +34,11 @@ def validate_archive_url(url: str, component: str) -> None:
             or parsed.query or parsed.fragment or not parsed.hostname):
         raise ArchiveDownloadError("unreviewed archive redirect URL")
     host, path = parsed.hostname, parsed.path
+    # Curl normalizes dot segments before requesting a redirect destination.
+    # Reject raw/encoded path traversal before evaluating the allowlisted
+    # storage prefixes; official Playwright URLs need no %-encoded paths.
+    if "%" in path or any(segment in {".", ".."} for segment in path.split("/")):
+        raise ArchiveDownloadError("unreviewed archive redirect path")
     if host == "cdn.playwright.dev":
         return
     if (host == "playwright.download.prss.microsoft.com"
