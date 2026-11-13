@@ -177,6 +177,23 @@ def assert_antigravity_manual_contract(text: str) -> None:
         raise AssertionError("Antigravity review writer must never merge its own PR")
 
 
+
+def assert_inspect_workflow_tracks_official_origin_helper() -> None:
+    """A helper-only change must still trigger the offline inspection gate."""
+    workflow = (ROOT / ".github/workflows/inspect-antigravity-cli.yml").read_text(
+        encoding="utf-8"
+    )
+    trigger = workflow.split("permissions:\n", 1)[0]
+    for path in ("antigravity_official_url.py", "test_antigravity_official_url.py"):
+        require(trigger, f'- "scripts/{path}"', "official-origin PR path trigger")
+        require(workflow, f"scripts/{path}", "official-origin compilation input")
+    require(
+        workflow,
+        "python3 scripts/test_antigravity_official_url.py",
+        "shared official-origin validation in inspection CI",
+    )
+
+
 def main() -> None:
     """Run workflow architecture assertions."""
     upstream = UPSTREAM.read_text(encoding="utf-8")
@@ -185,6 +202,7 @@ def main() -> None:
     assert_download_pin_parser_fixtures()
     assert_scheduler_contract(upstream)
     assert_antigravity_manual_contract(antigravity)
+    assert_inspect_workflow_tracks_official_origin_helper()
     pins = {
         pinned_artifact_download_sha(job_block(upstream, "check"), "scheduled writer", expected_count=3),
         pinned_artifact_download_sha(job_block(antigravity, "maintain-pr"), "manual review writer"),
