@@ -1,6 +1,6 @@
 # Context7 hosted MCP for Antigravity CLI
 
-> **Release status:** This integration is experimental and is being developed in draft PR #324. It is not yet merged or included in published `edge`, `stable` or `latest` images. The commands below require a future reviewed image containing this implementation.
+> **Verified status (2026-11-14):** PR #324 was **merged** as `258d79a` and shipped through experimental `edge`. Real Codex/Antigravity use on TrueNAS and role-local rollback **have not yet been accepted**; there is no later stable publication. CI success alone does not prove real `agy /mcp` tool calls. See the [v0.3.0 acceptance guide](v0.3.0-acceptance.md).
 
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
