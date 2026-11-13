@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import antigravity_download as NETWORK
+from antigravity_official_url import has_unsafe_raw_url_characters
 
 ROOT = Path(__file__).resolve().parent
 INSPECTOR_PATH = ROOT / "inspect-antigravity-cli.py"
@@ -62,7 +63,12 @@ class DiscoveryError(ValueError):
 
 
 def _strict_https_url(url: object, *, host: str, path: str | None = None) -> bool:
-    if not isinstance(url, str) or not url or "\\" in url:
+    if (
+        not isinstance(url, str)
+        or not url
+        or "\\" in url
+        or has_unsafe_raw_url_characters(url)
+    ):
         return False
     try:
         parsed = urllib.parse.urlsplit(url)
