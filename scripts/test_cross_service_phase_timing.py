@@ -19,6 +19,13 @@ PHASES = (
 )
 
 
+CODEX_RECREATION_SUBPHASES = (
+    "restart-and-health",
+    "security-and-auth-contract",
+    "mise-role-transitions",
+    "state-canaries-and-peers",
+)
+
 ADMIN_SUBPHASES = (
     "administrative-python-codex",
     "administrative-python-antigravity",
@@ -95,6 +102,51 @@ class IsolationPhaseTimingTests(unittest.TestCase):
         self.assertIn('ci_admin_subphase_started=$SECONDS', function)
         self.assertIn('CI TIMING admin-and-development-tooling/%s: %ss', function)
         self.assertNotIn('ci_phase_started=', function)
+
+    def test_codex_recreation_subphases_preserve_all_existing_checks(self) -> None:
+        start = self.source.index(
+            'ci_phase_checkpoint "state-canaries-and-authenticated-launcher"\n'
+        )
+        end = self.source.index('ci_phase_checkpoint "codex-recreation"\n')
+        block = self.source[start:end]
+        self.assertIn('ci_codex_recreation_started=$SECONDS\n', block)
+        labels = tuple(
+            re.findall(r'ci_codex_recreation_checkpoint "([^"]+)"', block)
+        )
+        self.assertEqual(labels, CODEX_RECREATION_SUBPHASES)
+        for original_command, checkpoint in (
+            ('assert_image_id "$codex_name"',
+             "restart-and-health"),
+            ('assert_read_only_rootfs "$codex_name" Codex',
+             "security-and-auth-contract"),
+            ('assert_mise_trust_state "$codex_name" observe untrusted',
+             "mise-role-transitions"),
+            ('wait_for_health_command "$antigravity_name"',
+             "state-canaries-and-peers"),
+        ):
+            self.assertIn(
+                original_command + '\n'
+                + 'ci_codex_recreation_checkpoint "' + checkpoint + '"',
+                block,
+            )
+        self.assertEqual(
+            len(re.findall(r'^assert_mise_trust_state ', block, re.M)), 5
+        )
+        self.assertIn('verify_canaries codex_invariants "$codex_name"', block)
+        self.assertIn(
+            'verify_canaries antigravity_invariants "$antigravity_name"',
+            block,
+        )
+
+    def test_codex_subphase_timer_is_independent_and_uses_bash_seconds(self) -> None:
+        function = self.source.split(
+            'ci_codex_recreation_checkpoint() {\n', 1
+        )[1].split('\n}', 1)[0]
+        self.assertIn('SECONDS - ci_codex_recreation_started', function)
+        self.assertIn('ci_codex_recreation_started=$SECONDS', function)
+        self.assertIn('CI TIMING codex-recreation/%s: %ss', function)
+        self.assertNotIn('ci_phase_started=', function)
+        self.assertNotIn('ci_admin_subphase_started=', function)
 
     def test_final_checkpoint_precedes_success_only(self) -> None:
         self.assertIn(
