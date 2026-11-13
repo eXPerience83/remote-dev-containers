@@ -8,6 +8,15 @@ set -euo pipefail
 image="${1:-${REMOTE_DEV_ISOLATION_IMAGE:-remote-dev:local}}"
 source_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
+# Built-in Bash timing only: do not use external probes or print fixture secrets.
+ci_phase_started=$SECONDS
+ci_phase_checkpoint() {
+  local phase="$1"
+  printf 'CI TIMING %s: %ss\n' "$phase" "$(( SECONDS - ci_phase_started ))"
+  ci_phase_started=$SECONDS
+}
+
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "ERROR: cross-service isolation test requires $1" >&2
@@ -1739,12 +1748,14 @@ start_antigravity() {
     || fail "Antigravity fixture ownership could not be verified"
 }
 
+ci_phase_checkpoint "fixture-preparation"
 start_launcher base
 start_codex
 start_antigravity
 for name in "$launcher_name" "$codex_name" "$antigravity_name"; do
   wait_for_health_command "$name"
   assert_image_id "$name"
+ci_phase_checkpoint "initial-role-startup"
 done
 assert_no_broad_mounts_or_environment "$launcher_name" launcher
 assert_no_broad_mounts_or_environment "$codex_name" codex
@@ -1773,6 +1784,7 @@ assert_read_only_rootfs "$antigravity_name" Antigravity
 assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
 assert_role_private_agent_guidance
+ci_phase_checkpoint "initial-isolation-and-auth"
 # Feed the regression into the existing hardened role containers. No new mounts.
 # docker exec does not inherit startup exports; supply the role scratch path
 # already verified by assert_development_scratch_environment above.
@@ -1790,6 +1802,7 @@ assert_mise_trust_state "$antigravity_name" prepare untrusted
 assert_mise_trust_state "$codex_name" trust trusted
 assert_mise_trust_state "$antigravity_name" observe untrusted
 
+ci_phase_checkpoint "admin-and-development-tooling"
 remove_owned_container "$launcher_name" "$launcher_id" \
   || fail "failed to remove the owned passwordless launcher fixture for authentication coverage"
 start_launcher authenticated
@@ -1844,6 +1857,7 @@ wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 wait_for_health_command "$antigravity_name"
 
+ci_phase_checkpoint "state-canaries-and-authenticated-launcher"
 remove_owned_container "$codex_name" "$codex_id" \
   || fail "failed to remove the owned Codex fixture for recreation"
 start_codex
@@ -1868,6 +1882,7 @@ verify_canaries antigravity_invariants "$antigravity_name"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$antigravity_name"
 
+ci_phase_checkpoint "codex-recreation"
 remove_owned_container "$antigravity_name" "$antigravity_id" \
   || fail "failed to remove the owned Antigravity fixture for recreation"
 start_antigravity
@@ -1889,6 +1904,7 @@ verify_canaries antigravity_invariants "$antigravity_name"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 
+ci_phase_checkpoint "antigravity-recreation"
 antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
 antigravity_scratch_measurement="$(measure_canary \
   "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
@@ -1911,4 +1927,5 @@ for name in "$codex_name" "$antigravity_name"; do
     || fail "failed to clean up synthetic mise project"
 done
 
+ci_phase_checkpoint "scratch-recreation-and-final-canaries"
 echo "Hardened cross-service isolation and offline toolchain canaries: OK"
