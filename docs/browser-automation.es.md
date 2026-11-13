@@ -52,8 +52,7 @@ adicional**. Landlock ABI 7 tampoco media todos los sockets UNIX; un socket
 accesible para ese UID sigue siendo un riesgo residual. Se mantiene Internet
 y acceso a la LAN por decisión del operador, sin aislamiento de red.
 
-**Estado:** funcionalidad experimental en desarrollo, no incluida en la
-imagen estable v0.2.1. Las pruebas de CI incluyen construcción AMD64,
+**Estado verificado (14-11-2026):** Playwright MCP está **integrado en `main` y Edge experimental**, pero **no en la última estable publicada v0.2.0**. No está aceptado para navegación general: la revisión exacta de Chromium `158.0.8127.18` sigue sin parche acreditado para **CVE-2026-125350** (#320), una vulnerabilidad explotada. **Evita sitios externos/no confiables**; limita cualquier prueba a páginas locales controladas hasta resolver #320. Consulta [aceptación v0.3.0](v0.3.0-acceptance.es.md). Las pruebas de CI incluyen construcción AMD64,
 navegación HTTP/JavaScript/WebSocket, capturas, comprobaciones negativas
 de Landlock y limpieza de procesos. La aceptación con AGY real en TrueNAS
 sigue sin verificarse; los tests opcionales de integración no la sustituyen.
