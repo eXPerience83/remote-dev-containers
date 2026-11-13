@@ -1047,6 +1047,19 @@ args = ["--safe"]
         require_success(result, "anonymous status")
         if result.stdout.strip() != "Context7: configured (anonymous)":
             raise AssertionError(f"unexpected anonymous status: {result.stdout!r}")
+        plain_status = run_manager(home, "status")
+        if (
+            plain_status.returncode != result.returncode
+            or plain_status.stdout != result.stdout
+            or plain_status.stderr != result.stderr
+        ):
+            raise AssertionError("Context7 status --menu compatibility alias changed semantics")
+        config_before_unknown = config.read_bytes()
+        invalid = run_manager(home, "unknown")
+        if invalid.returncode != 2 or "invalid choice" not in invalid.stderr:
+            raise AssertionError("unsupported Context7 command not rejected by argparse")
+        if config.read_bytes() != config_before_unknown:
+            raise AssertionError("unsupported Context7 command altered managed configuration")
 
         drifted = config.read_text(encoding="utf-8").replace(
             'url = "https://mcp.context7.com/mcp"',
