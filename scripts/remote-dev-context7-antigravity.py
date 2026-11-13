@@ -160,7 +160,7 @@ def using_config(directory: Path, mutator):
         os.close(fd)
 
 
-def status(directory: Path, *, verbose: bool = False) -> int:
+def status(directory: Path) -> int:
     if not directory.exists() and not directory.is_symlink():
         # Missing optional MCP config must not make agent Doctor fail.
         # Do not create the provider-private directory from a passive probe.

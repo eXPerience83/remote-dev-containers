@@ -44,6 +44,37 @@ class Context7Antigravity(unittest.TestCase):
             result = manager.main(list(args), directory=self.configdir)
         return result, stdout.getvalue(), stderr.getvalue()
 
+    def test_status_menu_alias_preserves_passive_exit_and_output(self):
+        # Keep --menu as a supported compatibility alias: it must not
+        # trigger configuration writes or change diagnostic semantics.
+        for label, payload in (
+            ("absent", None),
+            ("managed", {"mcpServers": {"context7": manager.ENTRY}}),
+            ("user-managed", {
+                "mcpServers": {"context7": {"command": "custom"}}
+            }),
+        ):
+            with self.subTest(state=label):
+                if payload is None:
+                    self.file.unlink(missing_ok=True)
+                else:
+                    self.file.write_text(json.dumps(payload), encoding="utf-8")
+                before = self.file.read_bytes() if self.file.exists() else None
+                direct = self.call("status")
+                menu = self.call("status", "--menu")
+                self.assertEqual(direct, menu)
+                self.assertEqual(
+                    self.file.read_bytes() if self.file.exists() else None,
+                    before,
+                )
+                self.assertFalse(self.backup.exists())
+
+    def test_unknown_subcommand_is_rejected_without_writing(self):
+        with self.assertRaises(SystemExit) as error:
+            self.call("unknown")
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse(self.file.exists())
+
     def test_missing_installs_without_other_changes(self):
         self.assertEqual(self.call("status", "--menu")[0], 0)
         self.assertFalse(self.file.exists())
