@@ -148,6 +148,19 @@ class IsolationPhaseTimingTests(unittest.TestCase):
         self.assertNotIn('ci_phase_started=', function)
         self.assertNotIn('ci_admin_subphase_started=', function)
 
+    def test_mise_diffs_fail_closed_and_report_independent_costs(self) -> None:
+        function = self.source.split(
+            'assert_mise_trust_state() {\n', 1
+        )[1].split('\n}', 1)[0]
+        self.assertEqual(function.count('docker diff "$name"'), 2)
+        self.assertIn('|| fail "native mise $role $action/$expected pre-action docker diff failed"', function)
+        self.assertIn('|| fail "native mise $role $action/$expected post-action docker diff failed"', function)
+        self.assertIn('"$rootfs_before" "$rootfs_after"', function)
+        self.assertIn('CI TIMING mise-trust-state/%s/%s/%s:', function)
+        self.assertIn('before-diff=%ss exec=%ss after-diff=%ss', function)
+        self.assertNotIn('ci_phase_started=', function)
+        self.assertNotIn('ci_codex_recreation_started=', function)
+
     def test_final_checkpoint_precedes_success_only(self) -> None:
         self.assertIn(
             'ci_phase_checkpoint "scratch-recreation-and-final-canaries"\n'
