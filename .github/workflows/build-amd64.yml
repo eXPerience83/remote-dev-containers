@@ -87,6 +87,8 @@ jobs:
             scripts/test_sync_python_runtime_notices.py \
             scripts/compact-python-runtime-notices.py \
             scripts/test_compact_python_runtime_notices.py \
+            scripts/standalone_artifact_common.py \
+            scripts/test_standalone_artifact_common.py \
             scripts/sync-standalone-artifact-inspection.py \
             scripts/test_sync_standalone_artifact_inspection.py \
             scripts/validate-standalone-artifact-inspection.py \
@@ -128,6 +130,7 @@ jobs:
           python3 scripts/test_select_mature_pypi_version.py
           python3 scripts/test_sync_python_runtime_notices.py
           python3 scripts/test_compact_python_runtime_notices.py
+          python3 scripts/test_standalone_artifact_common.py
           python3 scripts/test_sync_standalone_artifact_inspection.py
           python3 scripts/test_validate_standalone_artifact_inspection.py
           python3 scripts/test_inspect_antigravity_cli.py
