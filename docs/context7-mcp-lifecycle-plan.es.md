@@ -32,4 +32,4 @@ Reglas innegociables: diagnóstico **sin escrituras ni red**; acción explícita
 
 **Pendiente:** verificaciones de configuración a nivel de proyecto en Antigravity, aceptación con agentes reales y revisión del contrato legal/privacidad específica. El CI verde no reemplaza estas pruebas.
 
-No fusionar PR #324 ni considerar aprobado el desarrollo mientras queden puertas abiertas en la [matriz principal](context7-mcp-lifecycle-plan.md).
+PR #324 ya está fusionado; **no cerrar #95 ni declarar la integración aceptada en producción** mientras queden pendientes las pruebas reales y las decisiones humanas de la [matriz principal](context7-mcp-lifecycle-plan.md).
