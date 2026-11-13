@@ -18,6 +18,8 @@ Utiliza **Context7 integration...** en el menú de Codex o:
 
 ```bash
 remote-dev-context7 status
+remote-dev-context7 reinstall --yes
+remote-dev-context7 plan
 remote-dev-context7 install
 remote-dev-context7 repair
 remote-dev-context7 test
@@ -38,6 +40,16 @@ Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous` y `--api-key-stdin`. La automatización del device login puede elegir además `--cli-channel reviewed` o `--cli-channel latest`; el menú interactivo utiliza `auto`.
 
 `remote-dev-context7 update` vuelve a validar/aplicar la configuración MCP alojada que incluye la imagen. Es independiente de la versión transitoria de `ctx7`, que solo se utiliza para la autenticación por dispositivo.
+
+### Diagnóstico y reinstalación aislada de Context7
+
+`remote-dev-context7 status --menu` es un diagnóstico pasivo: detecta si la configuración está ausente, dañada o necesita una acción. `remote-dev-context7 plan` muestra si puede **reinstalarse exclusivamente el registro MCP Context7** sin alterar la configuración del resto del agente.
+
+La opción del menú **Reinstalar solo Context7** o `remote-dev-context7 reinstall --yes` regenera el bloque oficial de Context7 en `config.toml`, en lugar de añadir a mano campos antiguos. Requiere que la entrada Context7 pueda delimitarse inequívocamente; no atraviesa tablas de otros MCP ni acepta sintaxis ambigua. Comprueba que todos los valores TOML externos a Context7 son idénticos antes y después. Utiliza bloqueo compartido con Playwright, copia privada del archivo original y sustitución atómica. Conserva la API key privada: no exige volver a iniciar sesión.
+
+**La reinstalación descarta personalizaciones de la propia entrada Context7**. Es una acción explícita y no se ejecuta durante `status`, `plan`, `doctor` o el arranque. Si el alcance no puede demostrarse, se bloquea sin escribir. La recuperación limitada del comando `repair` se conserva para formatos antiguos ya revisados, pero la nueva operación recomendada para reconstruir una entrada dañada es `reinstall`.
+
+Antigravity utiliza su propio archivo JSON y se gestiona con `remote-dev-context7-antigravity`. La integración Antigravity empieza en modo remoto anónimo; no se guarda la clave de Codex en su JSON. Consulta `docs/context7-antigravity.es.md`.
 
 ## CLI de Context7 revisado y última versión oficial
 
@@ -104,7 +116,7 @@ required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
 
-Todo lo demás se conserva. Un `mcp_servers.context7` previo no gestionado, marcadores ambiguos o estado inseguro fallan de forma segura. Antes de sustituir un bloque gestionado, se guarda la configuración anterior completa y privada en:
+Con `install` y `repair`, se conserva lo ajeno al bloque gestionado y se rechazan entradas `mcp_servers.context7` sin gestión, marcadores ambiguos o estados inseguros. Por separado, `reinstall --yes` permite sustituir una tabla Context7 no gestionada **solo si su alcance puede aislarse con seguridad**; se restablecen sus opciones, pero no las de otros MCP (véase la sección de reinstalación). Antes de sustituir un bloque gestionado, se guarda la configuración anterior completa y privada en:
 
 ```text
 $CODEX_HOME/config.toml.remote-dev-context7.bak

@@ -8,6 +8,7 @@ import getpass
 import json
 import os
 from pathlib import Path
+import secrets
 import stat
 import subprocess
 import sys
@@ -351,7 +352,17 @@ def backup_and_replace_config(paths: Paths, old: str, new: str) -> bool:
         return False
     validate_home(paths, create=True)
     if paths.config.exists():
-        atomic_write(paths.backup, old, mode=0o600)
+        backup = paths.backup
+        # Preserve the *first* rollback snapshot across later reinstalls.
+        # Every subsequent changed preimage gets a new private backup.
+        if backup.exists() or backup.is_symlink():
+            info = backup.lstat()
+            if (not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or (stat.S_IMODE(info.st_mode) & 0o077)):
+                raise Context7Error("unsafe existing Context7 rollback backup")
+            backup = backup.with_name(backup.name + "." + secrets.token_hex(8))
+        atomic_write(backup, old, mode=0o600)
     atomic_write(paths.config, new, mode=0o600)
     return True
 
@@ -468,6 +479,185 @@ def safe_interleaved_legacy_candidate(state: ConfigState) -> str | None:
     return candidate
 
 
+def safe_nested_headers_legacy_candidate(state: ConfigState) -> str | None:
+    """Recognize the exact hosted Context7 legacy *subtable* syntax.
+
+    Old Codex MCP registration may use [mcp_servers.context7.env_http_headers]
+    rather than the managed inline-header table. Rebuilding Context7 requires
+    semantic equality of its two known fields, no user customization, a single
+    displaced END marker, and unchanged semantics for every other MCP.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+    lines = state.text.splitlines(keepends=True)
+    ctx_header = "[mcp_servers.context7]\n"
+    nested_header = "[mcp_servers.context7.env_http_headers]\n"
+    ctx = [i for i, line in enumerate(lines) if line == ctx_header]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER + "\n"]
+    if len(ctx) != 1 or len(ends) != 1 or ctx[0] >= ends[0]:
+        return None
+    start, old_end = ctx[0], ends[0]
+    headers = [
+        (i, lines[i].rstrip("\r\n"))
+        for i in range(start + 1, old_end)
+        if lines[i].startswith("[") and lines[i].rstrip("\r\n").endswith("]")
+    ]
+    if len(headers) < 2 or headers[0][1] != nested_header.rstrip("\n"):
+        return None
+    nested = headers[0][0]
+    first_other = headers[1][0]
+    if any(
+        not header.startswith("[mcp_servers.")
+        or header.startswith("[mcp_servers.context7.")
+        or header == "[mcp_servers.context7]"
+        for _, header in headers[1:]
+    ):
+        return None
+    url_line = f'url = "{CONTEXT7_ENDPOINT}"\n'
+    url_fields = [line for line in lines[start + 1:nested] if line.strip()]
+    if url_fields != [url_line]:
+        return None
+    key_fields = [
+        (i, line) for i, line in enumerate(lines[nested + 1:first_other], nested + 1)
+        if line.strip()
+    ]
+    accepted_keys = {
+        f'{CONTEXT7_ENV} = "{CONTEXT7_ENV}"\n',
+        f'"{CONTEXT7_ENV}" = "{CONTEXT7_ENV}"\n',
+    }
+    if len(key_fields) != 1 or key_fields[0][1] not in accepted_keys:
+        return None
+    try:
+        before = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    table = context7_table(before)
+    if (not isinstance(table, dict)
+            or set(table) != {"url", "env_http_headers"}
+            or table["url"] != MANAGED_CONTRACT["url"]
+            or table["env_http_headers"] != MANAGED_CONTRACT["env_http_headers"]):
+        return None
+
+    # Preserve the *exact* bytes following the known header mapping, including
+    # inter-table spacing and every unrelated MCP table. Only the misplaced END
+    # comment and the known two-field Context7 stanza are removed.
+    end_of_key = key_fields[0][0] + 1
+    candidate = (
+        "".join(lines[:start]) + MANAGED_BLOCK
+        + "".join(lines[end_of_key:old_end])
+        + "".join(lines[old_end + 1:])
+    )
+    try:
+        after = parse_toml(candidate, label="reconstructed Codex config")
+    except Context7Error:
+        return None
+    if (context7_table(after) != MANAGED_CONTRACT
+            or without_context7(before) != without_context7(after)
+            or inspect_config_candidate(candidate) != "managed"):
+        return None
+    return candidate
+
+
+def recognized_legacy_recovery(state: ConfigState) -> str | None:
+    """Only these three reviewed layouts may be reconstructed."""
+    return (
+        safe_missing_begin_candidate(state)
+        or safe_interleaved_legacy_candidate(state)
+        or safe_nested_headers_legacy_candidate(state)
+    )
+
+
+def scoped_reinstall_candidate(state: ConfigState) -> str | None:
+    """Reinstall the *entire* Context7 MCP registration, not its legacy fields.
+
+    Syntax-aware at TOML table boundaries. Preserve all unrelated input bytes
+    except a unique orphaned Remote Dev END marker. Reset only Context7's own
+    parent/child TOML tables. An ambiguous scope fails closed.
+    """
+    if state.kind in {"invalid", "conflict"}:
+        return None
+    if state.kind == "managed":
+        return state.text
+    if state.kind == "absent":
+        # A valid pre-existing inline mcp_servers table cannot be extended
+        # with a regular TOML child header. Validate the entire proposal and
+        # prove unrelated configuration is unchanged before allowing writes.
+        candidate = append_managed_block(state.text)
+        try:
+            before = parse_toml(state.text, label="existing Codex config")
+            after = parse_toml(candidate, label="proposed Context7 install")
+        except Context7Error:
+            return None
+        if (context7_table(after) != MANAGED_CONTRACT
+                or without_context7(before) != without_context7(after)
+                or inspect_config_candidate(candidate) != "managed"):
+            return None
+        return candidate
+    try:
+        before = parse_toml(state.text, label="Codex MCP config")
+    except Context7Error:
+        return None
+    if not isinstance(context7_table(before), dict):
+        return None
+    lines = state.text.splitlines(keepends=True)
+    roots = [i for i, line in enumerate(lines)
+             if line.rstrip("\r\n") == "[mcp_servers.context7]"]
+    if len(roots) != 1:
+        return None
+    start = roots[0]
+    starts = [i for i, line in enumerate(lines)
+              if line.rstrip("\r\n") == START_MARKER]
+    ends = [i for i, line in enumerate(lines)
+            if line.rstrip("\r\n") == END_MARKER]
+    if len(starts) > 1 or len(ends) > 1:
+        return None
+    if starts and (starts[0] != start - 1):
+        return None
+    if ends and ends[0] < start:
+        return None
+
+    # Context7 child tables can follow its root. Stop at the next unrelated
+    # TOML table, preserving everything beginning at that table verbatim.
+    after = len(lines)
+    foreign_seen = False
+    for i in range(start + 1, len(lines)):
+        header = lines[i].strip()
+        if not (header.startswith("[") and header.endswith("]")):
+            continue
+        if header.startswith("[mcp_servers.context7."):
+            if foreign_seen:
+                return None
+            continue
+        foreign_seen = True
+        if after == len(lines):
+            after = i
+    if ends and ends[0] >= start and ends[0] < after:
+        # The old END is part of the Context7 stanza, and is removed with it.
+        pass
+    keep = set(range(start, after))
+    if starts:
+        keep.add(starts[0])
+    if ends:
+        keep.add(ends[0])
+    pieces = []
+    for i, line in enumerate(lines):
+        if i == start:
+            pieces.append(MANAGED_BLOCK)
+        if i not in keep:
+            pieces.append(line)
+    candidate = "".join(pieces)
+    try:
+        rebuilt = parse_toml(candidate, label="reinstalled MCP config")
+        if (context7_table(rebuilt) != MANAGED_CONTRACT
+                or without_context7(before) != without_context7(rebuilt)
+                or inspect_config_candidate(candidate) != "managed"):
+            return None
+    except Context7Error:
+        return None
+    return candidate
+
+
 def inspect_config_candidate(text: str) -> str:
     """Validate a proposed repair without reading or writing private files."""
     try:
@@ -500,9 +690,7 @@ def managed_candidate(
             raise Context7Error(
                 "malformed Context7 ownership markers require explicit install/repair --yes"
             )
-        candidate = safe_missing_begin_candidate(state)
-        if candidate is None:
-            candidate = safe_interleaved_legacy_candidate(state)
+        candidate = recognized_legacy_recovery(state)
         if candidate is None:
             raise Context7Error("malformed Context7 ownership markers require manual review")
         return candidate
@@ -577,7 +765,9 @@ def secret_status(paths: Paths) -> tuple[str, str | None]:
     state_fd: int | None = None
     key_fd: int | None = None
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
-    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    # O_NONBLOCK prevents a FIFO path without a writer from hanging status/plan.
+    # read_private_key_from_fd still rejects non-regular descriptors.
+    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
         try:
             state_fd = os.open(paths.state_dir, directory_flags)
@@ -707,6 +897,23 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
     return 0
 
 
+def command_reinstall(paths: Paths, args: argparse.Namespace) -> int:
+    """Explicitly replace *only* Context7's MCP registration; retain key."""
+    confirm("Reinstall only Context7 MCP (reset custom Context7 settings)", yes=args.yes)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        auth, _ = secret_status(paths)
+        if auth == "unsafe":
+            raise Context7Error("Context7 authentication state is unsafe; reinstall blocked")
+        candidate = scoped_reinstall_candidate(state)
+        if candidate is None:
+            raise Context7Error("Context7 registration cannot be isolated safely; no changes made")
+        changed = backup_and_replace_config(paths, state.text, candidate)
+    print("Context7 MCP: reinstalled" if changed else "Context7 MCP: already current")
+    print("Context7 API key: preserved (no credential changes)")
+    return 0
+
+
 def command_update(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Update/reapply", yes=args.yes)
     changed = apply_managed_config(
@@ -770,6 +977,13 @@ def status_line(paths: Paths) -> tuple[str, int]:
                 "conflict": "Context7 ownership conflict",
                 "managed-drift": "managed Context7 contract drift",
             }.get(state.kind, "unrecognized Context7 configuration state")
+        # The same verified scope check drives the menu/Doctor recommendation
+        # for all damaged states, not just one historical marker layout.
+        if (scoped_reinstall_candidate(state) is not None
+                and secret_status(paths)[0] != "unsafe"):
+            reason += "; reinstall Context7 via menu or reinstall --yes"
+        else:
+            reason += "; no verified scoped reinstall; manual review required"
         return (
             "Context7: managed configuration damaged or Codex config invalid "
             f"({reason})",
@@ -781,6 +995,34 @@ def status_line(paths: Paths) -> tuple[str, int]:
     if secret == "missing":
         return "Context7: configured (anonymous)", 0
     return "Context7: configured but API-key state is unsafe", 3
+
+
+def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
+    """Passive/offline eligibility preview; never modifies config or keys."""
+    state = inspect_config(paths)
+    auth, _ = secret_status(paths)
+    if auth == "unsafe":
+        print("Context7 recovery: BLOCKED (private authentication state unsafe)")
+        return 3
+    if state.kind == "managed":
+        print("Context7 recovery: ALREADY MANAGED (nothing to reinstall)")
+        return 0
+    if state.kind == "absent":
+        if scoped_reinstall_candidate(state) is None:
+            print("Context7 recovery: BLOCKED (existing MCP format prevents safe install)")
+            return 3
+        print("Context7 recovery: NOT INSTALLED (safe Context7 registration available)")
+        print("Action: remote-dev-context7 reinstall --yes")
+        return 0
+    if scoped_reinstall_candidate(state) is not None:
+        print("Context7 recovery: REINSTALLABLE (read-only scope verification)")
+        print("Action: remote-dev-context7 reinstall --yes")
+        print("Effect: reset Context7's registration only; customized Context7 fields are discarded")
+        print("Safety: original config backed up; unrelated MCPs and private API key preserved")
+        return 0
+    print("Context7 recovery: BLOCKED (unsupported or ambiguous ownership layout)")
+    print("Action: manual review; do not remove/reinstall other MCP entries")
+    return 3
 
 
 def command_status(paths: Paths, args: argparse.Namespace) -> int:
@@ -914,12 +1156,17 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--menu", action="store_true")
 
+    subparsers.add_parser("plan", help="Read-only Context7 recovery eligibility preview")
+
     for name in ("install", "repair"):
         action = subparsers.add_parser(name)
         action.add_argument("--yes", action="store_true")
         auth = action.add_mutually_exclusive_group()
         auth.add_argument("--anonymous", action="store_true")
         auth.add_argument("--api-key-stdin", action="store_true")
+
+    reinstall_parser = subparsers.add_parser("reinstall")
+    reinstall_parser.add_argument("--yes", action="store_true")
 
     update_parser = subparsers.add_parser("update")
     update_parser.add_argument("--yes", action="store_true")
@@ -944,10 +1191,14 @@ def main() -> int:
         validate_home(paths, create=False)
         if args.command == "status":
             return command_status(paths, args)
+        if args.command == "plan":
+            return command_plan(paths, args)
         if args.command in {"install", "repair"}:
             return command_install(paths, args)
         if args.command == "update":
             return command_update(paths, args)
+        if args.command == "reinstall":
+            return command_reinstall(paths, args)
         if args.command == "test":
             return command_test(paths, args)
         if args.command == "remove":

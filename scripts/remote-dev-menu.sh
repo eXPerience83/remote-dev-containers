@@ -648,9 +648,11 @@ run_antigravity_action() {
 show_context7_menu() {
   local status_summary=""
   local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
+  local -a context7_plan_command=(/usr/local/bin/remote-dev-context7 plan)
   local -a context7_test_command=(/usr/local/bin/remote-dev-context7 test)
   local -a context7_update_command=(/usr/local/bin/remote-dev-context7 update)
   local -a context7_remove_command=(/usr/local/bin/remote-dev-context7 remove)
+  local -a context7_reinstall_command=(/usr/local/bin/remote-dev-context7 reinstall)
 
   while true; do
     status_summary="$(context7_status_summary)"
@@ -661,10 +663,12 @@ ${status_summary}
 =============================
 Context7 is an optional external Upstash service.
 Configuration/status are offline; only Test performs an explicit network check.
-1) Install / repair hosted Context7 MCP integration
+1) Install Context7 / manage authentication (legacy repair)
 2) Test bundled Codex config and Context7 hosted endpoint
 3) Update / reapply reviewed hosted integration contract
 4) Remove Remote Dev-managed Context7 integration
+6) Reinstall damaged Context7 MCP (reset registration; keep API key)
+p) Preview safe MCP recovery (read-only)
 5) Back
 MENU
     read -r -p "> " choice
@@ -680,6 +684,19 @@ MENU
         ;;
       4)
         if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
+        ;;
+      6)
+        if run_context7_action "Context7 isolated MCP reinstall" "${context7_reinstall_command[@]}"; then :; fi
+        ;;
+      p|P)
+        # Unlike lifecycle actions, preview must never harden persistent
+        # state permissions or write the user configuration.
+        local plan_status=0
+        "${context7_plan_command[@]}" || plan_status=$?
+        if (( plan_status != 0 )); then
+          echo "Context7: recovery preview blocked (status $plan_status)" >&2
+        fi
+        pause_for_menu "Press Enter to return to the Context7 menu..."
         ;;
       5)
         return 0
@@ -793,6 +810,47 @@ MENU
   done
 }
 
+show_antigravity_context7_menu() {
+  local output="" code=0
+  local readonly_context7=/usr/local/bin/remote-dev-context7-antigravity
+  while true; do
+    code=0
+    output="$("$readonly_context7" status --menu 2>&1)" || code=$?
+    clear
+    cat <<MENU
+Remote Dev — Antigravity — Context7
+${output}
+==================================
+Context7 uses hosted Streamable HTTP; anonymous mode only.
+No private API key is written to Antigravity JSON.
+1) Preview MCP configuration/reinstallation (read-only)
+2) Install / reinstall only Context7 MCP
+3) Test hosted endpoint (network)
+4) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        "$readonly_context7" plan || :
+        pause_for_menu "Press Enter to return to the Context7 menu..."
+        ;;
+      2)
+        if run_context7_action "Antigravity Context7 reinstall" "$readonly_context7" reinstall; then :; fi
+        ;;
+      3)
+        if run_context7_action "Antigravity Context7 test" "$readonly_context7" test; then :; fi
+        ;;
+      4)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
+
 show_antigravity_menu() {
   local status_summary="" next_mode_summary="" project_summary=""
 
@@ -817,7 +875,7 @@ ${project_summary}
 4) Approval settings...
 5) Install Antigravity from Google
 6) Update Antigravity from Google
-7) Context7 integration [pending #95]
+7) Context7 MCP integration...
 8) Antigravity sign-in [handled during launch]
 9) Sign in to GitHub CLI
 10) Run diagnostics
@@ -845,7 +903,7 @@ MENU
         if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
       7)
-        show_unavailable_action "Context7 for Antigravity is not implemented yet; see #95."
+        show_antigravity_context7_menu
         ;;
       8)
         show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."

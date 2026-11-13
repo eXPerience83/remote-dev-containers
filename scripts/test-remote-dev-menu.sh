@@ -186,6 +186,11 @@ case "${1:-}" in
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
     printf '%s\n' 'Context7: not configured'
     ;;
+  plan)
+    [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
   install|test|update|remove)
     # Production deliberately omits --yes here so the real manager owns the
     # disclosure/confirmation prompt. Reject any accidental extra arguments.
@@ -419,8 +424,9 @@ echo 'Codex runtime update/remove result pauses: OK'
 
 # Each successful Context7 action must consume its duplicate choice at the pause.
 # If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
-run_menu __unset__ $'7\n1\n1\n2\n2\n3\n3\n4\n4\n5\n12\n' "$output"
+run_menu __unset__ $'7\np\np\n1\n1\n2\n2\n3\n3\n4\n4\n5\n12\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 menu actions' \
+  'plan' \
   'install' \
   'test' \
   'update' \

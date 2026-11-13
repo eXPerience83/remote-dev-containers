@@ -94,3 +94,19 @@ Accepted. Human-facing channels are permanently ordered `dev -> edge -> stable =
 An edge build may have a dated identity such as `edge-YYYY.MM.DD-<short-sha>`, but the separate channel remains `edge`; the full source SHA and OCI digest are stronger provenance. Stable publication continues to use exact SemVer and `latest` is only an alias of the same stable digest, never of `dev` or `edge`.
 
 The repository's local source version may advance independently of published images. The `0.2.0` source cut follows an accepted `0.2.0-beta.1` TrueNAS phase; it is not itself proof of a tagged stable release. Published edge keeps its dated identity and `stable`/`latest` require the independent exact `v0.2.0` publisher.
+
+## D016 — Context7 is a role-local hosted MCP registration with explicit reinstall
+
+Accepted as the target contract on 2026-11-13 (implementation **in progress**, PR #324; not a shipping decision). Context7 is hosted and no persistent Context7 runtime binary is part of the image. A new image supplies a diagnosis/reinstall **manager** for each agent role; the operator explicitly reinstalls only the Context7 registration, not the agent or its other MCPs. Legacy narrow `repair` may remain but must not drive the core experience.
+
+Codex uses role-private TOML with an existing private Context7 API key. Antigravity uses independent role-private global MCP JSON and starts with the official Streamable HTTP endpoint **anonymously**; no copying/inlining of Codex keys and no assumption of secret-variable interpolation. Protect user-customized credential-bearing Antigravity entries from overwrites. Workspace/plugin MCP entries are user-owned. Never perform setup on startup or from passive `status`/`plan`/Doctor.
+
+Require provider-native isolated scope, full proposed-config validation, preserved unrelated MCP semantics, safe locks, backups, idempotence, no secret logs, explicit network tests and independent real agent MCP-tool acceptance. Codex TOML must preserve unrelated raw bytes; Antigravity JSON may normalize formatting but must preserve unrelated values and private original bytes in backup. Ambiguous or unsafe scope fails closed. Antigravity terms/privacy review under #53 and TrueNAS GO under #95 are **mandatory shipping gates**; prior CLI review alone is not approval for this new hosted service integration.
+
+Rejected alternatives: special-casing a user's broken TrueNAS file, deleting whole MCP configuration, reinstalling an agent/container, installing persistent `ctx7` via npm, copying credentials between roles, automatic self-repair and publishing Edge as proof before real agent acceptance. Rationale, milestones and negative tests: [Context7 lifecycle plan](context7-mcp-lifecycle-plan.md) ([Spanish summary](context7-mcp-lifecycle-plan.es.md)).
+
+## D017 — Context7 integration-first Edge acceptance sequence
+
+The project owner authorized on 2026-11-13 a revised rollout for PR #324: **do not publish a dev candidate**. Complete the implementation, CodeRabbit fixes and exact-HEAD CI; then merge #324 to `main`. Rebase or regenerate the separate upstream-update PR on that new `main`, validate it and merge it separately. Publish `edge` via its normal gated workflow and perform real Codex + Antigravity MCP acceptance *after* deployment to the explicitly user-approved TrueNAS stack. Record the previous digest and backups so failures can be corrected by a subsequent reviewed Edge change or rolled back. No modifications of `stable`/`latest` are authorized by this decision.
+
+This supersedes D016's dev-candidate-before-merge gate **for this PR only**, not its credential/scope/backup invariants. A green CI alone is not evidence of real agent-tool acceptance. The issue #53 hosted-service/privacy review remains an independently documented item; do not claim human legal sign-off where none exists. The user has explicitly accepted testing the experimental Edge integration and reporting defects for correction.
