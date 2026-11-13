@@ -1149,8 +1149,24 @@ assert_mise_trust_state() {
   local name="$1"
   local action="$2"
   local expected="$3"
-  local rootfs_before output
-  rootfs_before="$(docker diff "$name")"
+  local rootfs_before=""
+  local rootfs_after=""
+  local output=""
+  local role=""
+  local timer_started=0
+  local before_diff_seconds=0
+  local execution_seconds=0
+  local after_diff_seconds=0
+  case "$name" in
+    "$codex_name") role=codex ;;
+    "$antigravity_name") role=antigravity ;;
+    *) fail "native mise state check targeted an unknown role fixture" ;;
+  esac
+  timer_started=$SECONDS
+  rootfs_before="$(docker diff "$name")" \
+    || fail "native mise $role $action/$expected pre-action docker diff failed"
+  before_diff_seconds=$(( SECONDS - timer_started ))
+  timer_started=$SECONDS
   if ! output="$(docker_exec "$name" bash -c '
     set -euo pipefail
     test "${MISE_STATE_DIR+x}" != x
@@ -1211,7 +1227,15 @@ EOF
     printf '%s\n' "$output" >&2  # Only synthetic fixture output.
     fail "native mise state $action/$expected failed"
   fi
-  assert_equal "mise action rootfs changes" "$rootfs_before" "$(docker diff "$name")"
+  execution_seconds=$(( SECONDS - timer_started ))
+  timer_started=$SECONDS
+  rootfs_after="$(docker diff "$name")" \
+    || fail "native mise $role $action/$expected post-action docker diff failed"
+  after_diff_seconds=$(( SECONDS - timer_started ))
+  assert_equal "mise action rootfs changes" "$rootfs_before" "$rootfs_after"
+  printf 'CI TIMING mise-trust-state/%s/%s/%s: before-diff=%ss exec=%ss after-diff=%ss\n' \
+    "$role" "$action" "$expected" \
+    "$before_diff_seconds" "$execution_seconds" "$after_diff_seconds"
 }
 
 assert_project_toolchain_workflow() {
