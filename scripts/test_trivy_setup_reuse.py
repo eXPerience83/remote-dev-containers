@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline contract for reusing the Trivy installation in Build AMD64 (#327)."""
+"""Offline contract for reusing Trivy and its database within Build AMD64 (#327)."""
 
 from pathlib import Path
 
@@ -56,9 +56,13 @@ def validate(workflow: str) -> None:
         require(f"output: {output}" in body, f"report output changed in {name}")
         if index == 0:
             require("skip-setup-trivy:" not in body, "first scan must install Trivy")
+            require("          cache:" not in body, "first scan must restore/update the DB cache")
         else:
             require("          skip-setup-trivy: true" in body,
                     f"subsequent scan must reuse setup: {name}")
+            require(body.count("          cache: false\n") == 1
+                    and "          cache: true\n" not in body,
+                    f"subsequent scan must reuse local DB without remote restore: {name}")
         if index >= 4:
             require("if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true"
                     in body, f"optional comparison trigger changed: {name}")
@@ -100,10 +104,13 @@ def main() -> None:
     later_flag = "          skip-setup-trivy: true\n"
     require(workflow.count(later_flag) == len(SCANS) - 1, "expected seven setup-reuse flags")
     reject_mutation(workflow.replace(later_flag, "", 1), "later installer omission")
+    later_cache = "          cache: false\n"
+    require(workflow.count(later_cache) == len(SCANS) - 1, "expected seven local DB cache reuses")
+    reject_mutation(workflow.replace(later_cache, "", 1), "unnecessary later DB cache restore")
     reject_mutation(workflow.replace("output: trivy-remote-dev.json",
                                      "output: altered-report.json", 1),
                     "missing runtime critical report")
-    print("PASS: Build Trivy installs once and retains all eight scans, artifacts and security gate")
+    print("PASS: Build Trivy installs/restores once and retains all eight scans, artifacts and gate")
 
 
 if __name__ == "__main__":

@@ -166,6 +166,51 @@ def test_python_315_publisher_wiring(workflow: str) -> None:
         raise AssertionError(f"publisher contract accepted misplaced Python 3.15 pin: {label}")
 
 
+def validate_trivy_db_cache_reuse(workflow: str) -> None:
+    """Only the first scan restores the Actions cache; later scans reuse the local DB."""
+    steps = (
+        "Generate exact edge base SPDX SBOM",
+        "Generate exact edge Remote Dev SPDX SBOM",
+        "Scan exact edge base candidate for critical vulnerabilities",
+        "Scan exact edge Remote Dev candidate for critical vulnerabilities",
+    )
+    pin = "uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25"
+    for index, name in enumerate(steps):
+        step = named_workflow_step(workflow, name)
+        require_text(step, pin, f"exact pinned Trivy action in {name}")
+        if index == 0:
+            require("          cache:" not in step,
+                    "first edge scan must restore/update DB using the Actions cache")
+            require("skip-setup-trivy:" not in step,
+                    "first edge scan must install the Trivy binary")
+        else:
+            require("          skip-setup-trivy: true" in step,
+                    f"edge scan must reuse installed Trivy: {name}")
+            require(step.count("          cache: false\n") == 1
+                    and "          cache: true\n" not in step,
+                    f"edge scan must reuse local DB without remote restore: {name}")
+
+
+def test_trivy_db_cache_reuse(workflow: str) -> None:
+    validate_trivy_db_cache_reuse(workflow)
+    first_output = "          output: sbom-publish-base.spdx.json\n"
+    require(workflow.count(first_output) == 1, "missing initial edge SBOM fixture")
+    later_cache = "          cache: false\n"
+    require(workflow.count(later_cache) == 3, "expected three local edge DB reuses")
+    mutations = (
+        ("first scan must restore the cache",
+         workflow.replace(first_output, first_output + later_cache, 1)),
+        ("later scan must not restore the cache",
+         workflow.replace(later_cache, "", 1)),
+    )
+    for label, candidate in mutations:
+        try:
+            validate_trivy_db_cache_reuse(candidate)
+        except AssertionError:
+            continue
+        raise AssertionError(f"edge cache contract accepted mutation: {label}")
+
+
 def main() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
@@ -201,6 +246,7 @@ def main() -> None:
         "edge publisher checks that all Dockerfile input paths trigger rebuilds",
     )
     test_python_315_publisher_wiring(workflow)
+    test_trivy_db_cache_reuse(workflow)
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
