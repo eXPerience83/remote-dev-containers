@@ -1305,35 +1305,14 @@ assert_project_toolchain_workflow() {
   wait_for_health_command "$name"
 }
 
-run_hardened_antigravity_fixture() {
-  local description="$1"
-  local fixture_tmp="$2"
-  shift 2
-  local output=""
-  local status=0
-  output="$(docker_exec --user 65534:65534 "$antigravity_name" env \
-    TMPDIR="$fixture_tmp" \
-    TMP="$fixture_tmp" \
-    TEMP="$fixture_tmp" \
-    UV_CACHE_DIR="$fixture_tmp" \
-    UV_TOOL_DIR="$fixture_tmp" \
-    NPM_CONFIG_CACHE="$fixture_tmp" \
-    PIP_CACHE_DIR="$fixture_tmp" \
-    PRE_COMMIT_HOME="$fixture_tmp" \
-    "$@" 2>&1)" || status=$?
-  if (( status != 0 )); then
-    if docker_exec_infrastructure_failure "$status"; then
-      fail "$description docker exec failed"
-    fi
-    printf '%s\n' "${output:0:32768}" >&2
-    fail "$description"
-  fi
-}
-
+# Run all eight independent rootless fixture processes through one Docker exec.
+# Keep a per-child timeout and fail-fast message.
 assert_hardened_antigravity_host_fixtures() {
   local fixture_root="/workspace/hardening-antigravity-fixtures"
   local fixture_tmp="$fixture_root/tmp"
   local copy_status=0
+  local output=""
+  local status=0
   docker_exec "$antigravity_name" install -d -m 0755 \
     "$fixture_root/scripts" "$fixture_tmp" >/dev/null 2>&1 \
     || fail "hardened Antigravity fixture roots could not be prepared"
@@ -1355,22 +1334,58 @@ assert_hardened_antigravity_host_fixtures() {
   docker_exec "$antigravity_name" chmod -R a+rX "$fixture_root/scripts" >/dev/null 2>&1 \
     || fail "Antigravity copied fixture sources could not be made readable"
 
-  run_hardened_antigravity_fixture "Antigravity runtime/admission fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-runtime-policy-neutral.sh"
-  run_hardened_antigravity_fixture "Antigravity security fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-security-regressions.sh"
-  run_hardened_antigravity_fixture "Antigravity repair fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-repair-download-hardening.sh"
-  run_hardened_antigravity_fixture "Antigravity private-staging fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-staging-wrappers.sh"
-  run_hardened_antigravity_fixture "Antigravity installer-origin fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-antigravity-redirects.sh"
-  run_hardened_antigravity_fixture "Antigravity OAuth fixture failed under hardening" \
-    "$fixture_tmp" python "$fixture_root/scripts/test-antigravity-oauth.py"
-  run_hardened_antigravity_fixture "Antigravity picker fixture failed under hardening" \
-    "$fixture_tmp" python "$fixture_root/scripts/test-antigravity-picker.py"
-  run_hardened_antigravity_fixture "Antigravity resume helper fixture failed under hardening" \
-    "$fixture_tmp" bash "$fixture_root/scripts/test-run-antigravity-picker.sh"
+  # Outer cap allows eight separate 30s budgets plus Docker overhead.
+  # The host never invokes the test scripts with elevated privileges.
+  output="$(timeout --foreground --kill-after=5s 270s \
+    docker exec -i --user 65534:65534 "$antigravity_name" env \
+      TMPDIR="$fixture_tmp" \
+      TMP="$fixture_tmp" \
+      TEMP="$fixture_tmp" \
+      UV_CACHE_DIR="$fixture_tmp" \
+      UV_TOOL_DIR="$fixture_tmp" \
+      NPM_CONFIG_CACHE="$fixture_tmp" \
+      PIP_CACHE_DIR="$fixture_tmp" \
+      PRE_COMMIT_HOME="$fixture_tmp" \
+      bash -s -- "$fixture_root" 2>&1 <<'ANTIGRAVITY_FIXTURE_BATCH'
+set -euo pipefail
+fixture_root="$1"
+run_fixture() {
+  local description="$1"
+  shift
+  local status=0
+  timeout --foreground --kill-after=5s 30s "$@" || status=$?
+  if (( status != 0 )); then
+    printf 'ERROR: %s (exit %s)\n' "$description" "$status" >&2
+    exit "$status"
+  fi
+}
+run_fixture "Antigravity runtime/admission fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-antigravity-runtime-policy-neutral.sh"
+run_fixture "Antigravity security fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-antigravity-security-regressions.sh"
+run_fixture "Antigravity repair fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-antigravity-repair-download-hardening.sh"
+run_fixture "Antigravity private-staging fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-antigravity-staging-wrappers.sh"
+run_fixture "Antigravity installer-origin fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-antigravity-redirects.sh"
+run_fixture "Antigravity OAuth fixture failed under hardening" \
+  python "$fixture_root/scripts/test-antigravity-oauth.py"
+run_fixture "Antigravity picker fixture failed under hardening" \
+  python "$fixture_root/scripts/test-antigravity-picker.py"
+run_fixture "Antigravity resume helper fixture failed under hardening" \
+  bash "$fixture_root/scripts/test-run-antigravity-picker.sh"
+ANTIGRAVITY_FIXTURE_BATCH
+  )" || status=$?
+  if (( status != 0 )); then
+    printf '%s\n' "${output:0:32768}" >&2
+    case "$status" in
+      124) fail "Antigravity fixture batch timed out" ;;
+      125) fail "Antigravity fixture batch timeout invocation failed" ;;
+      137) fail "Antigravity fixture batch required KILL escalation" ;;
+      *) fail "Antigravity hardened fixture batch failed" ;;
+    esac
+  fi
 
   docker_exec "$antigravity_name" rm -rf -- "$fixture_root" "$fixture_tmp" >/dev/null 2>&1 \
     || fail "Antigravity hardened fixtures did not clean up"
