@@ -1,6 +1,6 @@
 # Context7 alojado para Antigravity CLI
 
-> **Estado de publicación:** Integración experimental desarrollada en el PR #324 (borrador). Aún no está fusionada ni incluida en las imágenes publicadas `edge`, `stable` o `latest`. Los comandos requieren una futura imagen revisada que contenga estos cambios.
+> **Estado verificado (14-11-2026):** PR #324 **fusionado** como `258d79a` y distribuido en el canal experimental `edge`. Aún **no está aceptado funcionalmente en TrueNAS** para ambos agentes ni publicado en una estable posterior. No confundir CI verde con una llamada real de `agy /mcp`. Consulta [la guía de aceptación v0.3.0](v0.3.0-acceptance.es.md).
 
 Esta integración **instala o reinstala únicamente el registro MCP**, no descarga un servidor Context7 en la imagen. Antigravity usa `~/.gemini/config/mcp_config.json`, con la propiedad `mcpServers.context7.serverUrl` para el transporte HTTP.
 
