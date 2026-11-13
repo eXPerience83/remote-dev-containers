@@ -963,8 +963,8 @@ def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
         "inline-mcp-root": (
             'model = "synthetic"\nmcp_servers = { playwright = { command = "custom" } }\n'
         ),
-        "inline-mcp-playwright": (
-            'model = "synthetic"\n[mcp_servers]\nplaywright = { command = "custom" }\n'
+        "empty-inline-mcp-root": (
+            'model = "synthetic"\nmcp_servers = {}\n'
         ),
     }
     for label, original in cases.items():
