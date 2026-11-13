@@ -15,6 +15,12 @@ on:
 permissions:
   contents: read
 
+# Drop superseded PR builds only. Push/main and owner-dispatched checks retain
+# unique groups so a new PR commit cannot cancel release evidence or canaries.
+concurrency:
+  group: build-amd64-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
