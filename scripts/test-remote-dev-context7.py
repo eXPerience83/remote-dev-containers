@@ -1048,12 +1048,19 @@ args = ["--safe"]
         if result.stdout.strip() != "Context7: configured (anonymous)":
             raise AssertionError(f"unexpected anonymous status: {result.stdout!r}")
         plain_status = run_manager(home, "status")
-        if (
-            plain_status.returncode != result.returncode
-            or plain_status.stdout != result.stdout
-            or plain_status.stderr != result.stderr
+        require_success(plain_status, "detailed status")
+        if plain_status.stderr != result.stderr:
+            raise AssertionError("Context7 status variants produced different errors")
+        if plain_status.stdout.splitlines()[:1] != result.stdout.splitlines():
+            raise AssertionError("Context7 menu status differs from the detailed status line")
+        for detail in (
+            "Endpoint: https://mcp.context7.com/mcp",
+            "Required for Codex startup: no",
+            "Passive status network: not used",
+            "Service operator: Upstash",
         ):
-            raise AssertionError("Context7 status --menu compatibility alias changed semantics")
+            if detail not in plain_status.stdout or detail in result.stdout:
+                raise AssertionError("Context7 status --menu did not preserve its summary-only contract")
         config_before_unknown = config.read_bytes()
         invalid = run_manager(home, "unknown")
         if invalid.returncode != 2 or "invalid choice" not in invalid.stderr:
