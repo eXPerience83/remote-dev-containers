@@ -557,6 +557,83 @@ def recognized_legacy_recovery(state: ConfigState) -> str | None:
     )
 
 
+def scoped_reinstall_candidate(state: ConfigState) -> str | None:
+    """Reinstall the *entire* Context7 MCP registration, not its legacy fields.
+
+    Syntax-aware at TOML table boundaries. Preserve all unrelated input bytes
+    except a unique orphaned Remote Dev END marker. Reset only Context7's own
+    parent/child TOML tables. An ambiguous scope fails closed.
+    """
+    if state.kind in {"invalid", "conflict"}:
+        return None
+    if state.kind == "managed":
+        return state.text
+    if state.kind == "absent":
+        return append_managed_block(state.text)
+    try:
+        before = parse_toml(state.text, label="Codex MCP config")
+    except Context7Error:
+        return None
+    if not isinstance(context7_table(before), dict):
+        return None
+    lines = state.text.splitlines(keepends=True)
+    roots = [i for i, line in enumerate(lines)
+             if line.rstrip("\r\n") == "[mcp_servers.context7]"]
+    if len(roots) != 1:
+        return None
+    start = roots[0]
+    starts = [i for i, line in enumerate(lines)
+              if line.rstrip("\r\n") == START_MARKER]
+    ends = [i for i, line in enumerate(lines)
+            if line.rstrip("\r\n") == END_MARKER]
+    if len(starts) > 1 or len(ends) > 1:
+        return None
+    if starts and (starts[0] != start - 1):
+        return None
+    if ends and ends[0] < start:
+        return None
+
+    # Context7 child tables can follow its root. Stop at the next unrelated
+    # TOML table, preserving everything beginning at that table verbatim.
+    after = len(lines)
+    foreign_seen = False
+    for i in range(start + 1, len(lines)):
+        header = lines[i].strip()
+        if not (header.startswith("[") and header.endswith("]")):
+            continue
+        if header.startswith("[mcp_servers.context7."):
+            if foreign_seen:
+                return None
+            continue
+        foreign_seen = True
+        if after == len(lines):
+            after = i
+    if ends and ends[0] >= start and ends[0] < after:
+        # The old END is part of the Context7 stanza, and is removed with it.
+        pass
+    keep = set(range(start, after))
+    if starts:
+        keep.add(starts[0])
+    if ends:
+        keep.add(ends[0])
+    pieces = []
+    for i, line in enumerate(lines):
+        if i == start:
+            pieces.append(MANAGED_BLOCK)
+        if i not in keep:
+            pieces.append(line)
+    candidate = "".join(pieces)
+    try:
+        rebuilt = parse_toml(candidate, label="reinstalled MCP config")
+        if (context7_table(rebuilt) != MANAGED_CONTRACT
+                or without_context7(before) != without_context7(rebuilt)
+                or inspect_config_candidate(candidate) != "managed"):
+            return None
+    except Context7Error:
+        return None
+    return candidate
+
+
 def inspect_config_candidate(text: str) -> str:
     """Validate a proposed repair without reading or writing private files."""
     try:
@@ -796,6 +873,23 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
     return 0
 
 
+def command_reinstall(paths: Paths, args: argparse.Namespace) -> int:
+    """Explicitly replace *only* Context7's MCP registration; retain key."""
+    confirm("Reinstall only Context7 MCP (reset custom Context7 settings)", yes=args.yes)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        auth, _ = secret_status(paths)
+        if auth == "unsafe":
+            raise Context7Error("Context7 authentication state is unsafe; reinstall blocked")
+        candidate = scoped_reinstall_candidate(state)
+        if candidate is None:
+            raise Context7Error("Context7 registration cannot be isolated safely; no changes made")
+        changed = backup_and_replace_config(paths, state.text, candidate)
+    print("Context7 MCP: reinstalled" if changed else "Context7 MCP: already current")
+    print("Context7 API key: preserved (no credential changes)")
+    return 0
+
+
 def command_update(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Update/reapply", yes=args.yes)
     changed = apply_managed_config(
@@ -853,11 +947,11 @@ def status_line(paths: Paths) -> tuple[str, int]:
             reason = ("Context7 ownership markers malformed: " + subtype)
             if subtype == "missing BEGIN marker":
                 reason += missing_begin_layout_details(state.text)
-                if (recognized_legacy_recovery(state) is not None
+                if (scoped_reinstall_candidate(state) is not None
                         and secret_status(paths)[0] != "unsafe"):
-                    reason += "; safe MCP reconstruction available via repair"
+                    reason += "; reinstall Context7 via menu or reinstall --yes"
                 else:
-                    reason += "; no verified automatic recovery; manual review required"
+                    reason += "; no verified scoped reinstall; manual review required"
         else:
             reason = {
                 "invalid": "Codex config unreadable or invalid",
@@ -890,14 +984,11 @@ def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
     if state.kind == "absent":
         print("Context7 recovery: NOT INSTALLED (use install; no existing block to reclaim)")
         return 0
-    if state.kind == "unmanaged":
-        print("Context7 recovery: BLOCKED (user-owned MCP entry; will not overwrite)")
-        return 3
-    if state.kind == "markers-malformed" and recognized_legacy_recovery(state) is not None:
-        print("Context7 recovery: ELIGIBLE (read-only verification)")
-        print("Action: remote-dev-context7 repair --yes")
-        print("Effect: rebuild only reviewed Context7 MCP entry, keep existing API key")
-        print("Safety: original config backed up; unrelated MCP definitions preserved")
+    if scoped_reinstall_candidate(state) is not None:
+        print("Context7 recovery: REINSTALLABLE (read-only scope verification)")
+        print("Action: remote-dev-context7 reinstall --yes")
+        print("Effect: reset Context7's registration only; customized Context7 fields are discarded")
+        print("Safety: original config backed up; unrelated MCPs and private API key preserved")
         return 0
     print("Context7 recovery: BLOCKED (unsupported or ambiguous ownership layout)")
     print("Action: manual review; do not remove/reinstall other MCP entries")
@@ -1044,6 +1135,9 @@ def build_parser() -> argparse.ArgumentParser:
         auth.add_argument("--anonymous", action="store_true")
         auth.add_argument("--api-key-stdin", action="store_true")
 
+    reinstall_parser = subparsers.add_parser("reinstall")
+    reinstall_parser.add_argument("--yes", action="store_true")
+
     update_parser = subparsers.add_parser("update")
     update_parser.add_argument("--yes", action="store_true")
 
@@ -1073,6 +1167,8 @@ def main() -> int:
             return command_install(paths, args)
         if args.command == "update":
             return command_update(paths, args)
+        if args.command == "reinstall":
+            return command_reinstall(paths, args)
         if args.command == "test":
             return command_test(paths, args)
         if args.command == "remove":
