@@ -16,6 +16,14 @@ ci_phase_checkpoint() {
   ci_phase_started=$SECONDS
 }
 
+# Independent subphase timer: detailed readings must not reset outer phase totals.
+ci_admin_subphase_checkpoint() {
+  local subphase="$1"
+  printf 'CI TIMING admin-and-development-tooling/%s: %ss\n' \
+    "$subphase" "$(( SECONDS - ci_admin_subphase_started ))"
+  ci_admin_subphase_started=$SECONDS
+}
+
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -1785,6 +1793,7 @@ assert_distinct_agent_sources
 assert_hardened_codex_policy_and_doctor
 assert_role_private_agent_guidance
 ci_phase_checkpoint "initial-isolation-and-auth"
+ci_admin_subphase_started=$SECONDS
 # Feed the regression into the existing hardened role containers. No new mounts.
 # docker exec does not inherit startup exports; supply the role scratch path
 # already verified by assert_development_scratch_environment above.
@@ -1792,15 +1801,25 @@ for admin_role_container in "$codex_name" "$antigravity_name"; do
   timeout --foreground --kill-after=5s 180s docker exec -i -e TMPDIR=/workspace/.remote-dev-tmp/tmp "$admin_role_container" /bin/bash -s \
     < "$source_root/scripts/test-admin-python-isolation.sh" \
     || fail "administrative Python isolation failed"
+  if [[ "$admin_role_container" == "$codex_name" ]]; then
+    ci_admin_subphase_checkpoint "administrative-python-codex"
+  else
+    ci_admin_subphase_checkpoint "administrative-python-antigravity"
+  fi
 done
 assert_project_toolchain_workflow "$codex_name" Codex
+ci_admin_subphase_checkpoint "project-toolchain-codex"
 assert_project_toolchain_workflow "$antigravity_name" Antigravity
+ci_admin_subphase_checkpoint "project-toolchain-antigravity"
 assert_hardened_codex_runtime_regressions
+ci_admin_subphase_checkpoint "codex-runtime-regressions"
 assert_hardened_antigravity_host_fixtures
+ci_admin_subphase_checkpoint "antigravity-host-fixtures"
 assert_mise_trust_state "$codex_name" prepare untrusted
 assert_mise_trust_state "$antigravity_name" prepare untrusted
 assert_mise_trust_state "$codex_name" trust trusted
 assert_mise_trust_state "$antigravity_name" observe untrusted
+ci_admin_subphase_checkpoint "mise-trust-state"
 
 ci_phase_checkpoint "admin-and-development-tooling"
 remove_owned_container "$launcher_name" "$launcher_id" \
