@@ -796,8 +796,14 @@ def assert_nested_headers_recovery_fails_closed(module, root: Path) -> None:
             if module.safe_nested_headers_legacy_candidate(state) is not None:
                 raise AssertionError(f"{label}: unsafe layout accepted")
         plan = run_manager(home, "plan")
-        if plan.returncode != 3 or "BLOCKED" not in plan.stdout:
-            raise AssertionError(f"{label}: unsafe plan did not block recovery")
+        # The strict legacy *repair* must reject every mutated fixture.
+        # The separate, explicit *reinstall* can reset Context7-owned fields
+        # if it can prove that other MCP definitions remain intact.
+        if label == "duplicate-end":
+            if plan.returncode != 3 or "BLOCKED" not in plan.stdout:
+                raise AssertionError(f"{label}: ambiguous markers were reinstallable")
+        elif plan.returncode != 0 or "REINSTALLABLE" not in plan.stdout:
+            raise AssertionError(f"{label}: isolated reinstall should be available")
         result = run_manager(home, "repair", "--yes")
         require_failure(result, f"{label}: unsafe repair")
         if config.read_bytes() != preimage:
