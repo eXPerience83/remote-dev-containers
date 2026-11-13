@@ -242,6 +242,7 @@ jobs:
           format: spdx-json
           output: sbom-remote-dev.spdx.json
           skip-setup-trivy: true
+          cache: false
 
       - name: Record exact Chromium identity and notices in both SPDX images
         run: |
@@ -261,6 +262,7 @@ jobs:
           format: json
           output: trivy-base.json
           skip-setup-trivy: true
+          cache: false
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -273,6 +275,7 @@ jobs:
           format: json
           output: trivy-remote-dev.json
           skip-setup-trivy: true
+          cache: false
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -286,6 +289,7 @@ jobs:
           format: spdx-json
           output: sbom-before-base.spdx.json
           skip-setup-trivy: true
+          cache: false
           exit-code: '0'
 
       - name: Record before base json evidence
@@ -296,6 +300,7 @@ jobs:
           format: json
           output: trivy-before-base.json
           skip-setup-trivy: true
+          cache: false
           exit-code: '0'
 
       - name: Record before runtime spdx-json evidence
@@ -306,6 +311,7 @@ jobs:
           format: spdx-json
           output: sbom-before-runtime.spdx.json
           skip-setup-trivy: true
+          cache: false
           exit-code: '0'
 
       - name: Record before runtime json evidence
@@ -316,6 +322,7 @@ jobs:
           format: json
           output: trivy-before-runtime.json
           skip-setup-trivy: true
+          cache: false
           exit-code: '0'
 
       - name: Upload security and SBOM reports
