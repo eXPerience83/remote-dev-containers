@@ -18,6 +18,7 @@ Use **Context7 integration...** in the Codex menu or:
 
 ```bash
 remote-dev-context7 status
+remote-dev-context7 plan
 remote-dev-context7 install
 remote-dev-context7 repair
 remote-dev-context7 test
@@ -38,6 +39,14 @@ A plain interactive `install` or `repair` asks how authentication should be hand
 The existing non-interactive manager contract remains available with `--yes`, `--anonymous` and `--api-key-stdin`. Device-login automation can additionally choose `--cli-channel reviewed` or `--cli-channel latest`; the interactive menu uses `auto`.
 
 `remote-dev-context7 update` revalidates/reapplies the hosted MCP configuration shipped by the image. It is separate from the transient `ctx7` CLI version used only for device authentication.
+
+### Safe recovery of a legacy MCP registration
+
+The Codex menu and `remote-dev-context7 status --menu` detect malformed ownership markers, but **never repair them automatically**. `remote-dev-context7 plan` is a read-only preview that reports whether a reviewed legacy layout can be reconstructed and recommends `remote-dev-context7 repair --yes` only when eligible.
+
+Recovery recognizes an older `[mcp_servers.context7.env_http_headers]` nested header table containing the reviewed mapping, with neither `enabled` nor `required`, a missing `BEGIN` and a displaced `END` beyond unrelated MCP tables. Only the Context7 MCP registration is rebuilt; unrelated table bytes and the existing private API key are preserved. A private full-config backup is written before changing the config. `update`, `status`, `plan` and diagnostics never reclaim ambiguous ownership.
+
+**There is no local Context7 server package in the image to reinstall**: this is a hosted HTTP MCP registration. Explicit repair/reinstall reconstructs that entry under tightly scoped conditions. If the plan returns `BLOCKED`, do not force an install over customized configuration.
 
 ## Reviewed and latest official Context7 CLI
 

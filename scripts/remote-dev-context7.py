@@ -468,6 +468,95 @@ def safe_interleaved_legacy_candidate(state: ConfigState) -> str | None:
     return candidate
 
 
+def safe_nested_headers_legacy_candidate(state: ConfigState) -> str | None:
+    """Recognize the exact hosted Context7 legacy *subtable* syntax.
+
+    Old Codex MCP registration may use [mcp_servers.context7.env_http_headers]
+    rather than the managed inline-header table. Rebuilding Context7 requires
+    semantic equality of its two known fields, no user customization, a single
+    displaced END marker, and unchanged semantics for every other MCP.
+    """
+    if (state.kind != "markers-malformed"
+            or marker_layout_reason(state.text) != "missing BEGIN marker"):
+        return None
+    lines = state.text.splitlines(keepends=True)
+    ctx_header = "[mcp_servers.context7]\n"
+    nested_header = "[mcp_servers.context7.env_http_headers]\n"
+    ctx = [i for i, line in enumerate(lines) if line == ctx_header]
+    ends = [i for i, line in enumerate(lines) if line == END_MARKER + "\n"]
+    if len(ctx) != 1 or len(ends) != 1 or ctx[0] >= ends[0]:
+        return None
+    start, old_end = ctx[0], ends[0]
+    headers = [
+        (i, lines[i].rstrip("\r\n"))
+        for i in range(start + 1, old_end)
+        if lines[i].startswith("[") and lines[i].rstrip("\r\n").endswith("]")
+    ]
+    if len(headers) < 2 or headers[0][1] != nested_header.rstrip("\n"):
+        return None
+    nested = headers[0][0]
+    first_other = headers[1][0]
+    if any(
+        not header.startswith("[mcp_servers.")
+        or header.startswith("[mcp_servers.context7.")
+        or header == "[mcp_servers.context7]"
+        for _, header in headers[1:]
+    ):
+        return None
+    url_line = f'url = "{CONTEXT7_ENDPOINT}"\n'
+    url_fields = [line for line in lines[start + 1:nested] if line.strip()]
+    if url_fields != [url_line]:
+        return None
+    key_fields = [
+        (i, line) for i, line in enumerate(lines[nested + 1:first_other], nested + 1)
+        if line.strip()
+    ]
+    accepted_keys = {
+        f'{CONTEXT7_ENV} = "{CONTEXT7_ENV}"\n',
+        f'"{CONTEXT7_ENV}" = "{CONTEXT7_ENV}"\n',
+    }
+    if len(key_fields) != 1 or key_fields[0][1] not in accepted_keys:
+        return None
+    try:
+        before = parse_toml(state.text, label="Codex config")
+    except Context7Error:
+        return None
+    table = context7_table(before)
+    if (not isinstance(table, dict)
+            or set(table) != {"url", "env_http_headers"}
+            or table["url"] != MANAGED_CONTRACT["url"]
+            or table["env_http_headers"] != MANAGED_CONTRACT["env_http_headers"]):
+        return None
+
+    # Preserve the *exact* bytes following the known header mapping, including
+    # inter-table spacing and every unrelated MCP table. Only the misplaced END
+    # comment and the known two-field Context7 stanza are removed.
+    end_of_key = key_fields[0][0] + 1
+    candidate = (
+        "".join(lines[:start]) + MANAGED_BLOCK
+        + "".join(lines[end_of_key:old_end])
+        + "".join(lines[old_end + 1:])
+    )
+    try:
+        after = parse_toml(candidate, label="reconstructed Codex config")
+    except Context7Error:
+        return None
+    if (context7_table(after) != MANAGED_CONTRACT
+            or without_context7(before) != without_context7(after)
+            or inspect_config_candidate(candidate) != "managed"):
+        return None
+    return candidate
+
+
+def recognized_legacy_recovery(state: ConfigState) -> str | None:
+    """Only these three reviewed layouts may be reconstructed."""
+    return (
+        safe_missing_begin_candidate(state)
+        or safe_interleaved_legacy_candidate(state)
+        or safe_nested_headers_legacy_candidate(state)
+    )
+
+
 def inspect_config_candidate(text: str) -> str:
     """Validate a proposed repair without reading or writing private files."""
     try:
@@ -500,9 +589,7 @@ def managed_candidate(
             raise Context7Error(
                 "malformed Context7 ownership markers require explicit install/repair --yes"
             )
-        candidate = safe_missing_begin_candidate(state)
-        if candidate is None:
-            candidate = safe_interleaved_legacy_candidate(state)
+        candidate = recognized_legacy_recovery(state)
         if candidate is None:
             raise Context7Error("malformed Context7 ownership markers require manual review")
         return candidate
@@ -764,6 +851,11 @@ def status_line(paths: Paths) -> tuple[str, int]:
             reason = ("Context7 ownership markers malformed: " + subtype)
             if subtype == "missing BEGIN marker":
                 reason += missing_begin_layout_details(state.text)
+                if (recognized_legacy_recovery(state) is not None
+                        and secret_status(paths)[0] != "unsafe"):
+                    reason += "; safe MCP reconstruction available via repair"
+                else:
+                    reason += "; no verified automatic recovery; manual review required"
         else:
             reason = {
                 "invalid": "Codex config unreadable or invalid",
@@ -781,6 +873,33 @@ def status_line(paths: Paths) -> tuple[str, int]:
     if secret == "missing":
         return "Context7: configured (anonymous)", 0
     return "Context7: configured but API-key state is unsafe", 3
+
+
+def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
+    """Passive/offline eligibility preview; never modifies config or keys."""
+    state = inspect_config(paths)
+    auth, _ = secret_status(paths)
+    if auth == "unsafe":
+        print("Context7 recovery: BLOCKED (private authentication state unsafe)")
+        return 3
+    if state.kind == "managed":
+        print("Context7 recovery: ALREADY MANAGED (nothing to reinstall)")
+        return 0
+    if state.kind == "absent":
+        print("Context7 recovery: NOT INSTALLED (use install; no existing block to reclaim)")
+        return 0
+    if state.kind == "unmanaged":
+        print("Context7 recovery: BLOCKED (user-owned MCP entry; will not overwrite)")
+        return 3
+    if state.kind == "markers-malformed" and recognized_legacy_recovery(state) is not None:
+        print("Context7 recovery: ELIGIBLE (read-only verification)")
+        print("Action: remote-dev-context7 repair --yes")
+        print("Effect: rebuild only reviewed Context7 MCP entry, keep existing API key")
+        print("Safety: original config backed up; unrelated MCP definitions preserved")
+        return 0
+    print("Context7 recovery: BLOCKED (unsupported or ambiguous ownership layout)")
+    print("Action: manual review; do not remove/reinstall other MCP entries")
+    return 3
 
 
 def command_status(paths: Paths, args: argparse.Namespace) -> int:
@@ -914,6 +1033,8 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--menu", action="store_true")
 
+    subparsers.add_parser("plan", help="Read-only Context7 recovery eligibility preview")
+
     for name in ("install", "repair"):
         action = subparsers.add_parser(name)
         action.add_argument("--yes", action="store_true")
@@ -944,6 +1065,8 @@ def main() -> int:
         validate_home(paths, create=False)
         if args.command == "status":
             return command_status(paths, args)
+        if args.command == "plan":
+            return command_plan(paths, args)
         if args.command in {"install", "repair"}:
             return command_install(paths, args)
         if args.command == "update":

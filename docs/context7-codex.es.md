@@ -18,6 +18,7 @@ Utiliza **Context7 integration...** en el menú de Codex o:
 
 ```bash
 remote-dev-context7 status
+remote-dev-context7 plan
 remote-dev-context7 install
 remote-dev-context7 repair
 remote-dev-context7 test
@@ -38,6 +39,14 @@ Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous` y `--api-key-stdin`. La automatización del device login puede elegir además `--cli-channel reviewed` o `--cli-channel latest`; el menú interactivo utiliza `auto`.
 
 `remote-dev-context7 update` vuelve a validar/aplicar la configuración MCP alojada que incluye la imagen. Es independiente de la versión transitoria de `ctx7`, que solo se utiliza para la autenticación por dispositivo.
+
+### Recuperación segura de un registro MCP antiguo
+
+El diagnóstico del menú y `remote-dev-context7 status --menu` detectan un bloque Context7 mal delimitado, pero **nunca lo corrigen automáticamente**. `remote-dev-context7 plan` es una vista previa de solo lectura: indica si se reconoce una de las variantes estrictamente revisadas y recomienda `remote-dev-context7 repair --yes` solo cuando procede.
+
+La recuperación reconoce la variante antigua que declara `[mcp_servers.context7.env_http_headers]` con la cabecera oficial, sin `enabled` ni `required`, con `BEGIN` ausente y `END` desplazado detrás de otras tablas MCP. Solo se reconstruye el bloque Context7; se conservan literalmente las demás tablas, su contenido y la API key privada existente. Se guarda una copia privada del TOML previo; `update`, `status`, `plan` y el diagnóstico no reclaman ni reparan configuraciones ambiguas.
+
+**No hay un servidor Context7 instalado en la imagen que reinstalar**: es una entrada MCP HTTP alojada. La opción de reinstalación/reparación reconstruye ese registro bajo condiciones estrictas y exige confirmación. Si el plan dice `BLOCKED`, no se debe forzar una instalación sobre una configuración personalizada.
 
 ## CLI de Context7 revisado y última versión oficial
 

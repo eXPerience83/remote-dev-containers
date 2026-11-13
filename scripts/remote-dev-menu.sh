@@ -648,6 +648,7 @@ run_antigravity_action() {
 show_context7_menu() {
   local status_summary=""
   local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
+  local -a context7_plan_command=(/usr/local/bin/remote-dev-context7 plan)
   local -a context7_test_command=(/usr/local/bin/remote-dev-context7 test)
   local -a context7_update_command=(/usr/local/bin/remote-dev-context7 update)
   local -a context7_remove_command=(/usr/local/bin/remote-dev-context7 remove)
@@ -661,10 +662,11 @@ ${status_summary}
 =============================
 Context7 is an optional external Upstash service.
 Configuration/status are offline; only Test performs an explicit network check.
-1) Install / repair hosted Context7 MCP integration
+1) Install / safely rebuild hosted Context7 MCP integration
 2) Test bundled Codex config and Context7 hosted endpoint
 3) Update / reapply reviewed hosted integration contract
 4) Remove Remote Dev-managed Context7 integration
+p) Preview safe MCP recovery (read-only)
 5) Back
 MENU
     read -r -p "> " choice
@@ -680,6 +682,9 @@ MENU
         ;;
       4)
         if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
+        ;;
+      p|P)
+        if run_context7_action "Context7 recovery preview" "${context7_plan_command[@]}"; then :; fi
         ;;
       5)
         return 0
