@@ -57,6 +57,13 @@ class AntigravityOfficialUrlTests(unittest.TestCase):
                 with self.subTest(codepoint=point, url=repr(url)):
                     self.assertFalse(origin.safe_official_url(url))
 
+    def test_shared_raw_control_helper_preserves_exact_boundary(self) -> None:
+        self.assertFalse(origin.has_unsafe_raw_url_characters("https://antigravity.google/%20"))
+        for point in (*range(0x21), 0x7F):
+            with self.subTest(codepoint=point):
+                self.assertTrue(origin.has_unsafe_raw_url_characters(chr(point)))
+        self.assertFalse(origin.has_unsafe_raw_url_characters("https://antigravity.google"))
+
     def test_percent_encoded_space_remains_allowed(self) -> None:
         self.assertTrue(
             origin.safe_official_url("https://antigravity.google/cli/%20install.sh")
