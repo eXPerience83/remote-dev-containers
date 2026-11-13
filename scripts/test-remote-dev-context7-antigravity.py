@@ -114,6 +114,7 @@ class Context7Antigravity(unittest.TestCase):
             ("url-userinfo", {"serverUrl": "https://user:VERY_PRIVATE_VALUE@mcp.context7.com/mcp"}),
             ("disabled", {"serverUrl": manager.ENDPOINT, "disabled": True}),
             ("extra-timeout", {"serverUrl": manager.ENDPOINT, "timeoutSeconds": 60}),
+            ("invalid-url", {"serverUrl": "https://[invalid"}),
         ]:
             with self.subTest(name=name):
                 self.file.write_text(json.dumps({"mcpServers": {"context7": entry}}))

@@ -85,9 +85,15 @@ def inspect(content: bytes):
     for key in ("serverUrl", "url", "httpUrl"):
         uri = current.get(key)
         if isinstance(uri, str):
-            parsed_url = urlparse(uri)
-            if (parsed_url.username is not None or parsed_url.password is not None
-                    or parsed_url.query or parsed_url.fragment):
+            try:
+                parsed_url = urlparse(uri)
+                has_userinfo = (parsed_url.username is not None
+                                or parsed_url.password is not None)
+            except ValueError:
+                # Malformed URL/userinfo must not produce a traceback or
+                # accidentally authorize a destructive reinstall.
+                return "custom-auth", doc
+            if has_userinfo or parsed_url.query or parsed_url.fragment:
                 return "custom-auth", doc
     if current.get("disabled") is True:
         return "custom", doc
