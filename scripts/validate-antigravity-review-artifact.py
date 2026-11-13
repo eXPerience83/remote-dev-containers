@@ -7,14 +7,14 @@ import argparse
 import importlib.util
 import json
 import re
-import urllib.parse
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from antigravity_official_url import OFFICIAL_HOST, safe_official_url
+
 ROOT = Path(__file__).resolve().parent
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
-OFFICIAL_HOST = "antigravity.google"
 MAX_BYTES = 2 * 1024 * 1024
 MAX_NESTING_DEPTH = 64
 SAFE_STRING_RE = re.compile(r"[ -~]{0,500}")
@@ -116,23 +116,6 @@ def exact_sha(value: str | None, label: str) -> str | None:
         raise ArtifactError(f"{label} must be an exact SHA-256 value")
     return normalized
 
-
-def safe_official_url(value: object) -> bool:
-    if not isinstance(value, str) or not value or "\\" in value:
-        return False
-    try:
-        parsed = urllib.parse.urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        return False
-    return (
-        parsed.scheme == "https"
-        and parsed.hostname == OFFICIAL_HOST
-        and port in (None, 443)
-        and parsed.username is None
-        and parsed.password is None
-        and parsed.fragment == ""
-    )
 
 
 def require_official_installer(

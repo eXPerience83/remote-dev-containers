@@ -8,9 +8,10 @@ import datetime as dt
 import importlib.util
 import json
 import re
-import urllib.parse
 from pathlib import Path
 from typing import Any
+
+from antigravity_official_url import OFFICIAL_HOST, safe_official_url
 
 ROOT = Path(__file__).resolve().parent
 DISCOVERY_PATH = ROOT / "discover-antigravity-payload.py"
@@ -28,7 +29,6 @@ _CONTENT_TYPE_RE = re.compile(r"^[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+$")
 _LIBRARY_RE = re.compile(r"^lib[A-Za-z0-9_.+-]*\.so(?:\.[0-9]+)*$")
 _INTERPRETER_RE = re.compile(r"^/[A-Za-z0-9._+/-]{1,199}$")
 OFFICIAL_URL = "https://antigravity.google/cli/install.sh"
-OFFICIAL_HOST = "antigravity.google"
 EXPECTED_BINARY = ".local/bin/agy"
 MAX_JSON_BYTES = 256 * 1024
 MAX_PAYLOAD_BYTES = DISCOVERY.MAX_PAYLOAD_SIZE
@@ -104,24 +104,6 @@ def sha256(value: object, label: str) -> str:
         raise ReconcileError(f"{label} is invalid")
     return value
 
-
-def safe_official_url(value: object) -> bool:
-    """Return whether a URL remains on the reviewed official HTTPS origin."""
-    if not isinstance(value, str) or not value or "\\" in value:
-        return False
-    try:
-        parsed = urllib.parse.urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        return False
-    return (
-        parsed.scheme == "https"
-        and parsed.hostname == OFFICIAL_HOST
-        and port in (None, 443)
-        and parsed.username is None
-        and parsed.password is None
-        and parsed.fragment == ""
-    )
 
 
 def _require_exact_keys(value: object, expected: set[str], label: str) -> dict[str, Any]:
