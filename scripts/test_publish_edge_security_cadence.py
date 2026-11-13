@@ -10,6 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/publish-edge-amd64.yml"
 HELPER = ROOT / "scripts/validate-edge-publication-candidate.sh"
+SOURCE_PREFLIGHT = ROOT / "scripts/validate-publication-source.sh"
 RESOLVER = ROOT / "scripts/resolve-oci-platform-manifest.sh"
 
 
@@ -168,6 +169,7 @@ def test_python_315_publisher_wiring(workflow: str) -> None:
 def main() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
+    source_preflight = SOURCE_PREFLIGHT.read_text(encoding="utf-8")
     resolver = RESOLVER.read_text(encoding="utf-8")
 
     require_text(workflow, 'cron: "11 1 * * 0"', "weekly Sunday security rebuild")
@@ -185,8 +187,13 @@ def main() -> None:
     require_text(workflow, "persist-credentials: false", "credential-free checkout")
     require_text(
         workflow,
-        'python3 scripts/test_update_upstream_changelog.py',
-        "publisher preflight validates dual-Python changelog fixtures",
+        "bash scripts/validate-publication-source.sh edge",
+        "edge publisher invokes the reviewed source preflight",
+    )
+    require_text(
+        source_preflight,
+        "python3 scripts/test_update_upstream_changelog.py",
+        "shared preflight validates dual-Python changelog fixtures",
     )
     test_python_315_publisher_wiring(workflow)
 
