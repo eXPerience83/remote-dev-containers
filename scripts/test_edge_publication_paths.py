@@ -69,7 +69,7 @@ def covers(path: str, patterns: tuple[str, ...]) -> bool:
     for pattern in patterns:
         if pattern == path:
             return True
-        if pattern.endswith("/**") and path.startswith(pattern[:-2] + "/"):
+        if pattern.endswith("/**") and path.startswith(pattern[:-3] + "/"):
             return True
     return False
 
