@@ -1,6 +1,6 @@
 # Context7 MCP diagnostics and isolated reinstalls — delivery plan
 
-**Status:** IN PROGRESS (PR #324, draft; not a release approval).
+**Verified status (2026-11-14):** PR #324 **merged** into `main` (`258d79a`) and published to experimental Edge. The implementation is shipped but **live TrueNAS/agent acceptance and #53 third-party review remain open**. Historical milestone checkboxes below are not live state. See the [v0.3.0 acceptance guide](v0.3.0-acceptance.md).
 **Updated:** 2026-11-13. **Owners:** Remote Dev maintainers.
 **Trackers:** #95 (Antigravity), #53 (vendor/legal review), PR #323 (Codex legacy diagnostics), PR #324 (this implementation).
 **Decision record:** [D016](decisions.md#d016--context7-is-a-role-local-hosted-mcp-registration-with-explicit-reinstall).
