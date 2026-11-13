@@ -58,14 +58,6 @@ class ConcurrencyContract(unittest.TestCase):
         other = modeled_group("pull_request", 333, 301)
         self.assertEqual(first, newer)
         self.assertNotEqual(first, other)
-        for event, expected in (
-            ("pull_request", True),
-            ("push", False),
-            ("workflow_dispatch", False),
-        ):
-            with self.subTest(event=event):
-                self.assertEqual(event == "pull_request", expected)
-
     def test_manual_dispatch_and_main_have_unique_run_groups(self) -> None:
         self.assertNotEqual(
             modeled_group("workflow_dispatch", 111, 329),
