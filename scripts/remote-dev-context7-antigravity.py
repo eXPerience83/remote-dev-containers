@@ -73,10 +73,27 @@ def inspect(content: bytes):
         return "managed", doc
     if not isinstance(current, dict):
         raise MaintenanceError("Context7 entry is not a JSON object")
-    # Never silently erase authentication or opaque vendor invocation
-    # parameters. A credential-bearing custom entry needs separate review.
-    if any(k in current for k in ("headers", "oauth", "env", "args", "command", "apiKey", "token")):
+    # Never overwrite credentials, intentionally disabled MCPs or entries
+    # with provider-specific user options. Query strings and userinfo can
+    # themselves contain secrets, even without an explicit headers field.
+    sensitive = {"headers", "oauth", "env", "args", "command",
+                 "apikey", "token", "secret", "authprovidertype", "authorization"}
+    if any(key.casefold() in sensitive or "secret" in key.casefold()
+           for key in current):
         return "custom-auth", doc
+    for key in ("serverUrl", "url", "httpUrl"):
+        uri = current.get(key)
+        if isinstance(uri, str):
+            parsed_url = urlparse(uri)
+            if (parsed_url.username is not None or parsed_url.password is not None
+                    or parsed_url.query or parsed_url.fragment):
+                return "custom-auth", doc
+    if current.get("disabled") is True:
+        return "custom", doc
+    if current.get("serverUrl") == ENDPOINT and set(current) != set(ENTRY):
+        # A working hosted registration with extra timeouts, tool filters,
+        # or provider options is user-managed, not corrupted.
+        return "custom", doc
     return "drift", doc
 
 
@@ -122,8 +139,8 @@ def status(directory: Path, *, verbose: bool = False) -> int:
     if state == "absent":
         print("Context7 (Antigravity): not installed")
         return 0
-    if state == "custom-auth":
-        print("Context7 (Antigravity): user-managed credential-bearing MCP (left untouched)")
+    if state in {"custom-auth", "custom"}:
+        print("Context7 (Antigravity): user-managed MCP entry (left untouched)")
         return 0
     print("Context7 (Antigravity): registration differs; reinstall recommended")
     return 3
@@ -138,8 +155,8 @@ def plan(directory: Path) -> int:
     if state == "managed":
         print("Context7 (Antigravity): ALREADY INSTALLED, no reinstall needed")
         return 0
-    if state == "custom-auth":
-        print("Context7 (Antigravity): BLOCKED, custom authentication; preserve user settings")
+    if state in {"custom-auth", "custom"}:
+        print("Context7 (Antigravity): BLOCKED, user-managed settings; preserve this entry")
         return 3
     print("Context7 (Antigravity): REINSTALLABLE" if state == "drift"
           else "Context7 (Antigravity): NOT INSTALLED; installation available")
@@ -152,8 +169,8 @@ def plan(directory: Path) -> int:
 def reinstall(directory: Path) -> int:
     def mutate(ops, fd, content, info):
         state, doc = inspect(content)
-        if state == "custom-auth":
-            raise MaintenanceError("custom Context7 authentication; refusing to replace user credentials")
+        if state in {"custom-auth", "custom"}:
+            raise MaintenanceError("user-owned Context7 settings; refusing to replace them")
         updated = candidate(doc)
         if content == updated:
             return False

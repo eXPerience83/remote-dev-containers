@@ -95,6 +95,10 @@ class Context7Antigravity(unittest.TestCase):
                         "headers": {"Authorization": "Bearer VERY_PRIVATE_VALUE"}}),
             ("command", {"command": "npx", "args": ["--api-key", "VERY_PRIVATE_VALUE"]}),
             ("oauth", {"serverUrl": manager.ENDPOINT, "oauth": {"clientSecret": "PRIVATE"}}),
+            ("query-key", {"serverUrl": manager.ENDPOINT + "?token=VERY_PRIVATE_VALUE"}),
+            ("url-userinfo", {"serverUrl": "https://user:VERY_PRIVATE_VALUE@mcp.context7.com/mcp"}),
+            ("disabled", {"serverUrl": manager.ENDPOINT, "disabled": True}),
+            ("extra-timeout", {"serverUrl": manager.ENDPOINT, "timeoutSeconds": 60}),
         ]:
             with self.subTest(name=name):
                 self.file.write_text(json.dumps({"mcpServers": {"context7": entry}}))
