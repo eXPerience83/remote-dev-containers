@@ -1755,8 +1755,8 @@ start_antigravity
 for name in "$launcher_name" "$codex_name" "$antigravity_name"; do
   wait_for_health_command "$name"
   assert_image_id "$name"
-ci_phase_checkpoint "initial-role-startup"
 done
+ci_phase_checkpoint "initial-role-startup"
 assert_no_broad_mounts_or_environment "$launcher_name" launcher
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
