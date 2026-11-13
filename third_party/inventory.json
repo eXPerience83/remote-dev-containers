@@ -94,14 +94,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.11.7",
+      "version": "2026.11.8",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.11.7/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.11.8/LICENSE"
         }
       ]
     },
