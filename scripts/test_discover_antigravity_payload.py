@@ -116,6 +116,40 @@ class AntigravityPayloadDiscoveryTests(unittest.TestCase):
             MODULE.installer_url_policy("https://antigravity.google/cli/install.sh?x=1")
         )
 
+    def test_manifest_and_payload_urls_reject_raw_ascii_controls(self) -> None:
+        # urlsplit silently removes leading C0/space and embedded TAB/CR/LF.
+        # The network admission must validate the raw URL, not a normalized one.
+        for label, canonical, policy in (
+            ("manifest", MODULE.MANIFEST_URL, MODULE.manifest_url_policy),
+            ("payload", PAYLOAD_URL, MODULE.payload_url_policy),
+        ):
+            self.assertTrue(policy(canonical), label)
+            authority, path = canonical.split("://", 1)[1].split("/", 1)
+            for point in (*range(0x21), 0x7F):
+                control = chr(point)
+                for raw_url in (
+                    control + canonical,
+                    "https://" + authority[:4] + control + authority[4:] + "/" + path,
+                    "https://" + authority + "/" + control + path,
+                    canonical + control,
+                ):
+                    with self.subTest(label=label, point=point, url=repr(raw_url)):
+                        self.assertFalse(policy(raw_url))
+
+    def test_malformed_manifest_payload_is_rejected_before_archive_use(self) -> None:
+        self._write_manifest(
+            hashlib.sha512(self.archive.read_bytes()).hexdigest(),
+            payload_url="\t" + PAYLOAD_URL,
+        )
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "payload URL"):
+            self._discover()
+
+    def test_discovery_uses_shared_raw_url_guard(self) -> None:
+        import antigravity_official_url as origin
+        self.assertIs(
+            MODULE.has_unsafe_raw_url_characters, origin.has_unsafe_raw_url_characters
+        )
+
     def test_discovery_requires_exact_installer_hash(self) -> None:
         with self.assertRaisesRegex(MODULE.DiscoveryError, "explicitly admitted"):
             MODULE.discover(

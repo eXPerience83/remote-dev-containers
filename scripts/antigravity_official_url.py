@@ -12,6 +12,11 @@ import urllib.parse
 OFFICIAL_HOST = "antigravity.google"
 
 
+def has_unsafe_raw_url_characters(value: str) -> bool:
+    """Reject unescaped ASCII controls and spaces before URL normalization."""
+    return any(ord(char) <= 0x20 or ord(char) == 0x7f for char in value)
+
+
 def safe_official_url(value: object) -> bool:
     """Return whether a URL remains on the reviewed official HTTPS origin."""
     if not isinstance(value, str) or not value or "\\" in value:
@@ -19,7 +24,7 @@ def safe_official_url(value: object) -> bool:
     # urlsplit strips leading C0/space and embedded TAB, CR and LF. Reject
     # unescaped ASCII controls/spaces *before* parsing to avoid validating a
     # different origin string than the raw metadata supplied to this boundary.
-    if any(ord(char) <= 0x20 or ord(char) == 0x7f for char in value):
+    if has_unsafe_raw_url_characters(value):
         return False
     try:
         parsed = urllib.parse.urlsplit(value)
