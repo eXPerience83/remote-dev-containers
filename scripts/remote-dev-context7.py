@@ -1215,7 +1215,6 @@ def main() -> int:
     except OSError as exc:
         print(f"ERROR: local Context7 state operation failed (errno {exc.errno})", file=sys.stderr)
         return 2
-    return 2
 
 
 if __name__ == "__main__":
