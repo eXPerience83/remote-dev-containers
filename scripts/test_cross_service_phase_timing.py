@@ -17,6 +17,15 @@ PHASES = (
     "antigravity-recreation",
     "scratch-recreation-and-final-canaries",
 )
+ADMIN_SUBPHASES = (
+    "administrative-python-codex",
+    "administrative-python-antigravity",
+    "project-toolchain-codex",
+    "project-toolchain-antigravity",
+    "codex-runtime-regressions",
+    "antigravity-host-fixtures",
+    "mise-trust-state",
+)
 
 
 class IsolationPhaseTimingTests(unittest.TestCase):
@@ -44,6 +53,66 @@ class IsolationPhaseTimingTests(unittest.TestCase):
         self.assertIn('ci_phase_started=$SECONDS', self.source)
         self.assertIn('printf \'CI TIMING %s: %ss\\n\'', self.source)
         self.assertIn('ci_phase_started=$SECONDS\n}', self.source)
+
+    def test_admin_subphases_follow_all_existing_assertions(self) -> None:
+        before, separator, tail = self.source.partition(
+            'ci_phase_checkpoint "initial-isolation-and-auth"'
+        )
+        self.assertTrue(separator)
+        admin_block, separator, after = tail.partition(
+            'ci_phase_checkpoint "admin-and-development-tooling"'
+        )
+        self.assertTrue(separator)
+        self.assertIn('ci_admin_subphase_started=$SECONDS', admin_block)
+        self.assertNotIn("ci_admin_subphase_checkpoint", before)
+        self.assertNotIn("ci_admin_subphase_checkpoint", after)
+        self.assertEqual(
+            tuple(
+                re.findall(
+                    r'^\\s*ci_admin_subphase_checkpoint "([^"]+)"
+        self.assertIn(
+            'ci_phase_checkpoint "scratch-recreation-and-final-canaries"\n'
+            'echo "Hardened cross-service isolation and offline toolchain canaries: OK"',
+            self.source,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+,
+                    admin_block,
+                    re.M,
+                )
+            ),
+            ADMIN_SUBPHASES,
+        )
+        for assertion, label in (
+            ('assert_project_toolchain_workflow "$codex_name" Codex', "project-toolchain-codex"),
+            ('assert_project_toolchain_workflow "$antigravity_name" Antigravity', "project-toolchain-antigravity"),
+            ("assert_hardened_codex_runtime_regressions", "codex-runtime-regressions"),
+            ("assert_hardened_antigravity_host_fixtures", "antigravity-host-fixtures"),
+            ('assert_mise_trust_state "$antigravity_name" observe untrusted', "mise-trust-state"),
+        ):
+            self.assertIn(
+                f'{assertion}\\nci_admin_subphase_checkpoint "{label}"',
+                admin_block,
+            )
+        self.assertIn(
+            'if [[ "$admin_role_container" == "$codex_name" ]]; then\\n'
+            '    ci_admin_subphase_checkpoint "administrative-python-codex"\\n'
+            '  else\\n'
+            '    ci_admin_subphase_checkpoint "administrative-python-antigravity"',
+            admin_block,
+        )
+
+    def test_admin_timer_is_independent_of_outer_phases(self) -> None:
+        timer = self.source.split("ci_admin_subphase_checkpoint() {", 1)[1].split(
+            "}\\n", 1
+        )[0]
+        self.assertIn("SECONDS - ci_admin_subphase_started", timer)
+        self.assertIn("ci_admin_subphase_started=$SECONDS", timer)
+        self.assertIn("CI TIMING admin-and-development-tooling/%s: %ss", timer)
+        self.assertNotIn("ci_phase_started=", timer)
 
     def test_final_checkpoint_precedes_success_only(self) -> None:
         self.assertIn(
