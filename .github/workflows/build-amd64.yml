@@ -99,6 +99,7 @@ jobs:
             scripts/test_resolve_published_image_digest.py \
             scripts/test_periodic_image_rescan_workflow.py \
             scripts/test_publish_edge_security_cadence.py \
+            scripts/test_trivy_setup_reuse.py \
             web/ttyd-osc52/generate.py \
             web/ttyd-osc52/validate.py \
             web/ttyd-osc52/test_generate.py
@@ -160,6 +161,7 @@ jobs:
           python3 scripts/test_codex_regression_fixture_transfer.py
           python3 scripts/test_antigravity_fixture_batch.py
           python3 scripts/test_publish_edge_security_cadence.py
+          python3 scripts/test_trivy_setup_reuse.py
           python3 scripts/test_edge_publication_paths.py
           python3 scripts/test_publication_source_validation.py
           jq -e '.schema_version == 2 and .blocking_findings == []' \
@@ -239,6 +241,7 @@ jobs:
           image-ref: remote-dev:local
           format: spdx-json
           output: sbom-remote-dev.spdx.json
+          skip-setup-trivy: true
 
       - name: Record exact Chromium identity and notices in both SPDX images
         run: |
@@ -257,6 +260,7 @@ jobs:
           image-ref: remote-dev-base:local
           format: json
           output: trivy-base.json
+          skip-setup-trivy: true
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -268,6 +272,7 @@ jobs:
           image-ref: remote-dev:local
           format: json
           output: trivy-remote-dev.json
+          skip-setup-trivy: true
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
@@ -280,6 +285,7 @@ jobs:
           image-ref: remote-dev-base:pr2-before
           format: spdx-json
           output: sbom-before-base.spdx.json
+          skip-setup-trivy: true
           exit-code: '0'
 
       - name: Record before base json evidence
@@ -289,6 +295,7 @@ jobs:
           image-ref: remote-dev-base:pr2-before
           format: json
           output: trivy-before-base.json
+          skip-setup-trivy: true
           exit-code: '0'
 
       - name: Record before runtime spdx-json evidence
@@ -298,6 +305,7 @@ jobs:
           image-ref: remote-dev:pr2-before
           format: spdx-json
           output: sbom-before-runtime.spdx.json
+          skip-setup-trivy: true
           exit-code: '0'
 
       - name: Record before runtime json evidence
@@ -307,6 +315,7 @@ jobs:
           image-ref: remote-dev:pr2-before
           format: json
           output: trivy-before-runtime.json
+          skip-setup-trivy: true
           exit-code: '0'
 
       - name: Upload security and SBOM reports
