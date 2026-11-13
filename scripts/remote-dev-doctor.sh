@@ -317,6 +317,7 @@ elif [[ "$role" == antigravity ]]; then
   check_cmd remote-dev-update-antigravity
   check_cmd remote-dev-antigravity-policy
   check_cmd run-antigravity
+  check_cmd /usr/local/bin/remote-dev-context7-antigravity
 fi
 
 echo
@@ -430,6 +431,14 @@ elif [[ "$role" == antigravity ]]; then
     status=1
   fi
 
+  echo
+  context7_agy_status=0
+  /usr/local/bin/remote-dev-context7-antigravity status --menu || context7_agy_status=$?
+  if (( context7_agy_status != 0 )); then
+    echo "Context7 (Antigravity): use menu to preview/reinstall (status $context7_agy_status)"
+    status=1
+  fi
+  echo 'Context7 boundary: hosted anonymous MCP; no API key is copied to Antigravity JSON.'
   echo 'Antigravity support status: experimental validation only; not yet a supported integration.'
   echo 'Antigravity trust boundary: runtime-installed from Google; not bundled in the image or build-time SBOM.'
   echo 'Antigravity automatic CLI updates: disabled by the Remote Dev launcher.'

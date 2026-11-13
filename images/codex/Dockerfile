@@ -95,6 +95,7 @@ COPY scripts/remote-dev-prepare-development-scratch.py /usr/local/bin/remote-dev
 COPY scripts/remote-dev-context7.py /usr/local/lib/remote-dev/remote-dev-context7.py
 COPY scripts/remote-dev-context7-entrypoint.sh /usr/local/bin/remote-dev-context7
 COPY scripts/remote-dev-context7-device-login.py /usr/local/bin/remote-dev-context7-device-login
+COPY scripts/remote-dev-context7-antigravity.py /usr/local/bin/remote-dev-context7-antigravity
 COPY scripts/remote-dev-antigravity.sh /usr/local/bin/remote-dev-antigravity
 COPY scripts/remote-dev-install-antigravity.sh /usr/local/bin/remote-dev-install-antigravity
 COPY scripts/remote-dev-update-antigravity.sh /usr/local/bin/remote-dev-update-antigravity
@@ -126,6 +127,8 @@ RUN --network=none \
     --mount=type=bind,source=scripts/test-run-codex-policy.sh,target=/tmp/test-run-codex-policy,ro \
     --mount=type=bind,source=scripts/test-real-codex-project-trust.py,target=/tmp/test-real-codex-project-trust.py,ro \
     --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
+    --mount=type=bind,source=scripts/remote-dev-context7-antigravity.py,target=/tmp/remote-dev-context7-antigravity.py,ro \
+    --mount=type=bind,source=scripts/test-remote-dev-context7-antigravity.py,target=/tmp/test-remote-dev-context7-antigravity.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-project-collection-boundary.sh,target=/tmp/test-project-collection-boundary,ro \
@@ -154,6 +157,7 @@ RUN --network=none \
       /usr/local/bin/remote-dev-prepare-development-scratch \
       /usr/local/bin/remote-dev-context7 \
       /usr/local/bin/remote-dev-context7-device-login \
+      /usr/local/bin/remote-dev-context7-antigravity \
       /usr/local/bin/remote-dev-antigravity \
       /usr/local/bin/remote-dev-install-antigravity \
       /usr/local/bin/remote-dev-update-antigravity \
@@ -186,6 +190,7 @@ RUN --network=none \
       /usr/local/bin/remote-dev-prepare-development-scratch \
       /usr/local/bin/validate-codex-project-boundary \
       /usr/local/bin/remote-dev-context7-device-login \
+      /usr/local/bin/remote-dev-context7-antigravity \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /usr/local/bin/remote-dev-antigravity-policy \
@@ -199,6 +204,7 @@ RUN --network=none \
       /usr/local/bin/validate-codex-project-boundary \
       /usr/local/lib/remote-dev/remote-dev-context7.py \
       /usr/local/bin/remote-dev-context7-device-login \
+      /usr/local/bin/remote-dev-context7-antigravity \
       /usr/local/bin/remote-dev-antigravity-oauth \
       /usr/local/bin/remote-dev-antigravity-picker \
       /usr/local/bin/remote-dev-antigravity-policy \
@@ -223,6 +229,7 @@ RUN --network=none \
     && python -c 'import sys,tomllib; d=tomllib.load(open(sys.argv[1],"rb")); t=d.get("mcp_servers",{}).get("context7"); assert t == {"url":"https://mcp.context7.com/mcp","env_http_headers":{"CONTEXT7_API_KEY":"CONTEXT7_API_KEY"},"enabled":True,"required":False}' "$context7_smoke_home/config.toml" \
     && rm -rf "$context7_smoke_home" \
     && bash /tmp/test-run-codex-context7 \
+    && python /tmp/test-remote-dev-context7-antigravity.py \
     && python /tmp/test-antigravity-approval-policy.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-policy.sh \
     && python /tmp/test-antigravity-oauth.py \
