@@ -53,18 +53,7 @@ jobs:
 
       - name: Validate repository configuration
         run: |
-          while IFS= read -r -d '' script; do
-            bash -n "$script"
-          done < <(find scripts -type f -name '*.sh' -print0)
-          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
-            bash scripts/test-image-name-compat.sh
-          bash scripts/test-image-identity.sh
-          python3 scripts/test_edge_build_identity.py
-          python3 scripts/test_update_upstream_changelog.py
-          bash scripts/validate-version-pins.sh
-          bash scripts/test-source-revision.sh
-          jq -e . renovate.json >/dev/null
-          python3 scripts/validate-renovate-ownership.py --root .
+          bash scripts/validate-publication-source.sh stable
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
