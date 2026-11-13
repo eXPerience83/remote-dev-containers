@@ -947,17 +947,19 @@ def status_line(paths: Paths) -> tuple[str, int]:
             reason = ("Context7 ownership markers malformed: " + subtype)
             if subtype == "missing BEGIN marker":
                 reason += missing_begin_layout_details(state.text)
-                if (scoped_reinstall_candidate(state) is not None
-                        and secret_status(paths)[0] != "unsafe"):
-                    reason += "; reinstall Context7 via menu or reinstall --yes"
-                else:
-                    reason += "; no verified scoped reinstall; manual review required"
         else:
             reason = {
                 "invalid": "Codex config unreadable or invalid",
                 "conflict": "Context7 ownership conflict",
                 "managed-drift": "managed Context7 contract drift",
             }.get(state.kind, "unrecognized Context7 configuration state")
+        # The same verified scope check drives the menu/Doctor recommendation
+        # for all damaged states, not just one historical marker layout.
+        if (scoped_reinstall_candidate(state) is not None
+                and secret_status(paths)[0] != "unsafe"):
+            reason += "; reinstall Context7 via menu or reinstall --yes"
+        else:
+            reason += "; no verified scoped reinstall; manual review required"
         return (
             "Context7: managed configuration damaged or Codex config invalid "
             f"({reason})",
