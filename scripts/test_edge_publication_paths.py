@@ -46,8 +46,13 @@ def local_source_probe(source: str) -> str:
 
 
 def dockerfile_inputs() -> set[str]:
-    sources: set[str] = {".dockerignore", "versions.env"}
+    sources: set[str] = {
+        ".dockerignore",
+        "versions.env",
+        ".github/workflows/publish-edge-amd64.yml",
+    }
     for dockerfile in DOCKERFILES:
+        sources.add(str(dockerfile.relative_to(ROOT)))
         for line in dockerfile.read_text(encoding="utf-8").splitlines():
             if line.startswith(("COPY ", "ADD ")):
                 args = shlex.split(line)
@@ -96,6 +101,10 @@ class EdgeBuildSourceContract(unittest.TestCase):
         for removed, uncovered in (
             ("web/**", "web/ttyd-osc52/dist/index.html"),
             ("LICENSE", "LICENSE"),
+            ("images/**", "images/base/Dockerfile"),
+            (".dockerignore", ".dockerignore"),
+            ("versions.env", "versions.env"),
+            (".github/workflows/publish-edge-amd64.yml", ".github/workflows/publish-edge-amd64.yml"),
         ):
             with self.subTest(removed=removed):
                 self.assertIn(removed, patterns)
