@@ -10,20 +10,14 @@ unreviewed redirect before installer admission is checked.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import tempfile
 from pathlib import Path
 
 import antigravity_download as NETWORK
+from antigravity_inspector_loader import load_inspector
 
-ROOT = Path(__file__).resolve().parent
-INSPECTOR_PATH = ROOT / "inspect-antigravity-cli.py"
-SPEC = importlib.util.spec_from_file_location("antigravity_inspector", INSPECTOR_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError("could not load inspect-antigravity-cli.py")
-INSPECTOR = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(INSPECTOR)
+INSPECTOR = load_inspector()
 
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024
 

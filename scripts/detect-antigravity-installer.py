@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import tempfile
@@ -12,14 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import antigravity_download as NETWORK
+from antigravity_inspector_loader import load_inspector
 
-ROOT = Path(__file__).resolve().parent
-INSPECTOR_PATH = ROOT / "inspect-antigravity-cli.py"
-SPEC = importlib.util.spec_from_file_location("antigravity_inspector", INSPECTOR_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError("could not load inspect-antigravity-cli.py")
-INSPECTOR = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(INSPECTOR)
+INSPECTOR = load_inspector()
 
 _HOST_RE = re.compile(rb"https://([A-Za-z0-9.-]{1,253})(?=[:/\"'\s]|$)")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
