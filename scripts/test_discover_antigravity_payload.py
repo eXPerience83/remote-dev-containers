@@ -136,9 +136,19 @@ class AntigravityPayloadDiscoveryTests(unittest.TestCase):
                     with self.subTest(label=label, point=point, url=repr(raw_url)):
                         self.assertFalse(policy(raw_url))
 
+    def test_malformed_manifest_payload_is_rejected_before_archive_use(self) -> None:
+        self._write_manifest(
+            hashlib.sha512(self.archive.read_bytes()).hexdigest(),
+            payload_url="\t" + PAYLOAD_URL,
+        )
+        with self.assertRaisesRegex(MODULE.DiscoveryError, "payload URL"):
+            self._discover()
+
     def test_discovery_uses_shared_raw_url_guard(self) -> None:
         import antigravity_official_url as origin
-        self.assertIs(MODULE.has_unsafe_raw_url_characters, origin.has_unsafe_raw_url_characters)
+        self.assertIs(
+            MODULE.has_unsafe_raw_url_characters, origin.has_unsafe_raw_url_characters
+        )
 
     def test_discovery_requires_exact_installer_hash(self) -> None:
         with self.assertRaisesRegex(MODULE.DiscoveryError, "explicitly admitted"):
