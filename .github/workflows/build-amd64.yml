@@ -149,6 +149,7 @@ jobs:
           python3 scripts/test_periodic_image_rescan_workflow.py
           python3 scripts/test_build_image_comparison_workflow.py
           python3 scripts/test_build_pr_concurrency.py
+          python3 scripts/test_cross_service_phase_timing.py
           python3 scripts/test_publish_edge_security_cadence.py
           python3 scripts/test_edge_publication_paths.py
           python3 scripts/test_publication_source_validation.py
