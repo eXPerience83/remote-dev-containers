@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-12",
+  "refreshed_on": "2026-11-13",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.103.3",
+      "version": "2.104.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.103.3/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.104.0/LICENSE"
         }
       ]
     },
@@ -180,19 +180,19 @@
       "name": "uv",
       "image_scope": "both",
       "version_key": "UV_VERSION",
-      "version": "0.13.7",
+      "version": "0.13.8",
       "source": "https://github.com/astral-sh/uv",
       "license": "Apache-2.0 OR MIT",
       "notices": [
         {
           "path": "components/uv/LICENSE-APACHE-2.0",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.7/LICENSE-APACHE"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.8/LICENSE-APACHE"
         },
         {
           "path": "components/uv/LICENSE-MIT",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.7/LICENSE-MIT"
+          "reviewed_from": "https://raw.githubusercontent.com/astral-sh/uv/0.13.8/LICENSE-MIT"
         }
       ]
     },
@@ -201,19 +201,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.167.2",
+      "version": "rust-v0.169.0",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.167.2/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.169.0/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.167.2/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.169.0/NOTICE"
         }
       ]
     },

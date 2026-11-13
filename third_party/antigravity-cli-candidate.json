@@ -1,11 +1,11 @@
 {
   "archive": {
     "content_type": "application/x-tar",
-    "final_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.6-6212266538958848/linux-x64/cli_linux_x64.tar.gz",
+    "final_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.8-4602374149505024/linux-x64/cli_linux_x64.tar.gz",
     "member": "antigravity",
-    "sha512": "0c67824908caf9cc3156699802b8097f2fd02c4608ae9293c9aa7f17e1bcd342c4b9c2e158388253a37804ef6bd9c6b1d25cfaca3c07bbb7587378fc91839bb4",
-    "size": 104223118,
-    "source": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.6-6212266538958848/linux-x64/cli_linux_x64.tar.gz"
+    "sha512": "f08faaee588327dba8722bdc60f26a14f6915a8f2d756ed7959cde0a706d4e62fd9f831ab1a077dace5f947caaa6e851457df5023180bb8d3f54386804a3787f",
+    "size": 104805905,
+    "source": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.8-4602374149505024/linux-x64/cli_linux_x64.tar.gz"
   },
   "blocking_findings": [],
   "installer": {
@@ -21,17 +21,17 @@
   "manifest": {
     "content_type": "application/json",
     "final_url": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
-    "payload_sha512": "0c67824908caf9cc3156699802b8097f2fd02c4608ae9293c9aa7f17e1bcd342c4b9c2e158388253a37804ef6bd9c6b1d25cfaca3c07bbb7587378fc91839bb4",
-    "payload_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.6-6212266538958848/linux-x64/cli_linux_x64.tar.gz",
-    "sha256": "5fd32e6404f77e18c4c4e9e86e6f4336d674e3bd64f22d9852862be038b66fa4",
+    "payload_sha512": "f08faaee588327dba8722bdc60f26a14f6915a8f2d756ed7959cde0a706d4e62fd9f831ab1a077dace5f947caaa6e851457df5023180bb8d3f54386804a3787f",
+    "payload_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.8-4602374149505024/linux-x64/cli_linux_x64.tar.gz",
+    "sha256": "ec0cb9c9d6d22943df905af3e3177e8e2ae5898d91fed17ec341d93ce636cc26",
     "size": 301,
     "source": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
-    "version": "1.5.6"
+    "version": "1.5.8"
   },
   "payload": {
     "path": ".local/bin/agy",
-    "sha256": "7e5bbdcbf689354300500ba22d55c2ff1497e185ae18407325d480577a87db5d",
-    "size": 279462288
+    "sha256": "9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5",
+    "size": 281432776
   },
   "schema_version": 2
 }
