@@ -70,6 +70,12 @@ PR2 #281's six locked CLI additions and 53-command baseline were accepted on Tru
 
 A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
 
+## Active integration — Context7 diagnostics and role-local MCP reinstall (#95 / PR #324)
+
+The next Context7 capability is **not** a repair of one TrueNAS image. The image will offer passive, actionable MCP diagnostics and explicit isolated Context7 registration reinstall **for both Codex and Antigravity**, protecting credentials and unrelated MCPs. Antigravity is anonymous-by-default and remains experimental. The [execution plan](context7-mcp-lifecycle-plan.md), [Spanish summary](context7-mcp-lifecycle-plan.es.md) and decision D016 define the milestones, tests and acceptance gates.
+
+Development remains in a draft PR. A passing PR CI is only the offline gate; independent review (or documented audit if CodeRabbit rate-limited), Antigravity-specific #53 legal/privacy review, SHA-pinned candidate validation, separate real Codex/Antigravity MCP tool calls, and reversible TrueNAS tests precede merge or Edge publication. Prior dev candidate images from the superseded legacy-repair approach must not be accepted as evidence for this design.
+
 ## Ongoing maintenance
 
 - Grouped upstream component refreshes remain owned by `check-upstream.yml`, with bounded changelog provenance and human-reviewed PRs.
@@ -84,7 +90,7 @@ These are not shipped by the current core contract unless their own issue says o
 - #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers, passkeys/MFA, a future secure launcher entry point and any future password-strength/reuse policy.
 - #170 — deferred native TrueNAS Community App/ixVolumes research; current YAML remains supported.
 - #124 — optional role-scoped key-only inbound SSH/remote-client path.
-- #95 — Context7 for Antigravity.
+- #95 — Context7 for Antigravity: **active via PR #324**, gated by the Context7 lifecycle plan and #53 review; not yet shipped.
 - #71 — optional SMB access to selected project paths only.
 - #112 — ARM64.
 - #121 — PR1 and PR2 are integrated (53 baseline commands); live TrueNAS acceptance remains before closing the tracker. PR3 is a separate agent-demand survey.
