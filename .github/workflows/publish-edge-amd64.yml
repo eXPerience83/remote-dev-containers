@@ -12,6 +12,8 @@ on:
       - ".mise/locks/**"
       - "images/**"
       - "scripts/**"
+      - "web/**"
+      - "LICENSE"
       - "config/**"
       - "third_party/**"
       - ".github/workflows/publish-edge-amd64.yml"

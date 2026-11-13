@@ -120,7 +120,10 @@ fi
                 fakebin = self.fixture(root)
                 result, calls = self.run_fixture(root, fakebin, mode)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(calls, common + ([] if mode == "stable" else compose))
+                expected = common + ([] if mode == "stable" else compose)
+                if mode == "edge":
+                    expected.append(("python3", "scripts/test_edge_publication_paths.py"))
+                self.assertEqual(calls, expected)
                 self.assertEqual(
                     result.stdout.splitlines(),
                     [] if mode == "stable" else ["OK compose/one.yml", "OK compose/two.yml"],
