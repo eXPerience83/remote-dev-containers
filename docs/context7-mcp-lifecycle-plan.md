@@ -22,7 +22,7 @@ Never reinstall the agent, remove the whole MCP config, change other MCPs (Playw
 | Write operation | Explicit `remote-dev-context7 reinstall --yes` / Codex menu | Explicit `remote-dev-context7-antigravity reinstall --yes` / Antigravity menu |
 | Live check | Explicit Context7 endpoint test plus real Codex MCP tool call | Explicit endpoint test plus actual `agy /mcp` and tool call |
 | Concurrency | Shared directory flock with Playwright; snapshot check, private original backup, atomic replacement | Shared directory flock with Playwright JSON config provider; dirfd validation, private original backup, atomic replacement |
-| Customization | Explicit reinstall resets **Context7-only** user adjustments, warn before confirmation; fail closed if scope is ambiguous | Credential-bearing or user-authored opaque server setups are never silently rewritten; explicit remediation needs separately reviewed auth policy |
+| Customization | Explicit reinstall resets **Context7-only** user adjustments, warn before confirmation; fail closed if scope is ambiguous | Any extra Context7 option, with or without credentials (e.g. `disabledTools`, `timeoutSeconds`), is considered user-owned; reinstall refuses to overwrite and requires manual review |
 
 Two distinct operations must remain clearly labeled:
 - **Legacy repair** matches a narrow reviewed old format. If ineligible, do not try blind text patching.
@@ -58,30 +58,28 @@ Status/plan/doctor must be offline, bounded, read-only and redact user config/ke
 - [ ] Review existing backup collision/overwrite behavior; preserve the ability to roll back multiple reinstall attempts safely.
 - [ ] Ensure all Dockerfile image inventory, interpreter, permissions, static/unit/menu tests and smoke assertions pass on **the same SHA**.
 
-### Phase 2 — review and publication gates
+### Phase 2 — review, merge and Edge publication (owner-approved order)
 
-- [ ] Entire Build AMD64 CI **green at PR head** (repository validation, smoke, notices, SBOM and vulnerability gate).
-- [ ] Independent CodeRabbit full review or documented manual security review if CodeRabbit is rate-limited; resolve valid notes including out-of-diff.
-- [ ] Complete Antigravity-specific out-of-cycle hosted-service/terms/privacy/authentication interpretation under #53 before release. Existing #53 Antigravity CLI terms review is not automatic approval for this extra provider integration.
-- [ ] Keep PR #324 draft until code and safety gates; do not merge during development.
-- [ ] Explicitly authorize SHA-pinned **candidate/dev** workflow after review. It must publish the tested immutable candidate digest, **not edge/stable/latest**, and provide exact provenance. Any previous `candidate-pr-324-49d93b60a5da` belongs to the superseded legacy-only design.
+- [ ] Entire Build AMD64 CI **green at final PR head** (repository validation, smoke, notices, SBOM and vulnerability gate).
+- [ ] Review all CodeRabbit findings, including out-of-diff, and resolve valid issues. A new review may identify more problems.
+- [ ] Owner has explicitly authorized the integration-first path on 2026-11-13: **no dev candidate**; merge reviewed #324 to `main`, then separately rebase/re-generate and merge the upstream-update PR after its CI and review.
+- [ ] Publish Edge from integrated `main` with the normal independent build/security gate; verify immutable digest and image provenance before the owner downloads and updates their TrueNAS installation.
+- [ ] Keep `stable` and `latest` unchanged. Document the third-party hosted-service/privacy engineering evidence in #53; any unresolved independent legal assessment must remain explicitly labeled and cannot be claimed as approved.
 
-### Phase 3 — TrueNAS acceptance (no production mutation without authorization)
+### Phase 3 — TrueNAS acceptance after Edge publication
 
-- [ ] Deploy an isolated SHA/digest-pinned candidate to an appropriate test stack or user-approved controlled stack update; keep the prior digest and an independently protected state backup/rollback.
-- [ ] Record `remote-dev-version --check`, exact candidate source SHA, digest, roles and container security settings.
-- [ ] On Codex: run `plan` first, snapshot private config/key hashes, explicitly reinstall **only when eligible**, verify non-Context7 values and unrelated raw bytes, endpoint connectivity, real Context7 MCP tool lookup, Playwright/Developer Docs regression, Doctor and idempotence.
-- [ ] On Antigravity: inspect existing global and workspace MCP states, explicitly reinstall only the isolated global Context7 entry, preserve other MCPs/auth/session state, verify `agy /mcp` and an actual documentation call, Playwright regression, Doctor and idempotence.
-- [ ] Prove neither role can access the other's credentials or mutable state; starting a container must never self-install Context7. No vendor CLI runtime changes or automated image updates.
-- [ ] Exercise rollback to the prior digest with preserved prior user config; confirm no credential leakage or altered other-MCP state.
-- [ ] Record a sanitized PASS/FAIL/SKIP acceptance matrix and decision in #95/PR #324. No secrets, private TOML/JSON dumps or full private paths.
+- [ ] Capture the previous Edge image digest plus independent encrypted/private backups before updating the user-approved TrueNAS stack.
+- [ ] Record `remote-dev-version --check`, exact Edge source SHA and digest and both agent roles.
+- [ ] Codex: preview scope, record private preimage hashes, explicitly reinstall Context7 only if safe, verify unrelated MCPs, API key, real Context7 tool call, Playwright and OpenAI Developer Docs, Doctor, idempotence and rollback.
+- [ ] Antigravity: inspect global and workspace MCP conflicts, explicitly reinstall only eligible global Context7 entry (anonymous), verify a real `agy /mcp` tool call, Playwright, Doctor, idempotence and role isolation.
+- [ ] Record PASS/FAIL/SKIP evidence in #95 and PR #324. A failing test is not a successful acceptance: fix in a subsequent PR and republish Edge after fresh CI.
+- [ ] Never auto-install on startup or copy credentials between roles; preserve the rollback image and state.
 
-### Phase 4 — promote and close
+### Phase 4 — close
 
-- [ ] Only after approved acceptance: complete PR review, merge with fresh green checks, verify `main`, publish **edge** with independent build/security gate, and optionally update the user's Edge stack after explicit acceptance.
-- [ ] Keep `stable` / `latest` unchanged pending independent stable release gates.
-- [ ] Close #95 only when the Antigravity provider contract and legal gate are accepted. Record residual limitations (anonymous use, workspace overrides) in docs.
-- [ ] Update dated evidence, decision records and roadmap without claiming CodeRabbit acceptance or Antigravity vendor endorsement.
+- [ ] Mark the Context7 feature functionally accepted **only after** both agents' real-tool tests and recovery/rollback checks pass. Keep #95 open if Antigravity remains experimental or fails.
+- [ ] Record third-party privacy and legal sign-off separately in #53; do not invent approval.
+- [ ] Stable/latest still require a separate stable release process.
 
 ## Rollback and failure policy
 

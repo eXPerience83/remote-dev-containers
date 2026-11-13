@@ -178,6 +178,8 @@ class Context7Antigravity(unittest.TestCase):
             b'{"mcpServers":{"other":{"command":"safe","command":"not-safe"}}}',
             b"\xff",
             b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}},"rate":NaN}',
+            b'{"preferences":{"limit":1e400},"mcpServers":{}}',
+            b'{"preferences":{"nested":[{"other":-1e999}]},"mcpServers":{}}',
         ]
         for raw in bad:
             with self.subTest(raw=raw[:18]):

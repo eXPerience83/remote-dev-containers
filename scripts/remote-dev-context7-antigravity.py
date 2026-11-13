@@ -11,6 +11,7 @@ import argparse
 import importlib.machinery
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -61,12 +62,21 @@ def reject_nonfinite(_value: str):
     raise MaintenanceError("non-standard JSON numeric value; no changes permitted")
 
 
+def parse_finite_float(value: str) -> float:
+    # Python's default json.loads() silently converts 1e400 to infinity.
+    result = float(value)
+    if not math.isfinite(result):
+        raise MaintenanceError("JSON numeric overflow; no changes permitted")
+    return result
+
+
 def inspect(content: bytes):
     try:
         doc = (
             json.loads(content.decode("utf-8"),
                        object_pairs_hook=reject_duplicate_keys,
-                       parse_constant=reject_nonfinite)
+                       parse_constant=reject_nonfinite,
+                       parse_float=parse_finite_float)
             if content.strip() else {}
         )
     except (UnicodeError, ValueError) as exc:
@@ -127,7 +137,11 @@ def candidate(doc: dict) -> bytes:
         k: v for k, v in doc.get("mcpServers", {}).items() if k != "context7"
     }:
         raise MaintenanceError("unrelated MCP entry would change")
-    return (json.dumps(updated, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    try:
+        encoded = json.dumps(updated, indent=2, ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise MaintenanceError("proposed MCP JSON is not safely serializable") from exc
+    return (encoded + "\n").encode("utf-8")
 
 
 def using_config(directory: Path, mutator):

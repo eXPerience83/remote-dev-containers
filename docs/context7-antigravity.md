@@ -31,7 +31,7 @@ remote-dev-context7-antigravity test --yes
 
 The passive commands do not modify state or make network calls. `reinstall` is explicit, takes the same directory lock as the Playwright MCP configurator, and replaces only the JSON `mcpServers.context7` entry. It validates all other JSON values and writes a private original-file backup before atomic replacement.
 
-It **refuses to overwrite a customized Context7 entry with authentication settings** (headers, OAuth, command/args, token or env) to avoid destroying or disclosing secrets. Existing non-Context7 MCPs remain semantically unchanged. JSON formatting may be normalized; the original bytes remain in the private backup.
+It **refuses to overwrite any customized Context7 entry**, including authentication (headers, OAuth, tokens, command/args or env) **and non-authentication options** such as `timeoutSeconds`, `disabled` or `disabledTools`. All such user-owned entries require manual review and are preserved unchanged, even with an outdated endpoint. Existing non-Context7 MCPs remain semantically unchanged. JSON formatting may be normalized for an eligible reinstall; the original bytes remain in the private backup.
 
 For a real functional check after installing or reinstalling, open Antigravity CLI and run `/mcp`, confirm Context7 connects, then ask a simple public documentation question. `test --yes` tests only the hosted `/ping` endpoint and local JSON contract.
 

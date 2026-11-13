@@ -74,7 +74,7 @@ A normal integrated deployment remains on `edge-amd64` until that explicit stabl
 
 The next Context7 capability is **not** a repair of one TrueNAS image. The image will offer passive, actionable MCP diagnostics and explicit isolated Context7 registration reinstall **for both Codex and Antigravity**, protecting credentials and unrelated MCPs. Antigravity is anonymous-by-default and remains experimental. The [execution plan](context7-mcp-lifecycle-plan.md), [Spanish summary](context7-mcp-lifecycle-plan.es.md) and decision D016 define the milestones, tests and acceptance gates.
 
-Development remains in a draft PR. A passing PR CI is only the offline gate; independent review (or documented audit if CodeRabbit rate-limited), Antigravity-specific #53 legal/privacy review, SHA-pinned candidate validation, separate real Codex/Antigravity MCP tool calls, and reversible TrueNAS tests precede merge or Edge publication. Prior dev candidate images from the superseded legacy-repair approach must not be accepted as evidence for this design.
+The project owner approved a new D017 integration-first sequence: finish exact-HEAD CI and CodeRabbit fixes, merge #324 to main, then rebase/refresh and separately merge the upstream-update PR, publish gated Edge, and run real Codex/Antigravity MCP tests plus rollback on the approved TrueNAS stack. **No dev candidate** is required. Offline CI is not real-tool acceptance; results and residual #53 privacy/legal review must remain visible and must not be misrepresented as passed. Stable/latest stay unchanged.
 
 ## Ongoing maintenance
 

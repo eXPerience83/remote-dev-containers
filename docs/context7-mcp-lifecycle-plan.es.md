@@ -20,15 +20,15 @@ La **imagen nueva** debe diagnosticar Context7 en Codex y en Antigravity y ofrec
 
 Reglas innegociables: diagnóstico **sin escrituras ni red**; acción explícita con aviso; proteger clave y otros MCP (Playwright y Developer Docs); copias de seguridad antes de escribir; bloqueo compartido con el configurador de Playwright; rechazo de casos ambiguos; sin instalar nada al arrancar; sin tocar credenciales de un agente desde el otro.
 
-La reinstalación **sí restablece las personalizaciones de la propia entrada Context7** cuando el usuario lo confirma. Nunca debe borrar personalizaciones de otros MCP ni secretos de una entrada Context7 con autenticación propia de Antigravity. Los MCP definidos a nivel de proyecto y plugins pertenecen al usuario y necesitan diagnóstico separado.
+**Codex** puede restablecer las opciones de su propia entrada Context7 después de una confirmación expresa, solo si puede aislarla sin alterar otros MCP. **Antigravity no sigue esa política**: cualquier opción Context7 adicional, con o sin autenticación (por ejemplo `timeoutSeconds`, `disabled` o `disabledTools`), se considera configuración del usuario; la reinstalación se bloquea y requiere revisión manual. Nunca se borran las credenciales ni las opciones de otros MCP. Los MCP de proyecto y plugins necesitan diagnóstico separado.
 
 ## Hitos
 
 1. **Implementación y pruebas offline:** adaptar TOML/JSON; menús; copias/rollback; errores de sintaxis, marcadores y entradas duplicadas; pruebas de propiedades y concurrencia.
 2. **Revisión:** último SHA con CI íntegramente verde, CodeRabbit o auditoría manual documentada si hay limitación por cuota, y revisión específica de Context7-Antigravity bajo #53.
-3. **Candidata aislada:** publicar `candidate-pr-324-<sha>` y canal `dev` únicamente tras validación. No confundir la candidata antigua anterior al rediseño con la nueva.
-4. **Aceptación en TrueNAS:** probar en Codex y Antigravity reales, verificar Context7, el resto de los MCP, las claves separadas, idempotencia y rollback.
-5. **Cierre:** solo tras GO funcional y seguridad, fusionar, publicar Edge con su propio CI y actualizar TrueNAS con autorización. Nunca modificar `stable/latest` por este PR.
+3. **Integrar en `main`:** con CI verde y observaciones relevantes de CodeRabbit corregidas, fusionar el PR #324 cuando el propietario lo autorice; no publicar una candidata `dev`.
+4. **PR de actualizaciones:** después de integrar #324, rebasar o regenerar el PR de actualizaciones; validar y fusionar por separado.
+5. **Edge y aceptación en TrueNAS:** publicar Edge desde el `main` integrado mediante sus controles propios; después actualizar voluntariamente y probar Context7 con Codex y Antigravity, el resto de MCP, claves separadas, idempotencia y rollback. Los fallos funcionales abrirán correcciones; esta aprobación no supone aceptar los resultados antes de probarlos. No modificar `stable/latest` con este PR.
 
 **Pendiente:** verificaciones de configuración a nivel de proyecto en Antigravity, aceptación con agentes reales y revisión del contrato legal/privacidad específica. El CI verde no reemplaza estas pruebas.
 

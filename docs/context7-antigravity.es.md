@@ -23,7 +23,7 @@ remote-dev-context7-antigravity test --yes
 
 `status` y `plan` son pasivos y no hacen peticiones de red. `reinstall` requiere confirmación, utiliza el mismo bloqueo de directorio que Playwright, conserva el significado de las demás entradas MCP y hace una copia privada del JSON original antes de sustituirlo atómicamente. Puede normalizar el formato JSON, pero conserva todos los valores ajenos a Context7.
 
-**Si la entrada Context7 contiene autenticación personalizada** (`headers`, OAuth, token, comando, argumentos o `env`), la reinstalación se bloquea para proteger las credenciales. No toca configuraciones MCP específicas del proyecto (`.agents/mcp_config.json`).
+**Si Context7 contiene credenciales propias o cualquier opción adicional** (`headers`, OAuth, token, `env`, `timeoutSeconds`, `disabled`, `disabledTools`, filtros o argumentos), la entrada se considera personalizada y no se reinstala, aunque el endpoint sea antiguo. Se preserva sin cambios y exige revisión manual; no se eliminan restricciones de herramientas ni credenciales. Tampoco se modifican los MCP específicos del proyecto (`.agents/mcp_config.json`).
 
 Tras reinstalar, verifica el funcionamiento desde Antigravity CLI con `/mcp` y una consulta de documentación pública. `test --yes` solo comprueba la configuración local y el endpoint `/ping`: no demuestra por sí mismo que el agente pueda usar las herramientas.
 
