@@ -663,11 +663,11 @@ ${status_summary}
 =============================
 Context7 is an optional external Upstash service.
 Configuration/status are offline; only Test performs an explicit network check.
-1) Install / safely rebuild hosted Context7 MCP integration
+1) Install Context7 / manage authentication (legacy repair)
 2) Test bundled Codex config and Context7 hosted endpoint
 3) Update / reapply reviewed hosted integration contract
 4) Remove Remote Dev-managed Context7 integration
-6) Reinstall only Context7 MCP (preserve other MCPs and API key)
+6) Reinstall damaged Context7 MCP (reset registration; keep API key)
 p) Preview safe MCP recovery (read-only)
 5) Back
 MENU
