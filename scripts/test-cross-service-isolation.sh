@@ -41,6 +41,7 @@ require_command docker
 require_command jq
 require_command sha256sum
 require_command timeout
+require_command tar
 require_command python3
 
 case "$image" in
@@ -1004,24 +1005,28 @@ assert_hardened_codex_runtime_regressions() {
   local copy_status=0
   local regression_status=0
   local regression_description=""
-  local script=""
 
   docker_exec "$codex_name" install -d -m 0700 -- "$fixture_root" >/dev/null 2>&1 \
     || fail "hardened Codex regression fixture root could not be prepared"
-  for script in test-codex-runtime-noexec-staging.py test-remote-dev-context7-runtime-isolation.py test-real-codex-project-trust.py; do
-    copy_status=0
-    timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
-      "${docker_exec_timeout_seconds}s" \
-      docker cp "$source_root/scripts/$script" "$codex_name:$fixture_root/" \
-      >/dev/null 2>&1 || copy_status=$?
-    case "$copy_status" in
-      0) ;;
-      124) fail "Codex regression fixture copy timed out" ;;
-      125) fail "Codex regression fixture copy timeout invocation failed" ;;
-      137) fail "Codex regression fixture copy required KILL escalation" ;;
-      *) fail "Codex regression fixture copy failed" ;;
-    esac
-  done
+  # Transfer only the three reviewed synthetic regression sources in one Docker
+  # archive stream, keeping their names, bytes and in-container paths unchanged.
+  # pipefail rejects a failed host tar as well as a failed/timed-out docker cp.
+  {
+    tar -cf - -C "$source_root/scripts" -- \
+      test-codex-runtime-noexec-staging.py \
+      test-remote-dev-context7-runtime-isolation.py \
+      test-real-codex-project-trust.py |
+      timeout --foreground --kill-after="${docker_exec_kill_after_seconds}s" \
+        "${docker_exec_timeout_seconds}s" \
+        docker cp - "$codex_name:$fixture_root"
+  } >/dev/null 2>&1 || copy_status=$?
+  case "$copy_status" in
+    0) ;;
+    124) fail "Codex regression fixture copy timed out" ;;
+    125) fail "Codex regression fixture copy timeout invocation failed" ;;
+    137) fail "Codex regression fixture copy required KILL escalation" ;;
+    *) fail "Codex regression fixture copy failed" ;;
+  esac
   docker_exec "$codex_name" chmod a+r -- \
     "$fixture_root/test-codex-runtime-noexec-staging.py" \
     "$fixture_root/test-remote-dev-context7-runtime-isolation.py" \
