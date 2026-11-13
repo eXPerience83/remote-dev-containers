@@ -24,6 +24,14 @@ ci_admin_subphase_checkpoint() {
   ci_admin_subphase_started=$SECONDS
 }
 
+# Separate Codex recreation breakdown; keep the existing outer total intact.
+ci_codex_recreation_checkpoint() {
+  local subphase="$1"
+  printf 'CI TIMING codex-recreation/%s: %ss\n' \
+    "$subphase" "$(( SECONDS - ci_codex_recreation_started ))"
+  ci_codex_recreation_started=$SECONDS
+}
+
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -1897,11 +1905,13 @@ wait_for_health_command "$codex_name"
 wait_for_health_command "$antigravity_name"
 
 ci_phase_checkpoint "state-canaries-and-authenticated-launcher"
+ci_codex_recreation_started=$SECONDS
 remove_owned_container "$codex_name" "$codex_id" \
   || fail "failed to remove the owned Codex fixture for recreation"
 start_codex
 wait_for_health_command "$codex_name"
 assert_image_id "$codex_name"
+ci_codex_recreation_checkpoint "restart-and-health"
 assert_no_broad_mounts_or_environment "$codex_name" codex
 assert_mount_contract "$codex_name" codex
 assert_hardening_contract "$codex_name" codex
@@ -1910,16 +1920,19 @@ assert_agent_runtime_identity "$codex_name" Codex
 assert_development_scratch_environment "$codex_name" Codex
 assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
 assert_read_only_rootfs "$codex_name" Codex
+ci_codex_recreation_checkpoint "security-and-auth-contract"
 assert_mise_trust_state "$codex_name" observe trusted
 assert_mise_trust_state "$antigravity_name" observe untrusted
 assert_mise_trust_state "$codex_name" untrust untrusted
 assert_mise_trust_state "$antigravity_name" trust trusted
 assert_mise_trust_state "$codex_name" observe untrusted
+ci_codex_recreation_checkpoint "mise-role-transitions"
 assert_distinct_agent_sources
 verify_canaries codex_invariants "$codex_name"
 verify_canaries antigravity_invariants "$antigravity_name"
 wait_for_health_command "$launcher_name"
 wait_for_health_command "$antigravity_name"
+ci_codex_recreation_checkpoint "state-canaries-and-peers"
 
 ci_phase_checkpoint "codex-recreation"
 remove_owned_container "$antigravity_name" "$antigravity_id" \
