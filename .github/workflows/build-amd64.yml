@@ -153,6 +153,7 @@ jobs:
           python3 scripts/test_build_image_comparison_workflow.py
           python3 scripts/test_build_pr_concurrency.py
           python3 scripts/test_cross_service_phase_timing.py
+          python3 scripts/test_mise_diff_fail_closed.py
           python3 scripts/test_codex_regression_fixture_transfer.py
           python3 scripts/test_antigravity_fixture_batch.py
           python3 scripts/test_publish_edge_security_cadence.py
