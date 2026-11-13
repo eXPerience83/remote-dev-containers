@@ -10,6 +10,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SRC = Path(__file__).with_name("remote-dev-context7-antigravity.py")
 spec = importlib.util.spec_from_file_location("_antigravity_context7", SRC)
@@ -48,7 +49,8 @@ class Context7Antigravity(unittest.TestCase):
         self.assertFalse(self.file.exists())
         self.assertEqual(self.call("plan")[0], 0)
         self.assertFalse(self.file.exists())
-        self.assertEqual(self.call("reinstall")[0], 2)
+        with patch("sys.stdin", new=io.StringIO("")):
+            self.assertEqual(self.call("reinstall")[0], 2)
         self.assertFalse(self.file.exists())
 
         self.assertEqual(self.call("reinstall", "--yes")[0], 0)
@@ -126,6 +128,15 @@ class Context7Antigravity(unittest.TestCase):
             ("url-userinfo", {"serverUrl": "https://user:VERY_PRIVATE_VALUE@mcp.context7.com/mcp"}),
             ("disabled", {"serverUrl": manager.ENDPOINT, "disabled": True}),
             ("extra-timeout", {"serverUrl": manager.ENDPOINT, "timeoutSeconds": 60}),
+            ("legacy-url-tools", {"url": manager.ENDPOINT, "disabledTools": ["lookup"]}),
+            ("legacy-url-drift-tools", {"url": "https://old.example/mcp",
+                                        "disabledTools": ["lookup"]}),
+            ("stale-timeout", {"serverUrl": "https://old.example/mcp",
+                               "timeoutSeconds": 60}),
+            ("access-token", {"serverUrl": "https://old.example/mcp",
+                              "access_token": "VERY_PRIVATE_VALUE"}),
+            ("refresh-token", {"httpUrl": "https://old.example/mcp",
+                               "refresh_token": "VERY_PRIVATE_VALUE"}),
             ("invalid-url", {"serverUrl": "https://[invalid"}),
         ]:
             with self.subTest(name=name):
@@ -144,6 +155,19 @@ class Context7Antigravity(unittest.TestCase):
                 code, out, _ = self.call("status", "--menu")
                 self.assertEqual(code, 0)  # User-managed auth is not corruption.
                 self.assertNotIn("PRIVATE", out)
+
+    def test_simple_legacy_endpoint_can_be_reinstalled(self):
+        for selector in ("serverUrl", "url", "httpUrl"):
+            with self.subTest(selector=selector):
+                self.file.write_text(json.dumps(
+                    {"mcpServers": {"context7": {selector: "https://old.example/mcp"}}}
+                ), encoding="utf-8")
+                self.assertEqual(self.call("plan")[0], 0)
+                self.assertEqual(self.call("reinstall", "--yes")[0], 0)
+                doc = json.loads(self.file.read_bytes())
+                self.assertEqual(doc["mcpServers"]["context7"], manager.ENTRY)
+                if self.backup.exists():
+                    self.backup.unlink()
 
     def test_ambiguous_json_is_fail_closed(self):
         bad = [

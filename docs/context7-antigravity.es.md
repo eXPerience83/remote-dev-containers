@@ -1,5 +1,7 @@
 # Context7 alojado para Antigravity CLI
 
+> **Estado de publicación:** Integración experimental desarrollada en el PR #324 (borrador). Aún no está fusionada ni incluida en las imágenes publicadas `edge`, `stable` o `latest`. Los comandos requieren una futura imagen revisada que contenga estos cambios.
+
 Esta integración **instala o reinstala únicamente el registro MCP**, no descarga un servidor Context7 en la imagen. Antigravity usa `~/.gemini/config/mcp_config.json`, con la propiedad `mcpServers.context7.serverUrl` para el transporte HTTP.
 
 Codex y Antigravity tienen estados separados. Codex conserva su API key privada. **No copiamos esa clave a `mcp_config.json` ni suponemos que Antigravity sustituya variables de entorno en cabeceras HTTP.** Por ahora la integración Antigravity se registra en modo remoto anónimo, con los límites de uso correspondientes:
@@ -7,6 +9,8 @@ Codex y Antigravity tienen estados separados. Codex conserva su API key privada.
 ```json
 {"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}
 ```
+
+**Aviso de privacidad:** Context7 es un servicio externo operado por Upstash. Las búsquedas de documentación y los identificadores de bibliotecas generados por el agente se envían a ese proveedor. Trata las consultas MCP como datos compartidos con un tercero; no envíes secretos, información confidencial de proyectos ni datos personales regulados.
 
 Desde el menú de Antigravity, entra en **7) Context7 MCP integration...** para consultar estado, previsualizar, reinstalar y probar. También puedes usar:
 

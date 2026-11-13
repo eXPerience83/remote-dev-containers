@@ -116,7 +116,7 @@ required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
 
-Todo lo demás se conserva. Un `mcp_servers.context7` previo no gestionado, marcadores ambiguos o estado inseguro fallan de forma segura. Antes de sustituir un bloque gestionado, se guarda la configuración anterior completa y privada en:
+Con `install` y `repair`, se conserva lo ajeno al bloque gestionado y se rechazan entradas `mcp_servers.context7` sin gestión, marcadores ambiguos o estados inseguros. Por separado, `reinstall --yes` permite sustituir una tabla Context7 no gestionada **solo si su alcance puede aislarse con seguridad**; se restablecen sus opciones, pero no las de otros MCP (véase la sección de reinstalación). Antes de sustituir un bloque gestionado, se guarda la configuración anterior completa y privada en:
 
 ```text
 $CODEX_HOME/config.toml.remote-dev-context7.bak

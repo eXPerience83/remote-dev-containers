@@ -88,7 +88,9 @@ def inspect(content: bytes):
     # themselves contain secrets, even without an explicit headers field.
     sensitive = {"headers", "oauth", "env", "args", "command",
                  "apikey", "token", "secret", "authprovidertype", "authorization"}
-    if any(key.casefold() in sensitive or "secret" in key.casefold()
+    if any(key.casefold() in sensitive
+           or "secret" in key.casefold()
+           or "token" in key.casefold()
            for key in current):
         return "custom-auth", doc
     for key in ("serverUrl", "url", "httpUrl"):
@@ -104,11 +106,12 @@ def inspect(content: bytes):
                 return "custom-auth", doc
             if has_userinfo or parsed_url.query or parsed_url.fragment:
                 return "custom-auth", doc
-    if current.get("disabled") is True:
-        return "custom", doc
-    if current.get("serverUrl") == ENDPOINT and set(current) != set(ENTRY):
-        # A working hosted registration with extra timeouts, tool filters,
-        # or provider options is user-managed, not corrupted.
+    # Only simple registrations with exactly one endpoint selector are
+    # candidates for resetting. Every extra field, even on a stale URL, may
+    # encode a user-owned tool restriction, timeout, or authentication policy.
+    selectors = ("serverUrl", "url", "httpUrl")
+    present = [key for key in selectors if key in current]
+    if len(present) != 1 or set(current) != {present[0]}:
         return "custom", doc
     return "drift", doc
 

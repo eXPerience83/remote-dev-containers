@@ -11,12 +11,12 @@ La **imagen nueva** debe diagnosticar Context7 en Codex y en Antigravity y ofrec
 
 | Aspecto | Codex | Antigravity |
 |---|---|---|
-| Archivo | \`CODEX_HOME/config.toml\` privado | \`/root/.gemini/config/mcp_config.json\` privado |
-| Registro | TOML con URL, cabeceras y banderas de Context7 | JSON \`mcpServers.context7.serverUrl\` |
+| Archivo | `CODEX_HOME/config.toml` privado | `/root/.gemini/config/mcp_config.json` privado |
+| Registro | TOML con URL, cabeceras y banderas de Context7 | JSON `mcpServers.context7.serverUrl` |
 | Clave | Conservar la clave privada de Codex | Sin compartir claves: modo anónimo inicial |
-| Diagnóstico | Menú, \`status --menu\`, \`plan\`, Doctor | Menú, \`status --menu\`, \`plan\`, Doctor |
-| Reinstalación | \`remote-dev-context7 reinstall --yes\` | \`remote-dev-context7-antigravity reinstall --yes\` |
-| Validación real | Herramienta Context7 desde Codex | \`agy /mcp\` y consulta real |
+| Diagnóstico | Menú, `status --menu`, `plan`, Doctor | Menú, `status --menu`, `plan`, Doctor |
+| Reinstalación | `remote-dev-context7 reinstall --yes` | `remote-dev-context7-antigravity reinstall --yes` |
+| Validación real | Herramienta Context7 desde Codex | `agy /mcp` y consulta real |
 
 Reglas innegociables: diagnóstico **sin escrituras ni red**; acción explícita con aviso; proteger clave y otros MCP (Playwright y Developer Docs); copias de seguridad antes de escribir; bloqueo compartido con el configurador de Playwright; rechazo de casos ambiguos; sin instalar nada al arrancar; sin tocar credenciales de un agente desde el otro.
 
@@ -26,9 +26,9 @@ La reinstalación **sí restablece las personalizaciones de la propia entrada Co
 
 1. **Implementación y pruebas offline:** adaptar TOML/JSON; menús; copias/rollback; errores de sintaxis, marcadores y entradas duplicadas; pruebas de propiedades y concurrencia.
 2. **Revisión:** último SHA con CI íntegramente verde, CodeRabbit o auditoría manual documentada si hay limitación por cuota, y revisión específica de Context7-Antigravity bajo #53.
-3. **Candidata aislada:** publicar \`candidate-pr-324-<sha>\` y canal \`dev\` únicamente tras validación. No confundir la candidata antigua anterior al rediseño con la nueva.
+3. **Candidata aislada:** publicar `candidate-pr-324-<sha>` y canal `dev` únicamente tras validación. No confundir la candidata antigua anterior al rediseño con la nueva.
 4. **Aceptación en TrueNAS:** probar en Codex y Antigravity reales, verificar Context7, el resto de los MCP, las claves separadas, idempotencia y rollback.
-5. **Cierre:** solo tras GO funcional y seguridad, fusionar, publicar Edge con su propio CI y actualizar TrueNAS con autorización. Nunca modificar \`stable/latest\` por este PR.
+5. **Cierre:** solo tras GO funcional y seguridad, fusionar, publicar Edge con su propio CI y actualizar TrueNAS con autorización. Nunca modificar `stable/latest` por este PR.
 
 **Pendiente:** verificaciones de configuración a nivel de proyecto en Antigravity, aceptación con agentes reales y revisión del contrato legal/privacidad específica. El CI verde no reemplaza estas pruebas.
 

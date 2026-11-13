@@ -116,7 +116,7 @@ required = false
 # END REMOTE DEV MANAGED CONTEXT7
 ```
 
-Everything outside those markers is preserved. An existing unowned `mcp_servers.context7` entry, ambiguous markers or unsafe state fail closed. Before replacing a managed block, the complete previous config is saved privately as:
+For `install` and `repair`, content outside the managed block is preserved and an unowned `mcp_servers.context7` entry, ambiguous markers or unsafe state fail closed. Separately, the explicit `reinstall --yes` operation may replace a safely isolated unowned Context7 table and reset **its** settings, while preserving all other MCPs (see the reinstall section). Before replacing a managed block, the complete previous config is saved privately as:
 
 ```text
 $CODEX_HOME/config.toml.remote-dev-context7.bak

@@ -1,5 +1,7 @@
 # Context7 hosted MCP for Antigravity CLI
 
+> **Release status:** This integration is experimental and is being developed in draft PR #324. It is not yet merged or included in published `edge`, `stable` or `latest` images. The commands below require a future reviewed image containing this implementation.
+
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
 ## Codex and Antigravity are independent
@@ -13,6 +15,8 @@ The Antigravity entry installed by Remote Dev is initially anonymous:
 ```
 
 Context7 allows anonymous remote access at lower rate limits. Do not treat an HTTP `/ping` success as proof that tools are usable from the Antigravity CLI.
+
+**External-service privacy notice:** Context7 is operated by Upstash, outside Remote Dev. Agent-generated documentation searches and library identifiers are sent to the hosted provider. Treat MCP queries as externally disclosed; do not send confidential project data, secrets or regulated personal information through this integration.
 
 ## Controls
 
