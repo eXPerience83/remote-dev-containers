@@ -57,9 +57,18 @@ def reject_duplicate_keys(pairs):
     return result
 
 
+def reject_nonfinite(_value: str):
+    raise MaintenanceError("non-standard JSON numeric value; no changes permitted")
+
+
 def inspect(content: bytes):
     try:
-        doc = json.loads(content.decode("utf-8"), object_pairs_hook=reject_duplicate_keys) if content.strip() else {}
+        doc = (
+            json.loads(content.decode("utf-8"),
+                       object_pairs_hook=reject_duplicate_keys,
+                       parse_constant=reject_nonfinite)
+            if content.strip() else {}
+        )
     except (UnicodeError, ValueError) as exc:
         raise MaintenanceError("Antigravity MCP JSON is invalid; no changes permitted") from exc
     if not isinstance(doc, dict):
@@ -187,6 +196,10 @@ def reinstall(directory: Path) -> int:
         state, doc = inspect(content)
         if state in {"custom-auth", "custom"}:
             raise MaintenanceError("user-owned Context7 settings; refusing to replace them")
+        if state == "managed":
+            # An already-correct entry is a true no-op; do not reformat
+            # unrelated MCP JSON merely because an operator used reinstall.
+            return False
         updated = candidate(doc)
         if content == updated:
             return False

@@ -90,6 +90,18 @@ class Context7Antigravity(unittest.TestCase):
         self.assertEqual(again, self.file.read_bytes())
 
 
+
+    def test_healthy_entry_is_byte_exact_noop(self):
+        raw = (
+            b'{"mcpServers":{"playwright":{"command":"custom"},'
+            b'"context7":{"serverUrl":"https://mcp.context7.com/mcp"}},'
+            b'"preferences":{"custom":true}}'
+        )
+        self.file.write_bytes(raw)
+        self.assertEqual(self.call("reinstall", "--yes")[0], 0)
+        self.assertEqual(self.file.read_bytes(), raw)
+        self.assertFalse(self.backup.exists())
+
     def test_second_reinstall_keeps_previous_backup(self):
         first = b'{"mcpServers":{"context7":{"serverUrl":"https://first.example/mcp"}}}'
         second = b'{"mcpServers":{"context7":{"serverUrl":"https://second.example/mcp"}}}'
@@ -141,6 +153,7 @@ class Context7Antigravity(unittest.TestCase):
             b'{"mcpServers":{"context7":{},"context7":{"serverUrl":"https://wrong"}}}',
             b'{"mcpServers":{"other":{"command":"safe","command":"not-safe"}}}',
             b"\xff",
+            b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}},"rate":NaN}',
         ]
         for raw in bad:
             with self.subTest(raw=raw[:18]):
