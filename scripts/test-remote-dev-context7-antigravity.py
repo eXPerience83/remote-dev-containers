@@ -109,6 +109,9 @@ class Context7Antigravity(unittest.TestCase):
                 self.assertNotIn("PRIVATE", out)
                 self.assertEqual(original, self.file.read_bytes())
                 self.assertFalse(self.backup.exists())
+                code, out, _ = self.call("status", "--menu")
+                self.assertEqual(code, 0)  # User-managed auth is not corruption.
+                self.assertNotIn("PRIVATE", out)
 
     def test_ambiguous_json_is_fail_closed(self):
         bad = [

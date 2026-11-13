@@ -123,8 +123,8 @@ def status(directory: Path, *, verbose: bool = False) -> int:
         print("Context7 (Antigravity): not installed")
         return 0
     if state == "custom-auth":
-        print("Context7 (Antigravity): custom credential-bearing entry; reinstall blocked")
-        return 3
+        print("Context7 (Antigravity): user-managed credential-bearing MCP (left untouched)")
+        return 0
     print("Context7 (Antigravity): registration differs; reinstall recommended")
     return 3
 
