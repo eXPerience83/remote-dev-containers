@@ -1008,7 +1008,11 @@ def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
         print("Context7 recovery: ALREADY MANAGED (nothing to reinstall)")
         return 0
     if state.kind == "absent":
-        print("Context7 recovery: NOT INSTALLED (use install; no existing block to reclaim)")
+        if scoped_reinstall_candidate(state) is None:
+            print("Context7 recovery: BLOCKED (existing MCP format prevents safe install)")
+            return 3
+        print("Context7 recovery: NOT INSTALLED (safe Context7 registration available)")
+        print("Action: remote-dev-context7 reinstall --yes")
         return 0
     if scoped_reinstall_candidate(state) is not None:
         print("Context7 recovery: REINSTALLABLE (read-only scope verification)")

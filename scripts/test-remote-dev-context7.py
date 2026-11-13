@@ -978,6 +978,9 @@ def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
                 raise AssertionError(f"{label}: input should be valid without Context7")
             if module.scoped_reinstall_candidate(state) is not None:
                 raise AssertionError(f"{label}: unsafe install candidate accepted")
+        preview = run_manager(home, "plan")
+        if preview.returncode != 3 or "BLOCKED" not in preview.stdout:
+            raise AssertionError(f"{label}: plan falsely advertised a safe install")
         result = run_manager(home, "reinstall", "--yes")
         require_failure(result, f"{label}: invalid appending must fail closed")
         if file.read_text(encoding="utf-8") != original:
