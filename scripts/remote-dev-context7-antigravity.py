@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import secrets
 import stat
 import sys
 from urllib.parse import urlparse
@@ -176,8 +177,13 @@ def reinstall(directory: Path) -> int:
             return False
         # Before any mutation, create a private exact pre-image backup.
         if info is not None:
+            # Keep the first original rollback file intact. Later changed
+            # configurations use unique private snapshots, not a destructive
+            # rewrite of the original backup.
             prev, prev_info = ops.read_config(fd, BACKUP_FILE)
-            ops.atomic_write(fd, BACKUP_FILE, prev_info, content, prev)
+            backup_name = (BACKUP_FILE if prev_info is None
+                           else BACKUP_FILE + "." + secrets.token_hex(8))
+            ops.atomic_write(fd, backup_name, None, content, b"")
         ops.atomic_write(fd, CONFIG_FILE, info, updated, content)
         return True
 

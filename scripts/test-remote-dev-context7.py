@@ -933,6 +933,30 @@ def assert_scoped_reinstallation(module, root: Path) -> None:
             raise AssertionError(f"{label}: unsafe scope modified TOML")
 
 
+def assert_scoped_reinstall_retains_prior_backups(module, root: Path) -> None:
+    """Multiple changed registrations retain both original rollback states."""
+    home = root / "scoped-reinstall-rollback-history"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    prefix = 'model = "synthetic"\n'
+    original = prefix + '[mcp_servers.context7]\nurl = "https://one.example/mcp"\n'
+    config.write_text(original, encoding="utf-8")
+    require_success(run_manager(home, "reinstall", "--yes"), "initial scoped reinstall backup")
+    first_backup = home / "config.toml.remote-dev-context7.bak"
+    if first_backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("initial rollback preimage incorrect")
+    second = prefix + '[mcp_servers.context7]\nurl = "https://two.example/mcp"\n'
+    config.write_text(second, encoding="utf-8")
+    require_success(run_manager(home, "reinstall", "--yes"), "second scoped reinstall backup")
+    history = list(home.glob("config.toml.remote-dev-context7.bak.*"))
+    if len(history) != 1 or history[0].read_text(encoding="utf-8") != second:
+        raise AssertionError("later rollback preimage was not retained separately")
+    if first_backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("later reinstall overwrote original rollback")
+    assert_private_file(first_backup)
+    assert_private_file(history[0])
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -963,6 +987,7 @@ args = ["--safe"]
         assert_nested_headers_recovery_fails_closed(load_manager_module(), root)
         assert_passive_preview_rejects_fifo_key(load_manager_module(), root)
         assert_scoped_reinstallation(load_manager_module(), root)
+        assert_scoped_reinstall_retains_prior_backups(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")

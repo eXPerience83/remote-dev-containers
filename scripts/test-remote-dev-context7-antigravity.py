@@ -89,6 +89,21 @@ class Context7Antigravity(unittest.TestCase):
         self.assertEqual(self.call("reinstall", "--yes")[0], 0)
         self.assertEqual(again, self.file.read_bytes())
 
+
+    def test_second_reinstall_keeps_previous_backup(self):
+        first = b'{"mcpServers":{"context7":{"serverUrl":"https://first.example/mcp"}}}'
+        second = b'{"mcpServers":{"context7":{"serverUrl":"https://second.example/mcp"}}}'
+        self.file.write_bytes(first)
+        self.assertEqual(self.call("reinstall", "--yes")[0], 0)
+        self.assertEqual(self.backup.read_bytes(), first)
+        self.file.write_bytes(second)
+        self.assertEqual(self.call("reinstall", "--yes")[0], 0)
+        history = list(self.configdir.glob(manager.BACKUP_FILE + ".*"))
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].read_bytes(), second)
+        self.assertEqual(self.backup.read_bytes(), first)
+        self.assertEqual(stat.S_IMODE(history[0].stat().st_mode), 0o600)
+
     def test_custom_auth_is_never_discarded(self):
         for name, entry in [
             ("header", {"serverUrl": manager.ENDPOINT,

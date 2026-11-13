@@ -8,6 +8,7 @@ import getpass
 import json
 import os
 from pathlib import Path
+import secrets
 import stat
 import subprocess
 import sys
@@ -351,7 +352,17 @@ def backup_and_replace_config(paths: Paths, old: str, new: str) -> bool:
         return False
     validate_home(paths, create=True)
     if paths.config.exists():
-        atomic_write(paths.backup, old, mode=0o600)
+        backup = paths.backup
+        # Preserve the *first* rollback snapshot across later reinstalls.
+        # Every subsequent changed preimage gets a new private backup.
+        if backup.exists() or backup.is_symlink():
+            info = backup.lstat()
+            if (not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or (stat.S_IMODE(info.st_mode) & 0o077)):
+                raise Context7Error("unsafe existing Context7 rollback backup")
+            backup = backup.with_name(backup.name + "." + secrets.token_hex(8))
+        atomic_write(backup, old, mode=0o600)
     atomic_write(paths.config, new, mode=0o600)
     return True
 
