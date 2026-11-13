@@ -150,6 +150,17 @@ class Context7Antigravity(unittest.TestCase):
                 self.assertEqual(self.file.read_bytes(), raw)
                 self.assertFalse(self.backup.exists())
 
+    def test_missing_global_directory_is_optional_and_read_only(self):
+        self.configdir.rmdir()
+        code, out, _ = self.call("status", "--menu")
+        self.assertEqual(code, 0)
+        self.assertIn("not installed", out)
+        code, out, _ = self.call("plan")
+        self.assertEqual(code, 3)
+        self.assertIn("BLOCKED", out)
+        self.assertEqual(self.call("reinstall", "--yes")[0], 3)
+        self.assertFalse(self.configdir.exists())
+
     def test_fifo_and_symlink_config_rejected(self):
         self.file.symlink_to(self.root / "other")
         self.assertEqual(self.call("status", "--menu")[0], 3)

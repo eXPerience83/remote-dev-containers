@@ -129,6 +129,11 @@ def using_config(directory: Path, mutator):
 
 
 def status(directory: Path, *, verbose: bool = False) -> int:
+    if not directory.exists() and not directory.is_symlink():
+        # Missing optional MCP config must not make agent Doctor fail.
+        # Do not create the provider-private directory from a passive probe.
+        print("Context7 (Antigravity): not installed (global MCP config unavailable)")
+        return 0
     try:
         state, _ = using_config(directory, lambda _ops, _fd, data, _info: inspect(data))
     except MaintenanceError:
@@ -148,6 +153,10 @@ def status(directory: Path, *, verbose: bool = False) -> int:
 
 
 def plan(directory: Path) -> int:
+    if not directory.exists() and not directory.is_symlink():
+        print("Context7 (Antigravity): BLOCKED (global MCP directory missing)")
+        print("Action: restore the role-private mount; do not create arbitrary vendor state")
+        return 3
     try:
         state, _ = using_config(directory, lambda _ops, _fd, data, _info: inspect(data))
     except MaintenanceError:
