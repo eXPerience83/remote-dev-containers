@@ -957,6 +957,35 @@ def assert_scoped_reinstall_retains_prior_backups(module, root: Path) -> None:
     assert_private_file(history[0])
 
 
+def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
+    """An inline mcp_servers TOML table cannot be extended by appending a child."""
+    cases = {
+        "inline-mcp-root": (
+            'model = "synthetic"\nmcp_servers = { playwright = { command = "custom" } }\n'
+        ),
+        "inline-mcp-playwright": (
+            'model = "synthetic"\n[mcp_servers]\nplaywright = { command = "custom" }\n'
+        ),
+    }
+    for label, original in cases.items():
+        home = root / ("reinstall-absent-" + label)
+        home.mkdir(mode=0o700)
+        file = home / "config.toml"
+        file.write_text(original, encoding="utf-8")
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "absent":
+                raise AssertionError(f"{label}: input should be valid without Context7")
+            if module.scoped_reinstall_candidate(state) is not None:
+                raise AssertionError(f"{label}: unsafe install candidate accepted")
+        result = run_manager(home, "reinstall", "--yes")
+        require_failure(result, f"{label}: invalid appending must fail closed")
+        if file.read_text(encoding="utf-8") != original:
+            raise AssertionError(f"{label}: existing user config was changed")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{label}: forbidden reinstall wrote backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -988,6 +1017,7 @@ args = ["--safe"]
         assert_passive_preview_rejects_fifo_key(load_manager_module(), root)
         assert_scoped_reinstallation(load_manager_module(), root)
         assert_scoped_reinstall_retains_prior_backups(load_manager_module(), root)
+        assert_scoped_reinstall_absent_fails_closed(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")

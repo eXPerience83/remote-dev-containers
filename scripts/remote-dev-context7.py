@@ -580,7 +580,20 @@ def scoped_reinstall_candidate(state: ConfigState) -> str | None:
     if state.kind == "managed":
         return state.text
     if state.kind == "absent":
-        return append_managed_block(state.text)
+        # A valid pre-existing inline mcp_servers table cannot be extended
+        # with a regular TOML child header. Validate the entire proposal and
+        # prove unrelated configuration is unchanged before allowing writes.
+        candidate = append_managed_block(state.text)
+        try:
+            before = parse_toml(state.text, label="existing Codex config")
+            after = parse_toml(candidate, label="proposed Context7 install")
+        except Context7Error:
+            return None
+        if (context7_table(after) != MANAGED_CONTRACT
+                or without_context7(before) != without_context7(after)
+                or inspect_config_candidate(candidate) != "managed"):
+            return None
+        return candidate
     try:
         before = parse_toml(state.text, label="Codex MCP config")
     except Context7Error:
