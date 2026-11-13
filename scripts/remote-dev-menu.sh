@@ -684,7 +684,14 @@ MENU
         if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
         ;;
       p|P)
-        if run_context7_action "Context7 recovery preview" "${context7_plan_command[@]}"; then :; fi
+        # Unlike lifecycle actions, preview must never harden persistent
+        # state permissions or write the user configuration.
+        local plan_status=0
+        "${context7_plan_command[@]}" || plan_status=$?
+        if (( plan_status != 0 )); then
+          echo "Context7: recovery preview blocked (status $plan_status)" >&2
+        fi
+        pause_for_menu "Press Enter to return to the Context7 menu..."
         ;;
       5)
         return 0
