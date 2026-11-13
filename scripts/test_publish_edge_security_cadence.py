@@ -195,6 +195,11 @@ def main() -> None:
         "python3 scripts/test_update_upstream_changelog.py",
         "shared preflight validates dual-Python changelog fixtures",
     )
+    require_text(
+        source_preflight,
+        "python3 scripts/test_edge_publication_paths.py",
+        "edge publisher checks that all Dockerfile input paths trigger rebuilds",
+    )
     test_python_315_publisher_wiring(workflow)
 
     base_build = workflow.index("Build untagged edge base candidate")
