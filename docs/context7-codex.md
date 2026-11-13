@@ -18,6 +18,7 @@ Use **Context7 integration...** in the Codex menu or:
 
 ```bash
 remote-dev-context7 status
+remote-dev-context7 reinstall --yes
 remote-dev-context7 plan
 remote-dev-context7 install
 remote-dev-context7 repair
@@ -40,13 +41,15 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 `remote-dev-context7 update` revalidates/reapplies the hosted MCP configuration shipped by the image. It is separate from the transient `ctx7` CLI version used only for device authentication.
 
-### Safe recovery of a legacy MCP registration
+### Diagnostics and isolated Context7 MCP reinstall
 
-The Codex menu and `remote-dev-context7 status --menu` detect malformed ownership markers, but **never repair them automatically**. `remote-dev-context7 plan` is a read-only preview that reports whether a reviewed legacy layout can be reconstructed and recommends `remote-dev-context7 repair --yes` only when eligible.
+`remote-dev-context7 status --menu` is passive. `remote-dev-context7 plan` reports whether **only the Context7 MCP registration** can be reinstalled without modifying unrelated agent configuration.
 
-Recovery recognizes an older `[mcp_servers.context7.env_http_headers]` nested header table containing the reviewed mapping, with neither `enabled` nor `required`, a missing `BEGIN` and a displaced `END` beyond unrelated MCP tables. Only the Context7 MCP registration is rebuilt; unrelated table bytes and the existing private API key are preserved. A private full-config backup is written before changing the config. `update`, `status`, `plan` and diagnostics never reclaim ambiguous ownership.
+The Codex menu option **Reinstall only Context7**, or `remote-dev-context7 reinstall --yes`, regenerates the reviewed Context7 stanza in `config.toml` rather than patching historical fields. It requires a provably isolated Context7 TOML table, validates all non-Context7 parsed values before and after, and preserves unrelated MCP sections. It uses the shared Playwright directory lock, private original-file backup and atomic replacement. The existing private API key is retained.
 
-**There is no local Context7 server package in the image to reinstall**: this is a hosted HTTP MCP registration. Explicit repair/reinstall reconstructs that entry under tightly scoped conditions. If the plan returns `BLOCKED`, do not force an install over customized configuration.
+**Reinstall intentionally discards custom Context7 entry settings**, and is never called automatically by `status`, `plan`, `doctor` or startup. Ambiguous ownership refuses to write. The older narrow `repair` path remains available for previously reviewed legacy layouts, but `reinstall` is the primary action when the MCP registration is damaged.
+
+Antigravity has its own JSON adapter via `remote-dev-context7-antigravity`. The initial Antigravity integration uses the hosted anonymous endpoint; no Codex API key is copied into its JSON. See `docs/context7-antigravity.md`.
 
 ## Reviewed and latest official Context7 CLI
 
