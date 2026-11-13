@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Validate the fixed, reviewed HTTPS origin for Antigravity metadata.
+"""Validate the fixed official HTTPS origin for Antigravity metadata.
 
-Keep this predicate identical to the previous validators' shared contract.
-Changing accepted URL bytes requires a separate security review.
+Reject malformed raw URL bytes before the standard URL parser normalizes them.
+The original shared host/scheme/port/credentials/fragment policy is unchanged.
 """
 
 from __future__ import annotations
