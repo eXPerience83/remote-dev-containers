@@ -12,6 +12,7 @@ invocations="$workdir/invocations"
 policy_calls="$workdir/policy-calls"
 preset_state="$workdir/guarded-preset"
 hardening_calls="$workdir/hardening-calls"
+context7_calls="$workdir/context7-calls"
 mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat >"$runtime_lib" <<'RUNTIME'
@@ -126,6 +127,27 @@ case "${1:-}" in
 esac
 POLICY
 
+cat >"$bin_dir/remote-dev-context7-antigravity" <<'CONTEXT7'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status)
+    [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
+    echo 'Context7 (Antigravity): not installed'
+    ;;
+  plan)
+    [[ "$#" == 1 ]] || exit 2
+    echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
+    echo plan >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+    ;;
+  reinstall|test)
+    [[ "$#" == 1 ]] || exit 2
+    echo "$1" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+    ;;
+  *) exit 2 ;;
+esac
+CONTEXT7
+
 cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -175,6 +197,7 @@ replacements = {
     "/usr/local/bin/run-antigravity": str(bin_dir / "run-antigravity"),
     "/usr/local/bin/remote-dev-antigravity-policy": str(bin_dir / "remote-dev-antigravity-policy"),
     "/usr/local/bin/remote-dev-antigravity": str(bin_dir / "remote-dev-antigravity"),
+    "/usr/local/bin/remote-dev-context7-antigravity": str(bin_dir / "remote-dev-context7-antigravity"),
     "/usr/local/bin/remote-dev-install-antigravity": str(bin_dir / "remote-dev-install-antigravity"),
     "/usr/local/bin/remote-dev-update-antigravity": str(bin_dir / "remote-dev-update-antigravity"),
     "/usr/local/bin/secure-persistent-state": str(bin_dir / "secure-persistent-state"),
@@ -286,3 +309,26 @@ mapfile -t calls <"$invocations"
 grep -Fq "Created project: $created_project_path" "$output"
 grep -Fxq 'Project: created-project' "$output"
 echo 'Successful project creation returns to Antigravity for immediate Start: OK'
+
+# Context7 is no longer a placeholder for Antigravity. Status/preview are
+# passive; reinstall and network test are explicit, separately confirmed.
+rm -f "$hardening_calls" "$context7_calls"
+printf '7\n1\n\n2\n\n3\n\n4\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+mapfile -t context7_actions <"$context7_calls"
+[[ "${#context7_actions[@]}" == 3 ]]
+[[ "${context7_actions[0]}" == plan ]]
+[[ "${context7_actions[1]}" == reinstall ]]
+[[ "${context7_actions[2]}" == test ]]
+[[ "$(wc -l <"$hardening_calls")" == 2 ]]
+grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
+grep -Fq 'Context7 (Antigravity): NOT INSTALLED; installation available' "$output"
+echo 'Antigravity Context7 preview, reinstall and test actions: OK'
