@@ -147,24 +147,7 @@ jobs:
 
       - name: Validate repository configuration
         run: |
-          set -euo pipefail
-          test -d scripts
-          while IFS= read -r -d '' script; do
-            bash -n "$script"
-          done < <(find scripts -type f -name '*.sh' -print0)
-          REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
-            bash scripts/test-image-name-compat.sh
-          bash scripts/test-image-identity.sh
-          python3 scripts/test_edge_build_identity.py
-          python3 scripts/test_update_upstream_changelog.py
-          bash scripts/validate-version-pins.sh
-          bash scripts/test-source-revision.sh
-          jq -e . renovate.json >/dev/null
-          python3 scripts/validate-renovate-ownership.py --root .
-          for file in compose/*.yml; do
-            docker compose -f "$file" config --quiet
-            echo "OK $file"
-          done
+          bash scripts/validate-publication-source.sh candidate
 
       - name: Build and smoke test the exact candidate
         env:
