@@ -38,3 +38,8 @@ if (( validate_compose == 1 )); then
     echo "OK $file"
   done
 fi
+
+# Edge must rebuild when any locally copied Dockerfile input changes.
+if [[ "$1" == edge ]]; then
+  python3 scripts/test_edge_publication_paths.py
+fi
