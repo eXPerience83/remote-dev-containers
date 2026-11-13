@@ -644,6 +644,351 @@ def assert_repair_preserves_mixed_newlines(module, root: Path) -> None:
                 raise AssertionError(f"{label}: recovered block did not validate")
 
 
+def assert_nested_headers_recovery_and_preflight(module, root: Path) -> None:
+    """Reproduce the actual TrueNAS report without reading private test input.
+
+    Legacy Context7 headers are a separate nested TOML table; BEGIN missing,
+    enabled/required absent, and two unrelated MCP tables ahead of END.
+    """
+    ctx = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        '\n[mcp_servers.context7.env_http_headers]\n'
+    )
+    unrelated = (
+        '\r\n[mcp_servers.playwright]\r\n'
+        'command = "custom-playwright"\r\n'
+        'enabled = false\r\n'
+        '\r\n[mcp_servers.openaiDeveloperDocs]\r\n'
+        'url = "https://example.invalid/docs"\r\n'
+    )
+    prefix = 'model = "synthetic"\r\n\r\n'
+    for variant, header in (
+        ("bare", 'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n'),
+        ("quoted", '"CONTEXT7_API_KEY" = "CONTEXT7_API_KEY"\n'),
+    ):
+        home = root / f"nested-real-{variant}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = prefix + ctx + header + unrelated + module.END_MARKER + "\n"
+        config.write_bytes(original.encode("utf-8"))
+        key_dir = home / ".remote-dev-context7"
+        key_dir.mkdir(mode=0o700)
+        key = key_dir / "api-key"
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        key_before = key.read_bytes()
+        old_bytes = config.read_bytes()
+
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "markers-malformed":
+                raise AssertionError(f"{variant}: true legacy format classified incorrectly")
+            recovered = module.safe_nested_headers_legacy_candidate(state)
+            expected = prefix + module.MANAGED_BLOCK + unrelated
+            if recovered != expected:
+                raise AssertionError(f"{variant}: recovered bytes touched other MCPs")
+            if module.without_context7(module.parse_toml(original, label="before")) != (
+                module.without_context7(module.parse_toml(recovered, label="after"))
+            ):
+                raise AssertionError("nested recovery changed unrelated TOML semantics")
+            if module.recognized_legacy_recovery(state) != expected:
+                raise AssertionError("nested recovery not considered by central planner")
+
+        plan = run_manager(home, "plan")
+        require_success(plan, f"{variant}: dry-run safe recovery plan")
+        if "REINSTALLABLE" not in plan.stdout or "reinstall --yes" not in plan.stdout:
+            raise AssertionError("safe recovery preview lacks actionable recommendation")
+        status = run_manager(home, "status", "--menu")
+        if status.returncode != 3 or "reinstall Context7" not in status.stdout:
+            raise AssertionError("doctor status does not recommend safe repair")
+        if config.read_bytes() != old_bytes or key.read_bytes() != key_before:
+            raise AssertionError("passive preview modified private files")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError("read-only plan created a backup")
+
+        update = run_manager(home, "update", "--yes")
+        require_failure(update, f"{variant}: update must not claim legacy ownership")
+        if config.read_bytes() != old_bytes:
+            raise AssertionError("update illegally rewrote legacy TOML")
+
+        repair = run_manager(home, "repair", "--yes")
+        require_success(repair, f"{variant}: explicit nested recovery")
+        if config.read_bytes() != expected.encode("utf-8"):
+            raise AssertionError("recovery did not preserve unrelated raw bytes")
+        backup = home / "config.toml.remote-dev-context7.bak"
+        if backup.read_bytes() != old_bytes:
+            raise AssertionError("private backup differs from exact preimage")
+        assert_private_file(backup)
+        if key.read_bytes() != key_before:
+            raise AssertionError("recovery unexpectedly changed existing API key")
+        assert_private_file(key)
+
+        newstatus = run_manager(home, "status", "--menu")
+        require_success(newstatus, f"{variant}: recovered status")
+        if newstatus.stdout.strip() != "Context7: configured (API key stored)":
+            raise AssertionError("recovered status not healthy or lost API key")
+        if "ALREADY MANAGED" not in run_manager(home, "plan").stdout:
+            raise AssertionError("recovered plan did not mark Context7 healthy")
+
+        prev = config.read_bytes()
+        repeat = run_manager(home, "repair", "--yes")
+        require_success(repeat, f"{variant}: recovery idempotence")
+        if config.read_bytes() != prev or key.read_bytes() != key_before:
+            raise AssertionError("repeated repair was not idempotent")
+
+
+def assert_nested_headers_recovery_fails_closed(module, root: Path) -> None:
+    ctx = (
+        '[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        '\n[mcp_servers.context7.env_http_headers]\n'
+        'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n'
+    )
+    other = (
+        '\n[mcp_servers.playwright]\ncommand = "user-owned"\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\n'
+        'url = "https://example.invalid/docs"\n'
+    )
+    original = 'model = "safe"\n' + ctx + other + module.END_MARKER + '\n'
+    bad_cases = {
+        "endpoint-custom": original.replace(
+            module.CONTEXT7_ENDPOINT, "https://example.invalid/custom", 1),
+        "key-custom": original.replace(
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"',
+            'CONTEXT7_API_KEY = "OTHER"', 1),
+        "enabled-custom": original.replace(
+            f'url = "{module.CONTEXT7_ENDPOINT}"\n',
+            f'url = "{module.CONTEXT7_ENDPOINT}"\nenabled = false\n', 1),
+        "required-custom": original.replace(
+            f'url = "{module.CONTEXT7_ENDPOINT}"\n',
+            f'url = "{module.CONTEXT7_ENDPOINT}"\nrequired = true\n', 1),
+        "nested-extra-key": original.replace(
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n',
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\nOTHER = "PRIVATE"\n', 1),
+        "nested-comment": original.replace(
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n',
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n# custom user note\n', 1),
+        "custom-url-format": original.replace(
+            f'url = "{module.CONTEXT7_ENDPOINT}"',
+            f'url="{module.CONTEXT7_ENDPOINT}"', 1),
+        "extra-headers": original.replace(
+            '[mcp_servers.playwright]\n',
+            '[mcp_servers.context7.extra]\nfoo = "bar"\n'
+            '[mcp_servers.playwright]\n', 1),
+        "missing-end": original.replace(module.END_MARKER + '\n', ''),
+        "duplicate-end": original + module.END_MARKER + '\n',
+        "wrong-marker": original.replace(module.END_MARKER, '# END OUTSIDER'),
+        "no-other-mcp": 'model = "safe"\n' + ctx + module.END_MARKER + '\n',
+        "extra-field": original.replace(
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n',
+            'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n'
+            'startup_timeout_sec = 15\n', 1),
+    }
+    for label, payload in bad_cases.items():
+        home = root / f"nested-denied-{label}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        config.write_bytes(payload.encode("utf-8"))
+        preimage = config.read_bytes()
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            if module.safe_nested_headers_legacy_candidate(state) is not None:
+                raise AssertionError(f"{label}: unsafe layout accepted")
+        plan = run_manager(home, "plan")
+        # The strict legacy *repair* must reject every mutated fixture.
+        # The separate, explicit *reinstall* can reset Context7-owned fields
+        # if it can prove that other MCP definitions remain intact.
+        if label == "duplicate-end":
+            if plan.returncode != 3 or "BLOCKED" not in plan.stdout:
+                raise AssertionError(f"{label}: ambiguous markers were reinstallable")
+        elif plan.returncode != 0 or "REINSTALLABLE" not in plan.stdout:
+            raise AssertionError(f"{label}: isolated reinstall should be available")
+        result = run_manager(home, "repair", "--yes")
+        require_failure(result, f"{label}: unsafe repair")
+        if config.read_bytes() != preimage:
+            raise AssertionError(f"{label}: unsafe recovery overwrote config")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{label}: failed recovery wrote backup")
+
+
+def assert_passive_preview_rejects_fifo_key(module, root: Path) -> None:
+    """A FIFO key without a writer must not hang passive status or plan."""
+    home = root / "nested-fifo-key"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(
+        'model = "test"\n[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        '\n[mcp_servers.context7.env_http_headers]\n'
+        'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n'
+        '\n[mcp_servers.playwright]\ncommand = "user-owned"\n'
+        + module.END_MARKER + '\n',
+        encoding="utf-8",
+    )
+    before = config.read_bytes()
+    key_dir = home / ".remote-dev-context7"
+    key_dir.mkdir(mode=0o700)
+    os.mkfifo(key_dir / "api-key", mode=0o600)
+    for args in (("plan",), ("status", "--menu")):
+        # run_manager already enforces a 20s bound; use a shorter bound here
+        # to prove the FIFO is rejected without blocking on a writer.
+        result = subprocess.run(
+            [sys.executable, str(MANAGER), *args],
+            text=True, capture_output=True,
+            env={**os.environ, "CODEX_HOME": str(home),
+                 "REMOTE_DEV_ROLE": "codex"},
+            timeout=4,
+            check=False,
+        )
+        if result.returncode != 3:
+            raise AssertionError(f"FIFO key {args} did not report unsafe status")
+        if args[0] == "plan" and "BLOCKED" not in result.stdout:
+            raise AssertionError("plan did not block unsafe key state")
+    if config.read_bytes() != before:
+        raise AssertionError("passive FIFO diagnosis changed config")
+    if (home / "config.toml.remote-dev-context7.bak").exists():
+        raise AssertionError("passive FIFO diagnosis wrote backup")
+
+
+def assert_scoped_reinstallation(module, root: Path) -> None:
+    """Reinstall means rebuilding Context7's registration, not patching old fields."""
+    common = (
+        '\n[mcp_servers.playwright]\ncommand = "playwright"\n'
+        '\n[mcp_servers.openaiDeveloperDocs]\nurl = "https://example.invalid/docs"\n'
+    )
+    layouts = {
+        "nested": (
+            '[mcp_servers.context7]\nurl = "https://example.invalid/old"\n'
+            'enabled = false\n\n[mcp_servers.context7.env_http_headers]\n'
+            'CONTEXT7_API_KEY = "OTHER"\n' + common + module.END_MARKER + '\n'),
+        "inline": (
+            '[mcp_servers.context7]\nurl = "https://example.invalid/old"\n'
+            'env_http_headers = { KEY = "VALUE" }\n'
+            'required = true\n' + common),
+        "managed-drift": (
+            module.START_MARKER + '\n'
+            '[mcp_servers.context7]\nurl = "https://example.invalid/old"\n'
+            'enabled = false\n' + module.END_MARKER + '\n' + common),
+    }
+    prefix = 'model = "synthetic"\r\n\r\n'
+    for label, body in layouts.items():
+        home = root / ("scoped-reinstall-" + label)
+        home.mkdir(mode=0o700)
+        path = home / "config.toml"
+        original = prefix + body
+        path.write_bytes(original.encode("utf-8"))
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            candidate = module.scoped_reinstall_candidate(state)
+            if candidate is None:
+                raise AssertionError(f"{label}: safe scoped reinstall unavailable")
+            before = module.parse_toml(original, label="before")
+            after = module.parse_toml(candidate, label="after")
+            if module.without_context7(before) != module.without_context7(after):
+                raise AssertionError(f"{label}: other MCP changed")
+            if module.inspect_config_candidate(candidate) != "managed":
+                raise AssertionError(f"{label}: new MCP registration not managed")
+        plan = run_manager(home, "plan")
+        require_success(plan, f"{label}: reinstall preview")
+        if "REINSTALLABLE" not in plan.stdout:
+            raise AssertionError("plan did not recommend reinstall")
+        if path.read_bytes() != original.encode("utf-8"):
+            raise AssertionError("read-only plan modified private config")
+        result = run_manager(home, "reinstall", "--yes")
+        require_success(result, f"{label}: reinstall")
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "managed":
+                raise AssertionError(f"{label}: reinstall not managed")
+        if (home / "config.toml.remote-dev-context7.bak").read_bytes() != original.encode("utf-8"):
+            raise AssertionError(f"{label}: backup not exact")
+        saved = path.read_bytes()
+        require_success(run_manager(home, "reinstall", "--yes"), "idempotent reinstall")
+        if path.read_bytes() != saved:
+            raise AssertionError("reinstallation is not idempotent")
+
+    # Never let a malformed inline MCP table, duplicate owner marker or fake
+    # table-like content in user values expand the scope.
+    unsafe = {
+        "inline-root": 'mcp_servers = { context7 = { url = "custom" } }\n',
+        "duplicate-marker": (
+            '[mcp_servers.context7]\nurl = "custom"\n'
+            + module.END_MARKER + '\n' + module.END_MARKER + '\n'),
+        "unknown-marker-position": (
+            module.START_MARKER + '\nmodel = "custom"\n'
+            '[mcp_servers.context7]\nurl = "custom"\n'),
+    }
+    for label, body in unsafe.items():
+        home = root / ("scoped-reinstall-unsafe-" + label)
+        home.mkdir(mode=0o700)
+        path = home / "config.toml"
+        path.write_text(body, encoding="utf-8")
+        with codex_environment(home):
+            if module.scoped_reinstall_candidate(module.inspect_config(module.Paths())) is not None:
+                raise AssertionError(f"{label}: unsafe scope permitted")
+        result = run_manager(home, "reinstall", "--yes")
+        require_failure(result, f"{label}: unsafe reinstall")
+        if path.read_text(encoding="utf-8") != body:
+            raise AssertionError(f"{label}: unsafe scope modified TOML")
+
+
+def assert_scoped_reinstall_retains_prior_backups(module, root: Path) -> None:
+    """Multiple changed registrations retain both original rollback states."""
+    home = root / "scoped-reinstall-rollback-history"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    prefix = 'model = "synthetic"\n'
+    original = prefix + '[mcp_servers.context7]\nurl = "https://one.example/mcp"\n'
+    config.write_text(original, encoding="utf-8")
+    require_success(run_manager(home, "reinstall", "--yes"), "initial scoped reinstall backup")
+    first_backup = home / "config.toml.remote-dev-context7.bak"
+    if first_backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("initial rollback preimage incorrect")
+    second = prefix + '[mcp_servers.context7]\nurl = "https://two.example/mcp"\n'
+    config.write_text(second, encoding="utf-8")
+    require_success(run_manager(home, "reinstall", "--yes"), "second scoped reinstall backup")
+    history = list(home.glob("config.toml.remote-dev-context7.bak.*"))
+    if len(history) != 1 or history[0].read_text(encoding="utf-8") != second:
+        raise AssertionError("later rollback preimage was not retained separately")
+    if first_backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("later reinstall overwrote original rollback")
+    assert_private_file(first_backup)
+    assert_private_file(history[0])
+
+
+def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
+    """An inline mcp_servers TOML table cannot be extended by appending a child."""
+    cases = {
+        "inline-mcp-root": (
+            'model = "synthetic"\nmcp_servers = { playwright = { command = "custom" } }\n'
+        ),
+        "empty-inline-mcp-root": (
+            'model = "synthetic"\nmcp_servers = {}\n'
+        ),
+    }
+    for label, original in cases.items():
+        home = root / ("reinstall-absent-" + label)
+        home.mkdir(mode=0o700)
+        file = home / "config.toml"
+        file.write_text(original, encoding="utf-8")
+        with codex_environment(home):
+            state = module.inspect_config(module.Paths())
+            if state.kind != "absent":
+                raise AssertionError(f"{label}: input should be valid without Context7")
+            if module.scoped_reinstall_candidate(state) is not None:
+                raise AssertionError(f"{label}: unsafe install candidate accepted")
+        preview = run_manager(home, "plan")
+        if preview.returncode != 3 or "BLOCKED" not in preview.stdout:
+            raise AssertionError(f"{label}: plan falsely advertised a safe install")
+        result = run_manager(home, "reinstall", "--yes")
+        require_failure(result, f"{label}: invalid appending must fail closed")
+        if file.read_text(encoding="utf-8") != original:
+            raise AssertionError(f"{label}: existing user config was changed")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{label}: forbidden reinstall wrote backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -670,6 +1015,12 @@ args = ["--safe"]
         assert_stale_context7_snapshot_never_overwrites(load_manager_module(), root)
         assert_legacy_recovery_requires_explicit_permission(load_manager_module(), root)
         assert_repair_preserves_mixed_newlines(load_manager_module(), root)
+        assert_nested_headers_recovery_and_preflight(load_manager_module(), root)
+        assert_nested_headers_recovery_fails_closed(load_manager_module(), root)
+        assert_passive_preview_rejects_fifo_key(load_manager_module(), root)
+        assert_scoped_reinstallation(load_manager_module(), root)
+        assert_scoped_reinstall_retains_prior_backups(load_manager_module(), root)
+        assert_scoped_reinstall_absent_fails_closed(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")

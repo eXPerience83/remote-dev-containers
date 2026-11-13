@@ -19,6 +19,7 @@ PROGRAMS = {
     'remote-dev-prepare-development-scratch.py': '/usr/local/bin/remote-dev-prepare-development-scratch',
     'remote-dev-context7.py': '/usr/local/lib/remote-dev/remote-dev-context7.py',
     'remote-dev-context7-device-login.py': '/usr/local/bin/remote-dev-context7-device-login',
+    'remote-dev-context7-antigravity.py': '/usr/local/bin/remote-dev-context7-antigravity',
     'remote-dev-antigravity-oauth.py': '/usr/local/bin/remote-dev-antigravity-oauth',
     'remote-dev-antigravity-picker.py': '/usr/local/bin/remote-dev-antigravity-picker',
     'remote-dev-antigravity-policy.py': '/usr/local/bin/remote-dev-antigravity-policy',
