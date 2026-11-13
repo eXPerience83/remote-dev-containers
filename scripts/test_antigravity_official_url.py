@@ -43,6 +43,25 @@ class AntigravityOfficialUrlTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertFalse(origin.safe_official_url(url))
 
+    def test_reject_raw_ascii_controls_and_spaces_before_urlsplit(self) -> None:
+        official = "https://antigravity.google/cli/install.sh"
+        # urlsplit can normalize raw leading whitespace and TAB/CR/LF within
+        # an authority; all such inputs must fail before host comparison.
+        for point in (*range(0x21), 0x7F):
+            control = chr(point)
+            for url in (
+                control + official,
+                "https://antigravity.goo" + control + "gle/cli/install.sh",
+                "https://antigravity.google/cli/" + control + "install.sh",
+            ):
+                with self.subTest(codepoint=point, url=repr(url)):
+                    self.assertFalse(origin.safe_official_url(url))
+
+    def test_percent_encoded_space_remains_allowed(self) -> None:
+        self.assertTrue(
+            origin.safe_official_url("https://antigravity.google/cli/%20install.sh")
+        )
+
     def test_both_consumers_reference_the_same_validator(self) -> None:
         for filename in (
             "reconcile-antigravity-review-state.py",

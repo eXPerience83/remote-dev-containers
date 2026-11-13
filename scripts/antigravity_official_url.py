@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Validate the fixed, reviewed HTTPS origin for Antigravity metadata.
+"""Validate the fixed official HTTPS origin for Antigravity metadata.
 
-Keep this predicate identical to the previous validators' shared contract.
-Changing accepted URL bytes requires a separate security review.
+Reject malformed raw URL bytes before the standard URL parser normalizes them.
+The original shared host/scheme/port/credentials/fragment policy is unchanged.
 """
 
 from __future__ import annotations
@@ -15,6 +15,11 @@ OFFICIAL_HOST = "antigravity.google"
 def safe_official_url(value: object) -> bool:
     """Return whether a URL remains on the reviewed official HTTPS origin."""
     if not isinstance(value, str) or not value or "\\" in value:
+        return False
+    # urlsplit strips leading C0/space and embedded TAB, CR and LF. Reject
+    # unescaped ASCII controls/spaces *before* parsing to avoid validating a
+    # different origin string than the raw metadata supplied to this boundary.
+    if any(ord(char) <= 0x20 or ord(char) == 0x7f for char in value):
         return False
     try:
         parsed = urllib.parse.urlsplit(value)

@@ -15,6 +15,8 @@ on:
       - "scripts/update-antigravity-review-evidence.py"
       - "scripts/update-antigravity-review-doc.py"
       - "scripts/validate-antigravity-review-artifact.py"
+      - "scripts/antigravity_official_url.py"
+      - "scripts/test_antigravity_official_url.py"
       - "scripts/test_antigravity_download.py"
       - "scripts/test_run_antigravity_inspection.py"
       - "scripts/test_inspect_antigravity_cli.py"
@@ -66,6 +68,8 @@ jobs:
             scripts/update-antigravity-review-evidence.py \
             scripts/update-antigravity-review-doc.py \
             scripts/validate-antigravity-review-artifact.py \
+            scripts/antigravity_official_url.py \
+            scripts/test_antigravity_official_url.py \
             scripts/test_antigravity_download.py \
             scripts/test_run_antigravity_inspection.py \
             scripts/test_inspect_antigravity_cli.py \
@@ -86,6 +90,7 @@ jobs:
           python3 scripts/test_update_antigravity_review_evidence.py
           python3 scripts/test_update_antigravity_review_doc.py
           python3 scripts/test_validate_antigravity_review_artifact.py
+          python3 scripts/test_antigravity_official_url.py
           python3 scripts/test_optional_review_workflows.py
 
           jq -e '.schema_version == 2 and .blocking_findings == []' \
