@@ -806,6 +806,45 @@ def assert_nested_headers_recovery_fails_closed(module, root: Path) -> None:
             raise AssertionError(f"{label}: failed recovery wrote backup")
 
 
+def assert_passive_preview_rejects_fifo_key(module, root: Path) -> None:
+    """A FIFO key without a writer must not hang passive status or plan."""
+    home = root / "nested-fifo-key"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    config.write_text(
+        'model = "test"\n[mcp_servers.context7]\n'
+        f'url = "{module.CONTEXT7_ENDPOINT}"\n'
+        '\n[mcp_servers.context7.env_http_headers]\n'
+        'CONTEXT7_API_KEY = "CONTEXT7_API_KEY"\n'
+        '\n[mcp_servers.playwright]\ncommand = "user-owned"\n'
+        + module.END_MARKER + '\n',
+        encoding="utf-8",
+    )
+    before = config.read_bytes()
+    key_dir = home / ".remote-dev-context7"
+    key_dir.mkdir(mode=0o700)
+    os.mkfifo(key_dir / "api-key", mode=0o600)
+    for args in (("plan",), ("status", "--menu")):
+        # run_manager already enforces a 20s bound; use a shorter bound here
+        # to prove the FIFO is rejected without blocking on a writer.
+        result = subprocess.run(
+            [sys.executable, str(MANAGER), *args],
+            text=True, capture_output=True,
+            env={**os.environ, "CODEX_HOME": str(home),
+                 "REMOTE_DEV_ROLE": "codex"},
+            timeout=4,
+            check=False,
+        )
+        if result.returncode != 3:
+            raise AssertionError(f"FIFO key {args} did not report unsafe status")
+        if args[0] == "plan" and "BLOCKED" not in result.stdout:
+            raise AssertionError("plan did not block unsafe key state")
+    if config.read_bytes() != before:
+        raise AssertionError("passive FIFO diagnosis changed config")
+    if (home / "config.toml.remote-dev-context7.bak").exists():
+        raise AssertionError("passive FIFO diagnosis wrote backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -834,6 +873,7 @@ args = ["--safe"]
         assert_repair_preserves_mixed_newlines(load_manager_module(), root)
         assert_nested_headers_recovery_and_preflight(load_manager_module(), root)
         assert_nested_headers_recovery_fails_closed(load_manager_module(), root)
+        assert_passive_preview_rejects_fifo_key(load_manager_module(), root)
 
         result = run_manager(home, "install", "--yes", "--anonymous")
         require_success(result, "anonymous install")

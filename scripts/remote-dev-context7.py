@@ -664,7 +664,9 @@ def secret_status(paths: Paths) -> tuple[str, str | None]:
     state_fd: int | None = None
     key_fd: int | None = None
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
-    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    # O_NONBLOCK prevents a FIFO path without a writer from hanging status/plan.
+    # read_private_key_from_fd still rejects non-regular descriptors.
+    key_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
         try:
             state_fd = os.open(paths.state_dir, directory_flags)
