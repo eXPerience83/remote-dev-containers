@@ -194,6 +194,25 @@ def assert_inspect_workflow_tracks_official_origin_helper() -> None:
     )
 
 
+def assert_inspect_workflow_tracks_inspector_loader() -> None:
+    """A shared-loader-only change must trigger the full offline inspector gate."""
+    workflow = (ROOT / ".github/workflows/inspect-antigravity-cli.yml").read_text(
+        encoding="utf-8"
+    )
+    trigger = workflow.split("permissions:\n", 1)[0]
+    for name in (
+        "antigravity_inspector_loader.py",
+        "test_antigravity_inspector_loader.py",
+    ):
+        require(trigger, f'- "scripts/{name}"', "shared inspector loader trigger")
+        require(workflow, f"scripts/{name}", "shared inspector compilation input")
+    require(
+        workflow,
+        "python3 scripts/test_antigravity_inspector_loader.py",
+        "shared inspector loader executable regression",
+    )
+
+
 def main() -> None:
     """Run workflow architecture assertions."""
     upstream = UPSTREAM.read_text(encoding="utf-8")
@@ -203,6 +222,7 @@ def main() -> None:
     assert_scheduler_contract(upstream)
     assert_antigravity_manual_contract(antigravity)
     assert_inspect_workflow_tracks_official_origin_helper()
+    assert_inspect_workflow_tracks_inspector_loader()
     pins = {
         pinned_artifact_download_sha(job_block(upstream, "check"), "scheduled writer", expected_count=3),
         pinned_artifact_download_sha(job_block(antigravity, "maintain-pr"), "manual review writer"),
