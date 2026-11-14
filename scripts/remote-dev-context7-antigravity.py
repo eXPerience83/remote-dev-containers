@@ -223,9 +223,13 @@ def plan(directory: Path) -> int:
     return 0
 
 
-def reinstall(directory: Path) -> int:
+def reinstall(directory: Path, *, require_healthy_noop: bool = False) -> int:
     def mutate(ops, fd, content, info):
         state, doc = inspect(content)
+        # A passive preflight must never authorize a later write if the
+        # registration changes between two lock acquisitions.
+        if require_healthy_noop and state != "managed":
+            raise MaintenanceError("registration changed since no-op preflight")
         if state in {"custom-auth", "custom"}:
             raise MaintenanceError("user-owned Context7 settings; refusing to replace them")
         if state == "managed":
@@ -258,10 +262,12 @@ def reinstall(directory: Path) -> int:
     return 0
 
 
-def remove(directory: Path) -> int:
+def remove(directory: Path, *, require_absent_noop: bool = False) -> int:
     """Remove only the exact Remote Dev-owned Context7 registration."""
     def mutate(ops, fd, content, info):
         state, doc = inspect(content)
+        if require_absent_noop and state != "absent":
+            raise MaintenanceError("registration changed since no-op preflight")
         if state == "absent":
             return False
         if state != "managed":
@@ -353,9 +359,9 @@ def main(argv=None, *, directory=None):
     except MaintenanceError:
         current = "blocked"
     if args.command == "reinstall" and current == "managed":
-        return reinstall(target)
+        return reinstall(target, require_healthy_noop=True)
     if args.command == "remove" and current == "absent":
-        return remove(target)
+        return remove(target, require_absent_noop=True)
     if current in {"blocked", "custom", "custom-auth"} or (
             args.command == "remove" and current != "managed"):
         print("Context7 (Antigravity): action BLOCKED; manual review required")
