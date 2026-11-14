@@ -1025,6 +1025,23 @@ def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
     return 3
 
 
+def command_menu_state(paths: Paths) -> int:
+    """Passive state for menu dispatch; never expose authentication data."""
+    state = inspect_config(paths)
+    auth, _ = secret_status(paths)
+    if auth == "unsafe":
+        print("blocked")
+    elif state.kind == "managed":
+        print("healthy")
+    elif scoped_reinstall_candidate(state) is None:
+        print("blocked")
+    elif state.kind == "absent":
+        print("absent")
+    else:
+        print("repairable")
+    return 0
+
+
 def command_status(paths: Paths, args: argparse.Namespace) -> int:
     line, code = status_line(paths)
     print(line)
@@ -1155,6 +1172,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--menu", action="store_true")
+    subparsers.add_parser("menu-state", help="Passive menu state without credential values")
 
     subparsers.add_parser("plan", help="Read-only Context7 recovery eligibility preview")
 
@@ -1191,6 +1209,8 @@ def main() -> int:
         validate_home(paths, create=False)
         if args.command == "status":
             return command_status(paths, args)
+        if args.command == "menu-state":
+            return command_menu_state(paths)
         if args.command == "plan":
             return command_plan(paths, args)
         if args.command in {"install", "repair"}:
