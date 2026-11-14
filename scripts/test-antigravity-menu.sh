@@ -135,12 +135,16 @@ case "${1:-}" in
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
     echo 'Context7 (Antigravity): not installed'
     ;;
+  menu-state)
+    [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "\${REMOTE_DEV_MENU_AGY_CONTEXT7_STATE:-absent}"
+    ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
     echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
     echo plan >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
-  reinstall|test)
+  reinstall|test|remove)
     [[ "$#" == 1 ]] || exit 2
     echo "$1" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
@@ -249,7 +253,7 @@ grep -Fxq '4) Set Guarded preset: request-review (recommended)' "$output"
 grep -Fxq '5) Set Guarded preset: strict (more restrictive)' "$output"
 grep -Fxq '5) Install Antigravity from Google' "$output"
 grep -Fxq '6) Update Antigravity from Google' "$output"
-grep -Fxq '7) Context7 MCP integration...' "$output"
+grep -Fxq '7) MCP integrations...' "$output"
 grep -Fxq '8) Antigravity sign-in [handled during launch]' "$output"
 grep -Fxq '9) Sign in to GitHub CLI' "$output"
 grep -Fxq '10) Run diagnostics' "$output"
@@ -310,13 +314,12 @@ grep -Fq "Created project: $created_project_path" "$output"
 grep -Fxq 'Project: created-project' "$output"
 echo 'Successful project creation returns to Antigravity for immediate Start: OK'
 
-# Context7 is no longer a placeholder for Antigravity. Status/preview are
-# passive; reinstall and network test are explicit, separately confirmed.
+# Context7 uses native vendor OAuth; menu state never opens token storage.
 rm -f "$hardening_calls" "$context7_calls"
-printf '7\n1\n\n2\n\n3\n\n4\n12\n' | env \
+printf '7\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n12\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
-  PATH="$bin_dir:$PATH" \
-  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
   REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
   REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
@@ -324,11 +327,28 @@ printf '7\n1\n\n2\n\n3\n\n4\n12\n' | env \
   REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 mapfile -t context7_actions <"$context7_calls"
-[[ "${#context7_actions[@]}" == 3 ]]
-[[ "${context7_actions[0]}" == plan ]]
-[[ "${context7_actions[1]}" == reinstall ]]
-[[ "${context7_actions[2]}" == test ]]
+[[ "\${#context7_actions[@]}" == 4 ]]
+[[ "\${context7_actions[0]}" == plan ]]
+[[ "\${context7_actions[1]}" == test ]]
+[[ "\${context7_actions[2]}" == plan ]]
+[[ "\${context7_actions[3]}" == reinstall ]]
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
-grep -Fq 'Context7 (Antigravity): NOT INSTALLED; installation available' "$output"
-echo 'Antigravity Context7 preview, reinstall and test actions: OK'
+grep -Fq 'Authenticate' "$output"
+echo 'Antigravity Context7 guidance, installation and HTTP test: OK'
+
+rm -f "$hardening_calls" "$context7_calls"
+printf '7\n1\n4\n\n5\n\n0\n0\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == remove ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fq 'no reinstall is needed' "$output"
+echo 'Antigravity Context7 healthy no-op and selective removal: OK'
