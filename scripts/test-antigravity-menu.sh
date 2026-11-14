@@ -13,6 +13,7 @@ policy_calls="$workdir/policy-calls"
 preset_state="$workdir/guarded-preset"
 hardening_calls="$workdir/hardening-calls"
 context7_calls="$workdir/context7-calls"
+shared_calls="$workdir/shared-calls"
 mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat >"$runtime_lib" <<'RUNTIME'
@@ -188,6 +189,19 @@ cat >"$bin_dir/clear" <<'CLEAR'
 exit 0
 CLEAR
 
+
+cat >"$bin_dir/gh" <<'GH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'gh:%s\n' "$*" >>"$REMOTE_DEV_MENU_SHARED_CALLS"
+GH
+
+cat >"$bin_dir/remote-dev-doctor" <<'DOCTOR'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'doctor\n' >>"$REMOTE_DEV_MENU_SHARED_CALLS"
+DOCTOR
+
 chmod 0755 "$bin_dir"/*
 
 python3 - "$menu_source" "$fixture_menu" "$runtime_lib" "$bin_dir" <<'PY'
@@ -205,6 +219,7 @@ replacements = {
     "/usr/local/bin/remote-dev-install-antigravity": str(bin_dir / "remote-dev-install-antigravity"),
     "/usr/local/bin/remote-dev-update-antigravity": str(bin_dir / "remote-dev-update-antigravity"),
     "/usr/local/bin/secure-persistent-state": str(bin_dir / "secure-persistent-state"),
+    "/usr/local/bin/remote-dev-doctor": str(bin_dir / "remote-dev-doctor"),
 }
 for old, new in replacements.items():
     if old not in text:
@@ -352,3 +367,23 @@ printf '7\n1\n4\n\n5\n\n0\n0\n12\n' | env \
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 grep -Fq 'no reinstall is needed' "$output"
 echo 'Antigravity Context7 healthy no-op and selective removal: OK'
+
+# Shared main-menu login and diagnostics must dispatch identically for AGY.
+# Codex's fixture also tests option 11 (login shell); shell has its own role menu.
+rm -f "$hardening_calls" "$shared_calls"
+printf '9\n\n10\n\n12\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_SHARED_CALLS="$shared_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+mapfile -t shared_actions <"$shared_calls"
+[[ "${#shared_actions[@]}" == 3 ]]
+[[ "${shared_actions[0]}" == 'gh:auth login --hostname github.com --git-protocol https --web' ]]
+[[ "${shared_actions[1]}" == 'gh:auth setup-git' ]]
+[[ "${shared_actions[2]}" == doctor ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+echo 'Antigravity common GitHub and diagnostics menu helpers: OK'
