@@ -905,6 +905,11 @@ def command_reinstall(paths: Paths, args: argparse.Namespace) -> int:
         auth, _ = secret_status(paths)
         if auth == "unsafe":
             raise Context7Error("Context7 authentication state is unsafe; reinstall blocked")
+        if args.menu_safe and state.kind not in {"markers-malformed", "managed-drift"}:
+            # The menu's earlier offline status is advisory, not permission to
+            # overwrite a user-owned or changed registration. Revalidate while
+            # holding the configuration lock, *after* the confirmation prompt.
+            raise Context7Error("menu repair blocked: Context7 ownership changed; no changes made")
         candidate = scoped_reinstall_candidate(state)
         if candidate is None:
             raise Context7Error("Context7 registration cannot be isolated safely; no changes made")
@@ -1189,6 +1194,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     reinstall_parser = subparsers.add_parser("reinstall")
     reinstall_parser.add_argument("--yes", action="store_true")
+    reinstall_parser.add_argument(
+        "--menu-safe", action="store_true", help=argparse.SUPPRESS,
+    )
 
     update_parser = subparsers.add_parser("update")
     update_parser.add_argument("--yes", action="store_true")
