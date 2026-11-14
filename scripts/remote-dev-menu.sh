@@ -704,7 +704,7 @@ MENU
             ;;
           repairable)
             "$manager" plan || :
-            if run_context7_action "Codex Context7 selective repair" "$manager" reinstall; then :; fi
+            if run_context7_action "Codex Context7 selective repair" "$manager" reinstall --menu-safe; then :; fi
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no repair or confirmation is necessary."
