@@ -755,6 +755,29 @@ else
   version_summary="Image metadata unavailable"
 fi
 
+print_shared_agent_menu_tail() {
+  # Single source of truth for identical Codex/Antigravity main-menu options.
+  cat <<'MENU'
+9) Sign in to GitHub CLI
+10) Run diagnostics
+11) Open a login shell
+12) Exit this tmux session
+MENU
+}
+
+handle_shared_agent_menu_choice() {
+  local choice="$1"
+  case "$choice" in
+    3) show_projects_menu ;;
+    7) show_mcp_integrations_menu ;;
+    9) if run_github_login; then :; fi ;;
+    10) run_diagnostics ;;
+    11) if run_interactive_and_harden "Login shell" bash --login; then :; fi ;;
+    12) exit 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 show_codex_menu() {
   local next_mode_summary="" runtime_summary="" context7_summary="" project_summary=""
 
@@ -783,12 +806,12 @@ ${project_summary}
 6) Remove Codex update (use bundled fallback)
 7) MCP integrations...
 8) Sign in to Codex with device code
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
 MENU
+    print_shared_agent_menu_tail
     read -r -p "> " choice
+    if handle_shared_agent_menu_choice "$choice"; then
+      continue
+    fi
     case "$choice" in
       1)
         if run_codex_action "Codex"; then :; fi
@@ -796,9 +819,7 @@ MENU
       2)
         if run_codex_action "Codex resume" resume; then :; fi
         ;;
-      3)
-        show_projects_menu
-        ;;
+
       4)
         if choose_next_codex_mode; then :; fi
         ;;
@@ -808,25 +829,15 @@ MENU
       6)
         if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
         ;;
-      7)
-        show_mcp_integrations_menu
-        ;;
+
       8)
         if run_interactive_and_harden \
           "Codex login" run_credential_command codex login --device-auth; then :; fi
         ;;
-      9)
-        if run_github_login; then :; fi
-        ;;
-      10)
-        run_diagnostics
-        ;;
-      11)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
-        ;;
-      12)
-        exit 0
-        ;;
+
+
+
+
       *)
         sleep 1
         ;;
@@ -957,12 +968,12 @@ ${project_summary}
 6) Update Antigravity from Google
 7) MCP integrations...
 8) Antigravity sign-in [handled during launch]
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
 MENU
+    print_shared_agent_menu_tail
     read -r -p "> " choice
+    if handle_shared_agent_menu_choice "$choice"; then
+      continue
+    fi
     case "$choice" in
       1)
         if run_antigravity_action "Antigravity"; then :; fi
@@ -970,9 +981,7 @@ MENU
       2)
         if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
-      3)
-        show_projects_menu
-        ;;
+
       4)
         show_antigravity_approval_menu
         ;;
@@ -982,24 +991,14 @@ MENU
       6)
         if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
-      7)
-        show_mcp_integrations_menu
-        ;;
+
       8)
         show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
         ;;
-      9)
-        if run_github_login; then :; fi
-        ;;
-      10)
-        run_diagnostics
-        ;;
-      11)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
-        ;;
-      12)
-        exit 0
-        ;;
+
+
+
+
       *)
         sleep 1
         ;;
