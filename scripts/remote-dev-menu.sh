@@ -659,6 +659,34 @@ context7_menu_message() {
   pause_for_menu "Press Enter to return to the Context7 menu..."
 }
 
+print_context7_menu_options() {
+  # Keep the Context7 option numbers and semantics aligned. Only the
+  # authentication and removal labels differ by agent credential ownership.
+  local auth_label="" removal_label=""
+  case "$role" in
+    codex)
+      auth_label='Manage Context7 authentication (Codex private API key)'
+      removal_label='Remove Remote Dev-managed Context7 registration and local key'
+      ;;
+    antigravity)
+      auth_label='Manage authentication using Antigravity /mcp'
+      removal_label='Remove Remote Dev-managed Context7 registration'
+      ;;
+    *)
+      echo "ERROR: unsupported Context7 menu role: $role" >&2
+      return 2
+      ;;
+  esac
+  cat <<MENU
+1) Status and recovery diagnosis (offline)
+2) Test hosted connection (network; not a real MCP tool call)
+3) ${auth_label}
+4) Install or repair Context7 registration
+5) ${removal_label}
+0) Back
+MENU
+}
+
 show_context7_menu() {
   local status_summary="" state=""
   local manager=/usr/local/bin/remote-dev-context7
@@ -673,13 +701,8 @@ ${status_summary}
 =============================
 Context7 is an optional hosted Upstash MCP service.
 Registration/authentication status is offline; connection and tools are NOT tested.
-1) Status and recovery diagnosis (offline)
-2) Test hosted connection (network; not a real MCP tool call)
-3) Manage Context7 authentication (Codex private API key)
-4) Install or repair Context7 registration
-5) Remove Remote Dev-managed Context7 registration and local key
-0) Back
 MENU
+    print_context7_menu_options
     read -r -p "> " choice
     case "$choice" in
       1)
@@ -858,13 +881,8 @@ ${output}
 ==================================
 Context7 is a hosted Upstash MCP service.
 Antigravity handles OAuth itself; Remote Dev does not read its token store.
-1) Status and recovery diagnosis (offline)
-2) Test hosted connection (network; not a real MCP tool call)
-3) Manage authentication using Antigravity /mcp
-4) Install or repair Context7 registration
-5) Remove Remote Dev-managed Context7 registration
-0) Back
 MENU
+    print_context7_menu_options
     read -r -p "> " choice
     case "$choice" in
       1)
