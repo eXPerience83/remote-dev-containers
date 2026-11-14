@@ -320,6 +320,33 @@ class Context7Antigravity(unittest.TestCase):
                 self.assertEqual(self.file.read_bytes(), raw)
                 self.assertFalse(self.backup.exists())
 
+    def test_noop_preflight_must_recheck_under_lock(self):
+        # Simulate a changed entry after a successful *earlier* preflight.
+        # The privileged no-prompt no-op path may never become a write.
+        self.file.write_text(
+            '{"mcpServers":{"context7":{"serverUrl":"https://old.example/mcp"}}}',
+            encoding="utf-8",
+        )
+        before = self.file.read_bytes()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                manager.reinstall(self.configdir, require_healthy_noop=True), 3
+            )
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertFalse(self.backup.exists())
+
+        self.file.write_text(
+            '{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}',
+            encoding="utf-8",
+        )
+        before = self.file.read_bytes()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                manager.remove(self.configdir, require_absent_noop=True), 3
+            )
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertFalse(self.backup.exists())
+
     def test_cross_role_denial(self):
         os.environ["REMOTE_DEV_ROLE"] = "codex"
         code, _, _ = self.call("reinstall", "--yes")
