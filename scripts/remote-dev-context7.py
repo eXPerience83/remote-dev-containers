@@ -1033,6 +1033,10 @@ def command_menu_state(paths: Paths) -> int:
         print("blocked")
     elif state.kind == "managed":
         print("healthy")
+    elif state.kind == "unmanaged":
+        # CLI reinstall can deliberately reset an isolated user-owned table;
+        # the menu must never offer that destructive operation automatically.
+        print("blocked")
     elif scoped_reinstall_candidate(state) is None:
         print("blocked")
     elif state.kind == "absent":
