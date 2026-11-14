@@ -188,7 +188,7 @@ case "${1:-}" in
     ;;
   menu-state)
     [[ "$#" == 1 ]] || exit 2
-    printf '%s\n' "\${REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE:-absent}"
+    printf '%s\n' "${REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE:-absent}"
     ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
