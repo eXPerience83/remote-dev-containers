@@ -989,6 +989,100 @@ def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
             raise AssertionError(f"{label}: forbidden reinstall wrote backup")
 
 
+def assert_menu_state_is_passive_and_owner_aware(root: Path) -> None:
+    """Menu dispatch may never suggest automatic replacement of custom TOML."""
+    home = root / "menu-state"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+
+    def expect(expected: str, label: str) -> None:
+        before = config.read_bytes() if config.exists() else None
+        actual = run_manager(home, "menu-state")
+        require_success(actual, label)
+        if actual.stdout.strip() != expected:
+            raise AssertionError(
+                f"{label}: expected {expected!r}, got {actual.stdout!r}"
+            )
+        if (config.read_bytes() if config.exists() else None) != before:
+            raise AssertionError(f"{label}: passive menu-state modified config")
+
+    expect("absent", "empty Codex state")
+    config.write_text(
+        '[mcp_servers.context7]\nurl = "https://user.example/mcp"\n',
+        encoding="utf-8",
+    )
+    expect("blocked", "unowned custom Context7 entry")
+    config.write_text('{"invalid TOML"}\n', encoding="utf-8")
+    expect("blocked", "invalid TOML")
+
+    config.unlink()
+    require_success(
+        run_manager(home, "install", "--yes", "--anonymous"),
+        "managed anonymous Context7 installation",
+    )
+    expect("healthy", "healthy managed Context7")
+    if (home / ".remote-dev-context7" / "api-key").exists():
+        raise AssertionError("anonymous menu-state unexpectedly created a key")
+
+
+
+def assert_menu_safe_reinstall_rechecks_ownership(root: Path) -> None:
+    """A preflighted repair must not replace an entry changed before locking."""
+    home = root / "menu-repair-ownership-race"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    backup = home / "config.toml.remote-dev-context7.bak"
+    other_mcp = '\n[mcp_servers.playwright]\ncommand = "safe-local"\n'
+    repairable = (
+        START_MARKER + '\n[mcp_servers.context7]\n'
+        'url = "https://outdated.example/mcp"\n'
+        + END_MARKER + '\n' + other_mcp
+    )
+    config.write_text(repairable, encoding="utf-8")
+    result = run_manager(home, "menu-state")
+    require_success(result, "menu repairable preflight")
+    if result.stdout.strip() != "repairable":
+        raise AssertionError("managed drift was not offered a safe repair")
+
+    # Simulate another process replacing the entry during the menu prompt,
+    # before the reinstall transaction takes the lock.
+    unowned = (
+        '[mcp_servers.context7]\n'
+        'url = "https://user-owned.example/mcp"\n' + other_mcp
+    )
+    config.write_text(unowned, encoding="utf-8")
+    original = config.read_bytes()
+    guarded = run_manager(home, "reinstall", "--menu-safe", "--yes")
+    require_failure(guarded, "menu repair of now-user-owned MCP must fail closed")
+    if "menu repair blocked" not in guarded.stderr:
+        raise AssertionError("menu repair rejection did not identify changed ownership")
+    if config.read_bytes() != original or backup.exists():
+        raise AssertionError("menu-safe reinstall changed the unowned configuration")
+
+    # The explicit advanced CLI retains its reviewed scope-reset behavior,
+    # including a private backup and preservation of other MCPs.
+    require_success(
+        run_manager(home, "reinstall", "--yes"),
+        "explicit non-menu reinstall retains compatibility",
+    )
+    if backup.read_bytes() != original or other_mcp not in config.read_text():
+        raise AssertionError("non-menu reinstall lost original backup or unrelated MCP")
+
+    config.unlink()
+    absent_guarded = run_manager(home, "reinstall", "--menu-safe", "--yes")
+    require_failure(absent_guarded, "menu-safe repair must not install after state change")
+    if config.exists():
+        raise AssertionError("menu-safe repair installed an absent registration")
+
+    config.write_text(repairable, encoding="utf-8")
+    require_success(
+        run_manager(home, "reinstall", "--yes", "--menu-safe"),
+        "menu-safe repair of provably managed drift",
+    )
+    if other_mcp not in config.read_text():
+        raise AssertionError("menu-safe repair changed unrelated MCPs")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1007,6 +1101,8 @@ args = ["--safe"]
 '''
         config.write_text(original, encoding="utf-8")
 
+        assert_menu_state_is_passive_and_owner_aware(root)
+        assert_menu_safe_reinstall_rechecks_ownership(root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)

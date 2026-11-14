@@ -905,6 +905,11 @@ def command_reinstall(paths: Paths, args: argparse.Namespace) -> int:
         auth, _ = secret_status(paths)
         if auth == "unsafe":
             raise Context7Error("Context7 authentication state is unsafe; reinstall blocked")
+        if args.menu_safe and state.kind not in {"markers-malformed", "managed-drift"}:
+            # The menu's earlier offline status is advisory, not permission to
+            # overwrite a user-owned or changed registration. Revalidate while
+            # holding the configuration lock, *after* the confirmation prompt.
+            raise Context7Error("menu repair blocked: Context7 ownership changed; no changes made")
         candidate = scoped_reinstall_candidate(state)
         if candidate is None:
             raise Context7Error("Context7 registration cannot be isolated safely; no changes made")
@@ -1023,6 +1028,27 @@ def command_plan(paths: Paths, _args: argparse.Namespace) -> int:
     print("Context7 recovery: BLOCKED (unsupported or ambiguous ownership layout)")
     print("Action: manual review; do not remove/reinstall other MCP entries")
     return 3
+
+
+def command_menu_state(paths: Paths) -> int:
+    """Passive state for menu dispatch; never expose authentication data."""
+    state = inspect_config(paths)
+    auth, _ = secret_status(paths)
+    if auth == "unsafe":
+        print("blocked")
+    elif state.kind == "managed":
+        print("healthy")
+    elif state.kind == "unmanaged":
+        # CLI reinstall can deliberately reset an isolated user-owned table;
+        # the menu must never offer that destructive operation automatically.
+        print("blocked")
+    elif scoped_reinstall_candidate(state) is None:
+        print("blocked")
+    elif state.kind == "absent":
+        print("absent")
+    else:
+        print("repairable")
+    return 0
 
 
 def command_status(paths: Paths, args: argparse.Namespace) -> int:
@@ -1155,6 +1181,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--menu", action="store_true")
+    subparsers.add_parser("menu-state", help="Passive menu state without credential values")
 
     subparsers.add_parser("plan", help="Read-only Context7 recovery eligibility preview")
 
@@ -1167,6 +1194,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     reinstall_parser = subparsers.add_parser("reinstall")
     reinstall_parser.add_argument("--yes", action="store_true")
+    reinstall_parser.add_argument(
+        "--menu-safe", action="store_true", help=argparse.SUPPRESS,
+    )
 
     update_parser = subparsers.add_parser("update")
     update_parser.add_argument("--yes", action="store_true")
@@ -1191,6 +1221,8 @@ def main() -> int:
         validate_home(paths, create=False)
         if args.command == "status":
             return command_status(paths, args)
+        if args.command == "menu-state":
+            return command_menu_state(paths)
         if args.command == "plan":
             return command_plan(paths, args)
         if args.command in {"install", "repair"}:

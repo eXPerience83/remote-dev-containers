@@ -645,60 +645,107 @@ run_antigravity_action() {
   run_interactive_and_harden "$label" "${command[@]}"
 }
 
+context7_menu_state() {
+  local manager="$1" result=""
+  result="$("$manager" menu-state 2>/dev/null)" || result="blocked"
+  case "$result" in
+    absent|healthy|repairable|blocked) printf '%s\n' "$result" ;;
+    *) printf '%s\n' blocked ;;
+  esac
+}
+
+context7_menu_message() {
+  printf '%s\n' "$1"
+  pause_for_menu "Press Enter to return to the Context7 menu..."
+}
+
+print_context7_menu_options() {
+  # Keep the Context7 option numbers and semantics aligned. Only the
+  # authentication and removal labels differ by agent credential ownership.
+  local auth_label="" removal_label=""
+  case "$role" in
+    codex)
+      auth_label='Manage Context7 authentication (Codex private API key)'
+      removal_label='Remove Remote Dev-managed Context7 registration and local key'
+      ;;
+    antigravity)
+      auth_label='Manage authentication using Antigravity /mcp'
+      removal_label='Remove Remote Dev-managed Context7 registration'
+      ;;
+    *)
+      echo "ERROR: unsupported Context7 menu role: $role" >&2
+      return 2
+      ;;
+  esac
+  cat <<MENU
+1) Status and recovery diagnosis (offline)
+2) Test hosted connection (network; not a real MCP tool call)
+3) ${auth_label}
+4) Install or repair Context7 registration
+5) ${removal_label}
+0) Back
+MENU
+}
+
 show_context7_menu() {
-  local status_summary=""
-  local -a context7_install_command=(/usr/local/bin/remote-dev-context7 install)
-  local -a context7_plan_command=(/usr/local/bin/remote-dev-context7 plan)
-  local -a context7_test_command=(/usr/local/bin/remote-dev-context7 test)
-  local -a context7_update_command=(/usr/local/bin/remote-dev-context7 update)
-  local -a context7_remove_command=(/usr/local/bin/remote-dev-context7 remove)
-  local -a context7_reinstall_command=(/usr/local/bin/remote-dev-context7 reinstall)
+  local status_summary="" state=""
+  local manager=/usr/local/bin/remote-dev-context7
 
   while true; do
     status_summary="$(context7_status_summary)"
+    state="$(context7_menu_state "$manager")"
     clear
     cat <<MENU
 Remote Dev — Codex — Context7
 ${status_summary}
 =============================
-Context7 is an optional external Upstash service.
-Configuration/status are offline; only Test performs an explicit network check.
-1) Install Context7 / manage authentication (legacy repair)
-2) Test bundled Codex config and Context7 hosted endpoint
-3) Update / reapply reviewed hosted integration contract
-4) Remove Remote Dev-managed Context7 integration
-6) Reinstall damaged Context7 MCP (reset registration; keep API key)
-p) Preview safe MCP recovery (read-only)
-5) Back
+Context7 is an optional hosted Upstash MCP service.
+Registration/authentication status is offline; connection and tools are NOT tested.
 MENU
+    print_context7_menu_options
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_context7_action "Context7 install/repair" "${context7_install_command[@]}"; then :; fi
+        "$manager" status --menu || :
+        "$manager" plan || :
+        context7_menu_message "Live connectivity and MCP tools: not verified by this diagnosis."
         ;;
       2)
-        if run_context7_action "Context7 connection test" "${context7_test_command[@]}"; then :; fi
+        if run_context7_action "Codex Context7 HTTP test" "$manager" test; then :; fi
         ;;
       3)
-        if run_context7_action "Context7 contract update" "${context7_update_command[@]}"; then :; fi
+        if [[ "$state" == healthy ]]; then
+          if run_context7_action "Codex Context7 authentication" "$manager" install; then :; fi
+        else
+          context7_menu_message "Authentication changes require a healthy managed registration. Use installation/repair first, or review blocked ownership manually."
+        fi
         ;;
       4)
-        if run_context7_action "Context7 removal" "${context7_remove_command[@]}"; then :; fi
-        ;;
-      6)
-        if run_context7_action "Context7 isolated MCP reinstall" "${context7_reinstall_command[@]}"; then :; fi
-        ;;
-      p|P)
-        # Unlike lifecycle actions, preview must never harden persistent
-        # state permissions or write the user configuration.
-        local plan_status=0
-        "${context7_plan_command[@]}" || plan_status=$?
-        if (( plan_status != 0 )); then
-          echo "Context7: recovery preview blocked (status $plan_status)" >&2
-        fi
-        pause_for_menu "Press Enter to return to the Context7 menu..."
+        case "$state" in
+          absent)
+            if run_context7_action "Codex Context7 installation" "$manager" install; then :; fi
+            ;;
+          repairable)
+            "$manager" plan || :
+            if run_context7_action "Codex Context7 selective repair" "$manager" reinstall --menu-safe; then :; fi
+            ;;
+          healthy)
+            context7_menu_message "Context7 registration is already current; no repair or confirmation is necessary."
+            ;;
+          *)
+            "$manager" plan || :
+            context7_menu_message "Context7 repair blocked: ownership, configuration or private state needs manual review."
+            ;;
+        esac
         ;;
       5)
+        if [[ "$state" == healthy ]]; then
+          if run_context7_action "Codex Context7 removal" "$manager" remove; then :; fi
+        else
+          context7_menu_message "Removal is available only for a healthy, managed entry. No other MCPs or credentials were touched."
+        fi
+        ;;
+      0)
         return 0
         ;;
       *)
@@ -731,6 +778,36 @@ else
   version_summary="Image metadata unavailable"
 fi
 
+print_shared_agent_menu_tail() {
+  # Single source of truth for identical Codex/Antigravity main-menu options.
+  cat <<'MENU'
+9) Sign in to GitHub CLI
+10) Run diagnostics
+11) Open a login shell
+12) Exit this tmux session
+MENU
+}
+
+is_shared_agent_menu_choice() {
+  case "$1" in
+    3|7|9|10|11|12) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+handle_shared_agent_menu_choice() {
+  local choice="$1"
+  case "$choice" in
+    3) show_projects_menu ;;
+    7) show_mcp_integrations_menu ;;
+    9) if run_github_login; then :; fi ;;
+    10) run_diagnostics ;;
+    11) if run_interactive_and_harden "Login shell" bash --login; then :; fi ;;
+    12) exit 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 show_codex_menu() {
   local next_mode_summary="" runtime_summary="" context7_summary="" project_summary=""
 
@@ -757,14 +834,17 @@ ${project_summary}
 4) Approval mode for next launch...
 5) Update Codex from official OpenAI release
 6) Remove Codex update (use bundled fallback)
-7) Context7 integration...
+7) MCP integrations...
 8) Sign in to Codex with device code
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
 MENU
+    print_shared_agent_menu_tail
     read -r -p "> " choice
+    if is_shared_agent_menu_choice "$choice"; then
+      # Run actions outside a conditional command: preserve Bash errexit and
+      # fail-closed behavior inside nested project/credential helpers.
+      handle_shared_agent_menu_choice "$choice"
+      continue
+    fi
     case "$choice" in
       1)
         if run_codex_action "Codex"; then :; fi
@@ -772,9 +852,7 @@ MENU
       2)
         if run_codex_action "Codex resume" resume; then :; fi
         ;;
-      3)
-        show_projects_menu
-        ;;
+
       4)
         if choose_next_codex_mode; then :; fi
         ;;
@@ -784,25 +862,15 @@ MENU
       6)
         if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
         ;;
-      7)
-        show_context7_menu
-        ;;
+
       8)
         if run_interactive_and_harden \
           "Codex login" run_credential_command codex login --device-auth; then :; fi
         ;;
-      9)
-        if run_github_login; then :; fi
-        ;;
-      10)
-        run_diagnostics
-        ;;
-      11)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
-        ;;
-      12)
-        exit 0
-        ;;
+
+
+
+
       *)
         sleep 1
         ;;
@@ -811,36 +879,56 @@ MENU
 }
 
 show_antigravity_context7_menu() {
-  local output="" code=0
-  local readonly_context7=/usr/local/bin/remote-dev-context7-antigravity
+  local output="" state=""
+  local manager=/usr/local/bin/remote-dev-context7-antigravity
   while true; do
-    code=0
-    output="$("$readonly_context7" status --menu 2>&1)" || code=$?
+    output="$("$manager" status --menu 2>&1)" || :
+    state="$(context7_menu_state "$manager")"
     clear
     cat <<MENU
 Remote Dev — Antigravity — Context7
 ${output}
 ==================================
-Context7 uses hosted Streamable HTTP; anonymous mode only.
-No private API key is written to Antigravity JSON.
-1) Preview MCP configuration/reinstallation (read-only)
-2) Install / reinstall only Context7 MCP
-3) Test hosted endpoint (network)
-4) Back
+Context7 is a hosted Upstash MCP service.
+Antigravity handles OAuth itself; Remote Dev does not read its token store.
 MENU
+    print_context7_menu_options
     read -r -p "> " choice
     case "$choice" in
       1)
-        "$readonly_context7" plan || :
-        pause_for_menu "Press Enter to return to the Context7 menu..."
+        "$manager" status --menu || :
+        "$manager" plan || :
+        context7_menu_message "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
         ;;
       2)
-        if run_context7_action "Antigravity Context7 reinstall" "$readonly_context7" reinstall; then :; fi
+        if run_context7_action "Antigravity Context7 HTTP test" "$manager" test; then :; fi
         ;;
       3)
-        if run_context7_action "Antigravity Context7 test" "$readonly_context7" test; then :; fi
+        context7_menu_message "Start Antigravity normally, enter /mcp, select context7, then Authenticate. Confirm [Authed] in /mcp and call a real documentation tool. Logging out or revoking provider authorization is separate from removing the MCP entry."
         ;;
       4)
+        case "$state" in
+          absent|repairable)
+            "$manager" plan || :
+            if run_context7_action "Antigravity Context7 registration maintenance" "$manager" reinstall; then :; fi
+            ;;
+          healthy)
+            context7_menu_message "Context7 registration is already current; no reinstall is needed and OAuth state is preserved."
+            ;;
+          *)
+            "$manager" plan || :
+            context7_menu_message "Context7 repair blocked: configuration is unsafe or user-managed. No entries changed."
+            ;;
+        esac
+        ;;
+      5)
+        if [[ "$state" == healthy ]]; then
+          if run_context7_action "Antigravity Context7 removal" "$manager" remove; then :; fi
+        else
+          context7_menu_message "Only an exact Remote Dev-managed registration can be removed safely. OAuth session is not revoked."
+        fi
+        ;;
+      0)
         return 0
         ;;
       *)
@@ -850,6 +938,37 @@ MENU
   done
 }
 
+show_mcp_integrations_menu() {
+  while true; do
+    clear
+    cat <<MENU
+Remote Dev — ${role} — MCP integrations
+========================================
+1) Context7...
+0) Back
+
+Other MCP registrations (including Playwright and OpenAI Developer Docs,
+where configured) remain independent and are not changed here.
+Use the agent's native MCP commands to inspect individual registrations.
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if [[ "$role" == codex ]]; then
+          show_context7_menu
+        else
+          show_antigravity_context7_menu
+        fi
+        ;;
+      0)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
 
 show_antigravity_menu() {
   local status_summary="" next_mode_summary="" project_summary=""
@@ -875,14 +994,17 @@ ${project_summary}
 4) Approval settings...
 5) Install Antigravity from Google
 6) Update Antigravity from Google
-7) Context7 MCP integration...
+7) MCP integrations...
 8) Antigravity sign-in [handled during launch]
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
 MENU
+    print_shared_agent_menu_tail
     read -r -p "> " choice
+    if is_shared_agent_menu_choice "$choice"; then
+      # Run actions outside a conditional command: preserve Bash errexit and
+      # fail-closed behavior inside nested project/credential helpers.
+      handle_shared_agent_menu_choice "$choice"
+      continue
+    fi
     case "$choice" in
       1)
         if run_antigravity_action "Antigravity"; then :; fi
@@ -890,9 +1012,7 @@ MENU
       2)
         if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
-      3)
-        show_projects_menu
-        ;;
+
       4)
         show_antigravity_approval_menu
         ;;
@@ -902,24 +1022,14 @@ MENU
       6)
         if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
         ;;
-      7)
-        show_antigravity_context7_menu
-        ;;
+
       8)
         show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
         ;;
-      9)
-        if run_github_login; then :; fi
-        ;;
-      10)
-        run_diagnostics
-        ;;
-      11)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
-        ;;
-      12)
-        exit 0
-        ;;
+
+
+
+
       *)
         sleep 1
         ;;

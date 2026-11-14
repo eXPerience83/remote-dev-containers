@@ -41,11 +41,19 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 `remote-dev-context7 update` vuelve a validar/aplicar la configuración MCP alojada que incluye la imagen. Es independiente de la versión transitoria de `ctx7`, que solo se utiliza para la autenticación por dispositivo.
 
+### Navegación simplificada y diagnóstico (#347)
+
+El menú general de Codex permite **7) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
+
+`status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba HTTP requiere confirmación y **no acredita que las herramientas MCP respondan ni la autenticación**. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
+
+La gestión de autenticación sigue utilizando la clave privada y el flujo de dispositivo ya existente. Primero se instala o repara una configuración dañada. Al pulsar Instalar/reparar sobre una entrada sana, **no hay mutación ni confirmación**. Una configuración ausente usa `install`, una recuperable previsualiza `plan` y utiliza `reinstall`, conservando la clave. Las entradas ambiguas o personalizadas quedan bloqueadas. Eliminar borra solo registro y copia local de clave gestionados, no revoca la clave del proveedor ni elimina Playwright/OpenAI Developer Docs. Se conservan los comandos CLI anteriores, incluidos `repair` y `update`.
+
 ### Diagnóstico y reinstalación aislada de Context7
 
 `remote-dev-context7 status --menu` es un diagnóstico pasivo: detecta si la configuración está ausente, dañada o necesita una acción. `remote-dev-context7 plan` muestra si puede **reinstalarse exclusivamente el registro MCP Context7** sin alterar la configuración del resto del agente.
 
-La opción del menú **Reinstalar solo Context7** o `remote-dev-context7 reinstall --yes` regenera el bloque oficial de Context7 en `config.toml`, en lugar de añadir a mano campos antiguos. Requiere que la entrada Context7 pueda delimitarse inequívocamente; no atraviesa tablas de otros MCP ni acepta sintaxis ambigua. Comprueba que todos los valores TOML externos a Context7 son idénticos antes y después. Utiliza bloqueo compartido con Playwright, copia privada del archivo original y sustitución atómica. Conserva la API key privada: no exige volver a iniciar sesión.
+La opción **Instalar o reparar** del menú utiliza `reinstall --menu-safe` cuando puede recuperarse de forma segura un registro gestionado dañado. Tras la confirmación, comprueba de nuevo la propiedad bajo el bloqueo de configuración y rechaza entradas ajenas o modificadas, aunque el menú ofreciese reparación previamente. El comando avanzado independiente `remote-dev-context7 reinstall --yes` conserva su comportamiento explícito de restablecimiento selectivo. Ambos caminos reconstruyen el bloque oficial de Context7 en `config.toml` sin añadir manualmente campos antiguos. Requiere que la entrada Context7 pueda delimitarse inequívocamente; no atraviesa tablas de otros MCP ni acepta sintaxis ambigua. Comprueba que todos los valores TOML externos a Context7 son idénticos antes y después. Utiliza bloqueo compartido con Playwright, copia privada del archivo original y sustitución atómica. Conserva la API key privada: no exige volver a iniciar sesión.
 
 **La reinstalación descarta personalizaciones de la propia entrada Context7**. Es una acción explícita y no se ejecuta durante `status`, `plan`, `doctor` o el arranque. Si el alcance no puede demostrarse, se bloquea sin escribir. La recuperación limitada del comando `repair` se conserva para formatos antiguos ya revisados, pero la nueva operación recomendada para reconstruir una entrada dañada es `reinstall`.
 

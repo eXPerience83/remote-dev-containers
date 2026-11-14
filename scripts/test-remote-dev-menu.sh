@@ -186,6 +186,10 @@ case "${1:-}" in
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
     printf '%s\n' 'Context7: not configured'
     ;;
+  menu-state)
+    [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "${REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE:-absent}"
+    ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
     printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
@@ -195,6 +199,10 @@ case "${1:-}" in
     # Production deliberately omits --yes here so the real manager owns the
     # disclosure/confirmation prompt. Reject any accidental extra arguments.
     [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  reinstall)
+    [[ "$#" == 2 && "$2" == --menu-safe ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
@@ -411,7 +419,7 @@ grep -Fxq '3) Projects...' "$output"
 grep -Fxq '4) Approval mode for next launch...' "$output"
 grep -Fxq '5) Update Codex from official OpenAI release' "$output"
 grep -Fxq '6) Remove Codex update (use bundled fallback)' "$output"
-grep -Fxq '7) Context7 integration...' "$output"
+grep -Fxq '7) MCP integrations...' "$output"
 grep -Fxq '12) Exit this tmux session' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 
@@ -422,20 +430,32 @@ assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
 echo 'Codex runtime update/remove result pauses: OK'
 
-# Each successful Context7 action must consume its duplicate choice at the pause.
-# If a pause disappears, the duplicate becomes an extra lifecycle invocation and this test fails.
-run_menu __unset__ $'7\np\np\n1\n1\n2\n2\n3\n3\n4\n4\n5\n12\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 menu actions' \
-  'plan' \
-  'install' \
-  'test' \
-  'update' \
-  'remove'
-assert_hardening_count 4
+# Context7 uses an offline machine-readable state; main option 7 is unchanged.
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
+run_menu __unset__ $'7\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n12\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
+  'plan' 'test' 'install'
+assert_hardening_count 2
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
-grep -Fxq 'Configuration/status are offline; only Test performs an explicit network check.' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
-echo 'Context7 explicit menu actions: OK'
+
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
+run_menu __unset__ $'7\n1\n3\n\n4\n\n5\n\n0\n0\n12\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove'
+assert_hardening_count 2
+grep -Fq 'no repair or confirmation is necessary' "$output"
+
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
+run_menu __unset__ $'7\n1\n4\n\n0\n0\n12\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe'
+assert_hardening_count 1
+
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
+run_menu __unset__ $'7\n1\n4\n\n5\n\n0\n0\n12\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 blocked actions' 'plan'
+assert_hardening_count 0
+unset REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE
+echo 'Context7 state-aware offline menu and scoped maintenance: OK'
 
 run_menu __unset__ $'8\n8\n9\n9\n10\n10\n11\n11\n12\n' "$output"
 assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
