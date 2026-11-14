@@ -3,7 +3,8 @@
 
 The global JSON entry uses the vendor-documented serverUrl transport.
 Do not write authentication secrets to mcp_config.json: anonymous remote
-access is the default. All mutations are explicit, scoped, locked and backed up.
+access is the initial registration mode; the vendor may subsequently manage
+OAuth outside this JSON. All mutations are explicit, scoped, locked and backed up.
 """
 from __future__ import annotations
 
@@ -160,6 +161,20 @@ def using_config(directory: Path, mutator):
         os.close(fd)
 
 
+def menu_state(directory: Path) -> int:
+    """Offline, credential-free state for the interactive menu."""
+    if not directory.exists() and not directory.is_symlink():
+        print("blocked")  # A missing vendor mount must not be created.
+        return 0
+    try:
+        state, _ = using_config(directory, lambda _ops, _fd, data, _info: inspect(data))
+    except MaintenanceError:
+        print("blocked")
+        return 0
+    print({"managed": "healthy", "absent": "absent", "drift": "repairable"}.get(state, "blocked"))
+    return 0
+
+
 def status(directory: Path) -> int:
     if not directory.exists() and not directory.is_symlink():
         # Missing optional MCP config must not make agent Doctor fail.
@@ -172,7 +187,7 @@ def status(directory: Path) -> int:
         print("Context7 (Antigravity): unsafe or invalid MCP config; manual review required")
         return 3
     if state == "managed":
-        print("Context7 (Antigravity): configured (hosted anonymous MCP)")
+        print("Context7 (Antigravity): registration configured; authentication managed by Antigravity (/mcp), not verified")
         return 0
     if state == "absent":
         print("Context7 (Antigravity): not installed")
@@ -204,7 +219,7 @@ def plan(directory: Path) -> int:
           else "Context7 (Antigravity): NOT INSTALLED; installation available")
     print("Action: remote-dev-context7-antigravity reinstall --yes")
     print("Effect: reset only the Context7 global MCP entry to the official hosted endpoint")
-    print("Authentication: anonymous (no API key stored in JSON)")
+    print("Authentication: managed by Antigravity (/mcp); not inspected; no API key written to JSON")
     return 0
 
 
@@ -237,9 +252,44 @@ def reinstall(directory: Path) -> int:
     except MaintenanceError:
         print("Context7 (Antigravity): reinstall BLOCKED; global MCP config left untouched")
         return 3
-    print("Context7 (Antigravity): installed (hosted anonymous)" if changed
+    print("Context7 (Antigravity): registration installed" if changed
           else "Context7 (Antigravity): already current")
     print("Other MCP entries: retained; original JSON backed up before replacement")
+    return 0
+
+
+def remove(directory: Path) -> int:
+    """Remove only the exact Remote Dev-owned Context7 registration."""
+    def mutate(ops, fd, content, info):
+        state, doc = inspect(content)
+        if state == "absent":
+            return False
+        if state != "managed":
+            raise MaintenanceError("custom or damaged Context7 registration; removal blocked")
+        servers = dict(doc["mcpServers"])
+        del servers["context7"]
+        updated = dict(doc)
+        updated["mcpServers"] = servers
+        encoded = (json.dumps(updated, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+        if {k: v for k, v in updated.items() if k != "mcpServers"} != {
+                k: v for k, v in doc.items() if k != "mcpServers"}:
+            raise MaintenanceError("unrelated JSON settings would change")
+        if info is not None:
+            _, previous_backup = ops.read_config(fd, BACKUP_FILE)
+            backup_name = (BACKUP_FILE if previous_backup is None
+                           else BACKUP_FILE + "." + secrets.token_hex(8))
+            ops.atomic_write(fd, backup_name, None, content, b"")
+        ops.atomic_write(fd, CONFIG_FILE, info, encoded, content)
+        return True
+
+    try:
+        changed = using_config(directory, mutate)
+    except MaintenanceError:
+        print("Context7 (Antigravity): removal BLOCKED; configuration preserved")
+        return 3
+    print("Context7 (Antigravity): registration removed" if changed
+          else "Context7 (Antigravity): registration already absent")
+    print("Other MCPs preserved. Antigravity OAuth session is NOT signed out or revoked.")
     return 0
 
 
@@ -269,7 +319,7 @@ def test(directory: Path) -> int:
     except (OSError, ValueError, MaintenanceError):
         print("Context7 (Antigravity): hosted endpoint test failed")
         return 3
-    print("Context7 (Antigravity): hosted ping OK; confirm actual tools via agy /mcp")
+    print("Context7 (Antigravity): hosted HTTP ping PASS; authentication and MCP tool calls NOT VERIFIED (check agy /mcp)")
     return 0
 
 
@@ -278,7 +328,9 @@ def main(argv=None, *, directory=None):
     sub = parser.add_subparsers(dest="command", required=True)
     st = sub.add_parser("status")
     st.add_argument("--menu", action="store_true")
+    sub.add_parser("menu-state", help="Passive state for Remote Dev menus")
     sub.add_parser("plan")
+    sub.add_parser("remove").add_argument("--yes", action="store_true")
     reinstall_parser = sub.add_parser("reinstall")
     reinstall_parser.add_argument("--yes", action="store_true")
     test_parser = sub.add_parser("test")
@@ -290,17 +342,37 @@ def main(argv=None, *, directory=None):
     target = CONFIG_DIR if directory is None else directory
     if args.command == "status":
         return status(target)
+    if args.command == "menu-state":
+        return menu_state(target)
     if args.command == "plan":
         return plan(target)
+    # Healthy reinstall and already-absent removal are no-ops without a prompt.
+    # Never inspect the vendor's OAuth token store.
+    try:
+        current, _ = using_config(target, lambda _ops, _fd, data, _info: inspect(data))
+    except MaintenanceError:
+        current = "blocked"
+    if args.command == "reinstall" and current == "managed":
+        return reinstall(target)
+    if args.command == "remove" and current == "absent":
+        return remove(target)
+    if current in {"blocked", "custom", "custom-auth"} or (
+            args.command == "remove" and current != "managed"):
+        print("Context7 (Antigravity): action BLOCKED; manual review required")
+        return 3
     if not args.yes:
         if not sys.stdin.isatty():
             print("Context7 (Antigravity): explicit confirmation required (--yes)", file=sys.stderr)
             return 2
-        action = "REINSTALL" if args.command == "reinstall" else "TEST"
+        action = ("REMOVE" if args.command == "remove"
+                  else "INSTALL" if args.command == "reinstall" and current == "absent"
+                  else "REINSTALL" if args.command == "reinstall" else "TEST")
         answer = input(f"Type {action} to confirm {args.command}: ")
         if answer != action:
             print("Context7 (Antigravity): cancelled", file=sys.stderr)
             return 2
+    if args.command == "remove":
+        return remove(target)
     return reinstall(target) if args.command == "reinstall" else test(target)
 
 
