@@ -4,7 +4,7 @@ Remote Dev puede configurar el servicio Codex incluido para utilizar Context7 co
 
 > **Estado de publicación:** esta integración se introduce mediante la ruta experimental actual `dev -> edge` de Remote Dev que sigue #31. Los candidatos revisados antes del merge pueden publicarse en `dev`; `edge` contiene únicamente cambios integrados en `main`. No debe anunciarse disponibilidad estable hasta que una versión estable que incluya este cambio complete sus gates de publicación.
 
-Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
+Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. Su [documentación de privacidad](https://context7.com/docs/security/data-privacy) indica que las peticiones MCP envían consultas formuladas por el agente, identificadores de bibliotecas y metadatos del cliente/conexión (incluidos sesión y datos de IP para limitación de uso); el proveedor describe evaluación de consultas, reordenación con modelos y logs API de 30 días. Son afirmaciones del proveedor, **no** una garantía de que el agente nunca incluya datos sensibles en la consulta. No envíes secretos del proyecto, fragmentos de código privado ni datos personales regulados a Context7. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
 
 ```text
 https://mcp.context7.com/mcp

@@ -202,7 +202,7 @@ Remote Dev's accepted support interpretation is narrow:
 - keep non-affiliation/vendor terms/privacy wording;
 - do not describe Remote Dev review evidence as Google signing, certification or endorsement.
 
-The project records this as a human risk/support interpretation, not vendor legal approval.
+The **2026-09-03** experimental decision is a project interpretation, **not Google legal approval**. **Renewed #53 review pending (2026-11-14):** Google's [FAQ](https://antigravity.google/docs/faq) disallows consumer-plan integration of `agy` as an agent backend in third-party agents/apps. Remote Dev instead presents the official **interactive** CLI through a private terminal (documented SSH/`tmux` use), not as Codex's model backend; the exact third-party launcher boundary nonetheless lacks explicit vendor confirmation. See [optional-agent policy](third_party/optional-agents.md) and [runtime admission](docs/antigravity-runtime-admission.md). The experimental opt-in and safeguards remain unchanged.
 
 Scheduled #83 review automation is shipped. Daily discovery validates/downloads bounded installer/manifest/archive bytes as **data**, computes installer/payload identities and executes no vendor code. Changed candidates cross that boundary as metadata; executable inspection requires the explicit trusted review workflow.
 

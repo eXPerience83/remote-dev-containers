@@ -10,7 +10,7 @@ Codex y Antigravity tienen estados separados. Codex conserva su API key privada.
 {"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}
 ```
 
-**Aviso de privacidad:** Context7 es un servicio externo operado por Upstash. Las búsquedas de documentación y los identificadores de bibliotecas generados por el agente se envían a ese proveedor. Trata las consultas MCP como datos compartidos con un tercero; no envíes secretos, información confidencial de proyectos ni datos personales regulados.
+**Aviso de privacidad:** Context7 es un servicio externo operado por Upstash. Según su [documentación de privacidad](https://context7.com/docs/security/data-privacy), las llamadas MCP envían consultas generadas por el agente e identificadores de bibliotecas, además de metadatos del cliente/conexión (incluidos identidad/versión del cliente, sesión y datos de IP para limitación de uso). El proveedor describe uso de consultas para evaluación y reordenación documental mediante modelos de terceros, y conservación de logs API durante 30 días. Son **afirmaciones del proveedor**, no una garantía de Remote Dev de que las consultas nunca incluirán secretos. Trata las consultas MCP como datos compartidos externamente; no envíes secretos, información confidencial de proyectos ni datos personales regulados.
 
 Desde **7) MCP integrations... → 1) Context7...** puedes consultar las operaciones simplificadas. También están disponibles las órdenes:
 
