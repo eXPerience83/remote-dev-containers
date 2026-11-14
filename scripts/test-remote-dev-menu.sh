@@ -195,10 +195,14 @@ case "${1:-}" in
     printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
-  install|test|update|remove|reinstall)
+  install|test|update|remove)
     # Production deliberately omits --yes here so the real manager owns the
     # disclosure/confirmation prompt. Reject any accidental extra arguments.
     [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  reinstall)
+    [[ "$#" == 2 && "$2" == --menu-safe ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
@@ -443,7 +447,7 @@ grep -Fq 'no repair or confirmation is necessary' "$output"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
 run_menu __unset__ $'7\n1\n4\n\n0\n0\n12\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall'
+assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe'
 assert_hardening_count 1
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
