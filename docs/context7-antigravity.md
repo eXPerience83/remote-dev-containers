@@ -1,6 +1,6 @@
 # Context7 hosted MCP for Antigravity CLI
 
-> **Verified status (2026-11-14):** PR #324 was **merged** as `258d79a` and shipped through experimental `edge`. **Real Context7 tool calls have passed in both agents on TrueNAS Edge**, and AGY's native OAuth flow displayed `Authentication successful!`. Persistence after container recreation, private backups/rollback and #53 review remain pending; there is no later stable publication. See the [v0.3.0 acceptance guide](v0.3.0-acceptance.md).
+> **Verified status (2026-11-14):** PR #324 was **merged** as `258d79a` and shipped through experimental `edge`. **Real Context7 tool calls have passed in both agents on TrueNAS Edge**, and AGY's native OAuth flow displayed `Authentication successful!`. Persistence after container recreation, private backups/rollback and #53 review remain pending; there is no later stable publication. Acceptance evidence and remaining TrueNAS checks are tracked in [issue #95](https://github.com/eXPerience83/remote-dev-containers/issues/95); the bilingual v0.3.0 acceptance guides are proposed separately in [PR #345](https://github.com/eXPerience83/remote-dev-containers/pull/345) and are not yet in `main`.
 
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
