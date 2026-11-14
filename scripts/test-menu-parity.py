@@ -46,6 +46,9 @@ def assert_agent_menu_contract() -> None:
     if shared != expected_shared:
         raise AssertionError(f"shared main-menu tail drifted: {shared}")
 
+    guard = function("is_shared_agent_menu_choice")
+    if "3|7|9|10|11|12) return 0" not in guard:
+        raise AssertionError("shared option recognition disagrees with dispatcher")
     dispatch = function("handle_shared_agent_menu_choice")
     dispatcher_choices = [
         int(number)
@@ -69,8 +72,10 @@ def assert_agent_menu_contract() -> None:
         body = function(f"show_{role}_menu")
         if body.count("    print_shared_agent_menu_tail\n") != 1:
             raise AssertionError(f"{role}: shared footer is not printed exactly once")
-        if body.count('if handle_shared_agent_menu_choice "$choice"; then') != 1:
-            raise AssertionError(f"{role}: shared choices are not dispatched exactly once")
+        if body.count('if is_shared_agent_menu_choice "$choice"; then') != 1:
+            raise AssertionError(f"{role}: common option guard must occur exactly once")
+        if body.count('      handle_shared_agent_menu_choice "$choice"') != 1:
+            raise AssertionError(f"{role}: shared actions must run outside a conditional")
         own = options(body)
         if sorted(own) != list(range(1, 9)):
             raise AssertionError(f"{role}: expected local options 1-8; got {sorted(own)}")
