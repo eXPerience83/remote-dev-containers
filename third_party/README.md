@@ -31,7 +31,7 @@ CI remains offline for this evidence: `scripts/validate-standalone-artifact-insp
 
 Context7 follows the same non-distribution accounting boundary for its optional authentication CLI. `CONTEXT7_CLI_VERSION` and `CONTEXT7_CLI_SRI_SHA512` in `versions.env` record only the exact top-level CLI artifact whose transient `login --no-browser` surface Remote Dev has reviewed. The CLI is resolved/downloaded from the official public npm registry only after explicit user action and is removed afterward; it is intentionally absent from `third_party/inventory.json`, image notices and image SBOM content.
 
-The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change.
+The broader human review is tracked by the standing six-month maintenance issue #53, with additional reviews before stable releases and when distribution terms, packaging, authentication or optional-agent policies change. The owner's **2026-11-14** support decision and the strict distinction between **no proprietary CLI redistribution** and **Google's separate third-party service-access terms** are documented in the [source-backed official-CLI remote-terminal policy](../docs/antigravity-remote-terminal-policy.md) ([español](../docs/antigravity-remote-terminal-policy.es.md)). This human optional-provider disposition is not a review of all current image license notices and does not advance `third_party/inventory.json.reviewed_on`.
 
 ## Maintenance contract
 
