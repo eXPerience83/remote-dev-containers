@@ -198,7 +198,7 @@ La interpretación de soporte es estrecha:
 - conservar no afiliación y términos/privacidad;
 - no describir la evidencia de Remote Dev como firma, certificación o respaldo de Google.
 
-Es una interpretación humana de riesgo/soporte, no aprobación legal del proveedor.
+Se trata de una interpretación humana de riesgo/soporte del **03-09-2026**, **no de una aprobación de Google**. **Nueva revisión #53 pendiente (14-11-2026):** la [FAQ oficial](https://antigravity.google/docs/faq) indica expresamente que envolver `agy` en aplicaciones/agentes de terceros **no está soportado en planes de consumo**, aunque diferencia ese caso del scripting directo/CI. Como Remote Dev es un lanzador/contenedor externo para el CLI, la decisión anterior no acredita soporte de Google ni autoriza una publicación estable. Consulta [la política de agentes opcionales](third_party/optional-agents.md) y [la admisión de Antigravity](docs/antigravity-runtime-admission.es.md); la activación experimental y las salvaguardas actuales permanecen sin cambios.
 
 La automatización #83 ya está enviada. El descubrimiento programado valida bytes acotados del proveedor como **datos** y no ejecuta código del proveedor. Los cambios se representan como metadata y la inspección ejecutable requiere el workflow explícito de revisión confiable.
 
