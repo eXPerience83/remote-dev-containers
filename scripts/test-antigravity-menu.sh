@@ -137,7 +137,7 @@ case "${1:-}" in
     ;;
   menu-state)
     [[ "$#" == 1 ]] || exit 2
-    printf '%s\n' "\${REMOTE_DEV_MENU_AGY_CONTEXT7_STATE:-absent}"
+    printf '%s\n' "${REMOTE_DEV_MENU_AGY_CONTEXT7_STATE:-absent}"
     ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
@@ -327,11 +327,11 @@ printf '7\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n12\n' | env \
   REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 mapfile -t context7_actions <"$context7_calls"
-[[ "\${#context7_actions[@]}" == 4 ]]
-[[ "\${context7_actions[0]}" == plan ]]
-[[ "\${context7_actions[1]}" == test ]]
-[[ "\${context7_actions[2]}" == plan ]]
-[[ "\${context7_actions[3]}" == reinstall ]]
+[[ "${#context7_actions[@]}" == 4 ]]
+[[ "${context7_actions[0]}" == plan ]]
+[[ "${context7_actions[1]}" == test ]]
+[[ "${context7_actions[2]}" == plan ]]
+[[ "${context7_actions[3]}" == reinstall ]]
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
 grep -Fq 'Authenticate' "$output"
