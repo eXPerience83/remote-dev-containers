@@ -788,6 +788,13 @@ print_shared_agent_menu_tail() {
 MENU
 }
 
+is_shared_agent_menu_choice() {
+  case "$1" in
+    3|7|9|10|11|12) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 handle_shared_agent_menu_choice() {
   local choice="$1"
   case "$choice" in
@@ -832,7 +839,10 @@ ${project_summary}
 MENU
     print_shared_agent_menu_tail
     read -r -p "> " choice
-    if handle_shared_agent_menu_choice "$choice"; then
+    if is_shared_agent_menu_choice "$choice"; then
+      # Run actions outside a conditional command: preserve Bash errexit and
+      # fail-closed behavior inside nested project/credential helpers.
+      handle_shared_agent_menu_choice "$choice"
       continue
     fi
     case "$choice" in
@@ -989,7 +999,10 @@ ${project_summary}
 MENU
     print_shared_agent_menu_tail
     read -r -p "> " choice
-    if handle_shared_agent_menu_choice "$choice"; then
+    if is_shared_agent_menu_choice "$choice"; then
+      # Run actions outside a conditional command: preserve Bash errexit and
+      # fail-closed behavior inside nested project/credential helpers.
+      handle_shared_agent_menu_choice "$choice"
       continue
     fi
     case "$choice" in
