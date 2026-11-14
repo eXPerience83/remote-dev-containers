@@ -242,6 +242,84 @@ class Context7Antigravity(unittest.TestCase):
         self.assertEqual(self.call("reinstall", "--yes")[0], 3)
         self.assertFalse(self.backup.exists())
 
+    def test_menu_state_is_passive_and_oauth_is_not_inferred(self):
+        # Vendor OAuth state is outside mcp_config.json; a token file alone
+        # must never cause Remote Dev to report an authenticated session.
+        token = self.root / "mcp_oauth_tokens.json"
+        token.write_text('{"private":"DO_NOT_READ"}', encoding="utf-8")
+        examples = (
+            (None, "absent"),
+            ({"mcpServers": {"context7": manager.ENTRY}}, "healthy"),
+            ({"mcpServers": {"context7": {"serverUrl": "https://old.example/mcp"}}},
+             "repairable"),
+            ({"mcpServers": {"context7": {"serverUrl": manager.ENDPOINT,
+                                         "headers": {"private": "DO_NOT_READ"}}}},
+             "blocked"),
+        )
+        for payload, expected in examples:
+            with self.subTest(expected=expected):
+                if payload is None:
+                    self.file.unlink(missing_ok=True)
+                else:
+                    self.file.write_text(json.dumps(payload), encoding="utf-8")
+                before = self.file.read_bytes() if self.file.exists() else None
+                with patch.object(manager, "build_opener",
+                                  side_effect=AssertionError("passive state used network")):
+                    code, out, err = self.call("menu-state")
+                    self.assertEqual((code, out.strip(), err), (0, expected, ""))
+                    code, status, _ = self.call("status", "--menu")
+                self.assertNotIn("DO_NOT_READ", status)
+                self.assertNotIn("authenticated", status.lower())
+                self.assertEqual(self.file.read_bytes() if self.file.exists() else None,
+                                 before)
+                self.assertEqual(token.read_text(), '{"private":"DO_NOT_READ"}')
+                self.assertFalse(self.backup.exists())
+
+    def test_healthy_reinstall_has_no_confirmation_or_changes(self):
+        original = b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}'
+        self.file.write_bytes(original)
+        with patch("sys.stdin", new=io.StringIO("")):
+            self.assertEqual(self.call("reinstall")[0], 0)
+        self.assertEqual(self.file.read_bytes(), original)
+        self.assertFalse(self.backup.exists())
+
+    def test_selective_remove_retains_other_mcp_and_oauth_state(self):
+        token = self.root / "mcp_oauth_tokens.json"
+        token.write_bytes(b"SYNTHETIC_OAUTH_NEVER_READ")
+        doc = {"mcpServers": {"context7": manager.ENTRY,
+                              "playwright": {"command": "local"},
+                              "openaiDeveloperDocs": {"serverUrl": "https://example.invalid"}},
+               "preferences": {"persist": True}}
+        original = json.dumps(doc, separators=(",", ":")).encode()
+        self.file.write_bytes(original)
+        with patch("sys.stdin", new=io.StringIO("")):
+            self.assertEqual(self.call("remove")[0], 2)
+        self.assertEqual(self.file.read_bytes(), original)
+        self.assertEqual(self.call("remove", "--yes")[0], 0)
+        after = json.loads(self.file.read_bytes())
+        self.assertEqual(after["mcpServers"]["playwright"], {"command": "local"})
+        self.assertEqual(after["mcpServers"]["openaiDeveloperDocs"],
+                         {"serverUrl": "https://example.invalid"})
+        self.assertNotIn("context7", after["mcpServers"])
+        self.assertEqual(after["preferences"], doc["preferences"])
+        self.assertEqual(self.backup.read_bytes(), original)
+        self.assertEqual(token.read_bytes(), b"SYNTHETIC_OAUTH_NEVER_READ")
+        self.assertEqual(self.call("remove", "--yes")[0], 0)
+
+    def test_remove_blocks_custom_and_unsafe_config(self):
+        for raw in (b'{"mcpServers":{"context7":{"serverUrl":"https://old.example/mcp"}}}',
+                    b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp",'
+                    b'"headers":{"private":"SYNTHETIC"}}}}', b"{"):
+            with self.subTest(raw=raw):
+                self.file.write_bytes(raw)
+                self.assertEqual(self.call("menu-state")[1].strip(),
+                                 "blocked" if b"old.example" not in raw else "repairable")
+                code, out, _ = self.call("remove", "--yes")
+                self.assertEqual(code, 3)
+                self.assertIn("BLOCKED", out)
+                self.assertEqual(self.file.read_bytes(), raw)
+                self.assertFalse(self.backup.exists())
+
     def test_cross_role_denial(self):
         os.environ["REMOTE_DEV_ROLE"] = "codex"
         code, _, _ = self.call("reinstall", "--yes")
