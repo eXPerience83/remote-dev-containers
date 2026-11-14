@@ -247,26 +247,26 @@
         "NOTICES.txt": "146f4ac04efa3511a563394ad32e210bcfbd60197abd47da039645a371d8acd1"
       }
     },
-    "ruff-0.17.4": {
+    "ruff-0.17.5": {
       "name": "ruff",
-      "version": "0.17.4",
+      "version": "0.17.5",
       "license": "MIT",
       "wheels": [
         {
-          "url": "https://files.pythonhosted.org/packages/58/de/a392dc38b215798ae72e639d228b7f6c02d826a95d1c0ad7c4c0ee49ef5b/ruff-0.17.4-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
-          "hash": "sha256:8ea6e0017c785f7282092b11e46338e4ebed1b9e575ebf2e55a8a1eda968241a",
-          "size": 10136900,
-          "upload-time": "2026-11-05T18:51:44.562Z"
+          "url": "https://files.pythonhosted.org/packages/b7/ea/1b3afa3943239dede7a0755ea139bdb51879f0f3f96f92894081d5c7d2e5/ruff-0.17.5-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+          "hash": "sha256:6f6a7b138edf9cc402ca736a59d9525e6d766e5395760b72e7e146e6251ac963",
+          "size": 10168006,
+          "upload-time": "2026-11-12T17:54:17.195Z"
         },
         {
-          "url": "https://files.pythonhosted.org/packages/af/1b/62874f14c7873f27c7887d2b1ea41de990e14ba9518801ffe8eacb5d51a6/ruff-0.17.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-          "hash": "sha256:2cd025509b2e15721b426fc70fd946d71f43b3db3b08e946dfec2d696d911690",
-          "size": 10572829,
-          "upload-time": "2026-11-05T18:51:56.129Z"
+          "url": "https://files.pythonhosted.org/packages/f2/8a/1e29c0c3785ae7e5cd0d54ee8717a08867ef71545796340be4c653c57e24/ruff-0.17.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "hash": "sha256:40ca8afaac309b41a5b2e09e4e7beb1f824826b93c25697c4d74f573324fba4e",
+          "size": 10613231,
+          "upload-time": "2026-11-12T17:54:30.862Z"
         }
       ],
       "notices": {
-        "NOTICES.txt": "a88dcb669732501fff520083d6a1186576e1e55034b5a01cf9d8178f43000cc2"
+        "NOTICES.txt": "8751248bd78d6a7a77e3f8ddbfed668fa3713cb75d587f332cf01399f1933a0c"
       }
     },
     "virtualenv-21.15.0": {

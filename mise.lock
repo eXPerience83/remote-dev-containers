@@ -51,10 +51,10 @@ uv = { path = ".mise/locks/pypi-pytest/9.2.0~ec7278a3", digest = "sha256:bfba668
 python = "3.14.10"
 
 [[tools."pypi:ruff"]]
-version = "0.17.4"
+version = "0.17.5"
 backend = "pypi:ruff"
-specifiers = ["0.17.4"]
-uv = { path = ".mise/locks/pypi-ruff/0.17.4~ac198ac5", digest = "sha256:54f2097a0f09c582bc9cefc670263787e0062064a824818f65f2d1969f1a33ab" }
+specifiers = ["0.17.5"]
+uv = { path = ".mise/locks/pypi-ruff/0.17.5~ac198ac5", digest = "sha256:25f77c7f0f3a69615d82466fd32ee940b264cdd1a2d29885c17930eff198269d" }
 
 [tools."pypi:ruff".options]
 python = "3.14.10"
