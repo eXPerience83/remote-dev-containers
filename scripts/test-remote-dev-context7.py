@@ -989,6 +989,42 @@ def assert_scoped_reinstall_absent_fails_closed(module, root: Path) -> None:
             raise AssertionError(f"{label}: forbidden reinstall wrote backup")
 
 
+def assert_menu_state_is_passive_and_owner_aware(root: Path) -> None:
+    """Menu dispatch may never suggest automatic replacement of custom TOML."""
+    home = root / "menu-state"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+
+    def expect(expected: str, label: str) -> None:
+        before = config.read_bytes() if config.exists() else None
+        actual = run_manager(home, "menu-state")
+        require_success(actual, label)
+        if actual.stdout.strip() != expected:
+            raise AssertionError(
+                f"{label}: expected {expected!r}, got {actual.stdout!r}"
+            )
+        if (config.read_bytes() if config.exists() else None) != before:
+            raise AssertionError(f"{label}: passive menu-state modified config")
+
+    expect("absent", "empty Codex state")
+    config.write_text(
+        '[mcp_servers.context7]\nurl = "https://user.example/mcp"\n',
+        encoding="utf-8",
+    )
+    expect("blocked", "unowned custom Context7 entry")
+    config.write_text('{"invalid TOML"}\n', encoding="utf-8")
+    expect("blocked", "invalid TOML")
+
+    config.unlink()
+    require_success(
+        run_manager(home, "install", "--yes", "--anonymous"),
+        "managed anonymous Context7 installation",
+    )
+    expect("healthy", "healthy managed Context7")
+    if (home / ".remote-dev-context7" / "api-key").exists():
+        raise AssertionError("anonymous menu-state unexpectedly created a key")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1007,6 +1043,7 @@ args = ["--safe"]
 '''
         config.write_text(original, encoding="utf-8")
 
+        assert_menu_state_is_passive_and_owner_aware(root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
