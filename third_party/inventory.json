@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-13",
+  "refreshed_on": "2026-11-14",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -266,6 +266,49 @@
       ]
     },
     {
+      "id": "playwright-mcp",
+      "name": "Playwright MCP and its Playwright library",
+      "image_scope": "both",
+      "version_key": "PLAYWRIGHT_MCP_VERSION",
+      "version": "0.0.85",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "license": "Apache-2.0 (transitive npm dependencies retain their upstream licenses)",
+      "notices": [
+        {
+          "path": "components/playwright-mcp/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.85/LICENSE"
+        },
+        {
+          "path": "runtime/playwright/playwright/ThirdPartyNotices.txt",
+          "source": "runtime"
+        },
+        {
+          "path": "runtime/playwright/playwright-core/ThirdPartyNotices.txt",
+          "source": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "chromium-headless-shell",
+      "name": "Playwright-provisioned Chromium headless shell",
+      "image_scope": "both",
+      "version": "matching the installed Playwright version in @playwright/mcp 0.0.85",
+      "source": "https://chromium.googlesource.com/chromium/src",
+      "license": "BSD-3-Clause and additional Chromium third-party licenses",
+      "notices": [
+        {
+          "path": "components/chromium/LICENSE",
+          "source": "repository",
+          "reviewed_from": "https://raw.githubusercontent.com/chromium/chromium/main/LICENSE"
+        },
+        {
+          "path": "runtime/chromium/LICENSE.headless_shell",
+          "source": "runtime"
+        }
+      ]
+    },
+    {
       "id": "python-cli-cfgv",
       "name": "cfgv",
       "image_scope": "both",
@@ -481,12 +524,12 @@
       "id": "python-cli-ruff",
       "name": "ruff",
       "image_scope": "both",
-      "version": "0.17.4",
-      "source": "https://pypi.org/project/ruff/0.17.4/",
+      "version": "0.17.5",
+      "source": "https://pypi.org/project/ruff/0.17.5/",
       "license": "MIT",
       "notices": [
         {
-          "path": "components/python-clis/ruff-0.17.4/",
+          "path": "components/python-clis/ruff-0.17.5/",
           "source": "artifact"
         }
       ],
@@ -506,49 +549,6 @@
         }
       ],
       "distribution_notes": "MIT identifies virtualenv itself. Redistributed seed wheels and vendored components retain their own terms, preserved with exact member labels in NOTICES.txt."
-    },
-    {
-      "id": "playwright-mcp",
-      "name": "Playwright MCP and its Playwright library",
-      "image_scope": "both",
-      "version_key": "PLAYWRIGHT_MCP_VERSION",
-      "version": "0.0.85",
-      "source": "https://github.com/microsoft/playwright-mcp",
-      "license": "Apache-2.0 (transitive npm dependencies retain their upstream licenses)",
-      "notices": [
-        {
-          "path": "components/playwright-mcp/LICENSE",
-          "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.85/LICENSE"
-        },
-        {
-          "path": "runtime/playwright/playwright/ThirdPartyNotices.txt",
-          "source": "runtime"
-        },
-        {
-          "path": "runtime/playwright/playwright-core/ThirdPartyNotices.txt",
-          "source": "runtime"
-        }
-      ]
-    },
-    {
-      "id": "chromium-headless-shell",
-      "name": "Playwright-provisioned Chromium headless shell",
-      "image_scope": "both",
-      "version": "matching the installed Playwright version in @playwright/mcp 0.0.85",
-      "source": "https://chromium.googlesource.com/chromium/src",
-      "license": "BSD-3-Clause and additional Chromium third-party licenses",
-      "notices": [
-        {
-          "path": "components/chromium/LICENSE",
-          "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/chromium/chromium/main/LICENSE"
-        },
-        {
-          "path": "runtime/chromium/LICENSE.headless_shell",
-          "source": "runtime"
-        }
-      ]
     }
   ]
 }
