@@ -85,7 +85,9 @@ The support boundary is deliberately conservative:
 - retain non-affiliation and applicable vendor terms/privacy wording;
 - never describe the project decision or review evidence as Google approval, certification, signing or endorsement.
 
-A material change to vendor terms, FAQ, privacy/auth model, installer origin/behavior or official CLI guidance triggers a new out-of-cycle review under #53.
+**2026-11-14 — second owner disposition (retained).** After an out-of-cycle source and code audit, the owner explicitly chose to **keep** Antigravity optional and experimental. Remote Dev exposes Google's own **interactive** CLI through a privately authenticated `ttyd`/PTY/`tmux` terminal; it does not use the consumer account as a model backend for Codex or another agent. The user requests official installation and the manager downloads/validates the installer on the user's behalf; the executable is not redistributed with the image. Google's CLI guidance supports SSH/`tmux` and a [specific developer-forum reply](https://discuss.ai.google.dev/t/tos-violation-appeal-request/199917) supports interactive `agy` within Docker over SSH. Google also [restricts third-party agent/application wrapping on consumer plans](https://antigravity.google/docs/faq), and [§6](https://antigravity.google/terms) remains broad. This is a **project support/risk decision**, not a vendor authorization or immunity from account enforcement. No runtime disablement or switch to Claude/API-key is authorized by it.
+
+The exact source evidence, process/terminal/OAuth data flow, counterexample and limits of interpretation are in the [Antigravity remote-terminal policy](antigravity-remote-terminal-policy.md) ([español](antigravity-remote-terminal-policy.es.md)). A future terminal replacement that preserves only PTY I/O does not create a new model client. A material change to vendor terms, FAQ, privacy/auth model, installer origin, terminal/data flow or official CLI guidance triggers another review under #53. The standing #53 issue remains open; this decision does not override the independent #95/#320 release gates.
 
 ## D015 — release maturity and build identity are separate
 
