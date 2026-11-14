@@ -41,6 +41,14 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 `remote-dev-context7 update` revalidates/reapplies the hosted MCP configuration shipped by the image. It is separate from the transient `ctx7` CLI version used only for device authentication.
 
+### Simplified navigation and diagnosis (#347)
+
+The Codex main menu has **7) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
+
+`status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The HTTP test requires confirmation and **does not establish real tool success or authentication**. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
+
+Authentication management reuses the existing private-key/device-code flow. Missing or damaged registration must be installed or repaired first. Install/repair is a **no-op with no confirmation** on a healthy registration. Missing registration dispatches to `install`, safely repairable registration previews `plan` and invokes `reinstall`, preserving the API key. Ambiguous or custom entries fail closed. Remove deletes only the managed registration and local key, not the provider-side key or Playwright/OpenAI Developer Docs. All older CLI commands, including `repair` and `update`, remain supported.
+
 ### Diagnostics and isolated Context7 MCP reinstall
 
 `remote-dev-context7 status --menu` is passive. `remote-dev-context7 plan` reports whether **only the Context7 MCP registration** can be reinstalled without modifying unrelated agent configuration.
