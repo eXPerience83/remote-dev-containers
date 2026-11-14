@@ -52,8 +52,7 @@ additional Chromium sandbox. Landlock ABI 7 cannot mediate every UNIX socket,
 so world-accessible sockets remain a residual risk. Internet and LAN access
 are intentionally retained; this is not a network sandbox. **Verified status (2026-11-14):** Playwright MCP is merged in `main` and shipped through experimental Edge, but **not in the last published stable v0.2.0**. Chromium `158.0.8127.18` has no demonstrated fix for the exploited CVE-2026-125350 (#320). **Do not navigate to untrusted/external pages** until the exact binary is proven patched or replaced by a reviewed, officially matching Playwright MCP/Core/Chromium set. Use local controlled fixtures only; see [v0.3.0 acceptance](v0.3.0-acceptance.md). CI covers AMD64 image builds, real MCP HTTP/JavaScript/WebSocket
 navigation and screenshots, negative Landlock checks, and process cleanup.
-Live TrueNAS AGY acceptance is still unverified; the optional AGY CI tests
-do not exercise the proprietary agent itself.
+**Real Playwright MCP calls in both Codex and AGY** have passed against controlled `127.0.0.1` pages in TrueNAS Edge (2026-11-14), including DOM, JS, screenshots and shutdown. **Chromium patch evidence #320 and persistence/rollback remain pending**; optional CI tests alone do not establish those gates.
 
 Browser payloads live read-only in `/opt/remote-dev/playwright-browsers`,
 distinct from the ephemeral profile. No browser binaries are installed in
