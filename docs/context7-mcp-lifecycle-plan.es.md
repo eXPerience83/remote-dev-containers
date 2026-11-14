@@ -1,6 +1,6 @@
 # Context7 — plan de diagnóstico y reinstalación por agente
 
-**Estado verificado (14-11-2026):** PR #324 **integrado** en `main` y distribuido en Edge; la **aceptación funcional real** de Context7 en Codex y Antigravity y la revisión específica de terceros (#53) siguen pendientes. Este documento conserva hitos históricos y no autoriza `stable/latest`. Guía de pruebas: [v0.3.0](v0.3.0-acceptance.es.md).
+**Estado verificado (14-11-2026):** PR #324 **integrado** en `main` y distribuido en Edge; las **pruebas reales de llamadas MCP han pasado en ambos agentes**; el OAuth de AGY se completó con éxito, pero **persistencia/rollback tras recreación y revisión #53** siguen pendientes. Este documento conserva hitos históricos y no autoriza `stable/latest`. Guía de pruebas: [v0.3.0](v0.3.0-acceptance.es.md).
 **Fecha:** 13-11-2026. **Seguimiento:** issue #95 y revisión de terceros #53.
 **Decisión:** [D016](decisions.md#d016--context7-is-a-role-local-hosted-mcp-registration-with-explicit-reinstall).
 **Matriz completa y criterios técnicos:** [plan en inglés](context7-mcp-lifecycle-plan.md).
