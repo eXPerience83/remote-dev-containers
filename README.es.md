@@ -210,6 +210,8 @@ El MCP hospedado de Context7 y el onboarding opcional por código de dispositivo
 
 Context7 es un servicio externo operado por Upstash. Consulta [`docs/context7-codex.es.md`](docs/context7-codex.es.md).
 
+Codex y Antigravity comparten **7) MCP integrations... → 1) Context7...**: estado/diagnóstico pasivo, prueba HTTP explícita, autenticación propia, instalación/reparación y eliminación selectiva. Codex conserva su clave privada y Antigravity utiliza OAuth nativo desde `/mcp → context7 → Authenticate`. HTTP `/ping` no prueba el uso real de herramientas. Consulta [Context7 para Codex](docs/context7-codex.es.md) y [Context7 para Antigravity](docs/context7-antigravity.es.md).
+
 ## Aislamiento en TrueNAS
 
 La imagen predeterminada no instala Bubblewrap del sistema. Los lanzamientos soportados de Codex desactivan explícitamente el sandbox interno no soportado; el contenedor Docker exterior y sus montajes estrechos son el límite soportado.
