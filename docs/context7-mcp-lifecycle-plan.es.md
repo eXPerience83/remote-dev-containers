@@ -1,6 +1,6 @@
 # Context7 — plan de diagnóstico y reinstalación por agente
 
-**Estado:** EN DESARROLLO, PR #324 en borrador; no autoriza ninguna publicación.
+**Estado verificado (14-11-2026):** PR #324 **integrado** en `main` y distribuido en Edge; las **pruebas reales de llamadas MCP han pasado en ambos agentes**; el OAuth de AGY se completó con éxito, pero **persistencia/rollback tras recreación y revisión #53** siguen pendientes. Este documento conserva hitos históricos y no autoriza `stable/latest`. Guía de pruebas: [v0.3.0](v0.3.0-acceptance.es.md).
 **Fecha:** 13-11-2026. **Seguimiento:** issue #95 y revisión de terceros #53.
 **Decisión:** [D016](decisions.md#d016--context7-is-a-role-local-hosted-mcp-registration-with-explicit-reinstall).
 **Matriz completa y criterios técnicos:** [plan en inglés](context7-mcp-lifecycle-plan.md).
@@ -32,4 +32,4 @@ Reglas innegociables: diagnóstico **sin escrituras ni red**; acción explícita
 
 **Pendiente:** verificaciones de configuración a nivel de proyecto en Antigravity, aceptación con agentes reales y revisión del contrato legal/privacidad específica. El CI verde no reemplaza estas pruebas.
 
-No fusionar PR #324 ni considerar aprobado el desarrollo mientras queden puertas abiertas en la [matriz principal](context7-mcp-lifecycle-plan.md).
+PR #324 ya está fusionado; **no cerrar #95 ni declarar la integración aceptada en producción** mientras queden pendientes las pruebas reales y las decisiones humanas de la [matriz principal](context7-mcp-lifecycle-plan.md).
