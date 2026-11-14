@@ -1,6 +1,6 @@
 # Context7 hosted MCP for Antigravity CLI
 
-> **Verified status (2026-11-14):** PR #324 was **merged** as `258d79a` and shipped through experimental `edge`. Real Codex/Antigravity use on TrueNAS and role-local rollback **have not yet been accepted**; there is no later stable publication. CI success alone does not prove real `agy /mcp` tool calls. See the [v0.3.0 acceptance guide](v0.3.0-acceptance.md).
+> **Verified status (2026-11-14):** PR #324 was **merged** as `258d79a` and shipped through experimental `edge`. **Real Context7 tool calls have passed in both agents on TrueNAS Edge**, and AGY's native OAuth flow displayed `Authentication successful!`. Persistence after container recreation, private backups/rollback and #53 review remain pending; there is no later stable publication. See the [v0.3.0 acceptance guide](v0.3.0-acceptance.md).
 
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
@@ -14,7 +14,7 @@ The Antigravity entry installed by Remote Dev is initially anonymous:
 {"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}
 ```
 
-Context7 allows anonymous remote access at lower rate limits. Do not treat an HTTP `/ping` success as proof that tools are usable from the Antigravity CLI.
+Context7 allows anonymous remote access at lower rate limits. **AGY also supports OAuth sign-in natively via `/mcp → context7 → Authenticate` without changing this server entry.** TrueNAS screenshots show a successful OAuth flow, but not token persistence: the provider documents `~/.gemini/antigravity/mcp_oauth_tokens.json`, outside the currently mounted `/root/.gemini/config` and `/root/.gemini/antigravity-cli` directories. Do not treat an HTTP `/ping` success alone as proof that tools are usable from the CLI.
 
 **External-service privacy notice:** Context7 is operated by Upstash, outside Remote Dev. Agent-generated documentation searches and library identifiers are sent to the hosted provider. Treat MCP queries as externally disclosed; do not send confidential project data, secrets or regulated personal information through this integration.
 
@@ -33,7 +33,7 @@ The passive commands do not modify state or make network calls. `reinstall` is e
 
 It **refuses to overwrite any customized Context7 entry**, including authentication (headers, OAuth, tokens, command/args or env) **and non-authentication options** such as `timeoutSeconds`, `disabled` or `disabledTools`. All such user-owned entries require manual review and are preserved unchanged, even with an outdated endpoint. Existing non-Context7 MCPs remain semantically unchanged. JSON formatting may be normalized for an eligible reinstall; the original bytes remain in the private backup.
 
-For a real functional check after installing or reinstalling, open Antigravity CLI and run `/mcp`, confirm Context7 connects, then ask a simple public documentation question. `test --yes` tests only the hosted `/ping` endpoint and local JSON contract.
+**TrueNAS Edge real-agent PASS (2026-11-14):** `agy /mcp` and real Context7 `resolve-library-id` + `query-docs` calls returned public `/psf/requests` documentation. For independent acceptance after any future reinstall, open Antigravity CLI and run `/mcp`, confirm Context7 connects, then ask a simple public documentation question. `test --yes` tests only the hosted `/ping` endpoint and local JSON contract.
 
 Agent-global scope only: a project's `.agents/mcp_config.json` may supply another Context7 definition. Treat workspace-specific MCP settings as user-owned.
 
