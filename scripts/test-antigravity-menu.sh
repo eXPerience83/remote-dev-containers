@@ -331,29 +331,57 @@ grep -Fq 'ERROR: unable to inspect the configured Antigravity approval policy' "
 [[ ! -e "$invocations" ]]
 echo 'Antigravity policy inspection remains fail-closed: OK'
 
-rm -f "$manage_calls" "$hardening_calls"
-printf '5\n1\n\n2\n\n3\n\n0\n0\n' | env \
-  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
-  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
-  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  REMOTE_DEV_MENU_MANAGE_CALLS="$manage_calls" \
-  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
-[[ "$(cat "$manage_calls")" == $'remote-dev-install-antigravity\nremote-dev-update-antigravity' ]]
-[[ "$(wc -l <"$hardening_calls")" == 2 ]]
-grep -Fxq '1) Install from Google' "$output"
+run_manage_fixture() {
+  local input="$1" state="$2"
+  rm -f "$manage_calls" "$hardening_calls"
+  printf '%s' "$input" | env \
+    REMOTE_DEV_MENU_AGY_STATUS="$state" \
+    PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+    REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+    REMOTE_DEV_MENU_MANAGE_CALLS="$manage_calls" \
+    timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+}
+
+run_manage_fixture $'5\n1\n\n2\n\n3\n\n0\n0\n' 'Antigravity: 1.1.28 (official and reviewed)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [already installed; use Update]' "$output"
 grep -Fxq '2) Update from Google' "$output"
+grep -Fq 'Install is unavailable in the current runtime state' "$output"
 grep -Fq 'sign-in is handled by Google' "$output"
-rm -f "$manage_calls" "$hardening_calls"
-printf '5\n0\n0\n' | env \
-  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
-  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
-  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
-  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
-  REMOTE_DEV_MENU_MANAGE_CALLS="$manage_calls" \
-  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+
+run_manage_fixture $'5\n2\n\n1\n\n0\n0\n' 'Antigravity: not installed'
+[[ "$(cat "$manage_calls")" == 'remote-dev-install-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google' "$output"
+grep -Fxq '2) Update from Google [unavailable: install first]' "$output"
+grep -Fq 'Update is unavailable in the current runtime state' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: damaged or locally modified (explicit update required)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [unavailable: use Update to repair]' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: status unavailable (exit 7)'
 [[ ! -e "$manage_calls" ]] && [[ ! -e "$hardening_calls" ]]
-echo 'Antigravity Manage actions, provider sign-in guidance and Back: OK'
+grep -Fxq '1) Install from Google [blocked: status unavailable]' "$output"
+grep -Fxq '2) Update from Google [blocked: status unavailable]' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: 1.2.0 (official source; Remote Dev review pending)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [already installed; use Update]' "$output"
+grep -Fq 'review pending' "$output"
+grep -Fq 'not' "$output"
+
+run_manage_fixture $'5\n0\n0\n' 'Antigravity: 1.1.28 (official and reviewed)'
+[[ ! -e "$manage_calls" ]] && [[ ! -e "$hardening_calls" ]]
+echo 'Antigravity Manage state-aware actions, repair, review-pending and Back: OK'
 
 mkdir -p "$workdir/workspace/second-project"
 rm -f "$invocations" "$hardening_calls"
