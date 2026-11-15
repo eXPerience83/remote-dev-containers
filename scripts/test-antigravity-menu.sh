@@ -275,7 +275,6 @@ grep -Fxq '7) Sign in to GitHub CLI' "$output"
 grep -Fxq '8) Run diagnostics' "$output"
 grep -Fxq '9) Open container shell' "$output"
 grep -Fxq '0) Exit this tmux session' "$output"
-grep -Fxq '0) Exit this tmux session' "$output"
 if grep -Fq 'Launch/approval options [not available]' "$output"; then
   echo 'ERROR: Antigravity menu still marks approval mode unavailable' >&2
   exit 1
