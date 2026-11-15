@@ -38,31 +38,32 @@ def options(body: str) -> dict[int, str]:
 def assert_agent_menu_contract() -> None:
     shared = options(function("print_shared_agent_menu_tail"))
     expected_shared = {
-        9: "Sign in to GitHub CLI",
-        10: "Run diagnostics",
-        11: "Open a login shell",
-        12: "Exit this tmux session",
+        6: "MCP integrations...",
+        7: "Sign in to GitHub CLI",
+        8: "Run diagnostics",
+        9: "Open container shell",
+        0: "Exit this tmux session",
     }
     if shared != expected_shared:
         raise AssertionError(f"shared main-menu tail drifted: {shared}")
 
     guard = function("is_shared_agent_menu_choice")
-    if "3|7|9|10|11|12) return 0" not in guard:
+    if "3|6|7|8|9|0) return 0" not in guard:
         raise AssertionError("shared option recognition disagrees with dispatcher")
     dispatch = function("handle_shared_agent_menu_choice")
     dispatcher_choices = [
         int(number)
         for number in re.findall(r"^    (\d+)\)", dispatch, flags=re.MULTILINE)
     ]
-    if dispatcher_choices != [3, 7, 9, 10, 11, 12]:
+    if dispatcher_choices != [3, 6, 7, 8, 9, 0]:
         raise AssertionError(f"shared dispatch contract drifted: {dispatcher_choices}")
     for call in (
         "3) show_projects_menu",
-        "7) show_mcp_integrations_menu",
-        "9) if run_github_login",
-        "10) run_diagnostics",
-        '11) if run_interactive_and_harden "Login shell"',
-        "12) exit 0",
+        "6) show_mcp_integrations_menu",
+        "7) if run_github_login",
+        "8) run_diagnostics",
+        '9) if run_interactive_and_harden "Container shell"',
+        "0) exit 0",
     ):
         if call not in dispatch:
             raise AssertionError(f"missing common main-menu action: {call}")
@@ -77,21 +78,31 @@ def assert_agent_menu_contract() -> None:
         if body.count('      handle_shared_agent_menu_choice "$choice"') != 1:
             raise AssertionError(f"{role}: shared actions must run outside a conditional")
         own = options(body)
-        if sorted(own) != list(range(1, 9)):
-            raise AssertionError(f"{role}: expected local options 1-8; got {sorted(own)}")
-        if own[3] != "Projects..." or own[7] != "MCP integrations...":
-            raise AssertionError(f"{role}: common option 3/7 title mismatch")
+        if sorted(own) != list(range(1, 6)):
+            raise AssertionError(f"{role}: expected local options 1-5; got {sorted(own)}")
+        if own[3] != "Projects..." or own[4] != "Approval settings...":
+            raise AssertionError(f"{role}: common option 3/4 title mismatch")
         menus[role] = own | shared
-        if sorted(menus[role]) != list(range(1, 13)):
+        if sorted(menus[role]) != list(range(0, 10)):
             raise AssertionError(f"{role}: missing or repeated main-menu slot")
 
-    if menus["codex"][8] != "Sign in to Codex with device code":
-        raise AssertionError("Codex device-code authentication label changed")
-    if menus["antigravity"][8] != "Antigravity sign-in [handled during launch]":
-        raise AssertionError("Antigravity native sign-in label changed")
-    for number in (3, 7, 9, 10, 11, 12):
+    if menus["codex"][5] != "Manage Codex..." or menus["antigravity"][5] != "Manage Antigravity...":
+        raise AssertionError("agent management menu is not aligned")
+    for number in (0, 3, 4, 6, 7, 8, 9):
         if menus["codex"][number] != menus["antigravity"][number]:
             raise AssertionError(f"agent menus disagree on shared slot {number}")
+
+    codex_manage = function("show_codex_manage_menu")
+    antigravity_manage = function("show_antigravity_manage_menu")
+    for phrase in ("remote-dev-codex-runtime update", "remote-dev-codex-runtime remove", "codex login --device-auth", "0) Back"):
+        if phrase not in codex_manage:
+            raise AssertionError(f"missing Codex managed action: {phrase}")
+    for phrase in ("remote-dev-install-antigravity", "remote-dev-update-antigravity", "Antigravity sign-in information", "0) Back"):
+        if phrase not in antigravity_manage:
+            raise AssertionError(f"missing Antigravity managed action: {phrase}")
+    if "bash --login" not in dispatch:
+        raise AssertionError("container shell must retain login-style Bash")
+
     if "handle_shared_agent_menu_choice" in function("show_shell_menu"):
         raise AssertionError("shell recovery menu must remain independent")
 
