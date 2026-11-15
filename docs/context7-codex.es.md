@@ -14,7 +14,7 @@ Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni
 
 ## Ciclo de vida explícito
 
-Utiliza **Context7 integration...** en el menú de Codex o:
+En Codex, abre **7) MCP integrations... → 1) Context7...**, o utiliza estas órdenes CLI avanzadas:
 
 ```bash
 remote-dev-context7 status
