@@ -42,7 +42,7 @@ If `/workspace` contains `.git`, is recognized as a bare Git repository, or othe
 - project discovery, Select, Create and Delete are blocked;
 - an existing menu selection is discarded rather than reused as stale state;
 - **Run diagnostics** remains available;
-- **Open a login shell** remains available for manual inspection/cleanup;
+- **Open container shell** remains available for manual inspection/cleanup;
 - Remote Dev does not delete `.git`, run `git reset`, run `git clean`, move projects, or rewrite repository metadata automatically.
 
 Doctor reports the collection as `CRITICAL`/`BLOCKED` without printing remotes, repository contents, credentials or other private data.
