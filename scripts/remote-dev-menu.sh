@@ -818,9 +818,33 @@ MENU
 }
 
 show_antigravity_manage_menu() {
-  local status_summary=""
+  local status_summary="" manage_state=unknown install_hint="" update_hint=""
   while true; do
     status_summary="$(antigravity_status_summary)"
+    # This is a presentation guard, not a substitute for the official
+    # manager's checks and confirmations. Status remains lightweight/offline.
+    case "$status_summary" in
+      'Antigravity: not installed')
+        manage_state=absent
+        install_hint=""
+        update_hint=" [unavailable: install first]"
+        ;;
+      'Antigravity: damaged or locally modified (explicit update required)')
+        manage_state=damaged
+        install_hint=" [unavailable: use Update to repair]"
+        update_hint=""
+        ;;
+      'Antigravity: '*'(official and reviewed)'|'Antigravity: '*'(official source; Remote Dev review pending)')
+        manage_state=installed
+        install_hint=" [already installed; use Update]"
+        update_hint=""
+        ;;
+      *)
+        manage_state=unknown
+        install_hint=" [blocked: status unavailable]"
+        update_hint=" [blocked: status unavailable]"
+        ;;
+    esac
     clear
     cat <<MENU
 Remote Dev — Antigravity — Manage Antigravity
@@ -830,18 +854,26 @@ ${status_summary}
 Google's official CLI is optional and stays outside the image.
 Install/update are explicit actions. A review-pending version is not
 automatically updated or certified; launch still checks integrity.
-1) Install from Google
-2) Update from Google
+1) Install from Google${install_hint}
+2) Update from Google${update_hint}
 3) Antigravity sign-in information
 0) Back
 MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        if [[ "$manage_state" == absent ]]; then
+          if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        else
+          show_unavailable_action "Install is unavailable in the current runtime state. Use Update to replace/repair an existing installation, or Run diagnostics if status is unknown."
+        fi
         ;;
       2)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        if [[ "$manage_state" == installed || "$manage_state" == damaged ]]; then
+          if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        else
+          show_unavailable_action "Update is unavailable in the current runtime state. Install Antigravity first, or Run diagnostics if status is unknown."
+        fi
         ;;
       3)
         show_unavailable_action "Antigravity sign-in is handled by Google's CLI during launch, not by Remote Dev. Start Antigravity to sign in. Use /resume inside Antigravity to browse older conversations."
@@ -855,7 +887,6 @@ MENU
     esac
   done
 }
-
 show_unavailable_action() {
   local message="$1"
   clear
