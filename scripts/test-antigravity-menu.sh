@@ -317,6 +317,17 @@ grep -Fxq 'Antigravity guarded compatibility: BLOCKED' "$output"
 [[ ! -e "$hardening_calls" ]]
 echo 'Antigravity guarded BLOCKED remains visible with detail: OK'
 
+printf '0\n' | env \
+  REMOTE_DEV_MENU_GUARDED_COMPAT=unavailable \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+grep -Fxq 'Guarded compatibility: UNKNOWN — see Approval settings' "$output"
+[[ ! -e "$hardening_calls" ]]
+echo 'Antigravity guarded unavailable remains an actionable warning: OK'
+
 set +e
 printf '1\n' | env REMOTE_DEV_MENU_AGY_POLICY_FAIL=1 \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -377,7 +388,7 @@ run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 grep -Fxq '1) Install from Google [already installed; use Update]' "$output"
 grep -Fq 'review pending' "$output"
-grep -Fq 'not' "$output"
+grep -Fq 'automatically updated or certified' "$output"
 
 run_manage_fixture $'5\n0\n0\n' 'Antigravity: 1.1.28 (official and reviewed)'
 [[ ! -e "$manage_calls" ]] && [[ ! -e "$hardening_calls" ]]
