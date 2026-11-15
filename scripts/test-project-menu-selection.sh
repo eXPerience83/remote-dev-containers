@@ -116,7 +116,7 @@ chmod 0755 "$fixture_menu"
 # show_codex_menu refreshes the project selection in the parent shell before
 # invoking clear. Inject the second project from clear so it appears after the
 # sole project has been persisted in menu-session state but before Start input.
-printf '1\n\n12\n' | env \
+printf '1\n\n0\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workspace" \
   REMOTE_DEV_ROLE=codex \
@@ -146,7 +146,7 @@ echo 'Menu-session auto-selection survives a project appearing before Start: OK'
 rm -rf -- "$workspace/second-project"
 rm -f "$invocations" "$add_marker"
 post_launch_output="$workdir/post-launch-output"
-printf '1\n\n1\n\n12\n' | env \
+printf '1\n\n1\n\n0\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workspace" \
   REMOTE_DEV_ROLE=codex \
@@ -178,7 +178,7 @@ echo 'Menu-session auto-selection persists across launches after a sibling appea
 
 rm -f "$invocations"
 oversized_output="$workdir/oversized-output"
-printf '3\n1\n18446744073709551617\n4\n1\n\n12\n' | env \
+printf '3\n1\n18446744073709551617\n4\n1\n\n0\n' | env \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workspace" \
   REMOTE_DEV_ROLE=codex \
