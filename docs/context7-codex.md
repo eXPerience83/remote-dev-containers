@@ -14,7 +14,7 @@ Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runt
 
 ## Explicit lifecycle
 
-Use **Context7 integration...** in the Codex menu or:
+From Codex, open **7) MCP integrations... → 1) Context7...** or use these advanced CLI commands:
 
 ```bash
 remote-dev-context7 status
