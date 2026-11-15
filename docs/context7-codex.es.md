@@ -2,9 +2,9 @@
 
 Remote Dev puede configurar el servicio Codex incluido para utilizar Context7 como servicio MCP alojado y opcional de documentación.
 
-> **Estado de publicación:** esta integración se introduce mediante la ruta experimental actual `dev -> edge` de Remote Dev que sigue #31. Los candidatos revisados antes del merge pueden publicarse en `dev`; `edge` contiene únicamente cambios integrados en `main`. No debe anunciarse disponibilidad estable hasta que una versión estable que incluya este cambio complete sus gates de publicación.
+> **Estado verificado (14-11-2026):** la implementación de registro/reinstalación de Context7 del [PR #324](https://github.com/eXPerience83/remote-dev-containers/pull/324) está **fusionada y publicada en Edge experimental**. Las llamadas reales a herramientas Context7 funcionaron en Codex y Antigravity sobre TrueNAS; el uso de la API key de Codex quedó respaldado por una comprobación del contador de la cuenta, sin demostrar aislamiento absoluto frente a tráfico concurrente. **Persistencia OAuth de Antigravity tras recreación/rollback y decisión #53 específica de privacidad/servicio alojado siguen pendientes**, según [#95](https://github.com/eXPerience83/remote-dev-containers/issues/95). **No supone aceptación para stable.**
 
-Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
+Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. Su [documentación de privacidad](https://context7.com/docs/security/data-privacy) indica que las peticiones MCP envían consultas formuladas por el agente, identificadores de bibliotecas y metadatos del cliente/conexión (incluidos sesión y datos de IP para limitación de uso); el proveedor indica que envía las consultas MCP a **proveedores externos de modelos LLM** para reordenar documentación y que también las almacena anonimizadas para evaluar la calidad (excepto las consultas de espacios Enterprise). **No especifica cuánto tiempo conserva esas consultas de evaluación; el plazo declarado de 30 días se aplica únicamente a los logs de la API.** Son afirmaciones del proveedor, **no** una garantía de que el agente nunca incluya datos sensibles en la consulta. No envíes secretos del proyecto, fragmentos de código privado ni datos personales regulados a Context7. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
 
 ```text
 https://mcp.context7.com/mcp
@@ -14,7 +14,7 @@ Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni
 
 ## Ciclo de vida explícito
 
-Utiliza **Context7 integration...** en el menú de Codex o:
+En Codex, abre **7) MCP integrations... → 1) Context7...**, o utiliza estas órdenes CLI avanzadas:
 
 ```bash
 remote-dev-context7 status
