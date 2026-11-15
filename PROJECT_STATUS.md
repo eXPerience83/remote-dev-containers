@@ -121,7 +121,7 @@ The first-stable release checklist was reconciled and published for `v0.2.0`. Th
 - complete any open maintenance/security item that #31 identifies as blocking the claimed stable support level;
 - validate the dated `v0.2.0` changelog/source cut on exact-head CI, then create the exact tag on reviewed main and verify the independent stable publisher and digest-alias equality.
 
-Optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #180 persistent on-demand toolchains, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling does not become shipped merely because PR2's universal baseline has been integrated.
+At the time of the **v0.2.0 first-stable baseline**, optional/future work such as #181 stronger browser access, #170 native Community App research, #124 inbound key-only SSH, #95 Context7 for Antigravity, #71 SMB, #112 ARM64, #180 persistent on-demand toolchains, #148 concurrent sessions/worktrees and #151 isolated container build/test tooling **was not shipped merely because PR2's universal baseline had been integrated**. **Later status (2026-11-15):** the #95 Context7 implementation shipped on **experimental Edge** after [PR #324](https://github.com/eXPerience83/remote-dev-containers/pull/324) merged and real Codex/Antigravity MCP calls passed; **recreation/rollback acceptance and Context7 hosted-service/privacy sign-off remain pending**, so this is **not** v0.3.0 stable acceptance.
 
 ## Upstream pin policy
 
