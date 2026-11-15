@@ -776,6 +776,8 @@ antigravity_policy_menu_summary() {
     printf 'Guarded compatibility: UNKNOWN — see Approval settings\n'
   elif [[ "$compatibility_line" == *BLOCKED* ]]; then
     printf 'Guarded compatibility: BLOCKED — see Approval settings\n'
+  elif [[ "$compatibility_line" != 'Antigravity guarded compatibility: OK'* ]]; then
+    printf 'Guarded compatibility: UNKNOWN — see Approval settings\n'
   fi
 }
 
