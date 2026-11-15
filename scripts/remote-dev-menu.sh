@@ -469,19 +469,19 @@ next_codex_mode=""
 choose_next_codex_mode() {
   clear
   cat <<MENU
-Approval mode for next launch
-=============================
+Codex approval settings
+======================
 1) Use configured mode — ${configured_codex_mode}
 2) Autonomous — no confirmations
 3) Guarded — asks for confirmations
-4) Back
+0) Back
 MENU
   read -r -p "> " choice
   case "$choice" in
     1) next_codex_mode="" ;;
     2) next_codex_mode=autonomous ;;
     3) next_codex_mode=guarded ;;
-    4) return 1 ;;
+    0|4) return 1 ;;
     *)
       sleep 1
       return 1
@@ -589,7 +589,7 @@ below. Fine-grained allow/ask/deny rules remain user-managed and are preserved.
 3) Guarded for next launch — provider permission engine active
 4) Set Guarded preset: request-review (recommended)
 5) Set Guarded preset: strict (more restrictive)
-6) Back
+0) Back
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -611,7 +611,7 @@ MENU
       5)
         if set_antigravity_guarded_preset strict; then :; fi
         ;;
-      6)
+      0|6)
         return 0
         ;;
       *)
@@ -765,6 +765,97 @@ antigravity_status_summary() {
   fi
 }
 
+antigravity_policy_menu_summary() {
+  # Only surface the launch decision on the main screen. The detailed provider
+  # permission report remains visible in Approval settings (issue #225).
+  local source_line="" compatibility_line=""
+  source_line="$(sed -n 's/^Mode source: //p' <<<"$antigravity_policy_summary_text")"
+  printf 'Approval mode: %s (%s)\n' "$configured_antigravity_mode" "${source_line:-unknown}"
+  compatibility_line="$(sed -n '/^Antigravity guarded compatibility:/p' <<<"$antigravity_policy_summary_text")"
+  if [[ -z "$compatibility_line" ]]; then
+    printf 'Guarded compatibility: UNKNOWN — see Approval settings\n'
+  elif [[ "$compatibility_line" == *BLOCKED* ]]; then
+    printf 'Guarded compatibility: BLOCKED — see Approval settings\n'
+  fi
+}
+
+show_codex_manage_menu() {
+  local runtime_summary=""
+  while true; do
+    runtime_summary="$(codex_runtime_status_summary)"
+    clear
+    cat <<MENU
+Remote Dev — Codex — Manage Codex
+================================
+${runtime_summary}
+
+Optional updates are installed explicitly from official OpenAI releases.
+The bundled Codex CLI stays available as a fallback.
+1) Update from official OpenAI release
+2) Remove optional update / use bundled fallback
+3) Sign in to Codex with device code
+0) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
+        ;;
+      2)
+        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
+        ;;
+      3)
+        if run_interactive_and_harden "Codex login" run_credential_command codex login --device-auth; then :; fi
+        ;;
+      0)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
+show_antigravity_manage_menu() {
+  local status_summary=""
+  while true; do
+    status_summary="$(antigravity_status_summary)"
+    clear
+    cat <<MENU
+Remote Dev — Antigravity — Manage Antigravity
+============================================
+${status_summary}
+
+Google's official CLI is optional and stays outside the image.
+Install/update are explicit actions. A review-pending version is not
+automatically updated or certified; launch still checks integrity.
+1) Install from Google
+2) Update from Google
+3) Antigravity sign-in information
+0) Back
+MENU
+    read -r -p "> " choice
+    case "$choice" in
+      1)
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        ;;
+      2)
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+        ;;
+      3)
+        show_unavailable_action "Antigravity sign-in is handled by Google's CLI during launch, not by Remote Dev. Start Antigravity to sign in. Use /resume inside Antigravity to browse older conversations."
+        ;;
+      0)
+        return 0
+        ;;
+      *)
+        sleep 1
+        ;;
+    esac
+  done
+}
+
 show_unavailable_action() {
   local message="$1"
   clear
@@ -779,18 +870,19 @@ else
 fi
 
 print_shared_agent_menu_tail() {
-  # Single source of truth for identical Codex/Antigravity main-menu options.
+  # #351 explicitly migrates the former 12-slot contract to 1-9 + 0 Exit.
   cat <<'MENU'
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
+6) MCP integrations...
+7) Sign in to GitHub CLI
+8) Run diagnostics
+9) Open container shell
+0) Exit this tmux session
 MENU
 }
 
 is_shared_agent_menu_choice() {
   case "$1" in
-    3|7|9|10|11|12) return 0 ;;
+    3|6|7|8|9|0) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -799,11 +891,11 @@ handle_shared_agent_menu_choice() {
   local choice="$1"
   case "$choice" in
     3) show_projects_menu ;;
-    7) show_mcp_integrations_menu ;;
-    9) if run_github_login; then :; fi ;;
-    10) run_diagnostics ;;
-    11) if run_interactive_and_harden "Login shell" bash --login; then :; fi ;;
-    12) exit 0 ;;
+    6) show_mcp_integrations_menu ;;
+    7) if run_github_login; then :; fi ;;
+    8) run_diagnostics ;;
+    9) if run_interactive_and_harden "Container shell" bash --login; then :; fi ;;
+    0) exit 0 ;;
     *) return 1 ;;
   esac
 }
@@ -829,19 +921,15 @@ ${next_mode_summary}
 ${project_summary}
 ==================
 1) Start Codex
-2) Resume a Codex session (current project)
+2) Resume session (current project)
 3) Projects...
-4) Approval mode for next launch...
-5) Update Codex from official OpenAI release
-6) Remove Codex update (use bundled fallback)
-7) MCP integrations...
-8) Sign in to Codex with device code
+4) Approval settings...
+5) Manage Codex...
 MENU
     print_shared_agent_menu_tail
     read -r -p "> " choice
     if is_shared_agent_menu_choice "$choice"; then
-      # Run actions outside a conditional command: preserve Bash errexit and
-      # fail-closed behavior inside nested project/credential helpers.
+      # Preserve errexit and fail-closed behavior in nested helpers.
       handle_shared_agent_menu_choice "$choice"
       continue
     fi
@@ -852,25 +940,12 @@ MENU
       2)
         if run_codex_action "Codex resume" resume; then :; fi
         ;;
-
       4)
         if choose_next_codex_mode; then :; fi
         ;;
       5)
-        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
+        show_codex_manage_menu
         ;;
-      6)
-        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
-        ;;
-
-      8)
-        if run_interactive_and_harden \
-          "Codex login" run_credential_command codex login --device-auth; then :; fi
-        ;;
-
-
-
-
       *)
         sleep 1
         ;;
@@ -971,10 +1046,14 @@ MENU
 }
 
 show_antigravity_menu() {
-  local status_summary="" next_mode_summary="" project_summary=""
+  local status_summary="" next_mode_summary="" project_summary="" short_policy=""
+  local antigravity_version_summary=""
+  # Keep shared image provenance while removing the unrelated bundled Codex line.
+  antigravity_version_summary="$(sed '/^Codex:/d' <<<"$version_summary")"
 
   while true; do
     refresh_antigravity_policy
+    short_policy="$(antigravity_policy_menu_summary)"
     next_mode_summary="$(next_antigravity_mode_summary)"
     status_summary="$(antigravity_status_summary)"
     refresh_project_selection
@@ -982,26 +1061,22 @@ show_antigravity_menu() {
     clear
     cat <<MENU
 Remote Dev — Antigravity
-${version_summary}
+${antigravity_version_summary}
 ${status_summary}
-${antigravity_policy_summary_text}
+${short_policy}
 ${next_mode_summary}
 ${project_summary}
 ========================
-1) Start Antigravity (use /resume to browse/resume older conversations)
-2) Continue latest Antigravity conversation (current project)
+1) Start Antigravity
+2) Continue latest session (current project)
 3) Projects...
 4) Approval settings...
-5) Install Antigravity from Google
-6) Update Antigravity from Google
-7) MCP integrations...
-8) Antigravity sign-in [handled during launch]
+5) Manage Antigravity...
 MENU
     print_shared_agent_menu_tail
     read -r -p "> " choice
     if is_shared_agent_menu_choice "$choice"; then
-      # Run actions outside a conditional command: preserve Bash errexit and
-      # fail-closed behavior inside nested project/credential helpers.
+      # Preserve errexit and fail-closed behavior in nested helpers.
       handle_shared_agent_menu_choice "$choice"
       continue
     fi
@@ -1012,24 +1087,12 @@ MENU
       2)
         if run_antigravity_action "Antigravity continue" --continue; then :; fi
         ;;
-
       4)
         show_antigravity_approval_menu
         ;;
       5)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+        show_antigravity_manage_menu
         ;;
-      6)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
-        ;;
-
-      8)
-        show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
-        ;;
-
-
-
-
       *)
         sleep 1
         ;;
@@ -1044,7 +1107,7 @@ show_shell_menu() {
 Remote Dev — Shell
 ${version_summary}
 ==================
-1) Open a login shell
+1) Open container shell
 2) Sign in to GitHub CLI
 3) Run diagnostics
 4) Exit this tmux session
@@ -1052,7 +1115,7 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        if run_interactive_and_harden "Container shell" bash --login; then :; fi
         ;;
       2)
         if run_github_login; then :; fi
