@@ -56,6 +56,14 @@ The launcher is currently a small navigation surface, not the trusted authentica
 
 The existing `compose/launcher-auth.yml` override remains an advanced non-default compatibility/experimentation surface; it is not required by the current launcher contract and must not be presented as the normal deployment path.
 
+## Shared menu presentation and provider-specific adapters (#351)
+
+The common role menu in `scripts/remote-dev-menu.sh` deliberately shares **labels, numbering, rendering, and navigation**, but **not provider execution**. The shared helpers `print_agent_main_menu`, `show_agent_menu`, `print_agent_manage_menu`, `show_agent_manage_menu`, and `print_common_approval_mode_choices` provide the visible contract. `configure_agent_main_menu` and `configure_agent_manage_menu` supply only lightweight, offline, role-owned status and explanations; no vendor executable is run merely to display a menu.
+
+`dispatch_agent_main_choice` and `dispatch_agent_manage_choice` explicitly match `role:option` pairs, and unknown pairs fail closed. Codex launch remains `run-codex` with `--cd <selected project>`, `resume`, and its private approval override; Antigravity remains `run-antigravity` with `REMOTE_DEV_PROJECT`, `--continue`, and its own guarded provider engine. Codex update/removal/device login and Antigravity official install/update/native login guidance are **not interchangeable**. Project selection, GitHub login, diagnostics, and the container shell remain shared actions, with hardening and isolation unchanged. Context7 has an explicit two-role dispatch rather than using Antigravity as the default for any non-Codex role. Projects displays `0) Back` while continuing to accept the legacy `4` key.
+
+**Adding a future Claude Code role is not a label-only change.** It requires a dedicated role admission in the runtime, a role-private service/state mount and licensing/security review, plus explicit entries in the display-name, summary, management, launch/continue, approval, and MCP dispatch adapters. An unknown role must never fall through to Codex or Antigravity commands. Keep new provider-specific branches and exact-command/negative-isolation fixtures together; extend `scripts/test-menu-parity.py` before enabling the role. No Claude Code CLI or container has been added by #351.
+
 ## Agent roles
 
 ### Codex
