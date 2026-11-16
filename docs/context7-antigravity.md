@@ -20,7 +20,7 @@ Context7 allows anonymous remote access at lower rate limits. **AGY also support
 
 ## Controls
 
-From **7) MCP integrations... → 1) Context7...**, use the simplified menu or these CLI commands:
+From **6) MCP integrations... → 1) Context7...**, use the simplified menu or these CLI commands:
 
 ```sh
 remote-dev-context7-antigravity menu-state
@@ -41,7 +41,7 @@ Agent-global scope only: a project's `.agents/mcp_config.json` may supply anothe
 
 ## Shared Context7 menu (#347)
 
-Both agents expose **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. Main menu option 7 is preserved as *MCP integrations*.
+Both agents expose **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. The Context7 submenu remains unchanged; the #351 main-menu entry is now **6**.
 
 - **Status** and **plan** are passive and offline, without JSON changes. The OAuth token store is never inspected; a `serverUrl` registration **does not imply anonymous or authenticated OAuth**. The output says Antigravity owns authentication and refers to `/mcp`.
 - **Test** checks the hosted HTTPS `/ping` and local contract, not account login or successful MCP tool calls.

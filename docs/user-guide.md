@@ -22,6 +22,27 @@ Project selection changes the agent's default working directory; it is **not** f
 
 Agent authentication, configuration and session history live in the role-private persistent state, not inside the project checkout. Deleting or renaming a project therefore does not automatically delete the agent's historical session records.
 
+### Agent main-menu shortcuts (changed in #351)
+
+Codex and Antigravity now use the same compact navigation. The menu is in English in both roles:
+
+| Key | Codex | Antigravity |
+| --- | --- | --- |
+| 1 | Start Codex | Start Antigravity |
+| 2 | Resume session (current project) | Continue latest session (current project) |
+| 3 | Projects... | Projects... |
+| 4 | Approval settings... | Approval settings... |
+| 5 | Manage Codex... | Manage Antigravity... |
+| 6 | MCP integrations... | MCP integrations... |
+| 7 | Sign in to GitHub CLI | Sign in to GitHub CLI |
+| 8 | Run diagnostics | Run diagnostics |
+| 9 | Open container shell | Open container shell |
+| 0 | Exit this tmux session | Exit this tmux session |
+
+**Migration from the former 12-slot menu (#118/#126):** numeric shortcuts **5–12 are not backward-compatible**. Former `5` (Codex update / Antigravity install) is now `5 → 1`; former `6` (Codex remove fallback / Antigravity update) is `5 → 2`; former `7` (MCP) is `6`; former `8` (Codex device login / AGY sign-in information) is `5 → 3`; former `9` (GitHub), `10` (diagnostics), `11` (shell), and `12` (exit) are now `7`, `8`, `9`, and `0`. Do not replay old automated numeric keystrokes without updating them. The independent emergency **Shell** role keeps its own four shortcuts.
+
+`Manage Codex...` offers official-source optional runtime update, remove/fallback, and device-code sign-in. `Manage Antigravity...` offers explicit Google install/update and an explanation of its vendor-native sign-in (which happens when launching the CLI). Both management screens show lightweight offline status; actions still perform their own security checks and confirmations. Antigravity allows **Install** only while absent and **Update** while installed (including damaged installations); if inspection is unavailable, neither operation is dispatched until diagnostics can resolve the state. A review-pending version is identified explicitly, not certified by the menu. No automatic update is triggered by viewing a menu. Approval settings keep the configured vs **one-launch** selection; Antigravity's detailed guarded policy and presets live inside that submenu. A `BLOCKED` guarded state remains visible on the Antigravity main menu. Submenus now display `0) Back` (Projects also accepts its former `4` shortcut as a transition alias); the provider's session-resume semantics are unchanged (`codex resume` vs Antigravity `--continue`, with `/resume` for older conversations).
+
 ## 2. Select, create or delete a project
 
 Managed Codex/Antigravity sessions receive a brief [global Remote Dev environment guide](agent-guidance.md) automatically. Mechanical environment defaults, global guidance, more-specific repository instructions and MCP/plugins have separate responsibilities. This guidance is not a security boundary and does not activate `.venv` or install dependencies. Automatic reconciliation by `run-codex` / `run-antigravity` occurs only before eligible real agent sessions; explicit reconciliation is also available through `remote-dev-agent-guidance reconcile codex` or `remote-dev-agent-guidance reconcile antigravity`. Status and Doctor remain passive: they do not write state or print private instructions.
@@ -32,9 +53,9 @@ The normal Codex flow is:
 2. Open **Projects...** from the Codex menu.
 3. Select an existing project or create a new one.
 4. After a successful selection or creation, Remote Dev returns to the Codex menu; verify the `Project:` line.
-5. Choose **Start Codex** or **Resume a Codex session (current project)**.
+5. Choose **Start Codex** or **Resume session (current project)**.
 
-Antigravity uses the same **Projects...** navigation contract: after a successful Select/Create action, Remote Dev returns to the Antigravity menu with that project active so you can choose **Start Antigravity** or **Continue latest Antigravity conversation (current project)**.
+Antigravity uses the same **Projects...** navigation contract: after a successful Select/Create action, Remote Dev returns to the Antigravity menu with that project active so you can choose **Start Antigravity** or **Continue latest session (current project)**.
 
 Cancelled, invalid or failed Select/Create actions stay in **Projects...** so you can retry or go Back deliberately. Delete also stays in **Projects...** after the operation so you can inspect or continue managing the remaining projects.
 
@@ -55,7 +76,7 @@ Project names are limited to 1–128 ASCII characters: letters/digits plus `.`, 
 
 The behavior below was validated on real TrueNAS with Codex `0.147.0`. The Resume picker is **Codex-native UI**, so newer optional runtimes can change labels or keys. When the TUI differs, its on-screen footer is the immediate source of truth.
 
-Remote Dev launches **Resume a Codex session (current project)** with the selected project as Codex's explicit working directory. In the tested Codex picker:
+Remote Dev launches **Resume session (current project)** with the selected project as Codex's explicit working directory. In the tested Codex picker:
 
 - `[Cwd]` is the normal filter and shows sessions whose recorded cwd exactly matches the selected project path;
 - multiple meaningful sessions for the same exact project path are retained and can appear together;
@@ -108,7 +129,7 @@ A browser disconnect is not necessarily a terminated development session. Remote
 Inside the Remote Dev menu:
 
 - leaving Codex returns control to the menu when the interactive action finishes;
-- **Open a login shell** starts a general shell rather than an agent launch;
+- **Open container shell** starts a general shell rather than an agent launch;
 - **Exit this tmux session** terminates that tmux session instead of merely closing the browser tab.
 
 The project selection is menu/tmux process state. A normal browser disconnect/reconnect to the same live tmux session can retain it. A full container/tmux recreation may start a new menu process and therefore require selecting the project again; that does not imply the project directories or agent history were lost.

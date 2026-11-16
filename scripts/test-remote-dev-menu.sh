@@ -405,7 +405,7 @@ project_path="$workdir/workspace/project"
 output="$workdir/output"
 # Duplicate action choices are consumed by the success pause. If the pause
 # disappears, the duplicate becomes another action and the exact call count fails.
-run_menu __unset__ $'1\n1\n12\n' "$output"
+run_menu __unset__ $'1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'configured start' "[--cd][$project_path]"
 assert_file_lines "$agent_environment" 'configured agent environment' \
   "TMPDIR=$development_root/tmp TMP=$development_root/tmp TEMP=$development_root/tmp UV_CACHE_DIR=$development_root/uv-cache UV_TOOL_DIR=$development_root/uv-tools NPM_CONFIG_CACHE=$development_root/npm-cache PIP_CACHE_DIR=$development_root/pip-cache PRE_COMMIT_HOME=$development_root/pre-commit-cache"
@@ -414,25 +414,44 @@ grep -Fxq 'Codex: bundled 0.147.0' "$output"
 grep -Fxq 'Context7: not configured' "$output"
 grep -Fxq 'Project: project' "$output"
 grep -Fxq '1) Start Codex' "$output"
-grep -Fxq '2) Resume a Codex session (current project)' "$output"
+grep -Fxq '2) Resume session (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
-grep -Fxq '4) Approval mode for next launch...' "$output"
-grep -Fxq '5) Update Codex from official OpenAI release' "$output"
-grep -Fxq '6) Remove Codex update (use bundled fallback)' "$output"
-grep -Fxq '7) MCP integrations...' "$output"
-grep -Fxq '12) Exit this tmux session' "$output"
+grep -Fxq '4) Approval settings...' "$output"
+grep -Fxq '5) Manage Codex...' "$output"
+grep -Fxq '6) MCP integrations...' "$output"
+grep -Fxq '7) Sign in to GitHub CLI' "$output"
+grep -Fxq '0) Exit this tmux session' "$output"
 grep -Fxq 'Next launch mode: configured (autonomous)' "$output"
 
 echo 'Configured project-scoped Codex menu actions: OK'
 
-run_menu __unset__ $'5\n5\n6\n6\n12\n' "$output"
+run_menu __unset__ $'5\n1\n\n2\n\n0\n0\n' "$output"
 assert_file_lines "$runtime_invocations" 'runtime menu actions' update remove
 assert_hardening_count 2
+grep -Fxq '1) Update from official OpenAI release' "$output"
+grep -Fxq '2) Remove optional update / use bundled fallback' "$output"
+grep -Fxq '0) Back' "$output"
 echo 'Codex runtime update/remove result pauses: OK'
 
-# Context7 uses an offline machine-readable state; main option 7 is unchanged.
+run_menu __unset__ $'5\n0\n0\n' "$output"
+assert_file_lines "$runtime_invocations" 'cancelled manage menu'
+assert_hardening_count 0
+echo 'Codex Manage Back is nonmutating: OK'
+
+# Projects now shows the shared 0 Back, but accepts the historical 4 as an alias.
+run_menu __unset__ $'3\n0\n0\n' "$output"
+assert_file_lines "$invocations" 'Projects Back 0'
+assert_hardening_count 0
+grep -Fxq '0) Back' "$output"
+
+run_menu __unset__ $'3\n4\n0\n' "$output"
+assert_file_lines "$invocations" 'Projects legacy Back 4'
+assert_hardening_count 0
+echo 'Projects shared Back 0 and legacy 4 are nonmutating: OK'
+
+# Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
-run_menu __unset__ $'7\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n12\n' "$output"
+run_menu __unset__ $'6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
   'plan' 'test' 'install'
 assert_hardening_count 2
@@ -440,40 +459,40 @@ grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
-run_menu __unset__ $'7\n1\n3\n\n4\n\n5\n\n0\n0\n12\n' "$output"
+run_menu __unset__ $'6\n1\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove'
 assert_hardening_count 2
 grep -Fq 'no repair or confirmation is necessary' "$output"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
-run_menu __unset__ $'7\n1\n4\n\n0\n0\n12\n' "$output"
+run_menu __unset__ $'6\n1\n4\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe'
 assert_hardening_count 1
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
-run_menu __unset__ $'7\n1\n4\n\n5\n\n0\n0\n12\n' "$output"
+run_menu __unset__ $'6\n1\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 blocked actions' 'plan'
 assert_hardening_count 0
 unset REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE
 echo 'Context7 state-aware offline menu and scoped maintenance: OK'
 
-run_menu __unset__ $'8\n8\n9\n9\n10\n10\n11\n11\n12\n' "$output"
+run_menu __unset__ $'5\n3\n\n0\n7\n\n8\n\n9\n\n0\n' "$output"
 assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
 assert_file_lines "$github_invocations" 'GitHub CLI setup' \
   '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
   '[auth][setup-git]'
 assert_file_lines "$doctor_invocations" 'Codex diagnostics' doctor
-assert_file_lines "$shell_invocations" 'Codex login shell' shell
+assert_file_lines "$shell_invocations" 'Codex container shell' shell
 assert_file_lines "$credential_environment" 'credential action environment' \
   'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> UV_TOOL_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset> PRE_COMMIT_HOME=<unset>' \
   'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> UV_TOOL_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset> PRE_COMMIT_HOME=<unset>' \
   'TMPDIR=/tmp TMP=/tmp TEMP=/tmp UV_CACHE_DIR=<unset> UV_TOOL_DIR=<unset> NPM_CONFIG_CACHE=<unset> PIP_CACHE_DIR=<unset> PRE_COMMIT_HOME=<unset>'
-assert_file_lines "$shell_environment" 'login shell environment' \
+assert_file_lines "$shell_environment" 'container shell environment' \
   "TMPDIR=$development_root/tmp TMP=$development_root/tmp TEMP=$development_root/tmp UV_CACHE_DIR=$development_root/uv-cache UV_TOOL_DIR=$development_root/uv-tools NPM_CONFIG_CACHE=$development_root/npm-cache PIP_CACHE_DIR=$development_root/pip-cache PRE_COMMIT_HOME=$development_root/pre-commit-cache"
 assert_hardening_count 3
 echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
 
-run_menu __unset__ $'4\n3\n2\n2\n1\n1\n12\n' "$output"
+run_menu __unset__ $'4\n3\n2\n2\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
   "[--approval-mode][guarded][--cd][$project_path][resume]" \
   "[--cd][$project_path]"
@@ -486,7 +505,7 @@ fi
 
 echo 'One-launch guarded selection and reset: OK'
 
-run_menu guarded $'4\n2\n1\n1\n12\n' "$output"
+run_menu guarded $'4\n2\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'autonomous override of guarded deployment' \
   "[--approval-mode][autonomous][--cd][$project_path]"
 assert_hardening_count 1
@@ -495,7 +514,7 @@ grep -Fxq 'Next launch mode: autonomous (one launch)' "$output"
 
 echo 'One-launch autonomous selection precedence: OK'
 
-run_menu __unset__ $'4\n3\n4\n1\n1\n1\n12\n' "$output"
+run_menu __unset__ $'4\n3\n4\n1\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'configured-mode reset before launch' "[--cd][$project_path]"
 assert_hardening_count 1
 
@@ -504,7 +523,7 @@ echo 'Configured-mode reset: OK'
 fail_once="$workdir/fail-once"
 rm -f "$fail_once"
 export REMOTE_DEV_MENU_FAIL_ONCE_FILE="$fail_once"
-run_menu __unset__ $'4\n3\n1\n1\n1\n1\n12\n' "$output"
+run_menu __unset__ $'4\n3\n1\n1\n1\n1\n0\n' "$output"
 unset REMOTE_DEV_MENU_FAIL_ONCE_FILE
 assert_file_lines "$invocations" 'failed override then configured retry' \
   "[--approval-mode][guarded][--cd][$project_path]" \
@@ -515,7 +534,7 @@ grep -Fq 'ERROR: Codex (guarded) exited with status 42' "$output"
 echo 'Failed and successful action result pauses: OK'
 
 new_project_path="$workdir/workspace/new-project"
-run_menu __unset__ $'3\n2\nnew-project\n\n1\n1\n12\n' "$output"
+run_menu __unset__ $'3\n2\nnew-project\n\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'created project immediate start' "[--cd][$new_project_path]"
 [[ -d "$new_project_path" ]]
 grep -Fq "Created project: $new_project_path" "$output"
@@ -524,13 +543,13 @@ echo 'Successful project create returns to Codex with the new project active: OK
 
 second_project_path="$workdir/workspace/second-project"
 mkdir -p "$second_project_path"
-run_menu __unset__ $'3\n1\n3\n1\n1\n12\n' "$output"
+run_menu __unset__ $'3\n1\n3\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'selected project immediate start' "[--cd][$second_project_path]"
 grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Codex for immediate Start: OK'
 rm -rf -- "$second_project_path"
 
-run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n12\n' "$output"
+run_menu __unset__ $'3\n3\n1\nnew-project\n\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'project deletion navigation'
 [[ ! -e "$new_project_path" ]]
 grep -Fxq 'Deleted project: new-project' "$output"
@@ -540,7 +559,7 @@ if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
 fi
 echo 'Successful project deletion remains in Projects: OK'
 
-run_menu __unset__ $'3\n1\n2\n4\n12\n' "$output"
+run_menu __unset__ $'3\n1\n2\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'cancelled project selection'
 if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
   echo 'ERROR: cancelled project selection did not remain in Projects' >&2
@@ -548,7 +567,7 @@ if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
 fi
 echo 'Cancelled project selection remains in Projects: OK'
 
-run_menu __unset__ $'3\n1\ninvalid\n4\n12\n' "$output"
+run_menu __unset__ $'3\n1\ninvalid\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'invalid project selection'
 if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
   echo 'ERROR: invalid project selection did not remain in Projects' >&2
@@ -556,7 +575,7 @@ if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
 fi
 echo 'Invalid project selection remains in Projects: OK'
 
-run_menu __unset__ $'3\n2\nproject\n\n4\n12\n' "$output"
+run_menu __unset__ $'3\n2\nproject\n\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'failed project creation'
 if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
   echo 'ERROR: failed project creation did not remain in Projects' >&2
@@ -591,7 +610,7 @@ echo 'Project discovery failures remain fail-closed during menu render: OK'
 rm -f "$list_counter"
 export REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER="$list_counter"
 export REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL=2
-run_menu __unset__ $'1\n\n12\n' "$output"
+run_menu __unset__ $'1\n\n0\n' "$output"
 unset REMOTE_DEV_TEST_LIST_PROJECTS_FAIL_ON_CALL REMOTE_DEV_TEST_LIST_PROJECTS_COUNTER
 assert_file_lines "$invocations" 'mid-menu project discovery failure'
 grep -Fq 'ERROR: synthetic project listing failure during action' "$output"
@@ -602,14 +621,14 @@ fi
 echo 'Action-time project discovery failures block stale-project launches: OK'
 
 run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
-assert_file_lines "$shell_invocations" 'Shell login shell' shell
+assert_file_lines "$shell_invocations" 'Shell container shell' shell
 assert_file_lines "$github_invocations" 'Shell GitHub CLI setup' \
   '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
   '[auth][setup-git]'
 assert_file_lines "$doctor_invocations" 'Shell diagnostics' doctor
 assert_hardening_count 2
 grep -Fxq 'Remote Dev — Shell' "$output"
-grep -Fxq '1) Open a login shell' "$output"
+grep -Fxq '1) Open container shell' "$output"
 grep -Fxq '2) Sign in to GitHub CLI' "$output"
 grep -Fxq '3) Run diagnostics' "$output"
 grep -Fxq '4) Exit this tmux session' "$output"

@@ -35,65 +35,160 @@ def options(body: str) -> dict[int, str]:
     return {int(number): label for number, label in choices}
 
 
+def role_arm(name: str, role: str, number: int) -> str:
+    """Get exactly the role-qualified action arm, excluding other providers."""
+    body = function(name)
+    match = re.search(
+        rf"^    {re.escape(role)}:{number}\)\n(.*?)"
+        r"(?=^    (?:(?:codex|antigravity):[0-9]+|\*)\))",
+        body,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        raise AssertionError(f"{name}: missing {role}:{number} action")
+    return match.group(1)
+
+
+def assert_role_dispatch() -> None:
+    # Similar labels must not be allowed to execute another provider's CLI.
+    main = {
+        ("codex", 1): ('run_codex_action "Codex"',),
+        ("codex", 2): ('run_codex_action "Codex resume" resume',),
+        ("codex", 4): ("choose_next_codex_mode",),
+        ("codex", 5): ("show_agent_manage_menu",),
+        ("antigravity", 1): ('run_antigravity_action "Antigravity"',),
+        ("antigravity", 2): ('run_antigravity_action "Antigravity continue" --continue',),
+        ("antigravity", 4): ("show_antigravity_approval_menu",),
+        ("antigravity", 5): ("show_agent_manage_menu",),
+    }
+    manage = {
+        ("codex", 1): ("remote-dev-codex-runtime update",),
+        ("codex", 2): ("remote-dev-codex-runtime remove",),
+        ("codex", 3): ("run_credential_command codex login --device-auth",),
+        ("antigravity", 1): ("manage_state", "== absent", "remote-dev-install-antigravity"),
+        ("antigravity", 2): ("manage_state", "== installed", "== damaged", "remote-dev-update-antigravity"),
+        ("antigravity", 3): ("sign-in is handled by Google",),
+    }
+    for func_name, cases in (
+        ("dispatch_agent_main_choice", main),
+        ("dispatch_agent_manage_choice", manage),
+    ):
+        body = function(func_name)
+        if 'case "$role:$1" in' not in body or "*)\n" not in body:
+            raise AssertionError(f"{func_name}: missing role qualification / default deny")
+        for (role, number), phrases in cases.items():
+            arm = role_arm(func_name, role, number)
+            for phrase in phrases:
+                if phrase not in arm:
+                    raise AssertionError(f"{func_name} {role}:{number}: missing {phrase}")
+            if role == "codex" and any(
+                phrase in arm for phrase in ("run_antigravity_action", "remote-dev-install-antigravity", "remote-dev-update-antigravity")
+            ):
+                raise AssertionError("Codex action accidentally invokes Antigravity")
+            if role == "antigravity" and any(
+                phrase in arm for phrase in ("run_codex_action", "remote-dev-codex-runtime", "codex login")
+            ):
+                raise AssertionError("Antigravity action accidentally invokes Codex")
+        expected = {(role, number) for role, number in cases}
+        actual = set(
+            (role, int(number))
+            for role, number in re.findall(
+                r"^    (codex|antigravity):([0-9]+)\)", body, flags=re.MULTILINE
+            )
+        )
+        if actual != expected:
+            raise AssertionError(f"{func_name}: unexpected action arms: {actual ^ expected}")
+
+
 def assert_agent_menu_contract() -> None:
     shared = options(function("print_shared_agent_menu_tail"))
     expected_shared = {
-        9: "Sign in to GitHub CLI",
-        10: "Run diagnostics",
-        11: "Open a login shell",
-        12: "Exit this tmux session",
+        6: "MCP integrations...",
+        7: "Sign in to GitHub CLI",
+        8: "Run diagnostics",
+        9: "Open container shell",
+        0: "Exit this tmux session",
     }
     if shared != expected_shared:
         raise AssertionError(f"shared main-menu tail drifted: {shared}")
 
-    guard = function("is_shared_agent_menu_choice")
-    if "3|7|9|10|11|12) return 0" not in guard:
-        raise AssertionError("shared option recognition disagrees with dispatcher")
-    dispatch = function("handle_shared_agent_menu_choice")
-    dispatcher_choices = [
-        int(number)
-        for number in re.findall(r"^    (\d+)\)", dispatch, flags=re.MULTILINE)
-    ]
-    if dispatcher_choices != [3, 7, 9, 10, 11, 12]:
-        raise AssertionError(f"shared dispatch contract drifted: {dispatcher_choices}")
-    for call in (
-        "3) show_projects_menu",
-        "7) show_mcp_integrations_menu",
-        "9) if run_github_login",
-        "10) run_diagnostics",
-        '11) if run_interactive_and_harden "Login shell"',
-        "12) exit 0",
+    rendered_main = options(function("print_agent_main_menu"))
+    expected_main = {
+        1: "Start ${role_name}",
+        2: "${main_resume_label}",
+        3: "Projects...",
+        4: "Approval settings...",
+        5: "Manage ${role_name}...",
+    }
+    if rendered_main != expected_main:
+        raise AssertionError(f"shared agent main-menu text drifted: {rendered_main}")
+    if sorted(rendered_main | shared) != list(range(10)):
+        raise AssertionError("agent menu must provide exactly 0-9")
+
+    rendered_manage = options(function("print_agent_manage_menu"))
+    if rendered_manage != {
+        1: "${manage_choice1}",
+        2: "${manage_choice2}",
+        3: "${manage_choice3}",
+        0: "Back",
+    }:
+        raise AssertionError(f"shared agent Manage labels drifted: {rendered_manage}")
+    for name in ("agent_menu_role_name", "configure_agent_main_menu", "configure_agent_manage_menu"):
+        body = function(name)
+        if "codex)" not in body or "antigravity)" not in body or "*)" not in body:
+            raise AssertionError(f"{name}: both roles and fail-closed default are required")
+    if "Resume session (current project)" not in function("configure_agent_main_menu"):
+        raise AssertionError("Codex resume label drifted")
+    if "Continue latest session (current project)" not in function("configure_agent_main_menu"):
+        raise AssertionError("Antigravity continue label drifted")
+    render_loop = function("show_agent_menu")
+    for marker in (
+        'configure_agent_main_menu "$role_name"',
+        'print_agent_main_menu "$role_name"',
+        'if is_shared_agent_menu_choice "$choice"; then',
+        'handle_shared_agent_menu_choice "$choice"',
+        'dispatch_agent_main_choice "$choice"',
     ):
-        if call not in dispatch:
-            raise AssertionError(f"missing common main-menu action: {call}")
+        if marker not in render_loop:
+            raise AssertionError(f"shared agent main-menu loop missing {marker}")
+    manage_loop = function("show_agent_manage_menu")
+    for marker in (
+        "configure_agent_manage_menu",
+        'print_agent_manage_menu "$role_name"',
+        'dispatch_agent_manage_choice "$choice"',
+    ):
+        if marker not in manage_loop:
+            raise AssertionError(f"shared agent management loop missing {marker}")
 
-    menus: dict[str, dict[int, str]] = {}
-    for role in ("codex", "antigravity"):
-        body = function(f"show_{role}_menu")
-        if body.count("    print_shared_agent_menu_tail\n") != 1:
-            raise AssertionError(f"{role}: shared footer is not printed exactly once")
-        if body.count('if is_shared_agent_menu_choice "$choice"; then') != 1:
-            raise AssertionError(f"{role}: common option guard must occur exactly once")
-        if body.count('      handle_shared_agent_menu_choice "$choice"') != 1:
-            raise AssertionError(f"{role}: shared actions must run outside a conditional")
-        own = options(body)
-        if sorted(own) != list(range(1, 9)):
-            raise AssertionError(f"{role}: expected local options 1-8; got {sorted(own)}")
-        if own[3] != "Projects..." or own[7] != "MCP integrations...":
-            raise AssertionError(f"{role}: common option 3/7 title mismatch")
-        menus[role] = own | shared
-        if sorted(menus[role]) != list(range(1, 13)):
-            raise AssertionError(f"{role}: missing or repeated main-menu slot")
+    shared_dispatch = function("handle_shared_agent_menu_choice")
+    for marker in (
+        "3) show_projects_menu", "6) show_mcp_integrations_menu",
+        "7) if run_github_login", "8) run_diagnostics",
+        '9) if run_interactive_and_harden "Container shell" bash --login',
+        "0) exit 0",
+    ):
+        if marker not in shared_dispatch:
+            raise AssertionError(f"shared dispatch contract missing {marker}")
+    if "3|6|7|8|9|0) return 0" not in function("is_shared_agent_menu_choice"):
+        raise AssertionError("shared recognition and dispatch disagree")
 
-    if menus["codex"][8] != "Sign in to Codex with device code":
-        raise AssertionError("Codex device-code authentication label changed")
-    if menus["antigravity"][8] != "Antigravity sign-in [handled during launch]":
-        raise AssertionError("Antigravity native sign-in label changed")
-    for number in (3, 7, 9, 10, 11, 12):
-        if menus["codex"][number] != menus["antigravity"][number]:
-            raise AssertionError(f"agent menus disagree on shared slot {number}")
-    if "handle_shared_agent_menu_choice" in function("show_shell_menu"):
-        raise AssertionError("shell recovery menu must remain independent")
+    if (
+        "show_agent_menu" in function("show_shell_menu")
+        or "Open container shell" not in function("show_shell_menu")
+        or "bash --login" not in function("show_shell_menu")
+    ):
+        raise AssertionError("independent shell recovery role changed")
+    projects = function("show_projects_menu")
+    if "0) Back" not in projects or "0|4)" not in projects:
+        raise AssertionError("Projects must show 0 Back and retain old 4 alias")
+    approval = function("print_common_approval_mode_choices")
+    for item in ("Use configured mode for next launch", "Autonomous for next launch", "Guarded for next launch"):
+        if item not in approval:
+            raise AssertionError(f"approval common wording changed: {item}")
+    for name in ("choose_next_codex_mode", "show_antigravity_approval_menu"):
+        if "print_common_approval_mode_choices" not in function(name):
+            raise AssertionError(f"{name}: no shared approval labels")
+    assert_role_dispatch()
 
 
 def assert_context7_contract() -> None:
@@ -134,10 +229,10 @@ def assert_context7_contract() -> None:
         raise AssertionError("Codex must use locked, menu-safe selective repair")
     if 'reinstall --menu-safe' in function("show_antigravity_context7_menu"):
         raise AssertionError("Antigravity must keep its separate JSON manager")
-    if 'show_context7_menu' not in function("show_mcp_integrations_menu"):
-        raise AssertionError("Codex Context7 navigation missing")
-    if 'show_antigravity_context7_menu' not in function("show_mcp_integrations_menu"):
-        raise AssertionError("Antigravity Context7 navigation missing")
+    integrations = function("show_mcp_integrations_menu")
+    for token in ('case "$role" in', 'codex) show_context7_menu', 'antigravity) show_antigravity_context7_menu', '*)'):
+        if token not in integrations:
+            raise AssertionError(f"fail-closed provider-specific Context7 navigation missing: {token}")
 
 
 def main() -> None:

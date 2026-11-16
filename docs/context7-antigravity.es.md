@@ -12,7 +12,7 @@ Codex y Antigravity tienen estados separados. Codex conserva su API key privada.
 
 **Aviso de privacidad:** Context7 es un servicio externo operado por Upstash. Según su [documentación de privacidad](https://context7.com/docs/security/data-privacy), las llamadas MCP envían consultas generadas por el agente e identificadores de bibliotecas, además de metadatos del cliente/conexión (incluidos identidad/versión del cliente, sesión y datos de IP para limitación de uso). El proveedor indica que envía las consultas formuladas por MCP a **proveedores externos de modelos LLM** para reordenar documentación, y que las almacena anonimizadas para evaluar la calidad (excepto las de espacios Enterprise). **No declara un plazo de conservación para esas consultas de evaluación; los 30 días corresponden únicamente a los logs de la API.** Son **afirmaciones del proveedor**, no una garantía de Remote Dev de que las consultas nunca incluirán secretos. Trata las consultas MCP como datos compartidos externamente; no envíes secretos, información confidencial de proyectos ni datos personales regulados.
 
-Desde **7) MCP integrations... → 1) Context7...** puedes consultar las operaciones simplificadas. También están disponibles las órdenes:
+Desde **6) MCP integrations... → 1) Context7...** puedes consultar las operaciones simplificadas. También están disponibles las órdenes:
 
 ```sh
 remote-dev-context7-antigravity menu-state
@@ -31,7 +31,7 @@ La prueba real con `agy /mcp` y `resolve-library-id` + `query-docs` para `/psf/r
 
 ## Menú compartido de Context7 (#347)
 
-El submenú de ambos agentes utiliza **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar registro** y **0 Volver**. El menú principal conserva el acceso en el número 7, ahora bajo *MCP integrations*.
+El submenú de ambos agentes utiliza **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar registro** y **0 Volver**. El submenú Context7 no cambia; el acceso desde el menú general pasa al número **6** por #351.
 
 - **Estado** y **plan** son pasivos, no usan la red ni modifican el JSON. No se examina el archivo OAuth; la presencia del registro `serverUrl` **no implica modo anónimo ni OAuth autenticado**. La salida indica que Antigravity gestiona la autenticación y remite a `/mcp`.
 - **Prueba**: comprueba HTTP `/ping` y el contrato local, no el inicio de sesión ni el éxito de herramientas MCP.

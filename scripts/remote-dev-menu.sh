@@ -387,11 +387,11 @@ ${summary}
 1) Select project
 2) Create project
 3) Delete project
-4) Back
+0) Back
 MENU
     if (( project_collection_blocked == 1 )); then
       echo "Safety block: project mutations are disabled until the collection is repaired."
-      echo "Use Back → Run diagnostics / Login shell for read-only inspection and recovery."
+      echo "Use Back → Run diagnostics / Open container shell for inspection and recovery."
     fi
     read -r -p "> " choice
     case "$choice" in
@@ -408,7 +408,8 @@ MENU
       3)
         if delete_project_action; then :; fi
         ;;
-      4)
+      0|4)
+        # Accept historical 4 as a transition alias; display the shared 0 Back.
         return 0
         ;;
       *)
@@ -465,23 +466,32 @@ refresh_codex_policy() {
   esac
 }
 
+print_common_approval_mode_choices() {
+  # Shared numbering/wording. The guarded explanation is provider-specific:
+  # Codex uses confirmations; Antigravity uses its vendor permission engine.
+  local configured_mode="$1" guarded_explanation="$2"
+  cat <<MENU
+1) Use configured mode for next launch — ${configured_mode}
+2) Autonomous for next launch — no confirmations
+3) Guarded for next launch — ${guarded_explanation}
+MENU
+}
+
 next_codex_mode=""
 choose_next_codex_mode() {
   clear
   cat <<MENU
-Approval mode for next launch
-=============================
-1) Use configured mode — ${configured_codex_mode}
-2) Autonomous — no confirmations
-3) Guarded — asks for confirmations
-4) Back
+Codex approval settings
+======================
 MENU
+  print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
+  echo '0) Back'
   read -r -p "> " choice
   case "$choice" in
     1) next_codex_mode="" ;;
     2) next_codex_mode=autonomous ;;
     3) next_codex_mode=guarded ;;
-    4) return 1 ;;
+    0|4) return 1 ;;
     *)
       sleep 1
       return 1
@@ -584,12 +594,12 @@ Remote Dev has two launch modes. Autonomous uses the managed vendor bypass.
 Guarded keeps Antigravity's permission engine active; choose one guarded preset
 below. Fine-grained allow/ask/deny rules remain user-managed and are preserved.
 
-1) Use configured mode for next launch — ${configured_antigravity_mode}
-2) Autonomous for next launch — no confirmations
-3) Guarded for next launch — provider permission engine active
+MENU
+    print_common_approval_mode_choices "$configured_antigravity_mode" "provider permission engine active"
+    cat <<MENU
 4) Set Guarded preset: request-review (recommended)
 5) Set Guarded preset: strict (more restrictive)
-6) Back
+0) Back
 MENU
     read -r -p "> " choice
     case "$choice" in
@@ -611,7 +621,7 @@ MENU
       5)
         if set_antigravity_guarded_preset strict; then :; fi
         ;;
-      6)
+      0|6)
         return 0
         ;;
       *)
@@ -765,6 +775,139 @@ antigravity_status_summary() {
   fi
 }
 
+antigravity_policy_menu_summary() {
+  # Only surface the launch decision on the main screen. The detailed provider
+  # permission report remains visible in Approval settings (issue #225).
+  local source_line="" compatibility_line=""
+  source_line="$(sed -n 's/^Mode source: //p' <<<"$antigravity_policy_summary_text")"
+  printf 'Approval mode: %s (%s)\n' "$configured_antigravity_mode" "${source_line:-unknown}"
+  compatibility_line="$(sed -n '/^Antigravity guarded compatibility:/p' <<<"$antigravity_policy_summary_text")"
+  if [[ -z "$compatibility_line" ]]; then
+    printf 'Guarded compatibility: UNKNOWN — see Approval settings\n'
+  elif [[ "$compatibility_line" == *BLOCKED* ]]; then
+    printf 'Guarded compatibility: BLOCKED — see Approval settings\n'
+  elif [[ "$compatibility_line" != 'Antigravity guarded compatibility: OK'* ]]; then
+    printf 'Guarded compatibility: UNKNOWN — see Approval settings\n'
+  fi
+}
+
+configure_agent_manage_menu() {
+  # Role-owned status only. Never run a vendor runtime or online checks while
+  # drawing a menu. The provider manager still revalidates each mutating action.
+  manage_state="" manage_status="" manage_details=""
+  manage_choice1="" manage_choice2="" manage_choice3=""
+  case "$role" in
+    codex)
+      manage_status="$(codex_runtime_status_summary)"
+      manage_details=$'Optional updates are installed explicitly from official OpenAI releases.\nThe bundled Codex CLI stays available as a fallback.'
+      manage_choice1='Update from official OpenAI release'
+      manage_choice2='Remove optional update / use bundled fallback'
+      manage_choice3='Sign in to Codex with device code'
+      ;;
+    antigravity)
+      manage_status="$(antigravity_status_summary)"
+      manage_details=$'Google\x27s official CLI is optional and stays outside the image.\nInstall/update are explicit actions. A review-pending version is not\nautomatically updated or certified; launch still checks integrity.'
+      manage_choice1='Install from Google'
+      manage_choice2='Update from Google'
+      manage_choice3='Antigravity sign-in information'
+      case "$manage_status" in
+        'Antigravity: not installed')
+          manage_state=absent
+          manage_choice2+=' [unavailable: install first]'
+          ;;
+        'Antigravity: damaged or locally modified (explicit update required)')
+          manage_state=damaged
+          manage_choice1+=' [unavailable: use Update to repair]'
+          ;;
+        'Antigravity: '*'(official and reviewed)'|'Antigravity: '*'(official source; Remote Dev review pending)')
+          manage_state=installed
+          manage_choice1+=' [already installed; use Update]'
+          ;;
+        *)
+          manage_state=unknown
+          manage_choice1+=' [blocked: status unavailable]'
+          manage_choice2+=' [blocked: status unavailable]'
+          ;;
+      esac
+      ;;
+    *)
+      echo "ERROR: unsupported management menu role: $role" >&2
+      return 2
+      ;;
+  esac
+}
+
+print_agent_manage_menu() {
+  local role_name="$1"
+  clear
+  cat <<MENU
+Remote Dev — ${role_name} — Manage ${role_name}
+========================================
+${manage_status}
+
+${manage_details}
+1) ${manage_choice1}
+2) ${manage_choice2}
+3) ${manage_choice3}
+0) Back
+MENU
+}
+
+dispatch_agent_manage_choice() {
+  # Explicit role:action pairs are the security boundary between similarly
+  # named menus. Do not add catch-all provider fallbacks for future roles.
+  case "$role:$1" in
+    codex:1)
+      if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
+      ;;
+    codex:2)
+      if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
+      ;;
+    codex:3)
+      if run_interactive_and_harden "Codex login" run_credential_command codex login --device-auth; then :; fi
+      ;;
+    antigravity:1)
+      if [[ "$manage_state" == absent ]]; then
+        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
+      else
+        show_unavailable_action "Install is unavailable in the current runtime state. Use Update to replace/repair an existing installation, or Run diagnostics if status is unknown."
+      fi
+      ;;
+    antigravity:2)
+      if [[ "$manage_state" == installed || "$manage_state" == damaged ]]; then
+        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
+      else
+        show_unavailable_action "Update is unavailable in the current runtime state. Install Antigravity first, or Run diagnostics if status is unknown."
+      fi
+      ;;
+    antigravity:3)
+      show_unavailable_action "Antigravity sign-in is handled by Google's CLI during launch, not by Remote Dev. Start Antigravity to sign in. Use /resume inside Antigravity to browse older conversations."
+      ;;
+    *)
+      echo "ERROR: unsupported management action for role $role" >&2
+      return 2
+      ;;
+  esac
+}
+
+show_agent_manage_menu() {
+  local role_name
+  role_name="$(agent_menu_role_name)" || return $?
+  local manage_state="" manage_status="" manage_details=""
+  local manage_choice1="" manage_choice2="" manage_choice3=""
+  local choice=""
+  while true; do
+    configure_agent_manage_menu
+    print_agent_manage_menu "$role_name"
+    read -r -p "> " choice || return 0
+    case "$choice" in
+      1|2|3) dispatch_agent_manage_choice "$choice" ;;
+      0) return 0 ;;
+      *) sleep 1 ;;
+    esac
+  done
+}
+
 show_unavailable_action() {
   local message="$1"
   clear
@@ -779,18 +922,19 @@ else
 fi
 
 print_shared_agent_menu_tail() {
-  # Single source of truth for identical Codex/Antigravity main-menu options.
+  # #351 explicitly migrates the former 12-slot contract to 1-9 + 0 Exit.
   cat <<'MENU'
-9) Sign in to GitHub CLI
-10) Run diagnostics
-11) Open a login shell
-12) Exit this tmux session
+6) MCP integrations...
+7) Sign in to GitHub CLI
+8) Run diagnostics
+9) Open container shell
+0) Exit this tmux session
 MENU
 }
 
 is_shared_agent_menu_choice() {
   case "$1" in
-    3|7|9|10|11|12) return 0 ;;
+    3|6|7|8|9|0) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -799,84 +943,15 @@ handle_shared_agent_menu_choice() {
   local choice="$1"
   case "$choice" in
     3) show_projects_menu ;;
-    7) show_mcp_integrations_menu ;;
-    9) if run_github_login; then :; fi ;;
-    10) run_diagnostics ;;
-    11) if run_interactive_and_harden "Login shell" bash --login; then :; fi ;;
-    12) exit 0 ;;
+    6) show_mcp_integrations_menu ;;
+    7) if run_github_login; then :; fi ;;
+    8) run_diagnostics ;;
+    9) if run_interactive_and_harden "Container shell" bash --login; then :; fi ;;
+    0) exit 0 ;;
     *) return 1 ;;
   esac
 }
 
-show_codex_menu() {
-  local next_mode_summary="" runtime_summary="" context7_summary="" project_summary=""
-
-  while true; do
-    refresh_codex_policy
-    next_mode_summary="$(next_codex_mode_summary)"
-    runtime_summary="$(codex_runtime_status_summary)"
-    context7_summary="$(context7_status_summary)"
-    refresh_project_selection
-    project_summary="$(project_status_summary)"
-    clear
-    cat <<MENU
-Remote Dev — Codex
-${version_summary}
-${runtime_summary}
-${context7_summary}
-${policy_summary}
-${next_mode_summary}
-${project_summary}
-==================
-1) Start Codex
-2) Resume a Codex session (current project)
-3) Projects...
-4) Approval mode for next launch...
-5) Update Codex from official OpenAI release
-6) Remove Codex update (use bundled fallback)
-7) MCP integrations...
-8) Sign in to Codex with device code
-MENU
-    print_shared_agent_menu_tail
-    read -r -p "> " choice
-    if is_shared_agent_menu_choice "$choice"; then
-      # Run actions outside a conditional command: preserve Bash errexit and
-      # fail-closed behavior inside nested project/credential helpers.
-      handle_shared_agent_menu_choice "$choice"
-      continue
-    fi
-    case "$choice" in
-      1)
-        if run_codex_action "Codex"; then :; fi
-        ;;
-      2)
-        if run_codex_action "Codex resume" resume; then :; fi
-        ;;
-
-      4)
-        if choose_next_codex_mode; then :; fi
-        ;;
-      5)
-        if run_interactive_and_harden "Codex runtime update" /usr/local/bin/remote-dev-codex-runtime update; then :; fi
-        ;;
-      6)
-        if run_interactive_and_harden "Codex runtime removal" /usr/local/bin/remote-dev-codex-runtime remove; then :; fi
-        ;;
-
-      8)
-        if run_interactive_and_harden \
-          "Codex login" run_credential_command codex login --device-auth; then :; fi
-        ;;
-
-
-
-
-      *)
-        sleep 1
-        ;;
-    esac
-  done
-}
 
 show_antigravity_context7_menu() {
   local output="" state=""
@@ -954,11 +1029,14 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if [[ "$role" == codex ]]; then
-          show_context7_menu
-        else
-          show_antigravity_context7_menu
-        fi
+        case "$role" in
+          codex) show_context7_menu ;;
+          antigravity) show_antigravity_context7_menu ;;
+          *)
+            echo "ERROR: unsupported MCP integrations role: $role" >&2
+            return 2
+            ;;
+        esac
         ;;
       0)
         return 0
@@ -970,69 +1048,123 @@ MENU
   done
 }
 
-show_antigravity_menu() {
-  local status_summary="" next_mode_summary="" project_summary=""
+agent_menu_role_name() {
+  case "$role" in
+    codex) printf 'Codex\n' ;;
+    antigravity) printf 'Antigravity\n' ;;
+    *)
+      echo "ERROR: unsupported agent menu role: $role" >&2
+      return 2
+      ;;
+  esac
+}
 
-  while true; do
-    refresh_antigravity_policy
-    next_mode_summary="$(next_antigravity_mode_summary)"
-    status_summary="$(antigravity_status_summary)"
-    refresh_project_selection
-    project_summary="$(project_status_summary)"
-    clear
-    cat <<MENU
-Remote Dev — Antigravity
-${version_summary}
-${status_summary}
-${antigravity_policy_summary_text}
-${next_mode_summary}
-${project_summary}
+configure_agent_main_menu() {
+  local role_name="$1"
+  main_version_summary="$version_summary"
+  main_runtime_summary="" main_integration_summary="" main_policy_summary=""
+  main_next_summary="" main_resume_label=""
+  # Provider-specific status and approval parsing never has a generic default.
+  # Keep policy refresh outside conditional commands for fail-closed errexit.
+  case "$role" in
+    codex)
+      refresh_codex_policy
+      main_runtime_summary="$(codex_runtime_status_summary)"
+      main_integration_summary="$(context7_status_summary)"
+      main_policy_summary="$policy_summary"
+      main_next_summary="$(next_codex_mode_summary)"
+      main_resume_label="Resume session (current project)"
+      ;;
+    antigravity)
+      refresh_antigravity_policy
+      main_version_summary="$(sed '/^Codex:/d' <<<"$version_summary")"
+      main_runtime_summary="$(antigravity_status_summary)"
+      main_policy_summary="$(antigravity_policy_menu_summary)"
+      main_next_summary="$(next_antigravity_mode_summary)"
+      main_resume_label="Continue latest session (current project)"
+      ;;
+    *)
+      echo "ERROR: no main-menu adapter for $role_name" >&2
+      return 2
+      ;;
+  esac
+  refresh_project_selection
+  main_project_summary="$(project_status_summary)"
+}
+
+print_agent_main_menu() {
+  local role_name="$1"
+  clear
+  cat <<MENU
+Remote Dev — ${role_name}
+${main_version_summary}
+${main_runtime_summary}
+${main_integration_summary}
+${main_policy_summary}
+${main_next_summary}
+${main_project_summary}
 ========================
-1) Start Antigravity (use /resume to browse/resume older conversations)
-2) Continue latest Antigravity conversation (current project)
+1) Start ${role_name}
+2) ${main_resume_label}
 3) Projects...
 4) Approval settings...
-5) Install Antigravity from Google
-6) Update Antigravity from Google
-7) MCP integrations...
-8) Antigravity sign-in [handled during launch]
+5) Manage ${role_name}...
 MENU
-    print_shared_agent_menu_tail
-    read -r -p "> " choice
+  print_shared_agent_menu_tail
+}
+
+dispatch_agent_main_choice() {
+  # Shared presentation, provider-specific execution; no Codex/AGY fallback.
+  case "$role:$1" in
+    codex:1)
+      if run_codex_action "Codex"; then :; fi
+      ;;
+    codex:2)
+      if run_codex_action "Codex resume" resume; then :; fi
+      ;;
+    codex:4)
+      if choose_next_codex_mode; then :; fi
+      ;;
+    codex:5)
+      show_agent_manage_menu
+      ;;
+    antigravity:1)
+      if run_antigravity_action "Antigravity"; then :; fi
+      ;;
+    antigravity:2)
+      if run_antigravity_action "Antigravity continue" --continue; then :; fi
+      ;;
+    antigravity:4)
+      show_antigravity_approval_menu
+      ;;
+    antigravity:5)
+      show_agent_manage_menu
+      ;;
+    *)
+      echo "ERROR: unsupported main-menu action for role $role" >&2
+      return 2
+      ;;
+  esac
+}
+
+show_agent_menu() {
+  local role_name
+  role_name="$(agent_menu_role_name)" || return $?
+  local main_version_summary="" main_runtime_summary="" main_integration_summary=""
+  local main_policy_summary="" main_next_summary="" main_resume_label="" main_project_summary=""
+  local choice=""
+  while true; do
+    configure_agent_main_menu "$role_name"
+    print_agent_main_menu "$role_name"
+    read -r -p "> " choice || return 0
     if is_shared_agent_menu_choice "$choice"; then
-      # Run actions outside a conditional command: preserve Bash errexit and
-      # fail-closed behavior inside nested project/credential helpers.
+      # Do not wrap the shared action in a conditional: preserve errexit.
       handle_shared_agent_menu_choice "$choice"
       continue
     fi
     case "$choice" in
-      1)
-        if run_antigravity_action "Antigravity"; then :; fi
-        ;;
-      2)
-        if run_antigravity_action "Antigravity continue" --continue; then :; fi
-        ;;
-
-      4)
-        show_antigravity_approval_menu
-        ;;
-      5)
-        if run_interactive_and_harden "Antigravity installation" /usr/local/bin/remote-dev-install-antigravity; then :; fi
-        ;;
-      6)
-        if run_interactive_and_harden "Antigravity update" /usr/local/bin/remote-dev-update-antigravity; then :; fi
-        ;;
-
-      8)
-        show_unavailable_action "Antigravity authentication is currently handled by the vendor flow during launch."
-        ;;
-
-
-
-
-      *)
-        sleep 1
-        ;;
+      1|2|4|5) dispatch_agent_main_choice "$choice" ;;
+      *) sleep 1 ;;
     esac
   done
 }
@@ -1044,7 +1176,7 @@ show_shell_menu() {
 Remote Dev — Shell
 ${version_summary}
 ==================
-1) Open a login shell
+1) Open container shell
 2) Sign in to GitHub CLI
 3) Run diagnostics
 4) Exit this tmux session
@@ -1052,7 +1184,7 @@ MENU
     read -r -p "> " choice
     case "$choice" in
       1)
-        if run_interactive_and_harden "Login shell" bash --login; then :; fi
+        if run_interactive_and_harden "Container shell" bash --login; then :; fi
         ;;
       2)
         if run_github_login; then :; fi
@@ -1071,8 +1203,7 @@ MENU
 }
 
 case "$role" in
-  codex) show_codex_menu ;;
-  antigravity) show_antigravity_menu ;;
+  codex|antigravity) show_agent_menu ;;
   shell) show_shell_menu ;;
   *)
     echo "ERROR: internal unsupported menu role: $role" >&2

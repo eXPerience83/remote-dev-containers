@@ -194,15 +194,15 @@ run_recovery_menu() {
 
 codex_output="$workdir/codex-output"
 # Start and Resume are blocked. Projects remains reachable but selection is
-# blocked. Diagnostics and Login shell remain available for recovery.
-run_recovery_menu codex $'1\n\n2\n\n3\n1\n4\n10\n\n11\n\n12\n' "$codex_output"
+# blocked. Diagnostics and Container shell remain available for recovery.
+run_recovery_menu codex $'1\n\n2\n\n3\n1\n4\n8\n\n9\n\n0\n' "$codex_output"
 [[ ! -s "$agent_invocations" ]] || {
   echo 'ERROR: Codex was invoked from a contaminated project collection' >&2
   cat "$agent_invocations" >&2
   exit 1
 }
 assert_invocation_count "$doctor_invocations" 1 'Codex diagnostics'
-assert_invocation_count "$shell_invocations" 1 'Codex login shell'
+assert_invocation_count "$shell_invocations" 1 'Codex container shell'
 assert_invocation_count "$hardening_invocations" 1 'Codex persistent-state hardening'
 assert_output_contains "$codex_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$codex_output" 'agent launch is blocked'
@@ -212,14 +212,14 @@ assert_canary_and_contamination_preserved
 echo 'Codex contamination state keeps only recovery actions available: OK'
 
 agy_output="$workdir/antigravity-output"
-run_recovery_menu antigravity $'1\n\n2\n\n10\n\n11\n\n12\n' "$agy_output"
+run_recovery_menu antigravity $'1\n\n2\n\n8\n\n9\n\n0\n' "$agy_output"
 [[ ! -s "$agent_invocations" ]] || {
   echo 'ERROR: Antigravity was invoked from a contaminated project collection' >&2
   cat "$agent_invocations" >&2
   exit 1
 }
 assert_invocation_count "$doctor_invocations" 1 'Antigravity diagnostics'
-assert_invocation_count "$shell_invocations" 1 'Antigravity login shell'
+assert_invocation_count "$shell_invocations" 1 'Antigravity container shell'
 assert_invocation_count "$hardening_invocations" 1 'Antigravity persistent-state hardening'
 assert_output_contains "$agy_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$agy_output" 'agent launch is blocked'

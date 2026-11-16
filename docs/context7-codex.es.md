@@ -14,7 +14,7 @@ Remote Dev **no** incluye ni conserva de forma persistente el CLI de Context7 ni
 
 ## Ciclo de vida explícito
 
-En Codex, abre **7) MCP integrations... → 1) Context7...**, o utiliza estas órdenes CLI avanzadas:
+En Codex, abre **6) MCP integrations... → 1) Context7...**, o utiliza estas órdenes CLI avanzadas:
 
 ```bash
 remote-dev-context7 status
@@ -43,7 +43,7 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 ### Navegación simplificada y diagnóstico (#347)
 
-El menú general de Codex permite **7) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
+El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
 
 `status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba HTTP requiere confirmación y **no acredita que las herramientas MCP respondan ni la autenticación**. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
 

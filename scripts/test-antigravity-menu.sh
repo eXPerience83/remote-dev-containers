@@ -14,6 +14,7 @@ preset_state="$workdir/guarded-preset"
 hardening_calls="$workdir/hardening-calls"
 context7_calls="$workdir/context7-calls"
 shared_calls="$workdir/shared-calls"
+manage_calls="$workdir/manage-calls"
 mkdir -p "$bin_dir" "$workdir/workspace/project"
 
 cat >"$runtime_lib" <<'RUNTIME'
@@ -71,6 +72,7 @@ cat >"$bin_dir/run-antigravity" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == --print-policy ]]; then
+  if [[ "${REMOTE_DEV_MENU_AGY_POLICY_FAIL:-0}" == 1 ]]; then exit 7; fi
   mode="${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-autonomous}"
   if [[ -n "${REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE:-}" ]]; then
     source=deployment
@@ -88,7 +90,7 @@ if [[ "${1:-}" == --print-policy ]]; then
     "Antigravity approval mode: $mode" \
     "Approval behavior: test" \
     "Mode source: $source" \
-    "Antigravity guarded compatibility: OK (toolPermission=$tool, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)" \
+    "Antigravity guarded compatibility: ${REMOTE_DEV_MENU_GUARDED_COMPAT:-OK (toolPermission=$tool, artifactReviewPolicy=default, agentMode=default, fine-grained rules=none)}" \
     "Antigravity guarded preset: $preset" \
     'Antigravity guarded policy source: settings.json' \
     'Antigravity fine-grained permissions: user-managed and preserved'
@@ -157,13 +159,14 @@ cat >"$bin_dir/remote-dev-antigravity" <<'MANAGER'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == status && "${2:-}" == --menu ]]
-printf '%s\n' 'Antigravity: 1.1.28 (official and reviewed)'
+printf '%s\n' "${REMOTE_DEV_MENU_AGY_STATUS:-Antigravity: 1.1.28 (official and reviewed)}"
 MANAGER
 
 for command in remote-dev-install-antigravity remote-dev-update-antigravity; do
   cat >"$bin_dir/$command" <<'ACTION'
 #!/usr/bin/env bash
-exit 0
+set -euo pipefail
+printf '%s\n' "${0##*/}" >> "$REMOTE_DEV_MENU_MANAGE_CALLS"
 ACTION
   chmod 0755 "$bin_dir/$command"
 done
@@ -230,7 +233,7 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-printf '1\n\n2\n\n4\n3\n1\n\n4\n4\n\n5\n\n6\n1\n\n12\n' | env \
+printf '1\n\n2\n\n4\n3\n1\n\n4\n4\n\n5\n\n0\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
@@ -260,20 +263,18 @@ grep -Fxq 'Antigravity guarded preset: request-review' "$output"
 grep -Fxq 'Antigravity guarded preset: strict' "$output"
 grep -Fxq 'Antigravity fine-grained permissions: user-managed and preserved' "$output"
 grep -Fxq 'Project: project' "$output"
-grep -Fxq '1) Start Antigravity (use /resume to browse/resume older conversations)' "$output"
-grep -Fxq '2) Continue latest Antigravity conversation (current project)' "$output"
+grep -Fxq '1) Start Antigravity' "$output"
+grep -Fxq '2) Continue latest session (current project)' "$output"
 grep -Fxq '3) Projects...' "$output"
 grep -Fxq '4) Approval settings...' "$output"
 grep -Fxq '4) Set Guarded preset: request-review (recommended)' "$output"
 grep -Fxq '5) Set Guarded preset: strict (more restrictive)' "$output"
-grep -Fxq '5) Install Antigravity from Google' "$output"
-grep -Fxq '6) Update Antigravity from Google' "$output"
-grep -Fxq '7) MCP integrations...' "$output"
-grep -Fxq '8) Antigravity sign-in [handled during launch]' "$output"
-grep -Fxq '9) Sign in to GitHub CLI' "$output"
-grep -Fxq '10) Run diagnostics' "$output"
-grep -Fxq '11) Open a login shell' "$output"
-grep -Fxq '12) Exit this tmux session' "$output"
+grep -Fxq '5) Manage Antigravity...' "$output"
+grep -Fxq '6) MCP integrations...' "$output"
+grep -Fxq '7) Sign in to GitHub CLI' "$output"
+grep -Fxq '8) Run diagnostics' "$output"
+grep -Fxq '9) Open container shell' "$output"
+grep -Fxq '0) Exit this tmux session' "$output"
 if grep -Fq 'Launch/approval options [not available]' "$output"; then
   echo 'ERROR: Antigravity menu still marks approval mode unavailable' >&2
   exit 1
@@ -289,9 +290,113 @@ fi
 
 echo 'Antigravity approval settings, guarded presets and vendor-native continue: OK'
 
+rm -f "$invocations" "$hardening_calls"
+printf '0\n' | env -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+grep -Fxq 'Approval mode: autonomous (default)' "$output"
+if grep -Fq 'Approval behavior:' "$output" || grep -Fq 'Antigravity guarded preset:' "$output"; then
+  echo 'ERROR: Antigravity main summary leaked detailed guarded policy' >&2
+  exit 1
+fi
+[[ ! -e "$invocations" ]] && [[ ! -e "$hardening_calls" ]]
+echo 'Antigravity main summary is compact and read-only: OK'
+
+printf '4\n0\n0\n' | env \
+  REMOTE_DEV_MENU_GUARDED_COMPAT=BLOCKED \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+grep -Fxq 'Guarded compatibility: BLOCKED — see Approval settings' "$output"
+grep -Fxq 'Antigravity guarded compatibility: BLOCKED' "$output"
+[[ ! -e "$hardening_calls" ]]
+echo 'Antigravity guarded BLOCKED remains visible with detail: OK'
+
+printf '0\n' | env \
+  REMOTE_DEV_MENU_GUARDED_COMPAT=unavailable \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+grep -Fxq 'Guarded compatibility: UNKNOWN — see Approval settings' "$output"
+[[ ! -e "$hardening_calls" ]]
+echo 'Antigravity guarded unavailable remains an actionable warning: OK'
+
+set +e
+printf '1\n' | env REMOTE_DEV_MENU_AGY_POLICY_FAIL=1 \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+status=$?
+set -e
+[[ "$status" == 1 ]] || { echo "ERROR: policy inspection failure returned $status" >&2; exit 1; }
+grep -Fq 'ERROR: unable to inspect the configured Antigravity approval policy' "$output"
+[[ ! -e "$invocations" ]]
+echo 'Antigravity policy inspection remains fail-closed: OK'
+
+run_manage_fixture() {
+  local input="$1" state="$2"
+  rm -f "$manage_calls" "$hardening_calls"
+  printf '%s' "$input" | env \
+    REMOTE_DEV_MENU_AGY_STATUS="$state" \
+    PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+    REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+    REMOTE_DEV_MENU_MANAGE_CALLS="$manage_calls" \
+    timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+}
+
+run_manage_fixture $'5\n1\n\n2\n\n3\n\n0\n0\n' 'Antigravity: 1.1.28 (official and reviewed)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [already installed; use Update]' "$output"
+grep -Fxq '2) Update from Google' "$output"
+grep -Fq 'Install is unavailable in the current runtime state' "$output"
+grep -Fq 'sign-in is handled by Google' "$output"
+
+run_manage_fixture $'5\n2\n\n1\n\n0\n0\n' 'Antigravity: not installed'
+[[ "$(cat "$manage_calls")" == 'remote-dev-install-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google' "$output"
+grep -Fxq '2) Update from Google [unavailable: install first]' "$output"
+grep -Fq 'Update is unavailable in the current runtime state' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: damaged or locally modified (explicit update required)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [unavailable: use Update to repair]' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: status unavailable (exit 7)'
+[[ ! -e "$manage_calls" ]] && [[ ! -e "$hardening_calls" ]]
+grep -Fxq '1) Install from Google [blocked: status unavailable]' "$output"
+grep -Fxq '2) Update from Google [blocked: status unavailable]' "$output"
+
+run_manage_fixture $'5\n1\n\n2\n\n0\n0\n' \
+  'Antigravity: 1.2.0 (official source; Remote Dev review pending)'
+[[ "$(cat "$manage_calls")" == 'remote-dev-update-antigravity' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+grep -Fxq '1) Install from Google [already installed; use Update]' "$output"
+grep -Fq 'review pending' "$output"
+grep -Fq 'automatically updated or certified' "$output"
+
+run_manage_fixture $'5\n0\n0\n' 'Antigravity: 1.1.28 (official and reviewed)'
+[[ ! -e "$manage_calls" ]] && [[ ! -e "$hardening_calls" ]]
+echo 'Antigravity Manage state-aware actions, repair, review-pending and Back: OK'
+
 mkdir -p "$workdir/workspace/second-project"
 rm -f "$invocations" "$hardening_calls"
-printf '3\n1\n2\n1\n\n12\n' | env \
+printf '3\n1\n2\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
@@ -309,7 +414,7 @@ grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Antigravity for immediate Start: OK'
 
 rm -f "$invocations" "$hardening_calls"
-printf '3\n2\ncreated-project\n\n1\n\n12\n' | env \
+printf '3\n2\ncreated-project\n\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
@@ -331,7 +436,7 @@ echo 'Successful project creation returns to Antigravity for immediate Start: OK
 
 # Context7 uses native vendor OAuth; menu state never opens token storage.
 rm -f "$hardening_calls" "$context7_calls"
-printf '7\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n12\n' | env \
+printf '6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -353,7 +458,7 @@ grep -Fq 'Authenticate' "$output"
 echo 'Antigravity Context7 guidance, installation and HTTP test: OK'
 
 rm -f "$hardening_calls" "$context7_calls"
-printf '7\n1\n4\n\n5\n\n0\n0\n12\n' | env \
+printf '6\n1\n4\n\n5\n\n0\n0\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -369,9 +474,9 @@ grep -Fq 'no reinstall is needed' "$output"
 echo 'Antigravity Context7 healthy no-op and selective removal: OK'
 
 # Shared main-menu login and diagnostics must dispatch identically for AGY.
-# Codex's fixture also tests option 11 (login shell); shell has its own role menu.
+# Codex's fixture also tests option 9 (container shell); shell has its own role menu.
 rm -f "$hardening_calls" "$shared_calls"
-printf '9\n\n10\n\n12\n' | env \
+printf '7\n\n8\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
   REMOTE_DEV_MENU_INVOCATIONS="$invocations" \

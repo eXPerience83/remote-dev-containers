@@ -22,6 +22,27 @@ Seleccionar un proyecto cambia el directorio de trabajo predeterminado del agent
 
 La autenticación, configuración y el historial de sesiones del agente viven en el estado persistente privado del rol, no dentro del checkout del proyecto. Por eso borrar o renombrar un proyecto no elimina automáticamente el historial de sesiones del agente.
 
+### Atajos del menú principal (cambiados en #351)
+
+Codex y Antigravity comparten una navegación compacta. Los rótulos del menú real permanecen en inglés:
+
+| Tecla | Codex | Antigravity |
+| --- | --- | --- |
+| 1 | Start Codex | Start Antigravity |
+| 2 | Resume session (current project) | Continue latest session (current project) |
+| 3 | Projects... | Projects... |
+| 4 | Approval settings... | Approval settings... |
+| 5 | Manage Codex... | Manage Antigravity... |
+| 6 | MCP integrations... | MCP integrations... |
+| 7 | Sign in to GitHub CLI | Sign in to GitHub CLI |
+| 8 | Run diagnostics | Run diagnostics |
+| 9 | Open container shell | Open container shell |
+| 0 | Exit this tmux session | Exit this tmux session |
+
+**Migración desde el menú anterior de 12 opciones (#118/#126):** los atajos numéricos **5–12 cambian de significado**. El antiguo `5` (actualizar Codex / instalar AGY) pasa a `5 → 1`; el antiguo `6` (quitar actualización de Codex / actualizar AGY), a `5 → 2`; el antiguo `7` (MCP), a `6`; el antiguo `8` (login Codex / información login AGY), a `5 → 3`; los anteriores `9` (GitHub), `10` (diagnósticos), `11` (shell) y `12` (salir) pasan a `7`, `8`, `9` y `0`. Hay que actualizar los scripts o secuencias de teclas anteriores. El rol de recuperación **Shell** conserva sus cuatro opciones propias.
+
+`Manage Codex...` agrupa actualización opcional oficial, eliminación/vuelta al ejecutable incluido y login con código de dispositivo. `Manage Antigravity...` agrupa instalación/actualización explícita de Google e información sobre su login nativo (se realiza al abrir el CLI). Ambos muestran el estado ligero sin red; ver el menú no descarga ni instala nada. Cada operación conserva controles y confirmaciones propios. Antigravity permite **Install** únicamente si falta y **Update** si ya existe (incluso dañada); con estado desconocido, bloquea ambas operaciones hasta aclararlo con diagnósticos. «Review pending» se indica expresamente, no implica certificación. Los ajustes de aprobación mantienen la elección configurada o **solo para el próximo lanzamiento**; el detalle Guarded y sus presets de AGY se consultan en ese submenú. Los estados `BLOCKED` siguen visibles en el menú principal de AGY. Los submenús muestran `0) Back` (Projects sigue aceptando el antiguo `4` como alias de transición) y la reanudación sigue siendo específica del proveedor (`codex resume` frente a `--continue` de AGY, y `/resume` para conversaciones anteriores).
+
 ## 2. Seleccionar, crear o borrar un proyecto
 
 Las sesiones gestionadas de Codex/Antigravity reciben automáticamente una breve [guía global del entorno Remote Dev](agent-guidance.es.md). Los defaults mecánicos, la guía global, las instrucciones más específicas del repositorio y MCP/plugins tienen responsabilidades separadas. La guía no es una frontera de seguridad y no activa `.venv` ni instala dependencias. La reconciliación automática de `run-codex` / `run-antigravity` ocurre solo antes de sesiones reales elegibles del agente; también puede reconciliarse explícitamente mediante `remote-dev-agent-guidance reconcile codex` o `remote-dev-agent-guidance reconcile antigravity`. Status y Doctor siguen siendo pasivos: no escriben estado ni imprimen instrucciones privadas.
@@ -32,9 +53,9 @@ El flujo normal de Codex es:
 2. Entra en **Projects...** desde el menú de Codex.
 3. Selecciona un proyecto existente o crea uno nuevo.
 4. Tras seleccionar o crear correctamente el proyecto, Remote Dev vuelve al menú de Codex; comprueba la línea `Project:`.
-5. Elige **Start Codex** o **Resume a Codex session (current project)**.
+5. Elige **Start Codex** o **Resume session (current project)**.
 
-Antigravity usa el mismo contrato de navegación de **Projects...**: tras una acción Select/Create correcta, Remote Dev vuelve al menú de Antigravity con ese proyecto activo para que puedas elegir **Start Antigravity** o **Continue latest Antigravity conversation (current project)**.
+Antigravity usa el mismo contrato de navegación de **Projects...**: tras una acción Select/Create correcta, Remote Dev vuelve al menú de Antigravity con ese proyecto activo para que puedas elegir **Start Antigravity** o **Continue latest session (current project)**.
 
 Las acciones Select/Create canceladas, inválidas o fallidas permanecen en **Projects...** para que puedas reintentarlas o usar Back de forma explícita. Delete también permanece en **Projects...** después de la operación para que puedas revisar o seguir gestionando los proyectos restantes.
 
@@ -55,7 +76,7 @@ Los nombres se limitan a 1–128 caracteres ASCII: letras/dígitos más `.`, `_`
 
 El comportamiento siguiente se validó en TrueNAS real con Codex `0.147.0`. El selector Resume es **UI nativa de Codex**, por lo que runtimes opcionales más nuevos pueden cambiar etiquetas o teclas. Si la TUI difiere, su pie de pantalla es la fuente inmediata de verdad.
 
-Remote Dev lanza **Resume a Codex session (current project)** con el proyecto seleccionado como directorio de trabajo explícito de Codex. En el selector probado:
+Remote Dev lanza **Resume session (current project)** con el proyecto seleccionado como directorio de trabajo explícito de Codex. En el selector probado:
 
 - `[Cwd]` es el filtro normal y muestra sesiones cuyo cwd guardado coincide exactamente con la ruta del proyecto seleccionado;
 - se conservan y pueden aparecer juntas varias sesiones con contenido real del mismo proyecto exacto;
@@ -108,7 +129,7 @@ Una desconexión del navegador no significa necesariamente que la sesión de des
 Dentro del menú de Remote Dev:
 
 - al salir de Codex, el control vuelve al menú cuando termina la acción interactiva;
-- **Open a login shell** abre una shell general y no un lanzamiento del agente;
+- **Open container shell** abre una shell general y no un lanzamiento del agente;
 - **Exit this tmux session** termina esa sesión tmux, en lugar de limitarse a cerrar la pestaña del navegador.
 
 La selección del proyecto es estado del proceso menú/tmux. Una desconexión/reconexión normal del navegador al mismo tmux vivo puede conservarla. Una recreación completa del contenedor/tmux puede iniciar un proceso de menú nuevo y, por tanto, exigir seleccionar el proyecto otra vez; eso no implica que se hayan perdido los directorios de proyecto ni el historial del agente.
