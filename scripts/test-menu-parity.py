@@ -39,8 +39,8 @@ def role_arm(name: str, role: str, number: int) -> str:
     """Get exactly the role-qualified action arm, excluding other providers."""
     body = function(name)
     match = re.search(
-        rf"^    {re.escape(role)}:{number}\\)\\n(.*?)"
-        r"(?=^    (?:(?:codex|antigravity):[0-9]+|\\*)\\))",
+        rf"^    {re.escape(role)}:{number}\)\n(.*?)"
+        r"(?=^    (?:(?:codex|antigravity):[0-9]+|\*)\))",
         body,
         flags=re.MULTILINE | re.DOTALL,
     )
@@ -93,7 +93,7 @@ def assert_role_dispatch() -> None:
         actual = set(
             (role, int(number))
             for role, number in re.findall(
-                r"^    (codex|antigravity):([0-9]+)\\)", body, flags=re.MULTILINE
+                r"^    (codex|antigravity):([0-9]+)\)", body, flags=re.MULTILINE
             )
         )
         if actual != expected:
@@ -172,8 +172,9 @@ def assert_agent_menu_contract() -> None:
     if "3|6|7|8|9|0) return 0" not in function("is_shared_agent_menu_choice"):
         raise AssertionError("shared recognition and dispatch disagree")
 
-    if "show_agent_menu" not in function("show_shell_menu") and (
-        "Open container shell" not in function("show_shell_menu")
+    if (
+        "show_agent_menu" in function("show_shell_menu")
+        or "Open container shell" not in function("show_shell_menu")
         or "bash --login" not in function("show_shell_menu")
     ):
         raise AssertionError("independent shell recovery role changed")
