@@ -806,7 +806,7 @@ configure_agent_manage_menu() {
       ;;
     antigravity)
       manage_status="$(antigravity_status_summary)"
-      manage_details=$"Google's official CLI is optional and stays outside the image.\nInstall/update are explicit actions. A review-pending version is not\nautomatically updated or certified; launch still checks integrity."
+      manage_details=$'Google\x27s official CLI is optional and stays outside the image.\nInstall/update are explicit actions. A review-pending version is not\nautomatically updated or certified; launch still checks integrity.'
       manage_choice1='Install from Google'
       manage_choice2='Update from Google'
       manage_choice3='Antigravity sign-in information'
