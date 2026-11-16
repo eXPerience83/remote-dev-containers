@@ -438,6 +438,17 @@ assert_file_lines "$runtime_invocations" 'cancelled manage menu'
 assert_hardening_count 0
 echo 'Codex Manage Back is nonmutating: OK'
 
+# Projects now shows the shared 0 Back, but accepts the historical 4 as an alias.
+run_menu __unset__ $'3\n0\n0\n' "$output"
+assert_file_lines "$invocations" 'Projects Back 0'
+assert_hardening_count 0
+grep -Fxq '0) Back' "$output"
+
+run_menu __unset__ $'3\n4\n0\n' "$output"
+assert_file_lines "$invocations" 'Projects legacy Back 4'
+assert_hardening_count 0
+echo 'Projects shared Back 0 and legacy 4 are nonmutating: OK'
+
 # Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
 run_menu __unset__ $'6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
