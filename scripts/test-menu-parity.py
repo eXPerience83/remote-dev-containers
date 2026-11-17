@@ -300,6 +300,15 @@ def assert_full_nested_menu_contract() -> None:
     ):
         if token not in test:
             raise AssertionError(f"shared Context7 test lost {token}")
+    install = function("run_confirmed_context7_install")
+    for marker in ("menu_confirm_yes_no", "Install Context7 registration?",
+                   'run_context7_action "$label" "$manager"'):
+        if marker not in install:
+            raise AssertionError(f"shared Context7 installation lost {marker}")
+    for name in ("show_context7_menu", "show_antigravity_context7_menu"):
+        if "run_confirmed_context7_install" not in function(name):
+            raise AssertionError(f"{name}: initial install bypassed shared consent")
+
     change = function("run_confirmed_context7_change")
     for token in (
         "menu_confirm_word", "codex:REMOVE", "antigravity:REMOVE",
