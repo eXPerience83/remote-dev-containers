@@ -42,6 +42,23 @@ pause_for_menu() {
   read -r -p "$prompt" _
 }
 
+# Menu-only consent helpers. Direct CLI managers retain their own prompts.
+# Network diagnostics use y/N; context7 registration removal/repair uses a
+# stronger typed word. Never pass --yes without prior consent.
+menu_confirm_yes_no() {
+  local question="$1" answer=""
+  printf '%s [y/N] ' "$question"
+  IFS= read -r answer || return 1
+  case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
+
+menu_confirm_word() {
+  local word="$1" operation="$2" answer=""
+  printf 'Type %s to confirm %s: ' "$word" "$operation"
+  IFS= read -r answer || return 1
+  [[ "$answer" == "$word" ]]
+}
+
 report_action_failure() {
   local label="$1"
   local action_status="$2"
@@ -267,8 +284,9 @@ choose_project_name() {
     printf '%d) %s\n' "$((index + 1))" "${projects[$index]}"
   done
   max_choice="$(( ${#projects[@]} + 1 ))"
-  printf '%s) Back\n' "$max_choice"
-  read -r -p "> " choice
+  # N+1 remains an invisible historical Back alias.
+  printf '0) Back\n'
+  read -r -p "> " choice || return 1
 
   if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
     return 1
@@ -321,7 +339,7 @@ create_project_action() {
   echo "Create project"
   echo "=============="
   echo "Projects are created as direct child directories of $workspace."
-  read -r -p "Project name: " name
+  read -r -p "Project name: " name || return 1
   if resolved="$(remote_dev_create_project "$workspace" "$name")"; then
     active_project_name="$name"
     active_project_path="$resolved"
@@ -355,7 +373,7 @@ Path: $resolved
 This permanently removes the entire project directory and all of its contents.
 Type the exact project name to confirm: $project_choice_name
 DELETE_WARNING
-  read -r -p "> " confirmation
+  read -r -p "> " confirmation || return 1
   if remote_dev_delete_project "$workspace" "$project_choice_name" "$confirmation"; then
     if [[ "$active_project_name" == "$project_choice_name" ]]; then
       active_project_name=""
@@ -393,7 +411,7 @@ MENU
       echo "Safety block: project mutations are disabled until the collection is repaired."
       echo "Use Back → Run diagnostics / Open container shell for inspection and recovery."
     fi
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         if select_project_action; then
@@ -486,7 +504,7 @@ Codex approval settings
 MENU
   print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
   echo '0) Back'
-  read -r -p "> " choice
+  read -r -p "> " choice || return 1
   case "$choice" in
     1) next_codex_mode="" ;;
     2) next_codex_mode=autonomous ;;
@@ -571,6 +589,14 @@ next_antigravity_mode_summary() {
 set_antigravity_guarded_preset() {
   local preset="$1"
 
+  clear
+  echo 'This changes a persistent Antigravity Guarded preset; fine-grained rules remain unchanged.'
+  if ! menu_confirm_yes_no "Apply Guarded preset $preset?"; then
+    echo 'Guarded preset change cancelled; settings were not modified.'
+    pause_for_menu "Press Enter to return to Antigravity approval settings..."
+    return 0
+  fi
+
   run_interactive_and_harden_to \
     "Press Enter to return to Antigravity approval settings..." \
     "Antigravity guarded preset" \
@@ -601,7 +627,7 @@ MENU
 5) Set Guarded preset: strict (more restrictive)
 0) Back
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         next_antigravity_mode=""
@@ -713,7 +739,7 @@ Context7 is an optional hosted Upstash MCP service.
 Registration/authentication status is offline; connection and tools are NOT tested.
 MENU
     print_context7_menu_options
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         "$manager" status --menu || :
@@ -968,7 +994,7 @@ Context7 is a hosted Upstash MCP service.
 Antigravity handles OAuth itself; Remote Dev does not read its token store.
 MENU
     print_context7_menu_options
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         "$manager" status --menu || :
@@ -1026,7 +1052,7 @@ Other MCP registrations (including Playwright and OpenAI Developer Docs,
 where configured) remain independent and are not changed here.
 Use the agent's native MCP commands to inspect individual registrations.
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         case "$role" in
@@ -1179,9 +1205,9 @@ ${version_summary}
 1) Open container shell
 2) Sign in to GitHub CLI
 3) Run diagnostics
-4) Exit this tmux session
+0) Exit this tmux session
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         if run_interactive_and_harden "Container shell" bash --login; then :; fi
@@ -1192,7 +1218,8 @@ MENU
       3)
         run_diagnostics
         ;;
-      4)
+      0|4)
+        # Historical 4 remains accepted, but 0 is shown like all other menus.
         exit 0
         ;;
       *)
