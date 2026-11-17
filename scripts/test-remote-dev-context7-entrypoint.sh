@@ -62,8 +62,9 @@ run_and_expect() {
 run_interactive_choice() {
   local choice="$1"
   local command="$2"
+  local screen="${3:-/dev/null}"
   printf '%s\n' "$choice" | \
-    CAPTURE="$capture" script -q -e -f -c "$entrypoint $command" /dev/null >/dev/null 2>&1
+    CAPTURE="$capture" script -q -e -f -c "$entrypoint $command" /dev/null >"$screen" 2>&1
 }
 
 choose_and_expect() {
@@ -90,11 +91,19 @@ choose_and_expect 3 install $'manager\ninstall\n--yes'
 choose_and_expect 4 repair $'manager\nrepair\n--yes\n--anonymous'
 
 : >"$capture"
-if run_interactive_choice 5 install; then
-  echo 'Context7 entrypoint cancellation unexpectedly succeeded' >&2
+if run_interactive_choice 0 install "$temp_root/auth-screen"; then
+  echo 'Context7 entrypoint 0 Cancel unexpectedly succeeded' >&2
   exit 1
 fi
-assert_capture '' "cancelled choice 5"
+assert_capture '' "cancelled choice 0"
+grep -Fq '0) Cancel' "$temp_root/auth-screen"
+
+: >"$capture"
+if run_interactive_choice 5 install; then
+  echo 'Context7 entrypoint historical 5 Cancel unexpectedly succeeded' >&2
+  exit 1
+fi
+assert_capture '' "cancelled historical choice 5"
 
 : >"$capture"
 if run_interactive_choice 99 install; then
