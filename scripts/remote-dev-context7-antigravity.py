@@ -390,7 +390,7 @@ def main(argv=None, *, directory=None):
     if args.command == "remove":
         return remove(target)
     return (reinstall(target, require_absent=args.expect_absent)
-            if args.command == "reinstall" else test(target)
+            if args.command == "reinstall" else test(target))
 
 
 if __name__ == "__main__":
