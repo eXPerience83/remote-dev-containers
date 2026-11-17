@@ -713,6 +713,25 @@ NOTICE
   if run_context7_action "$label" "$manager" test --yes; then :; fi
 }
 
+# Installation presents the same y/N disclosure to either role; Codex then
+# offers its private authentication-onboarding choices, while Antigravity
+# creates only the vendor-owned anonymous registration after --yes.
+run_confirmed_context7_install() {
+  local label="$1" manager="$2"
+  shift 2
+  clear
+  cat <<'NOTICE'
+Context7 is an optional external Upstash service.
+Installing registers a hosted MCP endpoint; authentication is provider-specific.
+No other MCP server is modified.
+NOTICE
+  if ! menu_confirm_yes_no "Install Context7 registration?"; then
+    context7_menu_message "Context7 installation cancelled; no configuration changes were made."
+    return 0
+  fi
+  if run_context7_action "$label" "$manager" "$@"; then :; fi
+}
+
 run_confirmed_context7_change() {
   local word="$1" label="$2" manager="$3"
   shift 3
@@ -798,7 +817,8 @@ MENU
       4)
         case "$state" in
           absent)
-            if run_context7_action "Codex Context7 installation" "$manager" install; then :; fi
+            "$manager" plan || :
+            run_confirmed_context7_install "Codex Context7 installation" "$manager" install
             ;;
           repairable)
             "$manager" plan || :
@@ -1053,7 +1073,7 @@ MENU
             if [[ "$state" == repairable ]]; then
               run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall
             else
-              if run_context7_action "Antigravity Context7 installation" "$manager" reinstall; then :; fi
+              run_confirmed_context7_install "Antigravity Context7 installation" "$manager" reinstall --yes
             fi
             ;;
           healthy)
