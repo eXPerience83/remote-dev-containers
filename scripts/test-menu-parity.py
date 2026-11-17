@@ -242,6 +242,16 @@ def assert_full_nested_menu_contract() -> None:
         1: "Select project", 2: "Create project", 3: "Delete project", 0: "Back"
     }:
         raise AssertionError("Projects menu options or Back drifted")
+    # The blocked collection is visible but cannot enter any selectable,
+    # creating or destructive workflow, even before the runtime revalidates.
+    for guard in (
+        "if (( project_collection_blocked == 1 )); then",
+        '1|2|3)',
+        "Project collection is blocked; selection, creation and deletion are disabled.",
+        "continue",
+    ):
+        if guard not in projects:
+            raise AssertionError(f"blocked Projects menu lost pre-dispatch guard: {guard}")
     picker = function("choose_project_name")
     if ("printf '0) Back" not in picker
             or "index == ${#projects[@]}" not in picker):
