@@ -1083,7 +1083,7 @@ MENU
             if [[ "$state" == repairable ]]; then
               run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall
             else
-              run_confirmed_context7_install "Antigravity Context7 installation" "$manager" reinstall --yes
+              run_confirmed_context7_install "Antigravity Context7 installation" "$manager" reinstall --yes --expect-absent
             fi
             ;;
           healthy)
