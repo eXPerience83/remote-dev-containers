@@ -41,7 +41,7 @@ Agent-global scope only: a project's `.agents/mcp_config.json` may supply anothe
 
 ## Shared Context7 menu (#347)
 
-Both agents expose **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. The Context7 submenu remains unchanged; the #351 main-menu entry is now **6**.
+Both agents expose **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. **The menu now requires the same `y/N` consent for Test and initial Install in both roles**, and the same typed `REINSTALL`/`REMOVE` for eligible repair/removal. These prompt changes do not affect direct-CLI protections, Antigravity OAuth, or Codex private keys (except when a Codex user explicitly removes their own Context7 registration/key). See the [full menu audit](menu-interaction-audit.md). The Context7 submenu remains unchanged; the #351 main-menu entry is now **6**.
 
 - **Status** and **plan** are passive and offline, without JSON changes. The OAuth token store is never inspected; a `serverUrl` registration **does not imply anonymous or authenticated OAuth**. The output says Antigravity owns authentication and refers to `/mcp`.
 - **Test** checks the hosted HTTPS `/ping` and local contract, not account login or successful MCP tool calls.
