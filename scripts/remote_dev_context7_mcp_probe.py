@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import ssl
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
@@ -111,17 +112,21 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
             if request_id is None:
                 if status not in (200, 202, 204):
                     raise ProbeError("MCP initialization notification was rejected")
-                response.read(MAX_RESPONSE_BYTES + 1)
+                # Notifications have no JSON-RPC reply and may be answered
+                # by an open stream. Close immediately; never wait for EOF.
                 return {}, next_session
             if status != 200:
                 raise ProbeError("MCP request failed with HTTP status " + str(status))
             content_type = response.headers.get("Content-Type", "")
+            deadline = time.monotonic() + 25
             if content_type.split(";", 1)[0].lower().strip() == "text/event-stream":
                 # A compliant SSE response may remain open after the matching
                 # JSON-RPC event. Read bounded frames, not until connection EOF.
                 raw_parts = []
                 received = 0
                 while received <= MAX_RESPONSE_BYTES:
+                    if time.monotonic() >= deadline:
+                        raise ProbeError("MCP event stream exceeded its time limit")
                     line = response.readline(MAX_RESPONSE_BYTES - received + 1)
                     if not line:
                         break
@@ -139,7 +144,17 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                 if received > MAX_RESPONSE_BYTES:
                     raise ProbeError("MCP response exceeded its size limit")
                 raise ProbeError("MCP event stream did not return the matching request ID")
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            # read1 does not wait for the entire requested byte count. This
+            # bounds slow-trickling or non-terminating JSON responses too.
+            data = bytearray()
+            while len(data) <= MAX_RESPONSE_BYTES:
+                if time.monotonic() >= deadline:
+                    raise ProbeError("MCP response exceeded its time limit")
+                chunk = response.read1(min(8192, MAX_RESPONSE_BYTES + 1 - len(data)))
+                if not chunk:
+                    break
+                data.extend(chunk)
+            raw = bytes(data)
     except ProbeError:
         raise
     except HTTPError as exc:
