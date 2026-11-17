@@ -327,6 +327,18 @@ def assert_full_nested_menu_contract() -> None:
     if 'run_confirmed_context7_change REINSTALL' not in function("show_antigravity_context7_menu"):
         raise AssertionError("Antigravity repair bypasses scoped confirmation")
 
+    # Context7 has two *further* Codex-owned interactive menus after the
+    # parent Context7 submenu. They must also show 0 Cancel and retain their
+    # own former numeric aliases without ever triggering installation.
+    wrapper = (SOURCE.parent / "remote-dev-context7-entrypoint.sh").read_text(encoding="utf-8")
+    chooser = (SOURCE.parent / "remote-dev-context7-device-login.py").read_text(encoding="utf-8")
+    for marker in ('0) Cancel', '0|5)', 'exec "$device_login" --yes'):
+        if marker not in wrapper:
+            raise AssertionError(f"Context7 authentication wizard lost {marker}")
+    for marker in ('print("0) Cancel")', 'choice in {"0", "3"}'):
+        if marker not in chooser:
+            raise AssertionError(f"Context7 CLI-version chooser lost {marker}")
+
     # Prevent EoF from implicitly executing other menu choices.
     for name in (
         "show_projects_menu", "show_antigravity_approval_menu",
