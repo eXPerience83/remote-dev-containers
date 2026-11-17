@@ -456,7 +456,7 @@ echo 'Successful project creation returns to Antigravity for immediate Start: OK
 
 # Context7 uses native vendor OAuth; menu state never opens token storage.
 rm -f "$hardening_calls" "$context7_calls"
-printf '6\n1\n1\n\n2\ny\n\n3\n\n4\n\n5\n\n0\n0\n0\n' | env \
+printf '6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -471,7 +471,7 @@ mapfile -t context7_actions <"$context7_calls"
 [[ "${context7_actions[0]}" == plan ]]
 [[ "${context7_actions[1]}" == 'test --yes' ]]
 [[ "${context7_actions[2]}" == plan ]]
-[[ "${context7_actions[3]}" == reinstall ]]
+[[ "${context7_actions[3]}" == 'reinstall --yes' ]]
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
 grep -Fq 'Authenticate' "$output"
@@ -508,6 +508,21 @@ for decision in n TEST ""; do
   [[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
   grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
 done
+
+# Both roles require y/N for initial registration, but keep their
+# different authentication schemas (Codex onboarding vs AGY native OAuth).
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n4\nn\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == plan ]]
+[[ ! -e "$hardening_calls" ]]
+grep -Fq 'Context7 installation cancelled; no configuration changes were made.' "$output"
 
 # A repairable AGY registration requires exactly REINSTALL before --yes.
 rm -f "$hardening_calls" "$context7_calls"
