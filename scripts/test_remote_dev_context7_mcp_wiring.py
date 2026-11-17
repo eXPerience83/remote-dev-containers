@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Role-isolation regressions for the menu's active Context7 MCP test.
+
+All network and vendor CLI calls are mocked. OAuth state is never opened.
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import types
+import unittest
+from unittest.mock import patch
+
+
+def load_module(name, source):
+    spec = importlib.util.spec_from_file_location(name, source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+HERE = Path(__file__).parent
+CODEX = HERE / "remote-dev-context7.py"
+AGY = HERE / "remote-dev-context7-antigravity.py"
+if not CODEX.is_file():
+    CODEX = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
+if not AGY.is_file():
+    AGY = Path("/usr/local/bin/remote-dev-context7-antigravity")
+codex = load_module("codex_context7_wiring_fixture", CODEX)
+agy = load_module("agy_context7_wiring_fixture", AGY)
+SECRET = "ctx7sk-SYNTHETIC_KEY_NEVER_SEND"
+
+
+class SyntheticProbeError(Exception):
+    pass
+
+
+class FakeProbe:
+    ProbeError = SyntheticProbeError
+
+    def __init__(self, *, failed=False):
+        self.calls = []
+        self.failed = failed
+
+    def probe(self, api_key=None):
+        self.calls.append(api_key)
+        if self.failed:
+            raise self.ProbeError("synthetic MCP failure")
+        return (
+            "Context7 MCP protocol initialize: PASS",
+            "Context7 MCP tools/list: PASS (resolve-library-id, query-docs)",
+            "Context7 MCP real tools/call: PASS (2 public documentation calls)",
+        )
+
+
+class FakeHTTPResponse:
+    headers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def geturl(self):
+        return agy.PING
+
+    def read(self, count=-1):
+        return b'{"status":"ok","message":"pong"}'
+
+
+class FakeOpener:
+    def open(self, request, timeout=10):
+        assert request.full_url == agy.PING
+        return FakeHTTPResponse()
+
+
+class WiringTests(unittest.TestCase):
+    def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp) / "codex"
+            home.mkdir(mode=0o700)
+            config = home / "config.toml"
+            config.write_text(codex.MANAGED_BLOCK, encoding="utf-8")
+            config.chmod(0o600)
+            key_dir = home / ".remote-dev-context7"
+            key_dir.mkdir(mode=0o700)
+            key_file = key_dir / "api-key"
+            key_file.write_text(SECRET, encoding="utf-8")
+            key_file.chmod(0o600)
+            with patch.dict(os.environ, {"CODEX_HOME": str(home), "REMOTE_DEV_ROLE": "codex"}):
+                paths = codex.Paths()
+                before = (config.read_bytes(), key_file.read_bytes())
+                for failure in (False, True):
+                    with self.subTest(failure=failure):
+                        fake = FakeProbe(failed=failure)
+                        with (patch.object(codex, "bundled_codex_accepts_config"),
+                              patch.object(codex, "hosted_ping"),
+                              patch.object(codex, "load_mcp_probe", return_value=fake),
+                              contextlib.redirect_stdout(io.StringIO()) as stdout):
+                            if failure:
+                                with self.assertRaises(codex.Context7Error):
+                                    codex.command_test(paths, argparse.Namespace(yes=True))
+                            else:
+                                self.assertEqual(
+                                    codex.command_test(paths, argparse.Namespace(yes=True)), 0)
+                        self.assertEqual(fake.calls, [SECRET])
+                        self.assertNotIn(SECRET, stdout.getvalue())
+                        if not failure:
+                            self.assertIn("Codex agent-native MCP tool execution: NOT VERIFIED",
+                                          stdout.getvalue())
+                            self.assertIn("MCP real tools/call: PASS", stdout.getvalue())
+                self.assertEqual((config.read_bytes(), key_file.read_bytes()), before)
+
+    def test_antigravity_uses_anonymous_probe_not_oauth_store(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "gemini"
+            root.mkdir(mode=0o700)
+            config = root / "mcp_config.json"
+            config.write_text(json.dumps({"mcpServers": {"context7": agy.ENTRY}}))
+            config.chmod(0o600)
+            oauth = root / "mcp_oauth_tokens.json"
+            oauth.write_text(SECRET, encoding="utf-8")
+            oauth.chmod(0o600)
+            before = (config.read_bytes(), oauth.read_bytes())
+            with patch.dict(os.environ, {"REMOTE_DEV_ROLE": "antigravity"}):
+                for failure in (False, True):
+                    with self.subTest(failure=failure):
+                        fake = FakeProbe(failed=failure)
+                        with (patch.object(agy, "build_opener", return_value=FakeOpener()),
+                              patch.object(agy, "load_mcp_probe", return_value=fake),
+                              contextlib.redirect_stdout(io.StringIO()) as stdout):
+                            code = agy.test(root)
+                        self.assertEqual(code, 3 if failure else 0)
+                        self.assertEqual(fake.calls, [None])
+                        self.assertNotIn(SECRET, stdout.getvalue())
+                        if not failure:
+                            self.assertIn("Antigravity OAuth and agent-native MCP tool execution: NOT VERIFIED",
+                                          stdout.getvalue())
+                            self.assertIn("Context7 request mode: anonymous", stdout.getvalue())
+            self.assertEqual((config.read_bytes(), oauth.read_bytes()), before)
+
+
+if __name__ == "__main__":
+    unittest.main()
