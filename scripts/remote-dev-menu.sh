@@ -689,7 +689,7 @@ print_context7_menu_options() {
   esac
   cat <<MENU
 1) Status and recovery diagnosis (offline)
-2) Test hosted connection (network; not a real MCP tool call)
+2) Test hosted MCP tools (network; not agent-native authentication)
 3) ${auth_label}
 4) Install or repair Context7 registration
 5) ${removal_label}
@@ -710,7 +710,7 @@ Remote Dev — Codex — Context7
 ${status_summary}
 =============================
 Context7 is an optional hosted Upstash MCP service.
-Registration/authentication status is offline; connection and tools are NOT tested.
+Registration/authentication status is offline; choose Test for a real hosted MCP probe.
 MENU
     print_context7_menu_options
     read -r -p "> " choice
@@ -721,7 +721,7 @@ MENU
         context7_menu_message "Live connectivity and MCP tools: not verified by this diagnosis."
         ;;
       2)
-        if run_context7_action "Codex Context7 HTTP test" "$manager" test; then :; fi
+        if run_context7_action "Codex Context7 MCP tool test" "$manager" test; then :; fi
         ;;
       3)
         if [[ "$state" == healthy ]]; then
@@ -976,7 +976,7 @@ MENU
         context7_menu_message "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
         ;;
       2)
-        if run_context7_action "Antigravity Context7 HTTP test" "$manager" test; then :; fi
+        if run_context7_action "Antigravity Context7 MCP tool test" "$manager" test; then :; fi
         ;;
       3)
         context7_menu_message "Start Antigravity normally, enter /mcp, select context7, then Authenticate. Confirm [Authed] in /mcp and call a real documentation tool. Logging out or revoking provider authorization is separate from removing the MCP entry."
