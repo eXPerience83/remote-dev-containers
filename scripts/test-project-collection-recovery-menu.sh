@@ -46,6 +46,19 @@ assert_output_contains() {
   }
 }
 
+assert_output_occurrences() {
+  local file="$1"
+  local text="$2"
+  local expected="$3"
+  local actual
+
+  actual="$(grep -Fc -- "$text" "$file" || true)"
+  [[ "$actual" == "$expected" ]] || {
+    echo "ERROR: menu output contained $actual rejections, expected $expected: $text" >&2
+    exit 1
+  }
+}
+
 assert_canary_and_contamination_preserved() {
   [[ -f "$canary" ]] || {
     echo 'ERROR: sibling canary was removed' >&2
@@ -207,7 +220,7 @@ assert_invocation_count "$hardening_invocations" 1 'Codex persistent-state harde
 assert_output_contains "$codex_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$codex_output" 'agent launch is blocked'
 assert_output_contains "$codex_output" 'Safety block: project mutations are disabled until the collection is repaired.'
-assert_output_contains "$codex_output" 'Project collection is blocked; selection, creation and deletion are disabled.'
+assert_output_occurrences "$codex_output" 'Project collection is blocked; selection, creation and deletion are disabled.' 3
 assert_canary_and_contamination_preserved
 echo 'Codex contamination state keeps only recovery actions available: OK'
 
@@ -223,6 +236,6 @@ assert_invocation_count "$shell_invocations" 1 'Antigravity container shell'
 assert_invocation_count "$hardening_invocations" 1 'Antigravity persistent-state hardening'
 assert_output_contains "$agy_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$agy_output" 'agent launch is blocked'
-assert_output_contains "$agy_output" 'Project collection is blocked; selection, creation and deletion are disabled.'
+assert_output_occurrences "$agy_output" 'Project collection is blocked; selection, creation and deletion are disabled.' 3
 assert_canary_and_contamination_preserved
 echo 'Antigravity contamination state keeps only recovery actions available: OK'
