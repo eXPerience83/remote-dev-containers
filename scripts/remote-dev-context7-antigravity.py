@@ -304,6 +304,20 @@ class NoRedirect(HTTPRedirectHandler):
         raise MaintenanceError("Context7 ping redirect denied")
 
 
+def load_mcp_probe():
+    path = Path("/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        path = Path(__file__).with_name("remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        raise MaintenanceError("Context7 MCP probe module is unavailable")
+    spec = importlib.util.spec_from_file_location("remote_dev_context7_mcp_probe", path)
+    if spec is None or spec.loader is None:
+        raise MaintenanceError("Context7 MCP probe module cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test(directory: Path) -> int:
     code = status(directory)
     if code != 0:
@@ -325,7 +339,21 @@ def test(directory: Path) -> int:
     except (OSError, ValueError, MaintenanceError):
         print("Context7 (Antigravity): hosted endpoint test failed")
         return 3
-    print("Context7 (Antigravity): hosted HTTP ping PASS; authentication and MCP tool calls NOT VERIFIED (check agy /mcp)")
+    print("Antigravity local MCP registration: PASS")
+    print("Context7 hosted HTTP ping: PASS")
+    try:
+        probe = load_mcp_probe()
+        for line in probe.probe(api_key=None):
+            print(line)
+    except (MaintenanceError, OSError) as exc:
+        print("Context7 (Antigravity): MCP tool verification FAILED (probe unavailable)")
+        return 3
+    except probe.ProbeError as exc:
+        print(f"Context7 (Antigravity): MCP tool verification FAILED: {exc}")
+        return 3
+    print("Context7 request mode: anonymous (Antigravity OAuth tokens never inspected)")
+    print("Antigravity OAuth and agent-native MCP tool execution: NOT VERIFIED by this standalone probe.")
+    print("For agent acceptance, use agy /mcp and call both Context7 tools on public docs.")
     return 0
 
 
