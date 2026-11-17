@@ -345,6 +345,16 @@ def assert_full_nested_menu_contract() -> None:
         raise AssertionError("Codex manager repair changed")
     if 'run_confirmed_context7_change REINSTALL' not in function("show_antigravity_context7_menu"):
         raise AssertionError("Antigravity repair bypasses scoped confirmation")
+    if 'reinstall --yes --expect-absent' not in function("show_antigravity_context7_menu"):
+        raise AssertionError("Antigravity initial install must require locked absent state")
+    backend = (SOURCE.parent / "remote-dev-context7-antigravity.py").read_text(encoding="utf-8")
+    for marker in (
+        '"--expect-absent"',
+        'if require_absent and state != "absent":',
+        'return (reinstall(target, require_absent=args.expect_absent)',
+    ):
+        if marker not in backend:
+            raise AssertionError(f"Antigravity initial consent state guard lost: {marker}")
 
     # Context7 has two *further* Codex-owned interactive menus after the
     # parent Context7 submenu. They must also show 0 Cancel and retain their
