@@ -130,6 +130,8 @@ RUN --network=none \
     --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
     --mount=type=bind,source=scripts/remote-dev-context7-antigravity.py,target=/tmp/remote-dev-context7-antigravity.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-context7-antigravity.py,target=/tmp/test-remote-dev-context7-antigravity.py,ro \
+    --mount=type=bind,source=scripts/test_remote_dev_context7_mcp_probe.py,target=/tmp/test_remote_dev_context7_mcp_probe.py,ro \
+    --mount=type=bind,source=scripts/test_remote_dev_context7_mcp_wiring.py,target=/tmp/test_remote_dev_context7_mcp_wiring.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-project-collection-boundary.sh,target=/tmp/test-project-collection-boundary,ro \
@@ -231,6 +233,8 @@ RUN --network=none \
     && rm -rf "$context7_smoke_home" \
     && bash /tmp/test-run-codex-context7 \
     && python /tmp/test-remote-dev-context7-antigravity.py \
+    && python /tmp/test_remote_dev_context7_mcp_probe.py \
+    && python /tmp/test_remote_dev_context7_mcp_wiring.py \
     && python /tmp/test-antigravity-approval-policy.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-policy.sh \
     && python /tmp/test-antigravity-oauth.py \
