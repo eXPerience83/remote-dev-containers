@@ -351,8 +351,10 @@ class Context7Antigravity(unittest.TestCase):
 
                 def change_after_preflight(directory, mutator):
                     nonlocal calls
-                    result = original_using_config(directory, mutator)
+                    # Count attempts before entering the backend: the second
+                    # locked invocation deliberately raises MaintenanceError.
                     calls += 1
+                    result = original_using_config(directory, mutator)
                     if calls == 1:
                         self.file.write_bytes(changed)
                     return result
