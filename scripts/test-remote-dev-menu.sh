@@ -195,14 +195,18 @@ case "${1:-}" in
     printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
-  install|test|update|remove)
-    # Production deliberately omits --yes here so the real manager owns the
-    # disclosure/confirmation prompt. Reject any accidental extra arguments.
+  install|update)
+    # Provider-specific Codex onboarding remains delegated to the manager.
     [[ "$#" == 1 ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
+  test|remove)
+    # Menu-level consent must be completed before --yes reaches this fixture.
+    [[ "$#" == 2 && "$2" == --yes ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
   reinstall)
-    [[ "$#" == 2 && "$2" == --menu-safe ]] || exit 2
+    [[ "$#" == 3 && "$2" == --menu-safe && "$3" == --yes ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
@@ -451,30 +455,47 @@ echo 'Projects shared Back 0 and legacy 4 are nonmutating: OK'
 
 # Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
-run_menu __unset__ $'6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
+run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
-  'plan' 'test' 'install'
+  'plan' 'test --yes' 'install'
 assert_hardening_count 2
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
-run_menu __unset__ $'6\n1\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove'
+run_menu __unset__ $'6\n1\n3\n\n4\n\n5\nREMOVE\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove --yes'
 assert_hardening_count 2
 grep -Fq 'no repair or confirmation is necessary' "$output"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
-run_menu __unset__ $'6\n1\n4\n\n0\n0\n0\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe'
+run_menu __unset__ $'6\n1\n4\nREINSTALL\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe --yes'
 assert_hardening_count 1
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
 run_menu __unset__ $'6\n1\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 blocked actions' 'plan'
 assert_hardening_count 0
+# Rejecting the same nonmutating network test must never launch either
+# manager or trigger persistent-state hardening.
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
+for decision in n TEST ""; do
+  run_menu __unset__ "$(printf '6\\n1\\n2\\n%s\\n\\n0\\n0\\n0\\n' "$decision")" "$output"
+  assert_file_lines "$context7_invocations" "Context7 test decline $decision"
+  assert_hardening_count 0
+  grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+done
+# A failed typed removal or repair confirmation must not mutate state.
+run_menu __unset__ $'6\n1\n5\nNO\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 removal cancellation'
+assert_hardening_count 0
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
+run_menu __unset__ $'6\n1\n4\nNOT-REINSTALL\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 repair cancellation' 'plan'
+assert_hardening_count 0
 unset REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE
-echo 'Context7 state-aware offline menu and scoped maintenance: OK'
+echo 'Context7 end-to-end confirmations/cancellation and scoped maintenance: OK'
 
 run_menu __unset__ $'5\n3\n\n0\n7\n\n8\n\n9\n\n0\n' "$output"
 assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
@@ -631,6 +652,6 @@ grep -Fxq 'Remote Dev — Shell' "$output"
 grep -Fxq '1) Open container shell' "$output"
 grep -Fxq '2) Sign in to GitHub CLI' "$output"
 grep -Fxq '3) Run diagnostics' "$output"
-grep -Fxq '4) Exit this tmux session' "$output"
+grep -Fxq '0) Exit this tmux session' "$output"
 
 echo 'Shell menu result pauses: OK'
