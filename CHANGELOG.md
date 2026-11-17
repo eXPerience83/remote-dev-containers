@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- remote-dev-upstream-refreshes -->
 
+- 2026-11-17 — mise 2026.11.8 → 2026.11.9; uv 0.13.8 → 0.13.9; Context7 CLI (transient) 0.11.1 → 0.12.2.
+
 - 2026-11-14 — Ruff 0.17.4 → 0.17.5.
 
 - 2026-11-13 — mise 2026.11.7 → 2026.11.8.
