@@ -235,10 +235,117 @@ def assert_context7_contract() -> None:
             raise AssertionError(f"fail-closed provider-specific Context7 navigation missing: {token}")
 
 
+def assert_full_nested_menu_contract() -> None:
+    """Audit *every* visible nested menu, prompt and provider path, not just the titles."""
+    projects = function("show_projects_menu")
+    if options(projects) != {
+        1: "Select project", 2: "Create project", 3: "Delete project", 0: "Back"
+    }:
+        raise AssertionError("Projects menu options or Back drifted")
+    picker = function("choose_project_name")
+    if ("printf '0) Back" not in picker
+            or "index == ${#projects[@]}" not in picker):
+        raise AssertionError("dynamic project picker must show 0 Back and preserve legacy N+1")
+    if "Type the exact project name to confirm:" not in function("delete_project_action"):
+        raise AssertionError("project deletion lost its exact-name confirmation")
+    if "remote_dev_delete_project" not in function("delete_project_action"):
+        raise AssertionError("project deletion lost its ownership/boundary validation")
+    if "0|4)" not in projects:
+        raise AssertionError("Projects lost historic 4 Back alias")
+
+    # Start/continue actions already have role-qualified explicit dispatch.
+    # Project selectors and nested approvals must not accidentally change mode
+    # for more than one launch.
+    for provider, approval_name in (
+        ("codex", "choose_next_codex_mode"),
+        ("antigravity", "show_antigravity_approval_menu"),
+    ):
+        approval = function(approval_name)
+        if 'print_common_approval_mode_choices' not in approval or "0) Back" not in approval:
+            raise AssertionError(f"{provider}: missing common approval choices or Back")
+        if "next_" + provider + "_mode=" not in approval:
+            raise AssertionError(f"{provider}: approval choice not scoped to provider")
+    guarded = function("set_antigravity_guarded_preset")
+    if ('menu_confirm_yes_no "Apply Guarded preset $preset?"' not in guarded
+            or "remote-dev-antigravity-policy set-preset" not in guarded):
+        raise AssertionError("persistent Guarded preset must be explicitly confirmed")
+    if "remote-dev-antigravity-policy" in function("choose_next_codex_mode"):
+        raise AssertionError("Codex approval must never invoke AGY settings writer")
+    for provider, runner in (
+        ("codex", "run_codex_action"),
+        ("antigravity", "run_antigravity_action"),
+    ):
+        body = function(runner)
+        if 'next_' + provider + '_mode=""' not in body:
+            raise AssertionError(f"{provider}: one-launch override was not consumed")
+
+    shell = function("show_shell_menu")
+    if options(shell) != {
+        1: "Open container shell", 2: "Sign in to GitHub CLI",
+        3: "Run diagnostics", 0: "Exit this tmux session",
+    } or "0|4)" not in shell:
+        raise AssertionError("emergency Shell navigation must show 0 Exit with historic alias")
+    if "bash --login" not in shell or "run_github_login" not in shell:
+        raise AssertionError("emergency Shell actions changed")
+    integrations = function("show_mcp_integrations_menu")
+    if options(integrations) != {1: "Context7...", 0: "Back"}:
+        raise AssertionError("MCP integrations menu changed unexpectedly")
+
+    # A nonmutating remote *test* is y/N in both menus, even though the
+    # underlying direct CLI contract still has provider-specific confirmations.
+    test = function("run_confirmed_context7_test")
+    for token in (
+        "menu_confirm_yes_no", "test --yes", "no network request was made",
+        'run_context7_action "$label" "$manager"',
+    ):
+        if token not in test:
+            raise AssertionError(f"shared Context7 test lost {token}")
+    change = function("run_confirmed_context7_change")
+    for token in (
+        "menu_confirm_word", "codex:REMOVE", "antigravity:REMOVE",
+        "codex:REINSTALL|antigravity:REINSTALL", '"$@" --yes',
+    ):
+        if token not in change:
+            raise AssertionError(f"Context7 scoped change confirmation lost {token}")
+    for name, provider, manager in (
+        ("show_context7_menu", "Codex", "remote-dev-context7"),
+        ("show_antigravity_context7_menu", "Antigravity", "remote-dev-context7-antigravity"),
+    ):
+        role = function(name)
+        for token in (
+            "run_confirmed_context7_test", "run_confirmed_context7_change REMOVE",
+            'print_context7_menu_options', "0)",
+        ):
+            if token not in role:
+                raise AssertionError(f"{provider} Context7 submenu lost {token}")
+        if manager not in role or "manager" not in role:
+            raise AssertionError(f"{provider} must dispatch its own Context7 manager")
+        if '"$manager" test;' in role:
+            raise AssertionError(f"{provider} bypassed the shared consent prompt")
+    if "reinstall --menu-safe" not in function("show_context7_menu"):
+        raise AssertionError("Codex manager repair changed")
+    if 'run_confirmed_context7_change REINSTALL' not in function("show_antigravity_context7_menu"):
+        raise AssertionError("Antigravity repair bypasses scoped confirmation")
+
+    # Prevent EoF from implicitly executing other menu choices.
+    for name in (
+        "show_projects_menu", "show_antigravity_approval_menu",
+        "show_context7_menu", "show_antigravity_context7_menu",
+        "show_mcp_integrations_menu", "show_shell_menu",
+        "show_agent_menu", "show_agent_manage_menu",
+    ):
+        if 'read -r -p "> " choice || return 0' not in function(name):
+            raise AssertionError(f"{name} must exit on input EOF")
+    for name in ("choose_project_name", "create_project_action", "delete_project_action"):
+        if "|| return 1" not in function(name):
+            raise AssertionError(f"{name} cannot treat missing input as consent")
+
+
 def main() -> None:
     assert_agent_menu_contract()
     assert_context7_contract()
-    print("Codex/Antigravity main and Context7 menu parity: OK")
+    assert_full_nested_menu_contract()
+    print("Codex/Antigravity full menu tree, prompts and provider routing: OK")
 
 
 if __name__ == "__main__":
