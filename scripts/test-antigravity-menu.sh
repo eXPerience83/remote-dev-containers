@@ -417,6 +417,22 @@ mapfile -t calls <"$invocations"
 grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Antigravity for immediate Start: OK'
 
+# The project picker must show 0 Back, and Back at each nesting level
+# must not launch the agent or harden/mutate any persistent state.
+rm -f "$invocations" "$hardening_calls"
+printf '3\n1\n0\n0\n0\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$invocations" && ! -e "$hardening_calls" ]]
+(( $(grep -Fxc '0) Back' "$output") >= 2 ))
+echo 'Antigravity nested project 0 Back does not dispatch an agent: OK'
+
 rm -f "$invocations" "$hardening_calls"
 printf '3\n2\ncreated-project\n\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
