@@ -24,6 +24,8 @@ Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test 
 | Context7 → 2 Test | Configuración Codex y HTTP | Configuración AGY y HTTP | **Mismo `[y/N]`**, divulgación del servicio Upstash. Cancelar no llama al gestor; aceptar llama a `test --yes`, devuelve estado, endurece y pausa |
 | Context7 → 3 Autenticación | API key privada, alta/dispositivo | Instrucciones `agy /mcp` OAuth | Por diseño, distintos; jamás copiar tokens entre roles |
 | Context7 → 4 Install/repair | Alta con onboarding; reparación `reinstall --menu-safe` | Alta nativa; reparación `reinstall` | Alta conserva confirmaciones de proveedor. La **reparación** exige `REINSTALL` exacto en ambos menús, después `--yes`; estado bloqueado nunca escribe |
+| Codex Context7 → 3/4 → asistente de autenticación | Login por dispositivo / clave existente / conservar clave / anónimo | AGY utiliza su `/mcp` nativo | El asistente Codex muestra **0 Cancel**, admite el 5 histórico sin efectos |
+| Codex device login → selector de versión CLI | Versión revisada fijada / última oficial, pendiente de revisión | Sin equivalente propio en Remote Dev para AGY | Selector de versión muestra **0 Cancel**; el 3 histórico sigue cancelando sin adoptar credenciales |
 | Context7 → 5 Remove | Quita registro y **clave local** | Quita registro, **no revoca OAuth** | Teclear **`REMOVE`** en ambos, después `--yes` |
 | Context7 → 0 / MCP → 0 | Volver un nivel | Igual | Ninguna modificación |
 | Principal → 7 GitHub CLI | Login web y configuración Git | Igual | Credenciales privadas por rol |
