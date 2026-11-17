@@ -463,9 +463,9 @@ echo 'Project picker, Projects menu and main navigation all use 0 Back: OK'
 
 # Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
-run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
+run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
-  'plan' 'test --yes' 'install'
+  'plan' 'test --yes' 'plan' 'install'
 assert_hardening_count 2
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
@@ -485,6 +485,14 @@ export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
 run_menu __unset__ $'6\n1\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 blocked actions' 'plan'
 assert_hardening_count 0
+# Initial Context7 installation can be declined before any credential
+# prompt or configuration write; a read-only recovery plan is allowed.
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
+run_menu __unset__ $'6\n1\n4\nn\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 installation cancel' 'plan'
+assert_hardening_count 0
+grep -Fq 'Context7 installation cancelled; no configuration changes were made.' "$output"
+
 # Rejecting the same nonmutating network test must never launch either
 # manager or trigger persistent-state hardening.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
