@@ -320,6 +320,57 @@ class Context7Antigravity(unittest.TestCase):
                 self.assertEqual(self.file.read_bytes(), raw)
                 self.assertFalse(self.backup.exists())
 
+    def test_menu_absent_install_requires_same_state_under_write_lock(self):
+        # The regular direct-CLI reinstall can intentionally repair a drifted
+        # endpoint. A menu's initial INSTALL consent cannot authorize that.
+        # First prove a still-absent entry remains installable.
+        with patch("sys.stdin", new=io.StringIO("")):
+            self.assertEqual(self.call("reinstall", "--expect-absent")[0], 2)
+        self.assertFalse(self.file.exists())
+        self.assertEqual(self.call("reinstall", "--yes", "--expect-absent")[0], 0)
+        self.assertEqual(
+            json.loads(self.file.read_bytes())["mcpServers"]["context7"],
+            manager.ENTRY,
+        )
+        self.assertFalse(self.backup.exists())
+
+        # Simulate a second session writing the vendor JSON after the first
+        # menu-state/preflight read but before reinstall acquires its own lock.
+        # The first read sees absent; the locked mutation sees the new entry.
+        changes = (
+            b'{"mcpServers":{"context7":{"serverUrl":"https://old.example/mcp"}}}',
+            b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}',
+            b'{"mcpServers":{"context7":{"command":"user-owned"}}}',
+        )
+        for changed in changes:
+            with self.subTest(entry=changed):
+                self.file.unlink()
+                self.backup.unlink(missing_ok=True)
+                original_using_config = manager.using_config
+                calls = 0
+
+                def change_after_preflight(directory, mutator):
+                    nonlocal calls
+                    result = original_using_config(directory, mutator)
+                    calls += 1
+                    if calls == 1:
+                        self.file.write_bytes(changed)
+                    return result
+
+                with patch.object(
+                    manager, "using_config", side_effect=change_after_preflight
+                ):
+                    code, out, err = self.call(
+                        "reinstall", "--yes", "--expect-absent"
+                    )
+                self.assertEqual(calls, 2)
+                self.assertEqual(code, 3)
+                self.assertIn("BLOCKED", out)
+                self.assertNotIn("user-owned", out)
+                self.assertEqual(err, "")
+                self.assertEqual(self.file.read_bytes(), changed)
+                self.assertFalse(self.backup.exists())
+
     def test_noop_preflight_must_recheck_under_lock(self):
         # Simulate a changed entry after a successful *earlier* preflight.
         # The privileged no-prompt no-op path may never become a write.
