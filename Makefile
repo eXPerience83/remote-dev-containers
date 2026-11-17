@@ -52,6 +52,8 @@ agent-contract-tests:
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-collection-recovery-menu.sh
 	python3 scripts/test_validate_codex_project_boundary.py
 	python3 scripts/test-menu-parity.py
+	python3 scripts/test_remote_dev_context7_mcp_probe.py
+	python3 scripts/test_remote_dev_context7_mcp_wiring.py
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-remote-dev-menu.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-antigravity-menu.sh
