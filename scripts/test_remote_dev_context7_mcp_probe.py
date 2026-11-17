@@ -49,6 +49,14 @@ class FakeResponse:
     def read(self, limit=-1):
         return self.value[:limit] if limit >= 0 else self.value
 
+    def read1(self, limit):
+        if self.position >= len(self.value):
+            return b""
+        end = min(len(self.value), self.position + limit)
+        result = self.value[self.position:end]
+        self.position = end
+        return result
+
 
 class FakeOpener:
     def __init__(self, fault=None):
