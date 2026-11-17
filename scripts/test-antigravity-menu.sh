@@ -152,7 +152,8 @@ case "${1:-}" in
     echo plan >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
   reinstall)
-    [[ "$#" == 1 || ( "$#" == 2 && "$2" == --yes ) ]] || exit 2
+    [[ "$#" == 1 || ( "$#" == 2 && "$2" == --yes ) ||
+       ( "$#" == 3 && "$2" == --yes && "$3" == --expect-absent ) ]] || exit 2
     echo "$*" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
   test|remove)
@@ -495,7 +496,7 @@ mapfile -t context7_actions <"$context7_calls"
 [[ "${context7_actions[0]}" == plan ]]
 [[ "${context7_actions[1]}" == 'test --yes' ]]
 [[ "${context7_actions[2]}" == plan ]]
-[[ "${context7_actions[3]}" == 'reinstall --yes' ]]
+[[ "${context7_actions[3]}" == 'reinstall --yes --expect-absent' ]]
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
 grep -Fq 'Authenticate' "$output"
