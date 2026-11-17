@@ -695,6 +695,45 @@ context7_menu_message() {
   pause_for_menu "Press Enter to return to the Context7 menu..."
 }
 
+# Shared Context7 confirmation surface: provider-specific backends remain
+# authoritative for config ownership, credentials, and explicit direct CLI.
+run_confirmed_context7_test() {
+  local label="$1" manager="$2"
+  clear
+  cat <<'NOTICE'
+Context7 is an external Upstash service.
+This test contacts Context7 over HTTPS; do not send private or regulated data.
+No credentials or provider OAuth state are changed by this network test.
+NOTICE
+  if ! menu_confirm_yes_no "Test Context7 integration?"; then
+    context7_menu_message "Context7 test cancelled; no network request was made."
+    return 0
+  fi
+  # The menu already obtained consent, avoiding Codex y/N vs AGY typed TEST.
+  if run_context7_action "$label" "$manager" test --yes; then :; fi
+}
+
+run_confirmed_context7_change() {
+  local word="$1" label="$2" manager="$3"
+  shift 3
+  clear
+  case "$role:$word" in
+    codex:REMOVE)
+      echo 'Removes the managed Context7 registration AND Codex-private API key.' ;;
+    antigravity:REMOVE)
+      echo 'Removes the managed Context7 registration; vendor OAuth remains intact.' ;;
+    codex:REINSTALL|antigravity:REINSTALL)
+      echo 'Repairs the eligible Context7 registration only; other MCP entries remain intact.' ;;
+    *) echo 'ERROR: unsupported Context7 confirmation action' >&2; return 2 ;;
+  esac
+  if ! menu_confirm_word "$word" "Context7 $label"; then
+    context7_menu_message "Context7 $label cancelled; configuration was not changed."
+    return 0
+  fi
+  # Both managers independently revalidate eligibility after --yes.
+  if run_context7_action "$label" "$manager" "$@" --yes; then :; fi
+}
+
 print_context7_menu_options() {
   # Keep the Context7 option numbers and semantics aligned. Only the
   # authentication and removal labels differ by agent credential ownership.
@@ -747,7 +786,7 @@ MENU
         context7_menu_message "Live connectivity and MCP tools: not verified by this diagnosis."
         ;;
       2)
-        if run_context7_action "Codex Context7 HTTP test" "$manager" test; then :; fi
+        run_confirmed_context7_test "Codex Context7 HTTP test" "$manager"
         ;;
       3)
         if [[ "$state" == healthy ]]; then
@@ -763,7 +802,7 @@ MENU
             ;;
           repairable)
             "$manager" plan || :
-            if run_context7_action "Codex Context7 selective repair" "$manager" reinstall --menu-safe; then :; fi
+            run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --menu-safe
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no repair or confirmation is necessary."
@@ -776,7 +815,7 @@ MENU
         ;;
       5)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Codex Context7 removal" "$manager" remove; then :; fi
+          run_confirmed_context7_change REMOVE "removal" "$manager" remove
         else
           context7_menu_message "Removal is available only for a healthy, managed entry. No other MCPs or credentials were touched."
         fi
@@ -1002,7 +1041,7 @@ MENU
         context7_menu_message "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
         ;;
       2)
-        if run_context7_action "Antigravity Context7 HTTP test" "$manager" test; then :; fi
+        run_confirmed_context7_test "Antigravity Context7 HTTP test" "$manager"
         ;;
       3)
         context7_menu_message "Start Antigravity normally, enter /mcp, select context7, then Authenticate. Confirm [Authed] in /mcp and call a real documentation tool. Logging out or revoking provider authorization is separate from removing the MCP entry."
@@ -1011,7 +1050,11 @@ MENU
         case "$state" in
           absent|repairable)
             "$manager" plan || :
-            if run_context7_action "Antigravity Context7 registration maintenance" "$manager" reinstall; then :; fi
+            if [[ "$state" == repairable ]]; then
+              run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall
+            else
+              if run_context7_action "Antigravity Context7 installation" "$manager" reinstall; then :; fi
+            fi
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no reinstall is needed and OAuth state is preserved."
@@ -1024,7 +1067,7 @@ MENU
         ;;
       5)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Antigravity Context7 removal" "$manager" remove; then :; fi
+          run_confirmed_context7_change REMOVE "removal" "$manager" remove
         else
           context7_menu_message "Only an exact Remote Dev-managed registration can be removed safely. OAuth session is not revoked."
         fi
