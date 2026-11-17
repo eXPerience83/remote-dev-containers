@@ -40,6 +40,10 @@ remote_dev_validate_project_name() {
 
 remote_dev_list_projects() {
   local path name
+  if [[ "${REMOTE_DEV_TEST_BLOCK_PROJECTS:-0}" == 1 ]]; then
+    echo 'ERROR: synthetic blocked project collection' >&2
+    return 2
+  fi
   for path in "$1"/*; do
     [[ -d "$path" && ! -L "$path" ]] || continue
     name="${path##*/}"
@@ -432,6 +436,26 @@ printf '3\n1\n0\n0\n0\n' | env \
 [[ ! -e "$invocations" && ! -e "$hardening_calls" ]]
 (( $(grep -Fxc '0) Back' "$output") >= 2 ))
 echo 'Antigravity nested project 0 Back does not dispatch an agent: OK'
+
+# Collection-wide safety blocks must intercept all three project actions
+# before entering a picker, asking for a name, or attempting to delete files.
+rm -f "$invocations" "$hardening_calls"
+printf '3\n1\n\n2\n\n3\n\n0\n0\n' | env \
+  REMOTE_DEV_TEST_BLOCK_PROJECTS=1 \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$invocations" && ! -e "$hardening_calls" ]]
+[[ -d "$workdir/workspace/project" ]]
+[[ "$(grep -Fc 'Project collection is blocked; selection, creation and deletion are disabled.' "$output")" == 3 ]]
+if grep -Fxq 'Create project' "$output" || grep -Fxq 'Select project' "$output" || grep -Fxq 'Delete project' "$output"; then
+  echo 'ERROR: blocked Antigravity project collection entered a workflow' >&2
+  exit 1
+fi
+grep -Fq 'Project: BLOCKED (collection safety check failed; run diagnostics)' "$output"
+echo 'Antigravity blocked Projects refuses Select/Create/Delete before dispatch: OK'
 
 rm -f "$invocations" "$hardening_calls"
 printf '3\n2\ncreated-project\n\n1\n\n0\n' | env \
