@@ -505,7 +505,7 @@ def choose_cli_metadata(
         f"2) Use latest official {latest_version} "
         "[official source; Remote Dev review pending]"
     )
-    print("3) Cancel")
+    print("0) Cancel")
 
     if not sys.stdin.isatty():
         print(
@@ -528,7 +528,8 @@ def choose_cli_metadata(
         return metadata, True
     if choice == "2":
         return latest, False
-    if choice == "3":
+    if choice in {"0", "3"}:
+        # Preserve the former 3 key while displaying 0 Cancel.
         raise DeviceLoginError("cancelled")
     raise DeviceLoginError("invalid Context7 CLI version choice")
 
