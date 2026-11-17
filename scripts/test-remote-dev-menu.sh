@@ -481,7 +481,7 @@ assert_hardening_count 0
 # manager or trigger persistent-state hardening.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
 for decision in n TEST ""; do
-  run_menu __unset__ "$(printf '6\\n1\\n2\\n%s\\n\\n0\\n0\\n0\\n' "$decision")" "$output"
+  run_menu __unset__ "$(printf '6\n1\n2\n%s\n\n0\n0\n0\n' "$decision")" "$output"
   assert_file_lines "$context7_invocations" "Context7 test decline $decision"
   assert_hardening_count 0
   grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
