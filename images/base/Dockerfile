@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.29.0@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 ARG UBUNTU_VERSION=26.04
-ARG UBUNTU_DIGEST=sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96
+ARG UBUNTU_DIGEST=sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
 FROM ubuntu:${UBUNTU_VERSION}@${UBUNTU_DIGEST}
 
 # Re-declare the pre-FROM arguments so they are available inside this build stage.
