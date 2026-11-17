@@ -93,6 +93,7 @@ COPY scripts/validate-codex-project-boundary.py /usr/local/bin/validate-codex-pr
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
 COPY scripts/remote-dev-prepare-development-scratch.py /usr/local/bin/remote-dev-prepare-development-scratch
 COPY scripts/remote-dev-context7.py /usr/local/lib/remote-dev/remote-dev-context7.py
+COPY --chown=0:0 --chmod=0444 scripts/remote_dev_context7_mcp_probe.py /usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py
 COPY scripts/remote-dev-context7-entrypoint.sh /usr/local/bin/remote-dev-context7
 COPY scripts/remote-dev-context7-device-login.py /usr/local/bin/remote-dev-context7-device-login
 COPY scripts/remote-dev-context7-antigravity.py /usr/local/bin/remote-dev-context7-antigravity
