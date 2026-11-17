@@ -27,7 +27,7 @@ remote-dev-context7 update
 remote-dev-context7 remove
 ```
 
-`status` is passive. `install`, `repair`, `update` and `remove` can mutate Codex-private persistent state and require explicit confirmation. `test` also requires confirmation because it performs a live check against Context7's documented `/ping` endpoint.
+`status` is passive. `install`, `repair`, `update` and `remove` can mutate Codex-private persistent state and require explicit confirmation. `test` also requires confirmation because it performs a live check against Context7's documented `/ping` endpoint **and** sends two bounded public documentation queries through the Streamable HTTP MCP server (`initialize`, `tools/list`, `resolve-library-id`, `query-docs`). The active test uses the validated private Codex API key if present, or runs anonymously otherwise. It does not alter Codex sessions or credentials.
 
 A plain interactive `install` or `repair` asks how authentication should be handled:
 
@@ -43,9 +43,9 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 ### Simplified navigation and diagnosis (#347)
 
-The Codex main menu has **6) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
+The Codex main menu has **6) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test hosted MCP tools**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
 
-`status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The HTTP test requires confirmation and **does not establish real tool success or authentication**. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
+`status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The active test requires confirmation and checks **real MCP tool success at the hosted endpoint**, not merely HTTP ping. Successful standalone tool calls do **not** prove that the running Codex agent discovered or executed those tools; verify that separately in Codex. Results distinguish the Codex API-key request from anonymous mode. Neither credentials nor returned documentation text are logged. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
 
 Authentication management reuses the existing private-key/device-code flow. Missing or damaged registration must be installed or repaired first. Install/repair is a **no-op with no confirmation** on a healthy registration. Missing registration dispatches to `install`, safely repairable registration previews `plan` and invokes `reinstall`, preserving the API key. Ambiguous or custom entries fail closed. Remove deletes only the managed registration and local key, not the provider-side key or Playwright/OpenAI Developer Docs. All older CLI commands, including `repair` and `update`, remain supported.
 
@@ -154,7 +154,7 @@ Network boundaries:
 - manual-key/anonymous `install` or `repair`: local state only;
 - device login: explicit public-npm metadata lookup and exact transient top-level package download/verification, then npm resolution needed to execute the verified package and Context7 device authorization;
 - `update`/`remove`: local state only;
-- `test`: explicit live config + `https://mcp.context7.com/ping` check;
+- `test`: explicit config + hosted `/ping` + bounded Streamable HTTP MCP tool calls (`resolve-library-id`, `query-docs`) using public Python Requests documentation; **provider-agent invocation remains unverified** and requires a separate Codex run. No values from the responses or private key are printed; HTTPS origin, response size and redirects are restricted;
 - normal enabled Codex sessions: Codex may contact the hosted MCP endpoint for initialization and tool use.
 
 ## Privacy, terms and evidence
