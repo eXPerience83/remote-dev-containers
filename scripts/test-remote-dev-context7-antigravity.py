@@ -363,7 +363,10 @@ class Context7Antigravity(unittest.TestCase):
                     code, out, err = self.call(
                         "reinstall", "--yes", "--expect-absent"
                     )
-                self.assertEqual(calls, 2)
+                self.assertEqual(
+                    calls, 2,
+                    f"preflight/lock calls={calls}, code={code}, out={out!r}, err={err!r}",
+                )
                 self.assertEqual(code, 3)
                 self.assertIn("BLOCKED", out)
                 self.assertNotIn("user-owned", out)
