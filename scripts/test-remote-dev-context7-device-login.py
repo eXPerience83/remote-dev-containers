@@ -329,6 +329,25 @@ def assert_reviewed_latest_selection(module) -> None:
                 "latest review-pending Context7 CLI selection failed"
             )
 
+        # Version selection is nested inside the authentication wizard.
+        # Both the new 0 Cancel and former 3 alias must fail without executing
+        # a transient third-party login or adopting a key.
+        for cancelled_choice in ("0", "3"):
+            builtins.input = lambda prompt="", selected=cancelled_choice: selected
+            try:
+                module.choose_cli_metadata(
+                    "auto", uid=1, gid=1, cwd=Path("/tmp"), environment={}
+                )
+            except module.DeviceLoginError as exc:
+                if str(exc) != "cancelled":
+                    raise AssertionError(
+                        f"unexpected Context7 version cancellation: {exc}"
+                    ) from exc
+            else:
+                raise AssertionError(
+                    f"Context7 version picker accepted cancelled choice {cancelled_choice}"
+                )
+
         selected, reviewed = module.choose_cli_metadata(
             "latest", uid=1, gid=1, cwd=Path("/tmp"), environment={}
         )
