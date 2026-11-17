@@ -8,6 +8,8 @@ from unittest import TestCase, main
 from unittest.mock import patch
 
 SOURCE = Path(__file__).with_name("remote_dev_context7_mcp_probe.py")
+if not SOURCE.is_file():
+    SOURCE = Path("/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py")
 spec = importlib.util.spec_from_file_location("context7_probe_test_subject", SOURCE)
 assert spec is not None and spec.loader is not None
 probe = importlib.util.module_from_spec(spec)
