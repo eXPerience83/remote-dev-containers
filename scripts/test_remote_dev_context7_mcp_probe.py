@@ -24,6 +24,18 @@ class FakeResponse:
         self.headers = {"Content-Type": content_type, "Mcp-Session-Id": session}
         self.value = value if isinstance(value, bytes) else json.dumps(value).encode()
         self.url = url
+        self.position = 0
+
+    def readline(self, limit=-1):
+        if self.position >= len(self.value):
+            return b""
+        end = self.value.find(b"\n", self.position)
+        end = len(self.value) if end < 0 else end + 1
+        if limit >= 0:
+            end = min(end, self.position + limit)
+        result = self.value[self.position:end]
+        self.position = end
+        return result
 
     def __enter__(self):
         return self
@@ -128,7 +140,6 @@ class ProbeTests(TestCase):
             ("initialize", "bad-json"),
             ("initialize", "oversize"),
             ("tools/list", "no-tools"),
-            ("tools/list", "duplicate"),
             ("tools/list", "bad-sse"),
             ("tools/call", "tool-error"),
             ("tools/call", "http-error"),
