@@ -195,7 +195,7 @@ run_recovery_menu() {
 codex_output="$workdir/codex-output"
 # Start and Resume are blocked. Projects remains reachable but selection is
 # blocked. Diagnostics and Container shell remain available for recovery.
-run_recovery_menu codex $'1\n\n2\n\n3\n1\n4\n8\n\n9\n\n0\n' "$codex_output"
+run_recovery_menu codex $'1\n\n2\n\n3\n1\n\n2\n\n3\n\n4\n8\n\n9\n\n0\n' "$codex_output"
 [[ ! -s "$agent_invocations" ]] || {
   echo 'ERROR: Codex was invoked from a contaminated project collection' >&2
   cat "$agent_invocations" >&2
@@ -207,12 +207,12 @@ assert_invocation_count "$hardening_invocations" 1 'Codex persistent-state harde
 assert_output_contains "$codex_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$codex_output" 'agent launch is blocked'
 assert_output_contains "$codex_output" 'Safety block: project mutations are disabled until the collection is repaired.'
-assert_output_contains "$codex_output" 'project selection is blocked'
+assert_output_contains "$codex_output" 'Project collection is blocked; selection, creation and deletion are disabled.'
 assert_canary_and_contamination_preserved
 echo 'Codex contamination state keeps only recovery actions available: OK'
 
 agy_output="$workdir/antigravity-output"
-run_recovery_menu antigravity $'1\n\n2\n\n8\n\n9\n\n0\n' "$agy_output"
+run_recovery_menu antigravity $'1\n\n2\n\n3\n1\n\n2\n\n3\n\n0\n8\n\n9\n\n0\n' "$agy_output"
 [[ ! -s "$agent_invocations" ]] || {
   echo 'ERROR: Antigravity was invoked from a contaminated project collection' >&2
   cat "$agent_invocations" >&2
@@ -223,5 +223,6 @@ assert_invocation_count "$shell_invocations" 1 'Antigravity container shell'
 assert_invocation_count "$hardening_invocations" 1 'Antigravity persistent-state hardening'
 assert_output_contains "$agy_output" 'Project: BLOCKED (collection safety check failed; run diagnostics)'
 assert_output_contains "$agy_output" 'agent launch is blocked'
+assert_output_contains "$agy_output" 'Project collection is blocked; selection, creation and deletion are disabled.'
 assert_canary_and_contamination_preserved
 echo 'Antigravity contamination state keeps only recovery actions available: OK'
