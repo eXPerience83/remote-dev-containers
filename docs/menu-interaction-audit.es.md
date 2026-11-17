@@ -40,6 +40,7 @@ Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test 
 - Cancelar, responder incorrectamente, agotar stdin o pulsar Back nunca debe ejecutar tests/instalaciones/borrados ni manipular credenciales. El menú solo envía `--yes` cuando ya obtuvo confirmación.
 - Las etiquetas similares no implican mezclar comandos: cada rama ejecuta su gestor con el rol correcto; se preservan respaldos, permisos, límites del workspace y aislamiento OAuth/API key.
 - Un `/ping` de Context7 **no demuestra** llamadas MCP reales; mejoras técnicas en #355/#356. Las pruebas del CI no consultan la red.
+- Colección de proyectos bloqueada: **Select/Create/Delete se interceptan antes de entrar en sus flujos**; la biblioteca runtime mantiene su propia comprobación de límites. Los fixtures de ambos proveedores verifican que no se presentan selectores ni confirmaciones de borrado, ni se ejecutan agentes.
 - Cobertura: contratos estructurales de **todos los menús** y fixtures reales de consentimiento/cancelación/acciones por rol, además de los tests existentes de operaciones y seguridad.
 
 Este cambio no despliega TrueNAS, no actualiza `stable/latest` y no acredita autenticación real ni subsana el bloqueo de Chromium (#320).
