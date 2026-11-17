@@ -453,6 +453,14 @@ assert_file_lines "$invocations" 'Projects legacy Back 4'
 assert_hardening_count 0
 echo 'Projects shared Back 0 and legacy 4 are nonmutating: OK'
 
+# The inner project picker is also a submenu: display 0 Back and exit
+# without selecting/mutating, regardless of the collection's current size.
+run_menu __unset__ $'3\n1\n0\n0\n0\n' "$output"
+assert_file_lines "$invocations" 'Project picker 0 Back'
+assert_hardening_count 0
+(( $(grep -Fxc '0) Back' "$output") >= 2 ))
+echo 'Project picker, Projects menu and main navigation all use 0 Back: OK'
+
 # Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
 run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
@@ -641,7 +649,7 @@ if grep -Fq 'ERROR: no projects are available under' "$output"; then
 fi
 echo 'Action-time project discovery failures block stale-project launches: OK'
 
-run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
+run_menu __unset__ $'1\n1\n2\n2\n3\n3\n0\n' "$output" shell
 assert_file_lines "$shell_invocations" 'Shell container shell' shell
 assert_file_lines "$github_invocations" 'Shell GitHub CLI setup' \
   '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
@@ -655,3 +663,10 @@ grep -Fxq '3) Run diagnostics' "$output"
 grep -Fxq '0) Exit this tmux session' "$output"
 
 echo 'Shell menu result pauses: OK'
+
+# Historical 4 Exit remains accepted without appearing on the screen.
+run_menu __unset__ $'4\n' "$output" shell
+assert_file_lines "$shell_invocations" 'Legacy Shell exit 4'
+assert_hardening_count 0
+grep -Fxq '0) Exit this tmux session' "$output"
+echo 'Shell 0 Exit and 4 legacy alias: OK'
