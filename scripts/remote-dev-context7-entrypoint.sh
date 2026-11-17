@@ -36,7 +36,7 @@ or that exact latest version with a clear review-pending warning.
 2) Enter an existing Context7 API key
 3) Keep the current API key, or stay anonymous if none exists
 4) Use anonymous access and remove the Remote Dev-managed API key
-5) Cancel
+0) Cancel
 MENU
 
 choice=""
@@ -58,7 +58,8 @@ case "$choice" in
   4)
     delegate_manager "$command" --yes --anonymous
     ;;
-  5)
+  0|5)
+    # Preserve the historical 5 alias without displaying it.
     echo "ERROR: cancelled" >&2
     exit 2
     ;;
