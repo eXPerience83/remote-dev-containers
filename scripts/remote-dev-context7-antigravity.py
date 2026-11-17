@@ -223,13 +223,19 @@ def plan(directory: Path) -> int:
     return 0
 
 
-def reinstall(directory: Path, *, require_healthy_noop: bool = False) -> int:
+def reinstall(directory: Path, *, require_healthy_noop: bool = False,
+              require_absent: bool = False) -> int:
     def mutate(ops, fd, content, info):
         state, doc = inspect(content)
         # A passive preflight must never authorize a later write if the
         # registration changes between two lock acquisitions.
         if require_healthy_noop and state != "managed":
             raise MaintenanceError("registration changed since no-op preflight")
+        # Initial menu consent is specifically for installing a missing entry,
+        # not for repairing one that another session created in the meantime.
+        # The check must occur under the same lock as the write, not at menu render.
+        if require_absent and state != "absent":
+            raise MaintenanceError("registration changed since absent-state consent")
         if state in {"custom-auth", "custom"}:
             raise MaintenanceError("user-owned Context7 settings; refusing to replace them")
         if state == "managed":
@@ -339,6 +345,10 @@ def main(argv=None, *, directory=None):
     sub.add_parser("remove").add_argument("--yes", action="store_true")
     reinstall_parser = sub.add_parser("reinstall")
     reinstall_parser.add_argument("--yes", action="store_true")
+    reinstall_parser.add_argument(
+        "--expect-absent", action="store_true",
+        help="Menu-only: install only if Context7 is still absent under the write lock",
+    )
     test_parser = sub.add_parser("test")
     test_parser.add_argument("--yes", action="store_true")
     args = parser.parse_args(argv)
@@ -358,7 +368,7 @@ def main(argv=None, *, directory=None):
         current, _ = using_config(target, lambda _ops, _fd, data, _info: inspect(data))
     except MaintenanceError:
         current = "blocked"
-    if args.command == "reinstall" and current == "managed":
+    if args.command == "reinstall" and current == "managed" and not args.expect_absent:
         return reinstall(target, require_healthy_noop=True)
     if args.command == "remove" and current == "absent":
         return remove(target, require_absent_noop=True)
@@ -379,7 +389,8 @@ def main(argv=None, *, directory=None):
             return 2
     if args.command == "remove":
         return remove(target)
-    return reinstall(target) if args.command == "reinstall" else test(target)
+    return (reinstall(target, require_absent=args.expect_absent)
+            if args.command == "reinstall" else test(target)
 
 
 if __name__ == "__main__":
