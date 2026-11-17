@@ -89,7 +89,8 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
         "User-Agent": "remote-dev-context7-mcp-probe/1",
     }
     if api_key is not None:
-        if not isinstance(api_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,16384}", api_key):
+        if (not isinstance(api_key, str) or not 1 <= len(api_key) <= 16384 or
+                any(not 33 <= ord(char) <= 126 for char in api_key)):
             raise ProbeError("validated Context7 API key has an unsafe header shape")
         headers["CONTEXT7_API_KEY"] = api_key
     if session:
@@ -115,6 +116,29 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
             if status != 200:
                 raise ProbeError("MCP request failed with HTTP status " + str(status))
             content_type = response.headers.get("Content-Type", "")
+            if content_type.split(";", 1)[0].lower().strip() == "text/event-stream":
+                # A compliant SSE response may remain open after the matching
+                # JSON-RPC event. Read bounded frames, not until connection EOF.
+                raw_parts = []
+                received = 0
+                while received <= MAX_RESPONSE_BYTES:
+                    line = response.readline(MAX_RESPONSE_BYTES - received + 1)
+                    if not line:
+                        break
+                    received += len(line)
+                    raw_parts.append(line)
+                    if not line.strip() and any(part.startswith(b"data:") for part in raw_parts):
+                        try:
+                            parsed = _extract_message(
+                                b"".join(raw_parts), content_type, request_id)
+                        except ProbeError as exc:
+                            if "exactly one matching request ID" not in str(exc):
+                                raise
+                        else:
+                            return parsed, next_session
+                if received > MAX_RESPONSE_BYTES:
+                    raise ProbeError("MCP response exceeded its size limit")
+                raise ProbeError("MCP event stream did not return the matching request ID")
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except ProbeError:
         raise
