@@ -200,7 +200,7 @@ def assert_context7_contract() -> None:
         raise AssertionError("Context7 back navigation changed")
     for number, label in {
         1: "Status and recovery diagnosis (offline)",
-        2: "Test hosted connection (network; not a real MCP tool call)",
+        2: "Test hosted MCP tools (network; not agent-native authentication)",
         4: "Install or repair Context7 registration",
     }.items():
         if rendered[number] != label:
