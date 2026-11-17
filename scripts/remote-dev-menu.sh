@@ -412,6 +412,16 @@ MENU
       echo "Use Back → Run diagnostics / Open container shell for inspection and recovery."
     fi
     read -r -p "> " choice || return 0
+    # Do not even enter project selection/mutation workflows while the
+    # collection is unsafe. The runtime helpers still revalidate ownership.
+    if (( project_collection_blocked == 1 )); then
+      case "$choice" in
+        1|2|3)
+          show_unavailable_action "Project collection is blocked; selection, creation and deletion are disabled. Run diagnostics before retrying."
+          continue
+          ;;
+      esac
+    fi
     case "$choice" in
       1)
         if select_project_action; then
