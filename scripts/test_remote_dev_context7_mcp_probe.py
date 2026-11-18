@@ -82,6 +82,10 @@ class FakeOpener:
                 "serverInfo": {"name": "Context7", "version": "4.0.0"},
             }
         elif method == "notifications/initialized":
+            if self.fault == ("notifications/initialized", "bad-notification-status"):
+                return FakeResponse(b"", status=200, session=self.session)
+            if self.fault == ("notifications/initialized", "bad-notification-body"):
+                return FakeResponse(b'{"error":"ignored"}', status=202, session=self.session)
             return FakeResponse(b"", status=202, session=self.session)
         elif method == "tools/list":
             if self.fault == ("tools/list", "paged"):
