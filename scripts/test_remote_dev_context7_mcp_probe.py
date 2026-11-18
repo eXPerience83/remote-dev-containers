@@ -454,8 +454,9 @@ class ProbeTests(TestCase):
         def fragmented_open(request, *, timeout):
             response = regular_open(request, timeout=timeout)
             if json.loads(request.data)["method"] == "tools/list":
-                # Make the network deliver one byte at a time, including
-                # a CRLF pair split across calls to read1().
+                # Exercise actual CRLF, with CR and LF delivered separately.
+                # The old fixture only transmitted LF despite its name.
+                response.value = response.value.replace(b"\n", b"\r\n")
                 response.read1 = lambda limit: FakeResponse.read1(response, min(limit, 1))
             return response
 
