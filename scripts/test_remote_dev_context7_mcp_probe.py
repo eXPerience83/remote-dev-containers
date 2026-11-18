@@ -76,26 +76,45 @@ class FakeOpener:
         self.calls.append((body, headers))
         method = body["method"]
         if method == "initialize":
-            result = {"protocolVersion": self.negotiated_protocol, "capabilities": {}, "serverInfo": {}}
+            result = {
+                "protocolVersion": self.negotiated_protocol,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "Context7", "version": "4.0.0"},
+            }
         elif method == "notifications/initialized":
             return FakeResponse(b"", status=202, session=self.session)
         elif method == "tools/list":
             if self.fault == ("tools/list", "paged"):
                 cursor = body.get("params", {}).get("cursor")
                 if cursor is None:
-                    result = {"tools": [{"name": "resolve-library-id"}],
+                    result = {"tools": [{"name": "resolve-library-id",
+                                          "inputSchema": {"type": "object"}}],
                               "nextCursor": "opaque.cursor"}
                 elif cursor == "opaque.cursor":
-                    result = {"tools": [{"name": "query-docs"}]}
+                    result = {"tools": [{"name": "query-docs",
+                                          "inputSchema": {"type": "object"}}]}
                 else:
                     raise AssertionError("MCP tools/list received wrong pagination cursor")
             elif self.fault == ("tools/list", "loop-cursor"):
                 result = {"tools": [], "nextCursor": "loop"}
             else:
                 result = {"tools": [
-                    {"name": "resolve-library-id"}, {"name": "query-docs"}]}
+                    {"name": "resolve-library-id", "inputSchema": {"type": "object"}},
+                    {"name": "query-docs", "inputSchema": {"type": "object"}}]}
         elif method == "tools/call":
-            result = {"content": [{"type": "text", "text": "Public docs returned"}],
+            if body["params"]["name"] == "resolve-library-id":
+                content = (
+                    "Available Libraries:\n\n- Name: Requests\n"
+                    "- Context7-compatible library ID: /psf/requests\n"
+                    "- Source Reputation: High"
+                )
+            else:
+                content = (
+                    "### Timeout configuration for Python Requests\n"
+                    "Source: https://requests.readthedocs.io/en/latest/user/advanced/\n"
+                    "Use requests.get(url, timeout=5) to set the HTTP timeout."
+                )
+            result = {"content": [{"type": "text", "text": content}],
                       "isError": False}
         else:
             raise AssertionError("unexpected MCP method " + method)
@@ -109,6 +128,54 @@ class FakeOpener:
             if kind == "no-tools":
                 return FakeResponse({"jsonrpc": "2.0", "id": body["id"],
                                      "result": {"tools": []}})
+            if kind == "no-public-docs":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"],
+                    "result": {"content": [{"type": "text",
+                                           "text": "No documentation found for Requests timeout"}]}
+                })
+            if kind == "wrong-library":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"],
+                    "result": {"content": [{"type": "text",
+                                           "text": "Available Libraries:\n- Library ID: /other/project"}]}
+                })
+            if kind == "irrelevant-docs":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"],
+                    "result": {"content": [{"type": "text",
+                                           "text": "Unrelated information about cooking"}]}
+                })
+            if kind == "bad-initialize-capabilities":
+                bad = dict(result)
+                bad["capabilities"] = {}
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"], "result": bad})
+            if kind == "bad-initialize-server-info":
+                bad = dict(result)
+                bad["serverInfo"] = {}
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"], "result": bad})
+            if kind == "bad-tool-descriptors":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"],
+                    "result": {"tools": [{"name": "resolve-library-id"},
+                                         {"name": "query-docs"}]}})
+            if kind == "bool-id":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": True, "result": result})
+            if kind == "bad-notification-status":
+                return FakeResponse(b"", status=200, session=self.session)
+            if kind == "bad-notification-body":
+                return FakeResponse(b'{"error":"ignored"}', status=202, session=self.session)
+            if kind == "reflected-session":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"], "result": result},
+                    session=SECRET)
+            if kind == "reflected-cursor":
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": body["id"],
+                    "result": {"tools": [], "nextCursor": SECRET}})
             if kind == "tool-error":
                 return FakeResponse({"jsonrpc": "2.0", "id": body["id"],
                                      "result": {"isError": True, "content": [
@@ -195,6 +262,17 @@ class ProbeTests(TestCase):
             ("tools/list", "incomplete-transfer"),
             ("initialize", "future-protocol"),
             ("tools/list", "loop-cursor"),
+            ("initialize", "bad-initialize-capabilities"),
+            ("initialize", "bad-initialize-server-info"),
+            ("initialize", "bool-id"),
+            ("tools/list", "bad-tool-descriptors"),
+            ("tools/call", "no-public-docs"),
+            ("tools/call", "wrong-library"),
+            ("tools/call", "irrelevant-docs"),
+            ("notifications/initialized", "bad-notification-status"),
+            ("notifications/initialized", "bad-notification-body"),
+            ("initialize", "reflected-session"),
+            ("tools/list", "reflected-cursor"),
         ):
             with self.subTest(fault=fault):
                 opener = FakeOpener(fault)
