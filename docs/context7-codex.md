@@ -15,6 +15,9 @@ Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runt
 
 > **Probe framing/time limits:** The optional MCP functional test accepts SSE line boundaries only at CR/LF/CRLF (literal U+2028 inside JSON remains data), reads bounded chunks instead of waiting for a newline, and enforces an overall wall-clock response deadline even for a slowly trickling server. These are offline-tested transport protections; they do not establish agent-native OAuth or tool execution.
 
+> **Functional PASS rules (#355):** A successful probe requires valid MCP tool-capable initialization and tool schemas, HTTP 202 with an empty body for the initialized notification, a `resolve-library-id` result actually listing `/psf/requests`, and recognizable Requests timeout documentation from `query-docs`. Empty matches, quota messages, invalid replies, or merely nonempty text are **not PASS**. The standalone probes use a shared **90-second wall-clock budget**, starting before `/ping` and covering all MCP requests (each still capped at 25 seconds and 128 KiB). SSE priming and CR/LF/CRLF framing are handled without pretending that this proves agent-native execution.
+
+
 ## Explicit lifecycle
 
 From Codex, open **6) MCP integrations... → 1) Context7...** or use these advanced CLI commands:
