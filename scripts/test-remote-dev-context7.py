@@ -146,11 +146,12 @@ def assert_masked_interactive_key_prompt(module, home: Path) -> None:
         module.getpass.getpass = fake_getpass
         module.sys.stdin = TtyInput()
         with codex_environment(home):
-            action, value = module.choose_key(
+            action, value, observed_status = module.choose_key(
                 module.Paths(),
                 argparse_namespace(anonymous=False, api_key_stdin=False, yes=False),
             )
-            if action != "replace" or value != SYNTHETIC_KEY:
+            if (action != "replace" or value != SYNTHETIC_KEY
+                    or observed_status not in ("missing", "safe")):
                 raise AssertionError("interactive Context7 key prompt did not return the supplied synthetic key")
             if calls != [(expected_prompt, "*")]:
                 raise AssertionError(f"interactive Context7 key prompt is not masked with '*': {calls!r}")
@@ -1200,6 +1201,110 @@ def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
     )
 
 
+def assert_implicit_anonymous_keeps_newly_added_key(module, root: Path) -> None:
+    """A default anonymous selection must not delete a later private key."""
+    for menu_state in ("absent", "healthy"):
+        home = root / ("implicit-anonymous-key-race-" + menu_state)
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = ('model = "race-key"\n' if menu_state == "absent"
+                    else 'model = "race-key"\n\n' + module.MANAGED_BLOCK)
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        key = state_dir / "api-key"
+        backup = home / "config.toml.remote-dev-context7.bak"
+
+        original_choose = module.choose_key
+        def key_appears_after_selection(paths, args):
+            selection = original_choose(paths, args)
+            if selection != ("anonymous", None, "missing"):
+                raise AssertionError(
+                    f"unexpected implicit no-key selection: {selection!r}"
+                )
+            state_dir.mkdir(mode=0o700)
+            key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+            key.chmod(0o600)
+            return selection
+
+        with codex_environment(home):
+            args = module.build_parser().parse_args([
+                "install", "--yes", "--expect-" + menu_state,
+            ])
+            module.choose_key = key_appears_after_selection
+            try:
+                try:
+                    module.command_install(module.Paths(), args)
+                except module.Context7Error as exc:
+                    if ("state changed after anonymous selection" not in str(exc)
+                            or "no changes made" not in str(exc)):
+                        raise AssertionError(
+                            f"{menu_state}: incorrect concurrent-key error: {exc}"
+                        ) from exc
+                else:
+                    raise AssertionError(
+                        f"{menu_state}: implicit anonymous choice deleted a new key"
+                    )
+            finally:
+                module.choose_key = original_choose
+
+        if config.read_text(encoding="utf-8") != original:
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice rewrote config"
+            )
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice deleted new key"
+            )
+        assert_private_file(key)
+        if backup.exists():
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice wrote backup"
+            )
+
+    # A stable missing key still permits default anonymous installation.
+    stable = root / "implicit-anonymous-key-stable"
+    stable.mkdir(mode=0o700)
+    require_success(
+        run_manager(stable, "install", "--yes", "--expect-absent"),
+        "implicit anonymous installation with no competing key",
+    )
+    if (stable / ".remote-dev-context7" / "api-key").exists():
+        raise AssertionError("implicit anonymous installation unexpectedly wrote a key")
+
+    # Explicit --anonymous is separately authorized to remove an owned key,
+    # even when a concurrent writer adds it after initial key selection.
+    explicit = root / "explicit-anonymous-key-race"
+    explicit.mkdir(mode=0o700)
+    config = explicit / "config.toml"
+    config.write_text('model = "explicit"\n', encoding="utf-8")
+    key_dir = explicit / ".remote-dev-context7"
+    key = key_dir / "api-key"
+
+    def explicit_key_appears_after_selection(paths, args):
+        selection = original_choose(paths, args)
+        if selection != ("anonymous", None, "missing"):
+            raise AssertionError(f"unexpected explicit selection: {selection!r}")
+        key_dir.mkdir(mode=0o700)
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        return selection
+
+    with codex_environment(explicit):
+        module.choose_key = explicit_key_appears_after_selection
+        try:
+            args = module.build_parser().parse_args([
+                "install", "--yes", "--anonymous", "--expect-absent",
+            ])
+            if module.command_install(module.Paths(), args) != 0:
+                raise AssertionError("explicit anonymous installation failed")
+        finally:
+            module.choose_key = original_choose
+    if key.exists():
+        raise AssertionError(
+            "explicit --anonymous failed to remove the now-present owned key"
+        )
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1221,6 +1326,7 @@ args = ["--safe"]
         assert_menu_state_is_passive_and_owner_aware(root)
         assert_menu_safe_reinstall_rechecks_ownership(root)
         assert_menu_consent_preconditions_survive_races(load_manager_module(), root)
+        assert_implicit_anonymous_keeps_newly_added_key(load_manager_module(), root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
