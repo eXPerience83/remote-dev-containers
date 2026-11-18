@@ -39,7 +39,9 @@ harden_state_or_exit() {
 
 pause_for_menu() {
   local prompt="${1:-Press Enter to return to the menu...}"
-  read -r -p "$prompt" _
+  # End-of-input on a return pause is normal navigation termination. Do not
+  # leak read's status 1 into a completed/cancelled menu action under set -e.
+  read -r -p "$prompt" _ || return 0
 }
 
 # Menu-only consent helpers. Direct CLI managers retain their own prompts.
@@ -841,7 +843,7 @@ MENU
         ;;
       3)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Codex Context7 authentication" "$manager" install; then :; fi
+          if run_context7_action "Codex Context7 authentication" "$manager" install --menu-expect-healthy; then :; fi
         else
           context7_menu_message "Authentication changes require a healthy managed registration. Use installation/repair first, or review blocked ownership manually."
         fi
@@ -850,7 +852,7 @@ MENU
         case "$state" in
           absent)
             run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
-            run_confirmed_context7_install "Codex Context7 installation" "$manager" install
+            run_confirmed_context7_install "Codex Context7 installation" "$manager" install --menu-expect-absent
             ;;
           repairable)
             run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
@@ -867,7 +869,7 @@ MENU
         ;;
       5)
         if [[ "$state" == healthy ]]; then
-          run_confirmed_context7_change REMOVE "removal" "$manager" remove
+          run_confirmed_context7_change REMOVE "removal" "$manager" remove --expect-healthy
         else
           context7_menu_message "Removal is available only for a healthy, managed entry. No other MCPs or credentials were touched."
         fi
