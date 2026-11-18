@@ -881,18 +881,37 @@ def apply_managed_config(
 
 def command_install(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Install/repair", yes=args.yes)
+    # Onboarding (including device login) may take minutes. The menu's
+    # preflight is NOT permission to overwrite a registration changed while
+    # the operator was answering the prompt.
     key_action, key_value = choose_key(paths, args)
-    if key_action == "replace":
-        ensure_state_dir(paths)
-    changed = apply_managed_config(
-        paths, require_existing=False, allow_legacy_recovery=args.yes,
-    )
-    if key_action == "replace" and key_value is not None:
-        store_key(paths, key_value)
-    elif key_action == "anonymous":
-        remove_owned_key(paths)
+    with locked_codex_config(paths):
+        state = inspect_config(paths)
+        if args.expect_absent and state.kind != "absent":
+            raise Context7Error(
+                "menu install blocked: Context7 registration changed; retry diagnosis and confirmation"
+            )
+        if args.expect_healthy and state.kind != "managed":
+            raise Context7Error(
+                "menu authentication blocked: Context7 registration changed; retry diagnosis"
+            )
+        auth, _ = secret_status(paths)
+        if auth == "unsafe":
+            raise Context7Error("Context7 API-key state changed to unsafe; no changes made")
+        candidate = managed_candidate(
+            state, require_existing=False, allow_legacy_recovery=args.yes,
+        )
+        # Protect both the config and the private key with the same lock. Do
+        # not create the key directory before verifying the expected state.
+        if key_action == "replace":
+            ensure_state_dir(paths)
+        changed = backup_and_replace_config(paths, state.text, candidate)
+        if key_action == "replace" and key_value is not None:
+            store_key(paths, key_value)
+        elif key_action == "anonymous":
+            remove_owned_key(paths)
+        status, _ = secret_status(paths)
     print("Context7 managed configuration: installed" if changed else "Context7 managed configuration: already current")
-    status, _ = secret_status(paths)
     print("Context7 authentication: API key stored privately" if status == "safe" else "Context7 authentication: anonymous")
     return 0
 
@@ -929,34 +948,46 @@ def command_update(paths: Paths, args: argparse.Namespace) -> int:
     return 0
 
 
-def remove_managed_block(paths: Paths) -> bool:
+def remove_managed_block(
+    paths: Paths, *, require_healthy: bool = False, remove_key: bool = False,
+) -> bool:
     with locked_codex_config(paths):
         state = inspect_config(paths)
+        if require_healthy and state.kind != "managed":
+            raise Context7Error(
+                "menu removal blocked: Context7 registration changed; no configuration or key changes"
+            )
         if state.kind == "unmanaged":
             raise Context7Error(
                 "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
             )
         if state.kind in {"markers-malformed", "invalid", "conflict"}:
             raise Context7Error(state.detail or f"cannot safely remove Context7 state: {state.kind}")
-        if state.span is None:
-            return False
-        start, end = state.span
-        candidate = state.text[:start] + state.text[end:]
-        before = parse_toml(state.text, label="Codex config before Context7 removal")
-        result = parse_toml(candidate, label="Codex config after Context7 removal")
-        if has_context7(result):
-            raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
-        if without_context7(before) != without_context7(result):
-            raise Context7Error(
-                "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
-            )
-        return backup_and_replace_config(paths, state.text, candidate)
+        changed = False
+        if state.span is not None:
+            start, end = state.span
+            candidate = state.text[:start] + state.text[end:]
+            before = parse_toml(state.text, label="Codex config before Context7 removal")
+            result = parse_toml(candidate, label="Codex config after Context7 removal")
+            if has_context7(result):
+                raise Context7Error("Context7 configuration survives removal; refusing to rewrite the Codex config")
+            if without_context7(before) != without_context7(result):
+                raise Context7Error(
+                    "removing the managed Context7 block would change unrelated Codex configuration; resolve the drift manually"
+                )
+            changed = backup_and_replace_config(paths, state.text, candidate)
+        if remove_key:
+            # Also lock the key deletion; a failed menu-state precondition
+            # must never delete an API key or touch the rollback backup.
+            remove_owned_key(paths)
+        return changed
 
 
 def command_remove(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Remove", yes=args.yes)
-    changed = remove_managed_block(paths)
-    remove_owned_key(paths)
+    changed = remove_managed_block(
+        paths, require_healthy=args.expect_healthy, remove_key=True,
+    )
     print("Context7 managed configuration: removed" if changed else "Context7 managed configuration: not present")
     print("Unowned Codex configuration was not modified.")
     return 0
@@ -1188,6 +1219,13 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("install", "repair"):
         action = subparsers.add_parser(name)
         action.add_argument("--yes", action="store_true")
+        menu_precondition = action.add_mutually_exclusive_group()
+        menu_precondition.add_argument(
+            "--expect-absent", action="store_true", help=argparse.SUPPRESS,
+        )
+        menu_precondition.add_argument(
+            "--expect-healthy", action="store_true", help=argparse.SUPPRESS,
+        )
         auth = action.add_mutually_exclusive_group()
         auth.add_argument("--anonymous", action="store_true")
         auth.add_argument("--api-key-stdin", action="store_true")
@@ -1206,6 +1244,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     remove_parser = subparsers.add_parser("remove")
     remove_parser.add_argument("--yes", action="store_true")
+    remove_parser.add_argument(
+        "--expect-healthy", action="store_true", help=argparse.SUPPRESS,
+    )
 
     key_file = subparsers.add_parser("key-file", help=argparse.SUPPRESS)
     key_file.add_argument("--active", action="store_true", help=argparse.SUPPRESS)
