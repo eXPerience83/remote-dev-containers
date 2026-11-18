@@ -62,13 +62,20 @@ class SyntheticProbeError(Exception):
 
 class FakeProbe:
     ProbeError = SyntheticProbeError
+    TOTAL_TEST_SECONDS = 90
 
     def __init__(self, *, failed=False):
         self.calls = []
+        self.deadlines = []
         self.failed = failed
 
-    def probe(self, api_key=None):
+    @staticmethod
+    def _hard_read_deadline(_remaining):
+        return contextlib.nullcontext()
+
+    def probe(self, api_key=None, *, deadline=None):
         self.calls.append(api_key)
+        self.deadlines.append(deadline)
         if self.failed:
             raise self.ProbeError("synthetic MCP failure")
         return (
@@ -148,6 +155,8 @@ class WiringTests(unittest.TestCase):
                                 self.assertEqual(
                                     codex.command_test(paths, argparse.Namespace(yes=True)), 0)
                         self.assertEqual(fake.calls, [SECRET])
+                        self.assertEqual(len(fake.deadlines), 1)
+                        self.assertIsInstance(fake.deadlines[0], float)
                         self.assertNotIn(SECRET, stdout.getvalue())
                         if not failure:
                             self.assertIn("Codex agent-native MCP tool execution: NOT VERIFIED",
@@ -176,6 +185,8 @@ class WiringTests(unittest.TestCase):
                             code = agy.test(root)
                         self.assertEqual(code, 3 if failure else 0)
                         self.assertEqual(fake.calls, [None])
+                        self.assertEqual(len(fake.deadlines), 1)
+                        self.assertIsInstance(fake.deadlines[0], float)
                         self.assertNotIn(SECRET, stdout.getvalue())
                         if not failure:
                             self.assertIn("Antigravity OAuth and agent-native MCP tool execution: NOT VERIFIED",
