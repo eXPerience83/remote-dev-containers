@@ -91,6 +91,13 @@ class FakeOpener:
 
 
 class WiringTests(unittest.TestCase):
+    def test_extensionless_installed_agy_source_loader(self):
+        with tempfile.TemporaryDirectory() as temp:
+            entrypoint = Path(temp) / "remote-dev-context7-antigravity"
+            entrypoint.write_text("IS_INSTALLED_ENTRYPOINT = True\n", encoding="utf-8")
+            loaded = load_module("synthetic_extensionless_agy", entrypoint)
+            self.assertIs(loaded.IS_INSTALLED_ENTRYPOINT, True)
+
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp) / "codex"
@@ -153,6 +160,15 @@ class WiringTests(unittest.TestCase):
                             self.assertIn("Antigravity OAuth and agent-native MCP tool execution: NOT VERIFIED",
                                           stdout.getvalue())
                             self.assertIn("Context7 request mode: anonymous", stdout.getvalue())
+                # Loader faults happen before probe is bound. They must
+                # not throw UnboundLocalError or expose the OAuth fixture.
+                with (patch.object(agy, "build_opener", return_value=FakeOpener()),
+                      patch.object(agy, "load_mcp_probe",
+                                   side_effect=SyntaxError("synthetic invalid helper")),
+                      contextlib.redirect_stdout(io.StringIO()) as stdout):
+                    self.assertEqual(agy.test(root), 3)
+                self.assertIn("probe unavailable", stdout.getvalue())
+                self.assertNotIn(SECRET, stdout.getvalue())
             self.assertEqual((config.read_bytes(), oauth.read_bytes()), before)
 
 
