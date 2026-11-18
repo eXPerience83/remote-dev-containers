@@ -540,6 +540,11 @@ export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
 run_menu __unset__ $'6\n1\n4\nNOT-REINSTALL\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 repair cancellation' 'plan'
 assert_hardening_count 0
+# The same shared y/N helper accepts mixed-case Yes in either role.
+run_menu __unset__ $'6\n1\n2\nYes\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Codex mixed-case yes test' 'test --yes'
+assert_hardening_count 1
+
 # A failing offline status/plan must report both real exit codes without
 # triggering test, mutation, credential changes, or hardening.
 export REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL=1
