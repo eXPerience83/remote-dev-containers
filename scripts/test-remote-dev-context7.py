@@ -1083,6 +1083,116 @@ def assert_menu_safe_reinstall_rechecks_ownership(root: Path) -> None:
         raise AssertionError("menu-safe repair changed unrelated MCPs")
 
 
+def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
+    """Menu state is advisory: enforce absent/healthy at the write lock."""
+    for expected, initial_state in (
+        ("absent", "absent"),
+        ("healthy", "managed"),
+    ):
+        home = root / f"menu-consent-install-{expected}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = ('model = "race"\n' if initial_state == "absent"
+                    else 'model = "race"\n\n' + module.MANAGED_BLOCK)
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        state_dir.mkdir(mode=0o700)
+        key = state_dir / "api-key"
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        # A concurrent writer can add a managed-but-drifted registration
+        # while the onboarding wizard is accepting a menu-only y/N.
+        drift = 'model = "race"\n\n' + module.MANAGED_BLOCK.replace(
+            module.CONTEXT7_ENDPOINT, "https://stale.example.invalid/mcp"
+        )
+        previous_choose_key = module.choose_key
+        def change_after_prompt(paths, args):
+            config.write_text(drift, encoding="utf-8")
+            return previous_choose_key(paths, args)
+        args = module.build_parser().parse_args([
+            "install", "--yes", "--anonymous", "--expect-" + expected,
+        ])
+        with codex_environment(home):
+            module.choose_key = change_after_prompt
+            try:
+                try:
+                    module.command_install(module.Paths(), args)
+                except module.Context7Error as exc:
+                    if "menu" not in str(exc) or "changed" not in str(exc):
+                        raise AssertionError(f"unexpected menu install rejection: {exc}") from exc
+                else:
+                    raise AssertionError(f"{expected}: stale menu consent overwrote registration")
+            finally:
+                module.choose_key = previous_choose_key
+        if config.read_text(encoding="utf-8") != drift:
+            raise AssertionError(f"{expected}: external edit changed by stale menu consent")
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(f"{expected}: rejected install deleted or replaced the private key")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{expected}: rejected install wrote a rollback backup")
+
+    for changed_to in ("managed-drift", "absent"):
+        home = root / f"menu-consent-remove-{changed_to}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = 'model = "race"\n\n' + module.MANAGED_BLOCK
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        state_dir.mkdir(mode=0o700)
+        key = state_dir / "api-key"
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        external = (
+            original.replace(module.CONTEXT7_ENDPOINT, "https://stale.example.invalid/mcp")
+            if changed_to == "managed-drift" else 'model = "race"\n'
+        )
+        # Inject the competing transaction immediately before entering
+        # Codex's configuration lock, after the operator confirmed REMOVE.
+        original_lock = module.locked_codex_config
+        @contextlib.contextmanager
+        def change_before_write_lock(paths):
+            config.write_text(external, encoding="utf-8")
+            with original_lock(paths):
+                yield
+        with codex_environment(home):
+            module.locked_codex_config = change_before_write_lock
+            try:
+                result_args = module.build_parser().parse_args(
+                    ["remove", "--yes", "--expect-healthy"]
+                )
+                try:
+                    module.command_remove(module.Paths(), result_args)
+                except module.Context7Error as exc:
+                    if "menu removal blocked" not in str(exc):
+                        raise AssertionError(f"unexpected menu remove rejection: {exc}") from exc
+                else:
+                    raise AssertionError(f"{changed_to}: stale REMOVE consent succeeded")
+            finally:
+                module.locked_codex_config = original_lock
+        if config.read_text(encoding="utf-8") != external:
+            raise AssertionError(f"{changed_to}: rejected removal rewrote config")
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(f"{changed_to}: rejected removal deleted private key")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{changed_to}: rejected removal wrote backup")
+
+    # The menu guards also permit their intended states on the real CLI.
+    good_install = root / "menu-consent-good-install"
+    good_install.mkdir(mode=0o700)
+    require_success(
+        run_manager(good_install, "install", "--yes", "--anonymous", "--expect-absent"),
+        "menu install with stable absent registration",
+    )
+    require_success(
+        run_manager(good_install, "install", "--yes", "--expect-healthy"),
+        "menu authentication with stable managed registration",
+    )
+    require_success(
+        run_manager(good_install, "remove", "--yes", "--expect-healthy"),
+        "menu remove with stable managed registration",
+    )
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1103,6 +1213,7 @@ args = ["--safe"]
 
         assert_menu_state_is_passive_and_owner_aware(root)
         assert_menu_safe_reinstall_rechecks_ownership(root)
+        assert_menu_consent_preconditions_survive_races(load_manager_module(), root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
