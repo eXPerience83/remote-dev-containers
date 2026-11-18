@@ -820,6 +820,20 @@ def assert_manager_preflight_is_read_only(module) -> None:
                     "unsafe/unexpected Context7 preflight state was accepted: "
                     f"{state!r}"
                 )
+        # Menu-only expectations read the state without attempting login
+        # or mutating registration/credentials; stale states fail before
+        # downloading/launching the transient vendor CLI.
+        for expected in ("absent", "healthy"):
+            module.subprocess.run = response(expected)
+            module.preflight_manager_state(expected_state=expected)
+            module.subprocess.run = response("blocked")
+            try:
+                module.preflight_manager_state(expected_state=expected)
+            except module.DeviceLoginError as exc:
+                if "state changed" not in str(exc):
+                    raise AssertionError("unexpected menu preflight error") from exc
+            else:
+                raise AssertionError(f"{expected}: stale device-login preflight accepted")
     finally:
         module.subprocess.run = original_run
         module.PYTHON = original_python
@@ -827,10 +841,40 @@ def assert_manager_preflight_is_read_only(module) -> None:
     if not captured:
         raise AssertionError("Context7 preflight did not invoke the manager")
     for command in captured:
-        if command[-2:] != ["status", "--menu"]:
-            raise AssertionError(
-                f"Context7 preflight was not read-only: {command!r}"
-            )
+        if command[-2:] != ["status", "--menu"] and command[-1:] != ["menu-state"]:
+            raise AssertionError(f"Context7 preflight was not read-only: {command!r}")
+
+
+def assert_device_login_preserves_menu_expected_state(module) -> None:
+    original_preflight = module.preflight_manager_state
+    original_acquire = module.acquire_api_key
+    original_manager = module.run_manager
+    observed: list[tuple[str, object]] = []
+    try:
+        module.preflight_manager_state = lambda *, expected_state=None: observed.append(
+            ("preflight", expected_state)
+        )
+        module.acquire_api_key = lambda *, cli_channel: (
+            SYNTHETIC_KEY, "0.12.2", True
+        )
+        module.run_manager = lambda args, *, input_text=None: observed.append(
+            ("adopt", (list(args), input_text))
+        )
+        for expected in ("absent", "healthy"):
+            observed.clear()
+            module.command_login(yes=True, expected_state=expected)
+            if observed != [
+                ("preflight", expected),
+                ("adopt", (
+                    ["repair", "--yes", "--api-key-stdin", "--expect-" + expected],
+                    SYNTHETIC_KEY + "\n",
+                )),
+            ]:
+                raise AssertionError(f"{expected}: menu precondition dropped: {observed!r}")
+    finally:
+        module.preflight_manager_state = original_preflight
+        module.acquire_api_key = original_acquire
+        module.run_manager = original_manager
 
 
 def assert_success_reaps_process_group(module) -> None:
@@ -1332,6 +1376,7 @@ def main() -> int:
     assert_metadata_timeout_is_bounded(module)
     assert_reviewed_latest_selection(module)
     assert_manager_preflight_is_read_only(module)
+    assert_device_login_preserves_menu_expected_state(module)
     assert_acquire_uses_isolated_environment(module)
     assert_integrity_mismatch_blocks_vendor_execution(module)
     assert_preexec_package_revalidation(module)
