@@ -207,14 +207,22 @@ case "${1:-}" in
     fi
     printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
     ;;
-  install|update)
-    # Provider-specific Codex onboarding remains delegated to the manager.
+  install)
+    # This fixture stands in for the TTY-aware onboarding entrypoint;
+    # an initial menu install must carry its locked expected state.
+    [[ "$#" == 2 && ( "$2" == --menu-expect-absent || "$2" == --menu-expect-healthy ) ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  update)
     [[ "$#" == 1 ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
-  test|remove)
-    # Menu-level consent must be completed before --yes reaches this fixture.
+  test)
     [[ "$#" == 2 && "$2" == --yes ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  remove)
+    [[ "$#" == 3 && "$2" == --expect-healthy && "$3" == --yes ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   reinstall)
@@ -495,14 +503,14 @@ echo 'Codex blocked Projects refuses Select/Create/Delete before dispatch: OK'
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
 run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
-  'plan' 'test --yes' 'plan' 'install'
+  'plan' 'test --yes' 'plan' 'install --menu-expect-absent'
 assert_hardening_count 2
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
 run_menu __unset__ $'6\n1\n3\n\n4\n\n5\nREMOVE\n\n0\n0\n0\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove --yes'
+assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install --menu-expect-healthy' 'remove --expect-healthy --yes'
 assert_hardening_count 2
 grep -Fq 'no repair or confirmation is necessary' "$output"
 
