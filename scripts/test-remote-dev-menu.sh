@@ -574,6 +574,17 @@ assert_file_lines "$shell_environment" 'container shell environment' \
 assert_hardening_count 3
 echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
 
+# Approval invalid-input UX must match AGY: redraw the same submenu, never
+# treat an invalid selection as Back or arm a hidden agent action.
+run_menu __unset__ $'4\ninvalid\n9\n3\n1\n\n0\n' "$output"
+assert_file_lines "$invocations" 'Codex approval invalid choices stay in submenu' \
+  "[--approval-mode][guarded][--cd][$project_path]"
+assert_hardening_count 1
+if (( $(grep -Fxc 'Codex approval settings' "$output") != 3 )); then
+  echo 'ERROR: Codex approval invalid choices did not redraw the submenu' >&2
+  exit 1
+fi
+
 run_menu __unset__ $'4\n3\n2\n2\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
   "[--approval-mode][guarded][--cd][$project_path][resume]" \
