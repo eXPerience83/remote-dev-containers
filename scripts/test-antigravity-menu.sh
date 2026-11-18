@@ -609,6 +609,19 @@ printf '6\n1\n2\nYes\n\n0\n0\n0\n' | env \
 [[ "$(cat "$context7_calls")" == 'test --yes' ]]
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 
+# EOF at shared Context7 y/N is a normal cancelled exit, not status 1.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n2\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
+grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+
 # The same offline diagnostic error handling must apply to AGY without
 # invoking a test or modifying any role-private state.
 rm -f "$hardening_calls" "$context7_calls"
