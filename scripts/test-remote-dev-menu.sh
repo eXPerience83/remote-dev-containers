@@ -553,6 +553,13 @@ run_menu __unset__ $'6\n1\n2\nYes\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Codex mixed-case yes test' 'test --yes'
 assert_hardening_count 1
 
+# EOF at the y/N question cancels normally, and the later empty pause
+# must not turn that cancellation into a set -e failure.
+run_menu __unset__ $'6\n1\n2\n' "$output"
+assert_file_lines "$context7_invocations" 'Codex EOF during Context7 y/N'
+assert_hardening_count 0
+grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+
 # A failing offline status/plan must report both real exit codes without
 # triggering test, mutation, credential changes, or hardening.
 export REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL=1
