@@ -6,6 +6,7 @@ All network and vendor CLI calls are mocked. OAuth state is never opened.
 from __future__ import annotations
 
 import argparse
+import builtins
 import contextlib
 import importlib.util
 from importlib.machinery import SourceFileLoader
@@ -211,6 +212,36 @@ class WiringTests(unittest.TestCase):
                 self.assertEqual(agy.test(agy_home), 3)
             self.assertEqual(called, [])
 
+    def test_codex_ping_propagates_exact_probe_timer_error(self):
+        # The deadline exception must escape hosted_ping's network handler,
+        # then be translated by command_test to a precise, fixed message.
+        actual = codex.load_mcp_probe()
+
+        class ExpiredPingOpener:
+            def open(self, request, *, timeout):
+                del request, timeout
+                raise actual.ProbeError("MCP response exceeded its time limit")
+
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp) / "codex"
+            home.mkdir(mode=0o700)
+            config = home / "config.toml"
+            config.write_text(codex.MANAGED_BLOCK, encoding="utf-8")
+            config.chmod(0o600)
+            with (
+                patch.dict(os.environ, {"CODEX_HOME": str(home),
+                                        "REMOTE_DEV_ROLE": "codex"}),
+                patch.object(codex, "build_opener", return_value=ExpiredPingOpener()),
+                patch.object(codex, "bundled_codex_accepts_config"),
+                patch.object(codex, "load_mcp_probe", return_value=actual),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(
+                    codex.Context7Error,
+                    "hosted HTTP ping FAILED: MCP response exceeded its time limit",
+                ):
+                    codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
+
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp) / "codex"
@@ -260,13 +291,48 @@ class WiringTests(unittest.TestCase):
             oauth.write_text(SECRET, encoding="utf-8")
             oauth.chmod(0o600)
             before = (config.read_bytes(), oauth.read_bytes())
+            # A byte-for-byte check alone cannot detect unauthorized reads.
+            # Intercept all standard Python open paths during AGY testing.
+            original_builtin_open = builtins.open
+            original_io_open = io.open
+            original_os_open = os.open
+
+            def guard_oauth(file, *, operation):
+                if isinstance(file, (str, bytes, os.PathLike)):
+                    candidate = Path(os.fsdecode(file))
+                    if candidate == oauth or candidate.name == oauth.name:
+                        raise AssertionError(
+                            f"Antigravity inspected its private OAuth store via {operation}"
+                        )
+
+            def guarded_builtin(file, *args, **kwargs):
+                guard_oauth(file, operation="builtins.open")
+                return original_builtin_open(file, *args, **kwargs)
+
+            def guarded_io(file, *args, **kwargs):
+                guard_oauth(file, operation="io.open/Path.open")
+                return original_io_open(file, *args, **kwargs)
+
+            def guarded_os(file, *args, **kwargs):
+                guard_oauth(file, operation="os.open")
+                return original_os_open(file, *args, **kwargs)
+
             with patch.dict(os.environ, {"REMOTE_DEV_ROLE": "antigravity"}):
                 for failure in (False, True):
                     with self.subTest(failure=failure):
                         fake = FakeProbe(failed=failure)
                         with (patch.object(agy, "build_opener", return_value=FakeOpener()),
                               patch.object(agy, "load_mcp_probe", return_value=fake),
+                              patch.object(builtins, "open", guarded_builtin),
+                              patch.object(io, "open", guarded_io),
+                              patch.object(os, "open", guarded_os),
                               contextlib.redirect_stdout(io.StringIO()) as stdout):
+                            # Prove the guard itself detects a read before
+                            # accepting AGY's zero-access contract.
+                            with self.assertRaisesRegex(
+                                AssertionError, "inspected its private OAuth store"
+                            ):
+                                oauth.read_bytes()
                             code = agy.test(root)
                         self.assertEqual(code, 3 if failure else 0)
                         self.assertEqual(fake.calls, [None])
