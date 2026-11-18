@@ -421,6 +421,12 @@ def assert_shared_helper_invariants() -> None:
         if "run_context7_diagnostic_command" not in body:
             raise AssertionError(f"{name}: preflight plan bypasses failure reporting")
 
+    # Approval invalid choices must redraw the same submenu on both roles.
+    for name in ("choose_next_codex_mode", "show_antigravity_approval_menu"):
+        approval = function(name)
+        if "while true; do" not in approval or "*) sleep 1 ;;" not in approval:
+            raise AssertionError(f"{name}: invalid Approval choice escapes to parent")
+
     # Bash functions have dynamically scoped variables. Submenus must not
     # alter their caller's menu selection by assigning to a shared choice.
     for name in (
