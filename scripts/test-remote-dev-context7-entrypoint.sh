@@ -90,6 +90,18 @@ choose_and_expect 2 repair $'manager\nrepair'
 choose_and_expect 3 install $'manager\ninstall\n--yes'
 choose_and_expect 4 repair $'manager\nrepair\n--yes\n--anonymous'
 
+# Menu-only eligibility survives every nested onboarding option.
+choose_and_expect 1 'install --menu-expect-absent' $'device-login\n--yes\n--expect-absent'
+choose_and_expect 2 'install --menu-expect-absent' $'manager\ninstall\n--expect-absent'
+choose_and_expect 3 'install --menu-expect-absent' $'manager\ninstall\n--yes\n--expect-absent'
+choose_and_expect 4 'install --menu-expect-absent' $'manager\ninstall\n--yes\n--anonymous\n--expect-absent'
+choose_and_expect 1 'install --menu-expect-healthy' $'device-login\n--yes\n--expect-healthy'
+choose_and_expect 3 'install --menu-expect-healthy' $'manager\ninstall\n--yes\n--expect-healthy'
+
+# Non-interactive menu invocation does not lose the expected state.
+run_and_expect $'manager\ninstall\n--expect-absent' "$entrypoint" install --menu-expect-absent
+run_and_expect $'manager\ninstall\n--expect-healthy' "$entrypoint" install --menu-expect-healthy
+
 : >"$capture"
 if run_interactive_choice 0 install "$temp_root/auth-screen"; then
   echo 'Context7 entrypoint 0 Cancel unexpectedly succeeded' >&2
