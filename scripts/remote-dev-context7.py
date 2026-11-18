@@ -846,24 +846,26 @@ def read_key_from_stdin() -> str:
     return validate_api_key(value)
 
 
-def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None]:
+def choose_key(paths: Paths, args: argparse.Namespace) -> tuple[str, str | None, str]:
     current_status, current_value = secret_status(paths)
     if current_status == "unsafe":
         raise Context7Error("existing Context7 API-key state is unsafe; remove or repair its permissions first")
     if args.anonymous:
-        return "anonymous", None
+        return "anonymous", None, current_status
     if args.api_key_stdin:
         if not args.yes:
             raise Context7Error("--api-key-stdin requires --yes so stdin is reserved for the API key")
-        return "replace", read_key_from_stdin()
+        return "replace", read_key_from_stdin(), current_status
     if sys.stdin.isatty() and not args.yes:
         prompt = "Context7 API key (optional; blank keeps the current key or uses anonymous access): "
         entered = getpass.getpass(prompt, echo_char="*")
         if entered:
-            return "replace", validate_api_key(entered)
+            return "replace", validate_api_key(entered), current_status
     if current_status == "safe":
-        return "keep", current_value
-    return "anonymous", None
+        return "keep", current_value, current_status
+    # Remember that *no key existed* when the implicit anonymous choice was
+    # made. A later key must never be removed using that earlier consent.
+    return "anonymous", None, current_status
 
 
 def apply_managed_config(
@@ -884,7 +886,7 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
     # Onboarding (including device login) may take minutes. The menu's
     # preflight is NOT permission to overwrite a registration changed while
     # the operator was answering the prompt.
-    key_action, key_value = choose_key(paths, args)
+    key_action, key_value, key_status_at_selection = choose_key(paths, args)
     with locked_codex_config(paths):
         state = inspect_config(paths)
         if args.expect_absent and state.kind != "absent":
@@ -898,6 +900,15 @@ def command_install(paths: Paths, args: argparse.Namespace) -> int:
         auth, _ = secret_status(paths)
         if auth == "unsafe":
             raise Context7Error("Context7 API-key state changed to unsafe; no changes made")
+        # A default blank/keep choice can become anonymous when the key was
+        # missing at selection time. Do not delete a newly created key under
+        # that implicit choice; only --anonymous explicitly permits removal.
+        if (key_action == "anonymous" and not args.anonymous
+                and key_status_at_selection == "missing" and auth != "missing"):
+            raise Context7Error(
+                "Context7 API-key state changed after anonymous selection; "
+                "retry diagnosis and confirmation; no changes made"
+            )
         candidate = managed_candidate(
             state, require_existing=False, allow_legacy_recovery=args.yes,
         )
