@@ -61,9 +61,10 @@ class FakeResponse:
 
 
 class FakeOpener:
-    def __init__(self, fault=None):
+    def __init__(self, fault=None, *, negotiated_protocol="2025-03-26"):
         self.calls = []
         self.fault = fault
+        self.negotiated_protocol = negotiated_protocol
         self.session = "opaque.v1" if fault == ("initialize", "opaque-session") else "syntheticMcpSession"
 
     def open(self, request, *, timeout):
@@ -75,7 +76,7 @@ class FakeOpener:
         self.calls.append((body, headers))
         method = body["method"]
         if method == "initialize":
-            result = {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}}
+            result = {"protocolVersion": self.negotiated_protocol, "capabilities": {}, "serverInfo": {}}
         elif method == "notifications/initialized":
             return FakeResponse(b"", status=202, session=self.session)
         elif method == "tools/list":
@@ -234,6 +235,13 @@ class ProbeTests(TestCase):
             headers.get("mcp-session-id") == "opaque.v1"
             for _, headers in opener.calls[1:]
         ))
+        for negotiated in sorted(probe.SUPPORTED_PROTOCOL_VERSIONS):
+            supported = FakeOpener(negotiated_protocol=negotiated)
+            self.assertEqual(len(probe.probe(opener=supported)), 3)
+            self.assertTrue(all(
+                headers.get("mcp-protocol-version") == negotiated
+                for _, headers in supported.calls[1:]
+            ))
         opener = FakeOpener(fault=("tools/list", "paged"))
         self.assertEqual(len(probe.probe(opener=opener)), 3)
         tools_calls = [
