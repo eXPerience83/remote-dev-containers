@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import json
 import re
+import signal
 import ssl
+import threading
 import time
+from contextlib import contextmanager
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
@@ -19,6 +22,7 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Requ
 ENDPOINT = "https://mcp.context7.com/mcp"
 MAX_RESPONSE_BYTES = 128 * 1024
 TIMEOUT_SECONDS = 12
+RESPONSE_DEADLINE_SECONDS = 25
 PROTOCOL_VERSION = "2025-03-26"
 REQUIRED_TOOLS = frozenset({"resolve-library-id", "query-docs"})
 
@@ -50,7 +54,9 @@ def _extract_message(raw: bytes, content_type: str, request_id: int) -> dict:
     elif mime == "text/event-stream":
         messages = []
         current = []
-        for line in text.splitlines():
+        # SSE separators are CR, LF and CRLF only; Python str.splitlines()
+        # would also split a literal U+2028 inside a valid JSON data string.
+        for line in re.split(r"\r\n|\r|\n", text):
             if line.startswith("data:"):
                 current.append(line[5:].lstrip(" "))
             elif not line.strip() and current:
@@ -74,6 +80,48 @@ def _extract_message(raw: bytes, content_type: str, request_id: int) -> dict:
     if reply.get("jsonrpc") != "2.0" or "error" in reply or not isinstance(reply.get("result"), dict):
         raise ProbeError("MCP request was rejected or returned an invalid result")
     return reply["result"]
+
+
+@contextmanager
+def _hard_read_deadline(remaining: float):
+    """Bound a single buffered TLS read even if the server trickles bytes.
+
+    Socket timeouts are idle timeouts; a stream sending one byte before each
+    timeout can keep readline/read1 blocked past our total deadline. Remote
+    Dev invokes this synchronous probe on Linux from its main CLI thread.
+    """
+    if remaining <= 0:
+        raise ProbeError("MCP response exceeded its time limit")
+    if not hasattr(signal, "setitimer") or threading.current_thread() is not threading.main_thread():
+        raise ProbeError("MCP deadline enforcement is unavailable in this execution context")
+    previous = signal.getitimer(signal.ITIMER_REAL)
+    if previous[0] > 0:
+        raise ProbeError("MCP probe cannot replace an existing process alarm")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def alarm_handler(signum, frame):
+        del signum, frame
+        raise ProbeError("MCP response exceeded its time limit")
+
+    try:
+        signal.signal(signal.SIGALRM, alarm_handler)
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _completed_sse_prefix(raw: bytes) -> bytes | None:
+    """Return complete SSE frames only, retaining incomplete trailing bytes."""
+    last_boundary = 0
+    offset = 0
+    # bytes.splitlines deliberately recognizes only ASCII CR/LF, not U+2028.
+    for line in raw.splitlines(keepends=True):
+        offset += len(line)
+        if line in (b"\n", b"\r", b"\r\n"):
+            last_boundary = offset
+    return raw[:last_boundary] if last_boundary else None
 
 
 def _exchange(opener, *, method: str, request_id: int | None, params: dict | None,
@@ -118,31 +166,32 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
             if status != 200:
                 raise ProbeError("MCP request failed with HTTP status " + str(status))
             content_type = response.headers.get("Content-Type", "")
-            deadline = time.monotonic() + 25
+            deadline = time.monotonic() + RESPONSE_DEADLINE_SECONDS
             if content_type.split(";", 1)[0].lower().strip() == "text/event-stream":
-                # A compliant SSE response may remain open after the matching
-                # JSON-RPC event. Read bounded frames, not until connection EOF.
-                raw_parts = []
+                # Read bounded chunks instead of readline(), which a server
+                # trickling bytes without a newline could keep open indefinitely.
+                # Recognize only complete SSE frames before parsing JSON.
+                chunks: list[bytes] = []
                 received = 0
                 while received <= MAX_RESPONSE_BYTES:
-                    if time.monotonic() >= deadline:
-                        raise ProbeError("MCP event stream exceeded its time limit")
-                    line = response.readline(MAX_RESPONSE_BYTES - received + 1)
-                    if not line:
+                    remaining = deadline - time.monotonic()
+                    with _hard_read_deadline(remaining):
+                        chunk = response.read1(min(8192, MAX_RESPONSE_BYTES - received + 1))
+                    if not chunk:
                         break
-                    received += len(line)
-                    raw_parts.append(line)
-                    if not line.strip() and any(part.startswith(b"data:") for part in raw_parts):
+                    received += len(chunk)
+                    if received > MAX_RESPONSE_BYTES:
+                        raise ProbeError("MCP response exceeded its size limit")
+                    chunks.append(chunk)
+                    complete = _completed_sse_prefix(b"".join(chunks))
+                    if complete is not None:
                         try:
-                            parsed = _extract_message(
-                                b"".join(raw_parts), content_type, request_id)
+                            parsed = _extract_message(complete, content_type, request_id)
                         except ProbeError as exc:
                             if "exactly one matching request ID" not in str(exc):
                                 raise
                         else:
                             return parsed, next_session
-                if received > MAX_RESPONSE_BYTES:
-                    raise ProbeError("MCP response exceeded its size limit")
                 raise ProbeError("MCP event stream did not return the matching request ID")
             # read1 does not wait for the entire requested byte count. This
             # bounds slow-trickling or non-terminating JSON responses too.
@@ -150,7 +199,8 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
             while len(data) <= MAX_RESPONSE_BYTES:
                 if time.monotonic() >= deadline:
                     raise ProbeError("MCP response exceeded its time limit")
-                chunk = response.read1(min(8192, MAX_RESPONSE_BYTES + 1 - len(data)))
+                with _hard_read_deadline(deadline - time.monotonic()):
+                    chunk = response.read1(min(8192, MAX_RESPONSE_BYTES + 1 - len(data)))
                 if not chunk:
                     break
                 data.extend(chunk)
