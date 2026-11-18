@@ -268,14 +268,63 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
     return _extract_message(raw, content_type, request_id), next_session
 
 
-def _has_public_content(result: dict) -> bool:
-    if result.get("isError") is True:
-        return False
+def _tool_text(result: dict) -> str:
+    """Only treat text content as evidence when the MCP tool did not fail."""
+    if result.get("isError") not in (None, False):
+        return ""
     content = result.get("content")
-    return isinstance(content, list) and any(
-        isinstance(item, dict) and item.get("type") == "text"
-        and isinstance(item.get("text"), str) and bool(item["text"].strip())
-        for item in content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        item["text"] for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+        and isinstance(item.get("text"), str)
+    ).strip()
+
+
+def _has_public_content(result: dict, *, method: str) -> bool:
+    text = _tool_text(result)
+    if not text:
+        return False
+    # Context7 may say "no documentation found" or "no matching libraries"
+    # without setting isError. Neither is a successful functional probe.
+    if re.search(
+        r"(?i)\b(?:no (?:matching )?(?:libraries|docs|documentation|results|"
+        r"code snippets?|context)|rate.limit(?:ed)?|quota exceeded|"
+        r"too many requests|unauthorized|authentication required|"
+        r"upgrade your plan|request failed|service unavailable)\b", text,
+    ):
+        return False
+    if method == "resolve-library-id":
+        return (
+            "Available Libraries:" in text
+            and re.search(
+                r"(?<![\w/.-])" + re.escape(EXPECTED_LIBRARY_ID) +
+                r"(?![\w/.-])", text,
+            ) is not None
+        )
+    if method == "query-docs":
+        low = text.casefold()
+        return (
+            "requests" in low and "timeout" in low
+            and re.search(
+                r"(?i)(?:```|\brequests\.(?:get|post|request|session)\s*\(|"
+                r"https?://(?:www\.)?(?:requests\.readthedocs\.io|"
+                r"github\.com/psf/requests))", text,
+            ) is not None
+        )
+    return False
+
+
+def _valid_tool_descriptor(tool: object) -> bool:
+    if not isinstance(tool, dict):
+        return False
+    schema = tool.get("inputSchema")
+    return (
+        isinstance(tool.get("name"), str)
+        and isinstance(schema, dict)
+        and schema.get("type") == "object"
+        and isinstance(schema.get("properties", {}), dict)
     )
 
 
@@ -295,6 +344,14 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
     protocol = result.get("protocolVersion")
     if not isinstance(protocol, str) or protocol not in SUPPORTED_PROTOCOL_VERSIONS:
         raise ProbeError("MCP initialization negotiated an unsupported protocol version")
+    capabilities = result.get("capabilities")
+    server = result.get("serverInfo")
+    if (not isinstance(capabilities, dict)
+            or not isinstance(capabilities.get("tools"), dict)
+            or not isinstance(server, dict)
+            or not all(isinstance(server.get(k), str) and server[k].strip()
+                       for k in ("name", "version"))):
+        raise ProbeError("MCP initialization lacked tool capability or server information")
     _, session = _exchange(client, method="notifications/initialized",
                            request_id=None, params=None, api_key=api_key,
                            protocol=protocol, session=session)
@@ -313,8 +370,7 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
         if not isinstance(tools, list):
             raise ProbeError("MCP tools/list returned invalid tools")
         found_tools.update(
-            item["name"] for item in tools if isinstance(item, dict)
-            and isinstance(item.get("name"), str))
+            item["name"] for item in tools if _valid_tool_descriptor(item))
         if REQUIRED_TOOLS.issubset(found_tools):
             break
         cursor = listed.get("nextCursor")
@@ -322,6 +378,7 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
             raise ProbeError("MCP tools/list did not expose both required Context7 tools")
         if (not isinstance(cursor, str) or not cursor or len(cursor) > 256
                 or any(ord(ch) < 32 or ord(ch) == 127 for ch in cursor)
+                or (api_key is not None and api_key in cursor)
                 or cursor in visited_cursors):
             raise ProbeError("MCP tools/list returned an unsafe or repeated cursor")
         visited_cursors.add(cursor)
@@ -338,8 +395,10 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
             client, method="tools/call", request_id=request_id,
             params={"name": name, "arguments": arguments}, api_key=api_key,
             protocol=protocol, session=session)
-        if not _has_public_content(response):
-            raise ProbeError("Context7 " + name + " tool returned no usable documentation")
+        if not _has_public_content(response, method=name):
+            raise ProbeError(
+                "Context7 " + name + " returned no verified public documentation"
+            )
     return (
         "Context7 MCP protocol initialize: PASS",
         "Context7 MCP tools/list: PASS (resolve-library-id, query-docs)",
