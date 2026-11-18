@@ -1169,7 +1169,10 @@ def command_test(paths: Paths, args: argparse.Namespace) -> int:
     print("Codex local MCP configuration: PASS")
     hosted_ping()
     print("Context7 hosted HTTP ping: PASS")
-    probe = load_mcp_probe()
+    try:
+        probe = load_mcp_probe()
+    except (OSError, SyntaxError, ImportError, ValueError, TypeError):
+        raise Context7Error("Context7 MCP probe module could not be loaded") from None
     try:
         for line in probe.probe(api_key=key):
             print(line)
