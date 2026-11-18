@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 import types
 import unittest
 from unittest.mock import patch
@@ -158,6 +159,55 @@ class WiringTests(unittest.TestCase):
                     other = {k: v for k, v in headers.items()
                              if k != "context7_api_key"}
                     self.assertNotIn(SECRET, repr(other))
+
+    def test_slow_ping_is_cut_off_before_real_mcp_calls(self):
+        """Both providers' /ping must honor the same wall-clock budget."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            codex_home = root / "codex"
+            codex_home.mkdir(mode=0o700)
+            (codex_home / "config.toml").write_text(
+                codex.MANAGED_BLOCK, encoding="utf-8")
+            codex_probe = codex.load_mcp_probe()
+            called = []
+
+            def slow_ping():
+                time.sleep(0.2)
+                called.append("ping-completed")
+
+            with (patch.dict(os.environ, {"CODEX_HOME": str(codex_home),
+                                        "REMOTE_DEV_ROLE": "codex"}),
+                  patch.object(codex, "bundled_codex_accepts_config"),
+                  patch.object(codex, "load_mcp_probe", return_value=codex_probe),
+                  patch.object(codex, "hosted_ping", side_effect=slow_ping),
+                  patch.object(codex_probe, "TOTAL_TEST_SECONDS", 0.04),
+                  contextlib.redirect_stdout(io.StringIO())):
+                with self.assertRaises(codex.Context7Error):
+                    codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
+            self.assertEqual(called, [])
+
+            agy_home = root / "antigravity"
+            agy_home.mkdir(mode=0o700)
+            (agy_home / "mcp_config.json").write_text(
+                json.dumps({"mcpServers": {"context7": agy.ENTRY}}),
+                encoding="utf-8",
+            )
+            agy_probe = agy.load_mcp_probe()
+
+            class SlowPingOpener:
+                def open(self, request, timeout=10):
+                    del request, timeout
+                    time.sleep(0.2)
+                    called.append("agy-ping-completed")
+                    return FakeHTTPResponse()
+
+            with (patch.dict(os.environ, {"REMOTE_DEV_ROLE": "antigravity"}),
+                  patch.object(agy, "load_mcp_probe", return_value=agy_probe),
+                  patch.object(agy, "build_opener", return_value=SlowPingOpener()),
+                  patch.object(agy_probe, "TOTAL_TEST_SECONDS", 0.04),
+                  contextlib.redirect_stdout(io.StringIO())):
+                self.assertEqual(agy.test(agy_home), 3)
+            self.assertEqual(called, [])
 
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
