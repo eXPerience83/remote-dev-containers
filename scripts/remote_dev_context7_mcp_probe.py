@@ -25,8 +25,12 @@ MAX_RESPONSE_BYTES = 128 * 1024
 TIMEOUT_SECONDS = 12
 RESPONSE_DEADLINE_SECONDS = 25
 PROTOCOL_VERSION = "2025-03-26"
-# Only this revision has a deliberately tested wire contract in this probe.
-SUPPORTED_PROTOCOL_VERSIONS = frozenset({PROTOCOL_VERSION})
+# These 2025 revisions retain the Streamable HTTP initialize/list/call
+# semantics exercised by this probe. Later revisions require a separate
+# compatibility review before advertising support.
+SUPPORTED_PROTOCOL_VERSIONS = frozenset({
+    "2025-03-26", "2025-06-18", "2025-11-25",
+})
 MAX_TOOL_PAGES = 6
 REQUIRED_TOOLS = frozenset({"resolve-library-id", "query-docs"})
 
