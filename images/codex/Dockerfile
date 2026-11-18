@@ -234,7 +234,7 @@ RUN --network=none \
     && bash /tmp/test-run-codex-context7 \
     && python /tmp/test-remote-dev-context7-antigravity.py \
     && python /tmp/test_remote_dev_context7_mcp_probe.py \
-    && python /tmp/test_remote_dev_context7_mcp_wiring.py \
+    && REMOTE_DEV_MCP_WIRING_IMAGE_SMOKE=1 python /tmp/test_remote_dev_context7_mcp_wiring.py \
     && python /tmp/test-antigravity-approval-policy.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-policy.sh \
     && python /tmp/test-antigravity-oauth.py \
