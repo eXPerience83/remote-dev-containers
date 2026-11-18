@@ -305,6 +305,22 @@ if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   exit 1
 fi
 
+# Invalid choices in Approval must redraw the same submenu for both roles.
+rm -f "$invocations" "$hardening_calls"
+printf '4\ninvalid\n9\n3\n1\n\n0\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$invocations")" == '[project=project][--approval-mode][guarded]' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+if (( $(grep -Fxc 'Antigravity approval settings' "$output") != 3 )); then
+  echo 'ERROR: AGY approval invalid choices did not redraw the submenu' >&2
+  exit 1
+fi
+
 echo 'Antigravity approval settings, guarded presets and vendor-native continue: OK'
 
 rm -f "$invocations" "$hardening_calls"
