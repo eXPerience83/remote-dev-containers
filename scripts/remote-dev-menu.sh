@@ -49,7 +49,7 @@ menu_confirm_yes_no() {
   local question="$1" answer=""
   printf '%s [y/N] ' "$question"
   IFS= read -r answer || return 1
-  case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+  case "${answer,,}" in y|yes) return 0 ;; *) return 1 ;; esac
 }
 
 menu_confirm_word() {
