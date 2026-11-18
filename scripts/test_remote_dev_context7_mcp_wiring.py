@@ -168,6 +168,7 @@ class WiringTests(unittest.TestCase):
             codex_home.mkdir(mode=0o700)
             (codex_home / "config.toml").write_text(
                 codex.MANAGED_BLOCK, encoding="utf-8")
+            (codex_home / "config.toml").chmod(0o600)
             codex_probe = codex.load_mcp_probe()
             called = []
 
@@ -192,6 +193,7 @@ class WiringTests(unittest.TestCase):
                 json.dumps({"mcpServers": {"context7": agy.ENTRY}}),
                 encoding="utf-8",
             )
+            (agy_home / "mcp_config.json").chmod(0o600)
             agy_probe = agy.load_mcp_probe()
 
             class SlowPingOpener:
