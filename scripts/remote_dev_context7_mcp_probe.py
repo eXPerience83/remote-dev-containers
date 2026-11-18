@@ -273,7 +273,7 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
                 "clientInfo": {"name": "remote-dev-context7-probe", "version": "1.0.0"}},
         api_key=api_key, protocol=PROTOCOL_VERSION, session=session)
     protocol = result.get("protocolVersion")
-    if protocol not in SUPPORTED_PROTOCOL_VERSIONS:
+    if not isinstance(protocol, str) or protocol not in SUPPORTED_PROTOCOL_VERSIONS:
         raise ProbeError("MCP initialization negotiated an unsupported protocol version")
     _, session = _exchange(client, method="notifications/initialized",
                            request_id=None, params=None, api_key=api_key,
