@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import time
 from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import patch
@@ -157,6 +158,51 @@ class ProbeTests(TestCase):
                 with self.assertRaises(probe.ProbeError) as exc:
                     probe.probe(api_key=SECRET, opener=opener)
                 self.assertNotIn(SECRET, str(exc.exception))
+
+    def test_sse_literal_unicode_separator_and_crlf_framing(self):
+        # U+2028 is a Unicode line separator, but not an SSE delimiter.
+        result = {"content": [{"type": "text", "text": "public A\u2028B"}]}
+        message = {"jsonrpc": "2.0", "id": 2, "result": result}
+        stream = (
+            b"event: message\r\ndata: " +
+            json.dumps(message, ensure_ascii=False).encode("utf-8") +
+            b"\r\n\r\n"
+        )
+        self.assertEqual(
+            probe._extract_message(stream, "text/event-stream", 2), result,
+        )
+        self.assertEqual(probe._completed_sse_prefix(stream), stream)
+        self.assertIsNone(probe._completed_sse_prefix(stream[:-2]))
+
+    def test_sse_trickling_without_newline_hits_total_deadline(self):
+        # A socket idle timeout is NOT a total deadline. Simulate a blocked
+        # chunk read from a server that keeps its stream open indefinitely.
+        class SlowNoNewlineResponse(FakeResponse):
+            def read1(self, limit):
+                del limit
+                time.sleep(0.2)
+                return b"x"
+
+            def readline(self, limit=-1):
+                raise AssertionError("SSE probe must never use readline")
+
+        opener = FakeOpener()
+        regular_open = opener.open
+
+        def trickling_open(request, *, timeout):
+            if json.loads(request.data)["method"] == "tools/list":
+                return SlowNoNewlineResponse(
+                    b"data: not-a-complete-event",
+                    content_type="text/event-stream",
+                )
+            return regular_open(request, timeout=timeout)
+
+        opener.open = trickling_open
+        start = time.monotonic()
+        with patch.object(probe, "RESPONSE_DEADLINE_SECONDS", 0.05):
+            with self.assertRaisesRegex(probe.ProbeError, "time limit"):
+                probe.probe(opener=opener)
+        self.assertLess(time.monotonic() - start, 0.17)
 
     def test_injected_secret_rejected_before_network(self):
         for candidate in ("abc\nAuthorization: Bearer secret", "", "unsafe space"):
