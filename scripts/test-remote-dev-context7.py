@@ -1131,7 +1131,7 @@ def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
         if (home / "config.toml.remote-dev-context7.bak").exists():
             raise AssertionError(f"{expected}: rejected install wrote a rollback backup")
 
-    for changed_to in ("managed-drift", "absent"):
+    for changed_to in ("managed-drift", "absent", "unsafe-key"):
         home = root / f"menu-consent-remove-{changed_to}"
         home.mkdir(mode=0o700)
         config = home / "config.toml"
@@ -1144,14 +1144,19 @@ def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
         key.chmod(0o600)
         external = (
             original.replace(module.CONTEXT7_ENDPOINT, "https://stale.example.invalid/mcp")
-            if changed_to == "managed-drift" else 'model = "race"\n'
+            if changed_to == "managed-drift"
+            else 'model = "race"\n' if changed_to == "absent"
+            else original
         )
         # Inject the competing transaction immediately before entering
         # Codex's configuration lock, after the operator confirmed REMOVE.
         original_lock = module.locked_codex_config
         @contextlib.contextmanager
         def change_before_write_lock(paths):
-            config.write_text(external, encoding="utf-8")
+            if changed_to == "unsafe-key":
+                key.chmod(0o644)
+            else:
+                config.write_text(external, encoding="utf-8")
             with original_lock(paths):
                 yield
         with codex_environment(home):
@@ -1173,6 +1178,8 @@ def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
             raise AssertionError(f"{changed_to}: rejected removal rewrote config")
         if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
             raise AssertionError(f"{changed_to}: rejected removal deleted private key")
+        if changed_to == "unsafe-key" and stat.S_IMODE(key.stat().st_mode) != 0o644:
+            raise AssertionError("rejected removal silently changed unsafe private-key permissions")
         if (home / "config.toml.remote-dev-context7.bak").exists():
             raise AssertionError(f"{changed_to}: rejected removal wrote backup")
 
