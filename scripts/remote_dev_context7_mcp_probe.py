@@ -41,6 +41,10 @@ class ProbeError(RuntimeError):
     """Never embed server-supplied payloads or authentication values."""
 
 
+class NoMatchingReply(ProbeError):
+    """A complete SSE frame had no reply for this JSON-RPC request."""
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ProbeError("MCP transport refused an HTTP redirect")
@@ -90,8 +94,10 @@ def _extract_message(raw: bytes, content_type: str, request_id: int) -> dict:
         if (isinstance(parsed, dict) and type(parsed.get("id")) is int
                 and parsed["id"] == request_id):
             found.append(parsed)
-    if len(found) != 1:
-        raise ProbeError("MCP response did not contain exactly one matching request ID")
+    if not found:
+        raise NoMatchingReply("MCP response did not contain a matching request ID")
+    if len(found) > 1:
+        raise ProbeError("MCP response contained duplicate replies for one request ID")
     reply = found[0]
     if reply.get("jsonrpc") != "2.0" or "error" in reply or not isinstance(reply.get("result"), dict):
         raise ProbeError("MCP request was rejected or returned an invalid result")
@@ -126,19 +132,6 @@ def _hard_read_deadline(remaining: float):
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous_handler)
-
-
-def _completed_sse_prefix(raw: bytes) -> bytes | None:
-    """Return complete SSE frames only, retaining incomplete trailing bytes."""
-    last_boundary = 0
-    offset = 0
-    # Parse only SSE's CR, LF and CRLF line delimiters. The regex must
-    # never treat UTF-8 U+2028 or other bytes as event boundaries.
-    for match in re.finditer(rb"[^\r\n]*(?:\r\n|\r|\n)", raw):
-        offset = match.end()
-        if match.group(0) in (b"\n", b"\r", b"\r\n"):
-            last_boundary = offset
-    return raw[:last_boundary] if last_boundary else None
 
 
 def _exchange(opener, *, method: str, request_id: int | None, params: dict | None,
@@ -238,12 +231,12 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                                 try:
                                     parsed = _extract_message(
                                         bytes(frame), content_type, request_id)
-                                except ProbeError as exc:
-                                    if "exactly one matching request ID" not in str(exc):
-                                        raise
+                                except NoMatchingReply:
+                                    # An SSE priming/event frame or an unrelated
+                                    # JSON-RPC message is not this RPC's result.
+                                    frame.clear()
                                 else:
                                     return parsed, next_session
-                                frame.clear()
                         else:
                             line.append(char)
                 raise ProbeError("MCP event stream did not return the matching request ID")
@@ -286,13 +279,19 @@ def _has_public_content(result: dict, *, method: str) -> bool:
     text = _tool_text(result)
     if not text:
         return False
-    # Context7 may say "no documentation found" or "no matching libraries"
-    # without setting isError. Neither is a successful functional probe.
-    if re.search(
-        r"(?i)\b(?:no (?:matching )?(?:libraries|docs|documentation|results|"
+    # Context7 sometimes reports an empty result or a quota/authorization
+    # error as plain text without isError=true. Reject an explicit LEADING
+    # status, but not e.g. "request failed" inside a valid error-handling
+    # documentation snippet further down the response.
+    leading_line = next((line.strip() for line in text.splitlines()
+                         if line.strip()), "")
+    if re.match(
+        r"(?i)^(?:[>#*-]+\s*)?(?:(?:error|warning|status)\s*[:\-]\s*)?"
+        r"(?:no (?:matching )?(?:libraries|docs|documentation|results|"
         r"code snippets?|context)|rate.limit(?:ed)?|quota exceeded|"
         r"too many requests|unauthorized|authentication required|"
-        r"upgrade your plan|request failed|service unavailable)\b", text,
+        r"upgrade your plan|request failed|service unavailable)\b",
+        leading_line,
     ):
         return False
     if method == "resolve-library-id":
