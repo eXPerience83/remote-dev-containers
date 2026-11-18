@@ -12,6 +12,9 @@ https://mcp.context7.com/mcp
 
 Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runtime. Device-code sign-in resolves an exact official `ctx7` npm package, downloads the exact top-level tarball from the fixed public npm origin, verifies its SHA-512 SRI against the selected registry metadata, runs that verified local tarball only for authentication, and removes the package, npm cache and temporary vendor state afterward. Only the API key adopted into Remote Dev's existing private Context7 state persists.
 
+
+> **Probe framing/time limits:** The optional MCP functional test accepts SSE line boundaries only at CR/LF/CRLF (literal U+2028 inside JSON remains data), reads bounded chunks instead of waiting for a newline, and enforces an overall wall-clock response deadline even for a slowly trickling server. These are offline-tested transport protections; they do not establish agent-native OAuth or tool execution.
+
 ## Explicit lifecycle
 
 From Codex, open **6) MCP integrations... → 1) Context7...** or use these advanced CLI commands:
