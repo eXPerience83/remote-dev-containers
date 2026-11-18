@@ -313,8 +313,6 @@ class ProbeTests(TestCase):
         self.assertEqual(
             probe._extract_message(stream, "text/event-stream", 2), result,
         )
-        self.assertEqual(probe._completed_sse_prefix(stream), stream)
-        self.assertIsNone(probe._completed_sse_prefix(stream[:-2]))
         # Only a *strictly* blank line dispatches. A line consisting of a
         # space is an unknown SSE field, not an event boundary.
         text = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
@@ -326,6 +324,90 @@ class ProbeTests(TestCase):
         self.assertEqual(
             probe._extract_message(spaced, "text/event-stream", 2), result,
         )
+
+    def test_real_sse_transport_handles_utf8_u2028_across_byte_reads(self):
+        # Exercise the production _exchange SSE loop, not a framing helper.
+        # The literal U+2028 occupies three UTF-8 bytes, split across read1.
+        opener = FakeOpener()
+        normal_open = opener.open
+
+        class FragmentedResponse(FakeResponse):
+            def read1(self, limit):
+                return super().read1(min(limit, 1))
+
+        def fragmented_sse(request, *, timeout):
+            body = json.loads(request.data)
+            if body["method"] != "tools/list":
+                return normal_open(request, timeout=timeout)
+            result = {
+                "tools": [
+                    {"name": "resolve-library-id", "inputSchema": {"type": "object"},
+                     "description": "Example A\u2028Example B"},
+                    {"name": "query-docs", "inputSchema": {"type": "object"}},
+                ]
+            }
+            payload = json.dumps(
+                {"jsonrpc": "2.0", "id": body["id"], "result": result},
+                ensure_ascii=False, separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertIn("\u2028".encode("utf-8"), payload)
+            return FragmentedResponse(
+                b"event: message\r\ndata: " + payload + b"\r\n\r\n",
+                content_type="text/event-stream", session=opener.session,
+            )
+
+        opener.open = fragmented_sse
+        self.assertEqual(len(probe.probe(opener=opener)), 3)
+        self.assertEqual(
+            [body["method"] for body, _ in opener.calls],
+            ["initialize", "notifications/initialized", "tools/call", "tools/call"],
+        )
+
+    def test_no_matching_reply_is_distinct_from_duplicate_reply(self):
+        message = json.dumps({
+            "jsonrpc": "2.0", "id": 99, "result": {"ok": True},
+        }).encode()
+        with self.assertRaises(probe.NoMatchingReply):
+            probe._extract_message(
+                b"data: " + message + b"\n\n", "text/event-stream", 2,
+            )
+        with self.assertRaises(probe.ProbeError) as error:
+            probe._extract_message(
+                b"data: " + message + b"\n\ndata: " + message + b"\n\n",
+                "text/event-stream", 99,
+            )
+        self.assertNotIsInstance(error.exception, probe.NoMatchingReply)
+
+    def test_valid_requests_docs_can_quote_failure_phrases(self):
+        opener = FakeOpener()
+        normal_open = opener.open
+        def with_error_example(request, *, timeout):
+            response = normal_open(request, timeout=timeout)
+            body = json.loads(request.data)
+            if (body["method"] == "tools/call"
+                    and body["params"]["name"] == "query-docs"):
+                reply = json.loads(response.value)
+                reply["result"]["content"][0]["text"] += (
+                    "\n\nError handling example:\n"
+                    "# request failed after an unauthorized response\n"
+                    "# rate limit example; see requests.get(url, timeout=5)"
+                )
+                return FakeResponse(reply, session=opener.session)
+            return response
+        opener.open = with_error_example
+        self.assertEqual(len(probe.probe(opener=opener)), 3)
+
+    def test_explicit_failure_status_with_positive_markers_is_not_pass(self):
+        content = (
+            "Rate limit exceeded; upgrade your plan\n"
+            "### Requests timeout\n"
+            "https://requests.readthedocs.io/en/latest/user/advanced/\n"
+            "requests.get(url, timeout=5)"
+        )
+        self.assertFalse(probe._has_public_content(
+            {"content": [{"type": "text", "text": content}]},
+            method="query-docs",
+        ))
 
     def test_sse_priming_and_terminal_cr_without_eof(self):
         for kind in ("primed-sse", "terminal-cr"):
