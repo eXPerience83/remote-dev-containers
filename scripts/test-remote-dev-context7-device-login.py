@@ -1238,8 +1238,10 @@ def assert_adoption_order_and_failure(module) -> None:
     ) -> None:
         calls.append((list(arguments), input_text))
 
-    def fake_preflight() -> None:
+    def fake_preflight(*, expected_state=None) -> None:
         nonlocal preflight_calls
+        if expected_state is not None:
+            raise AssertionError("direct CLI login unexpectedly acquired menu precondition")
         preflight_calls += 1
 
     try:
