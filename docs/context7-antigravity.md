@@ -4,6 +4,9 @@
 
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
+
+> **Probe framing/time limits:** The optional MCP functional test accepts SSE line boundaries only at CR/LF/CRLF (literal U+2028 inside JSON remains data), reads bounded chunks instead of waiting for a newline, and enforces an overall wall-clock response deadline even for a slowly trickling server. These are offline-tested transport protections; they do not establish agent-native OAuth or tool execution.
+
 ## Codex and Antigravity are independent
 
 Codex keeps its existing API key in its own private state and may supply it to the Codex MCP through an environment-variable header mapping. Antigravity's current JSON remote-headers schema is not equivalent; **Remote Dev must not copy a key into a world-readable or persistent JSON field** or assume environment-variable substitution exists.
