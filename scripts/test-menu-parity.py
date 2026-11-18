@@ -424,7 +424,7 @@ def assert_shared_helper_invariants() -> None:
     # Approval invalid choices must redraw the same submenu on both roles.
     for name in ("choose_next_codex_mode", "show_antigravity_approval_menu"):
         approval = function(name)
-        if "while true; do" not in approval or "*) sleep 1 ;;" not in approval:
+        if "while true; do" not in approval or not re.search(r"\*\)\s*sleep 1\s*;;", approval):
             raise AssertionError(f"{name}: invalid Approval choice escapes to parent")
 
     # Bash functions have dynamically scoped variables. Submenus must not
