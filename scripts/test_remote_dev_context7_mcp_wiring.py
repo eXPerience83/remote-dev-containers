@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+from importlib.machinery import SourceFileLoader
 import io
 import json
 import os
@@ -19,7 +20,9 @@ from unittest.mock import patch
 
 
 def load_module(name, source):
-    spec = importlib.util.spec_from_file_location(name, source)
+    # The installed AGY command has no .py suffix; give Python its loader.
+    loader = SourceFileLoader(name, str(source))
+    spec = importlib.util.spec_from_file_location(name, source, loader=loader)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -31,8 +34,13 @@ CODEX = HERE / "remote-dev-context7.py"
 AGY = HERE / "remote-dev-context7-antigravity.py"
 if not CODEX.is_file():
     CODEX = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
-if not AGY.is_file():
-    AGY = Path("/usr/local/bin/remote-dev-context7-antigravity")
+installed_agy = Path("/usr/local/bin/remote-dev-context7-antigravity")
+# Image smoke must inspect the actual installed entrypoint, not the /tmp
+# source fixture; checkout tests still inspect the local .py file.
+if installed_agy.is_file():
+    AGY = installed_agy
+elif not AGY.is_file():
+    raise AssertionError("Antigravity Context7 entrypoint unavailable")
 codex = load_module("codex_context7_wiring_fixture", CODEX)
 agy = load_module("agy_context7_wiring_fixture", AGY)
 SECRET = "ctx7sk-SYNTHETIC_KEY_NEVER_SEND"
