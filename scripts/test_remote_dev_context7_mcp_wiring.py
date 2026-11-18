@@ -29,18 +29,28 @@ def load_module(name, source):
     return module
 
 
+def select_agy_source(checkout: Path, installed: Path, *, image_smoke: bool) -> Path:
+    """Prefer checkout in development; require the installed file in image smoke."""
+    if image_smoke:
+        if not installed.is_file():
+            raise AssertionError("installed Antigravity Context7 entrypoint unavailable")
+        return installed
+    if checkout.is_file():
+        return checkout
+    if installed.is_file():
+        return installed
+    raise AssertionError("Antigravity Context7 entrypoint unavailable")
+
+
 HERE = Path(__file__).parent
 CODEX = HERE / "remote-dev-context7.py"
-AGY = HERE / "remote-dev-context7-antigravity.py"
 if not CODEX.is_file():
     CODEX = Path("/usr/local/lib/remote-dev/remote-dev-context7.py")
-installed_agy = Path("/usr/local/bin/remote-dev-context7-antigravity")
-# Image smoke must inspect the actual installed entrypoint, not the /tmp
-# source fixture; checkout tests still inspect the local .py file.
-if installed_agy.is_file():
-    AGY = installed_agy
-elif not AGY.is_file():
-    raise AssertionError("Antigravity Context7 entrypoint unavailable")
+AGY = select_agy_source(
+    HERE / "remote-dev-context7-antigravity.py",
+    Path("/usr/local/bin/remote-dev-context7-antigravity"),
+    image_smoke=os.environ.get("REMOTE_DEV_MCP_WIRING_IMAGE_SMOKE") == "1",
+)
 codex = load_module("codex_context7_wiring_fixture", CODEX)
 agy = load_module("agy_context7_wiring_fixture", AGY)
 SECRET = "ctx7sk-SYNTHETIC_KEY_NEVER_SEND"
@@ -93,10 +103,21 @@ class FakeOpener:
 class WiringTests(unittest.TestCase):
     def test_extensionless_installed_agy_source_loader(self):
         with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp) / "remote-dev-context7-antigravity.py"
             entrypoint = Path(temp) / "remote-dev-context7-antigravity"
+            checkout.write_text("IS_INSTALLED_ENTRYPOINT = False\n", encoding="utf-8")
             entrypoint.write_text("IS_INSTALLED_ENTRYPOINT = True\n", encoding="utf-8")
+            self.assertEqual(
+                select_agy_source(checkout, entrypoint, image_smoke=False), checkout)
+            self.assertEqual(
+                select_agy_source(checkout, entrypoint, image_smoke=True), entrypoint)
             loaded = load_module("synthetic_extensionless_agy", entrypoint)
             self.assertIs(loaded.IS_INSTALLED_ENTRYPOINT, True)
+            entrypoint.unlink()
+            with self.assertRaisesRegex(AssertionError, "installed Antigravity"):
+                select_agy_source(checkout, entrypoint, image_smoke=True)
+            self.assertEqual(
+                select_agy_source(checkout, entrypoint, image_smoke=False), checkout)
 
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
