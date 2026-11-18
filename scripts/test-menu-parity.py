@@ -225,6 +225,29 @@ def assert_context7_contract() -> None:
         if handlers != [1, 2, 3, 4, 5, 0]:
             raise AssertionError(f"{name}: Context7 handler order drifted: {handlers}")
 
+    codex_context7 = function("show_context7_menu")
+    for marker in (
+        "install --menu-expect-absent",
+        "install --menu-expect-healthy",
+        "remove --expect-healthy",
+    ):
+        if marker not in codex_context7:
+            raise AssertionError(f"Codex menu action lost locked-state guard: {marker}")
+
+    codex_backend = (SOURCE.parent / "remote-dev-context7.py").read_text(encoding="utf-8")
+    codex_entrypoint = (SOURCE.parent / "remote-dev-context7-entrypoint.sh").read_text(encoding="utf-8")
+    codex_login = (SOURCE.parent / "remote-dev-context7-device-login.py").read_text(encoding="utf-8")
+    for marker in ('"menu install blocked:', '"menu authentication blocked:',
+                   '"menu removal blocked:', "with locked_codex_config(paths):"):
+        if marker not in codex_backend:
+            raise AssertionError(f"Codex manager lost menu consent guard: {marker}")
+    for marker in ("--menu-expect-absent", "--menu-expect-healthy",
+                   'exec "$device_login" --yes "$menu_precondition"'):
+        if marker not in codex_entrypoint:
+            raise AssertionError(f"Codex onboarding lost menu expectation: {marker}")
+    if '"--expect-" + expected_state' not in codex_login:
+        raise AssertionError("Codex device login lost locked expected-state forwarding")
+
     if 'reinstall --menu-safe' not in function("show_context7_menu"):
         raise AssertionError("Codex must use locked, menu-safe selective repair")
     if 'reinstall --menu-safe' in function("show_antigravity_context7_menu"):
@@ -377,6 +400,8 @@ def assert_full_nested_menu_contract() -> None:
     ):
         if 'read -r -p "> " choice || return 0' not in function(name):
             raise AssertionError(f"{name} must exit on input EOF")
+    if 'read -r -p "$prompt" _ || return 0' not in function("pause_for_menu"):
+        raise AssertionError("EOF during a menu return pause must not trigger set -e")
     for name in ("choose_project_name", "create_project_action", "delete_project_action"):
         if "|| return 1" not in function(name):
             raise AssertionError(f"{name} cannot treat missing input as consent")
