@@ -348,6 +348,9 @@ class WiringTests(unittest.TestCase):
                 with (patch.object(agy, "build_opener", return_value=FakeOpener()),
                       patch.object(agy, "load_mcp_probe",
                                    side_effect=SyntaxError("synthetic invalid helper")),
+                      patch.object(builtins, "open", guarded_builtin),
+                      patch.object(io, "open", guarded_io),
+                      patch.object(os, "open", guarded_os),
                       contextlib.redirect_stdout(io.StringIO()) as stdout):
                     self.assertEqual(agy.test(root), 3)
                 self.assertIn("probe unavailable", stdout.getvalue())
