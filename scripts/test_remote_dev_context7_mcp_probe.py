@@ -298,6 +298,42 @@ class ProbeTests(TestCase):
             "the deadline did not interrupt the blocking response read",
         )
 
+    def test_slow_response_headers_respect_total_deadline(self):
+        # A server that trickles headers must not bypass the response timer.
+        opener = FakeOpener()
+        regular_open = opener.open
+        reached_after_sleep = []
+
+        def slow_headers(request, *, timeout):
+            if json.loads(request.data)["method"] == "tools/list":
+                time.sleep(0.2)
+                reached_after_sleep.append(True)
+            return regular_open(request, timeout=timeout)
+
+        opener.open = slow_headers
+        with patch.object(probe, "RESPONSE_DEADLINE_SECONDS", 0.05):
+            with self.assertRaisesRegex(probe.ProbeError, "time limit"):
+                probe.probe(opener=opener)
+        self.assertEqual(
+            reached_after_sleep, [],
+            "the hard deadline did not interrupt slow response headers",
+        )
+
+    def test_fragmented_sse_crlf_across_reads(self):
+        opener = FakeOpener()
+        regular_open = opener.open
+
+        def fragmented_open(request, *, timeout):
+            response = regular_open(request, timeout=timeout)
+            if json.loads(request.data)["method"] == "tools/list":
+                # Make the network deliver one byte at a time, including
+                # a CRLF pair split across calls to read1().
+                response.read1 = lambda limit: FakeResponse.read1(response, min(limit, 1))
+            return response
+
+        opener.open = fragmented_open
+        self.assertEqual(len(probe.probe(opener=opener)), 3)
+
     def test_injected_secret_rejected_before_network(self):
         for candidate in ("abc\nAuthorization: Bearer secret", "", "unsafe space"):
             opener = FakeOpener()
