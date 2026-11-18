@@ -382,11 +382,64 @@ def assert_full_nested_menu_contract() -> None:
             raise AssertionError(f"{name} cannot treat missing input as consent")
 
 
+def assert_shared_helper_invariants() -> None:
+    """Catch future prompt/diagnostic divergence beyond visible menu labels."""
+    summary = function("print_next_launch_mode_summary")
+    for text in (
+        "Next launch mode: %s (one launch)",
+        "Next launch mode: configured (%s)",
+    ):
+        if text not in summary:
+            raise AssertionError(f"shared next-launch summary missing {text}")
+    for role in ("codex", "antigravity"):
+        adapter = function(f"next_{role}_mode_summary")
+        expected = (
+            f'print_next_launch_mode_summary "$next_{role}_mode" '
+            f'"$configured_{role}_mode"'
+        )
+        if expected not in adapter:
+            raise AssertionError(f"{role}: launch summary bypasses shared helper")
+
+    diagnostics = function("run_context7_diagnostic_command")
+    for token in ('action_status=$?', "report_action_failure", '"$@"'):
+        if token not in diagnostics:
+            raise AssertionError(f"shared Context7 diagnostics lost {token}")
+    offline = function("run_context7_offline_diagnosis")
+    for token in (
+        'run_context7_diagnostic_command "Context7 status" "$manager" status --menu',
+        'run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan',
+        'context7_menu_message "$note"',
+    ):
+        if token not in offline:
+            raise AssertionError(f"shared Context7 diagnosis lost {token}")
+    for name in ("show_context7_menu", "show_antigravity_context7_menu"):
+        body = function(name)
+        if body.count('run_context7_offline_diagnosis "$manager"') != 1:
+            raise AssertionError(f"{name}: offline diagnosis bypasses common helper")
+        if '"$manager" plan || :' in body or '"$manager" status --menu || :' in body:
+            raise AssertionError(f"{name}: a diagnostic exit code is still hidden")
+        if "run_context7_diagnostic_command" not in body:
+            raise AssertionError(f"{name}: preflight plan bypasses failure reporting")
+
+    # Bash functions have dynamically scoped variables. Submenus must not
+    # alter their caller's menu selection by assigning to a shared choice.
+    for name in (
+        "show_projects_menu", "choose_next_codex_mode",
+        "show_antigravity_approval_menu", "show_context7_menu",
+        "show_antigravity_context7_menu", "show_mcp_integrations_menu",
+        "show_shell_menu", "show_agent_menu", "show_agent_manage_menu",
+        "choose_project_name",
+    ):
+        if not re.search(r"\blocal [^\n]*\bchoice=", function(name)):
+            raise AssertionError(f"{name}: menu choice is not locally scoped")
+
+
 def main() -> None:
     assert_agent_menu_contract()
     assert_context7_contract()
     assert_full_nested_menu_contract()
-    print("Codex/Antigravity full menu tree, prompts and provider routing: OK")
+    assert_shared_helper_invariants()
+    print("Codex/Antigravity full menu tree, prompts, helpers and provider routing: OK")
 
 
 if __name__ == "__main__":
