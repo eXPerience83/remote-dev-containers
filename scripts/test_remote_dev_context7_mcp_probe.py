@@ -187,6 +187,23 @@ class FakeOpener:
             if kind == "bad-sse":
                 return FakeResponse(b"data: not-json\n\n",
                                     content_type="text/event-stream")
+            if kind == "primed-sse":
+                value = json.dumps({"jsonrpc": "2.0", "id": body["id"],
+                                    "result": result}).encode()
+                return FakeResponse(
+                    b"id: ready\ndata:\n\n" + b"data: " + value + b"\n\n",
+                    content_type="text/event-stream", session=self.session,
+                )
+            if kind == "terminal-cr":
+                value = json.dumps({"jsonrpc": "2.0", "id": body["id"],
+                                    "result": result}).encode()
+                class OpenSSE(FakeResponse):
+                    def read1(self, limit):
+                        if self.position >= len(self.value):
+                            raise AssertionError("valid final CR was not dispatched immediately")
+                        return super().read1(limit)
+                return OpenSSE(b"data: " + value + b"\r\r",
+                               content_type="text/event-stream", session=self.session)
             if kind == "opaque-session":
                 return FakeResponse(
                     {"jsonrpc": "2.0", "id": body["id"], "result": result},
@@ -305,6 +322,25 @@ class ProbeTests(TestCase):
         self.assertEqual(
             probe._extract_message(spaced, "text/event-stream", 2), result,
         )
+
+    def test_sse_priming_and_terminal_cr_without_eof(self):
+        for kind in ("primed-sse", "terminal-cr"):
+            with self.subTest(kind=kind):
+                opener = FakeOpener(fault=("tools/list", kind))
+                self.assertEqual(len(probe.probe(opener=opener)), 3)
+
+    def test_single_cumulative_deadline_across_mcp_exchanges(self):
+        opener = FakeOpener()
+        real_open = opener.open
+        def slowed_open(request, *, timeout):
+            time.sleep(0.04)
+            return real_open(request, timeout=timeout)
+        opener.open = slowed_open
+        with self.assertRaisesRegex(probe.ProbeError, "time limit"):
+            probe.probe(
+                opener=opener, deadline=time.monotonic() + 0.09)
+        # The 3rd or later operation must not gain a new 25-second budget.
+        self.assertLess(len(opener.calls), 5)
 
     def test_protocol_cursor_and_visible_ascii_session_ids(self):
         opener = FakeOpener(fault=("initialize", "opaque-session"))
