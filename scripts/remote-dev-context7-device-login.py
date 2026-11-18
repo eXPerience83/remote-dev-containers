@@ -912,11 +912,12 @@ def read_credentials(root: Path, *, expected_uid: int) -> str:
     return access_token
 
 
-def preflight_manager_state() -> None:
+def preflight_manager_state(*, expected_state: str | None = None) -> None:
     validate_executable(PYTHON, label="Python")
+    command = ["menu-state"] if expected_state is not None else ["status", "--menu"]
     try:
         result = subprocess.run(
-            [str(PYTHON), "-I", str(MANAGER), "status", "--menu"],
+            [str(PYTHON), "-I", str(MANAGER), *command],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -928,6 +929,10 @@ def preflight_manager_state() -> None:
     state = result.stdout.strip()
     if result.returncode != 0:
         raise DeviceLoginError("existing Context7 managed state is unsafe or damaged")
+    if expected_state is not None:
+        if state != expected_state:
+            raise DeviceLoginError("menu Context7 registration state changed before device login")
+        return
     if state == PREFLIGHT_UNMANAGED_STATE:
         raise DeviceLoginError("existing Context7 configuration is unmanaged; Remote Dev will not overwrite it")
     if state not in PREFLIGHT_ALLOWED_STATES:
@@ -1001,18 +1006,24 @@ def run_manager(arguments: list[str], *, input_text: str | None = None) -> None:
         raise DeviceLoginError(f"Context7 manager rejected the operation (exit {result.returncode})")
 
 
-def command_login(*, yes: bool, cli_channel: str = "auto") -> int:
+def command_login(
+    *, yes: bool, cli_channel: str = "auto", expected_state: str | None = None,
+) -> int:
     confirm(yes=yes)
 
-    # Validate the current ownership/configuration boundary without changing it.
-    # A failed or cancelled vendor login must not rewrite config or authentication state.
-    preflight_manager_state()
+    # Fail early if another session changed the menu's expected state while
+    # the operator selected device login. Repeat the same precondition under
+    # the manager's write lock when adopting the key, after vendor login.
+    preflight_manager_state(expected_state=expected_state)
 
     api_key, version, reviewed = acquire_api_key(cli_channel=cli_channel)
 
-    # The key is transferred only over the child process stdin. It is never a
-    # command-line argument, environment variable, log line or temporary TOML value.
-    run_manager(["repair", "--yes", "--api-key-stdin"], input_text=api_key + "\n")
+    # The key is transferred only over child stdin; never as argv/env/log.
+    # Manager rechecks the state and changes config/key under a single lock.
+    arguments = ["repair", "--yes", "--api-key-stdin"]
+    if expected_state is not None:
+        arguments.append("--expect-" + expected_state)
+    run_manager(arguments, input_text=api_key + "\n")
     review_text = "reviewed" if reviewed else "review pending"
     print(
         f"Context7 device login: API key adopted into Remote Dev private state "
@@ -1028,6 +1039,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Sign in to Context7 through a transient isolated device-code flow.",
     )
     parser.add_argument("--yes", action="store_true")
+    menu_expectation = parser.add_mutually_exclusive_group()
+    menu_expectation.add_argument(
+        "--expect-absent", action="store_true", help=argparse.SUPPRESS,
+    )
+    menu_expectation.add_argument(
+        "--expect-healthy", action="store_true", help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--cli-channel",
         choices=("auto", "reviewed", "latest"),
@@ -1041,7 +1059,13 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         validate_role()
-        return command_login(yes=args.yes, cli_channel=args.cli_channel)
+        expected_state = (
+            "absent" if args.expect_absent else
+            "healthy" if args.expect_healthy else None
+        )
+        return command_login(
+            yes=args.yes, cli_channel=args.cli_channel, expected_state=expected_state,
+        )
     except DeviceLoginError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
