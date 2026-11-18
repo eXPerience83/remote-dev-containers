@@ -618,7 +618,7 @@ set_antigravity_guarded_preset() {
 }
 
 show_antigravity_approval_menu() {
-  local next_mode_summary=""
+  local next_mode_summary="" choice=""
 
   while true; do
     refresh_antigravity_policy
