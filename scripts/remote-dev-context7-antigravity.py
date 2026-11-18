@@ -341,13 +341,16 @@ def test(directory: Path) -> int:
         return 3
     print("Antigravity local MCP registration: PASS")
     print("Context7 hosted HTTP ping: PASS")
+    # Keep module loading separate: when the imported source is broken,
+    # `probe` has not been assigned and cannot appear in an except clause.
     try:
         probe = load_mcp_probe()
-        for line in probe.probe(api_key=None):
-            print(line)
-    except (MaintenanceError, OSError) as exc:
+    except (MaintenanceError, OSError, SyntaxError, ImportError, ValueError, TypeError):
         print("Context7 (Antigravity): MCP tool verification FAILED (probe unavailable)")
         return 3
+    try:
+        for line in probe.probe(api_key=None):
+            print(line)
     except probe.ProbeError as exc:
         print(f"Context7 (Antigravity): MCP tool verification FAILED: {exc}")
         return 3
