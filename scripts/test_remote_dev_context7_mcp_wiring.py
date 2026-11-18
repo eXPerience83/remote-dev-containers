@@ -126,6 +126,39 @@ class WiringTests(unittest.TestCase):
             self.assertEqual(
                 select_agy_source(checkout, entrypoint, image_smoke=False), checkout)
 
+    def test_installed_probe_executes_real_mcp_logic_with_mocked_network(self):
+        """Run the actual installed probe with network mocked, not FakeProbe."""
+        fixture = load_module(
+            "synthetic_mcp_network_responses",
+            HERE / "test_remote_dev_context7_mcp_probe.py",
+        )
+        installed = Path("/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py")
+        for label, loader, key in (
+            ("codex", codex.load_mcp_probe, SECRET),
+            ("antigravity", agy.load_mcp_probe, None),
+        ):
+            with self.subTest(provider=label):
+                actual = loader()
+                if installed.exists():
+                    self.assertEqual(Path(actual.__file__), installed)
+                network = fixture.FakeOpener()
+                # Fake only the transport; the protocol implementation,
+                # validation, and both real tools/call are executed.
+                self.assertEqual(
+                    len(actual.probe(api_key=key, opener=network)), 3,
+                )
+                self.assertEqual(
+                    [request["method"] for request, _ in network.calls],
+                    ["initialize", "notifications/initialized", "tools/list",
+                     "tools/call", "tools/call"],
+                )
+                for body, headers in network.calls:
+                    self.assertEqual(headers.get("context7_api_key"), key)
+                    self.assertNotIn(SECRET, json.dumps(body))
+                    other = {k: v for k, v in headers.items()
+                             if k != "context7_api_key"}
+                    self.assertNotIn(SECRET, repr(other))
+
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp) / "codex"
