@@ -64,6 +64,7 @@ class FakeOpener:
     def __init__(self, fault=None):
         self.calls = []
         self.fault = fault
+        self.session = "opaque.v1" if fault == ("initialize", "opaque-session") else "syntheticMcpSession"
 
     def open(self, request, *, timeout):
         assert timeout == probe.TIMEOUT_SECONDS
@@ -76,7 +77,7 @@ class FakeOpener:
         if method == "initialize":
             result = {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}}
         elif method == "notifications/initialized":
-            return FakeResponse(b"", status=202)
+            return FakeResponse(b"", status=202, session=self.session)
         elif method == "tools/list":
             if self.fault == ("tools/list", "paged"):
                 cursor = body.get("params", {}).get("cursor")
@@ -146,8 +147,9 @@ class FakeOpener:
         message = {"jsonrpc": "2.0", "id": body["id"], "result": result}
         if method == "tools/list":
             return FakeResponse(("event: message\ndata: " + json.dumps(message) +
-                                 "\n\n").encode(), content_type="text/event-stream")
-        return FakeResponse(message)
+                                 "\n\n").encode(), content_type="text/event-stream",
+                            session=self.session)
+        return FakeResponse(message, session=self.session)
 
 
 class ProbeTests(TestCase):
@@ -247,15 +249,15 @@ class ProbeTests(TestCase):
         )
 
     def test_deep_json_nesting_returns_sanitized_probe_error(self):
-        # Build valid yet deeply nested JSON without relying on the encoder,
-        # which would hit its own recursion limit before the probe does.
-        payload = (
-            b'{"jsonrpc":"2.0","id":1,"result":{"nested":'
-            + b"[" * 1500 + b"0" + b"]" * 1500 + b"}}"
-        )
-        with self.assertRaisesRegex(probe.ProbeError, "malformed JSON") as exc:
-            probe._extract_message(payload, "application/json", 1)
-        self.assertNotIn("nested", str(exc.exception))
+        # The decoder's concrete recursion threshold varies by CPython
+        # version. Inject the exact failure at the decode boundary so this
+        # regression deterministically proves it cannot escape as a traceback.
+        payload = b'{"jsonrpc":"2.0","id":1,"result":{"sensitive":"do not print"}}'
+        with patch.object(probe.json, "loads", side_effect=RecursionError("secret")):
+            with self.assertRaisesRegex(probe.ProbeError, "malformed JSON") as exc:
+                probe._extract_message(payload, "application/json", 1)
+        self.assertNotIn("sensitive", str(exc.exception))
+        self.assertNotIn("secret", str(exc.exception))
 
     def test_sse_trickling_without_newline_hits_total_deadline(self):
         # A socket idle timeout is NOT a total deadline. Simulate a blocked
