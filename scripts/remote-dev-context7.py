@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from http.client import HTTPException
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -1131,8 +1132,10 @@ def hosted_ping() -> None:
                 raise Context7Error("Context7 ping response exceeded the supported size limit")
     except Context7Error:
         raise
-    except Exception as exc:
-        raise Context7Error(f"Context7 hosted endpoint is unreachable: {type(exc).__name__}") from exc
+    except (OSError, HTTPException, ValueError) as exc:
+        raise Context7Error(
+            f"Context7 hosted endpoint is unreachable: {type(exc).__name__}"
+        ) from exc
     try:
         data = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -1177,8 +1180,10 @@ def command_test(paths: Paths, args: argparse.Namespace) -> int:
         # initialize, tools/list and both tool calls.
         with probe._hard_read_deadline(deadline - time.monotonic()):
             hosted_ping()
-    except probe.ProbeError:
-        raise Context7Error("Context7 hosted HTTP ping exceeded the time budget") from None
+    except probe.ProbeError as exc:
+        # A deadline, pre-existing alarm, or unsupported signal context
+        # has a different fixed cause; do not mislabel all as a timeout.
+        raise Context7Error(f"Context7 hosted HTTP ping FAILED: {exc}") from None
     print("Context7 hosted HTTP ping: PASS")
     try:
         for line in probe.probe(api_key=key, deadline=deadline):
