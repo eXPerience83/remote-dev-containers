@@ -2,6 +2,7 @@
 """Offline regression tests for the real Context7 MCP probe. Never access network."""
 import importlib.util
 import io
+from http.client import IncompleteRead
 import json
 import time
 from pathlib import Path
@@ -77,8 +78,20 @@ class FakeOpener:
         elif method == "notifications/initialized":
             return FakeResponse(b"", status=202)
         elif method == "tools/list":
-            result = {"tools": [
-                {"name": "resolve-library-id"}, {"name": "query-docs"}]}
+            if self.fault == ("tools/list", "paged"):
+                cursor = body.get("params", {}).get("cursor")
+                if cursor is None:
+                    result = {"tools": [{"name": "resolve-library-id"}],
+                              "nextCursor": "opaque.cursor"}
+                elif cursor == "opaque.cursor":
+                    result = {"tools": [{"name": "query-docs"}]}
+                else:
+                    raise AssertionError("MCP tools/list received wrong pagination cursor")
+            elif self.fault == ("tools/list", "loop-cursor"):
+                result = {"tools": [], "nextCursor": "loop"}
+            else:
+                result = {"tools": [
+                    {"name": "resolve-library-id"}, {"name": "query-docs"}]}
         elif method == "tools/call":
             result = {"content": [{"type": "text", "text": "Public docs returned"}],
                       "isError": False}
@@ -105,6 +118,25 @@ class FakeOpener:
             if kind == "bad-sse":
                 return FakeResponse(b"data: not-json\n\n",
                                     content_type="text/event-stream")
+            if kind == "opaque-session":
+                return FakeResponse(
+                    {"jsonrpc": "2.0", "id": body["id"], "result": result},
+                    session="opaque.v1",
+                )
+            if kind == "future-protocol":
+                future = dict(result)
+                future["protocolVersion"] = "2099-01-01"
+                return FakeResponse(
+                    {"jsonrpc": "2.0", "id": body["id"], "result": future})
+            if kind == "incomplete-transfer":
+                class Interrupted(FakeResponse):
+                    def read1(self, limit):
+                        del limit
+                        raise IncompleteRead(b"some-secret-body", 1024)
+                return Interrupted(
+                    {"jsonrpc": "2.0", "id": body["id"], "result": result},
+                    content_type="text/event-stream",
+                )
             if kind == "duplicate":
                 value = json.dumps({"jsonrpc": "2.0", "id": body["id"],
                                     "result": result})
@@ -138,9 +170,14 @@ class ProbeTests(TestCase):
                 self.assertTrue(all(headers.get("mcp-session-id") ==
                                     "syntheticMcpSession" for _, headers
                                     in opener.calls[1:]))
-                for _, headers in opener.calls:
+                for body, headers in opener.calls:
                     self.assertEqual(headers.get("context7_api_key"), key)
-                    self.assertNotIn(SECRET, str(headers) if key is None else "")
+                    other_headers = {
+                        name: value for name, value in headers.items()
+                        if name != "context7_api_key"
+                    }
+                    self.assertNotIn(SECRET, repr(other_headers))
+                    self.assertNotIn(SECRET, json.dumps(body))
                 self.assertNotIn(SECRET, repr(lines))
 
     def test_fail_closed_on_transport_and_tool_failures(self):
@@ -152,6 +189,9 @@ class ProbeTests(TestCase):
             ("tools/list", "bad-sse"),
             ("tools/call", "tool-error"),
             ("tools/call", "http-error"),
+            ("tools/list", "incomplete-transfer"),
+            ("initialize", "future-protocol"),
+            ("tools/list", "loop-cursor"),
         ):
             with self.subTest(fault=fault):
                 opener = FakeOpener(fault)
@@ -173,14 +213,62 @@ class ProbeTests(TestCase):
         )
         self.assertEqual(probe._completed_sse_prefix(stream), stream)
         self.assertIsNone(probe._completed_sse_prefix(stream[:-2]))
+        # Only a *strictly* blank line dispatches. A line consisting of a
+        # space is an unknown SSE field, not an event boundary.
+        text = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+        split_at = text.index(",") + 1
+        spaced = (
+            "data: " + text[:split_at] + "\n \ndata: " +
+            text[split_at:] + "\n\n"
+        ).encode("utf-8")
+        self.assertEqual(
+            probe._extract_message(spaced, "text/event-stream", 2), result,
+        )
+
+    def test_protocol_cursor_and_visible_ascii_session_ids(self):
+        opener = FakeOpener(fault=("initialize", "opaque-session"))
+        probe.probe(opener=opener)
+        self.assertTrue(all(
+            headers.get("mcp-session-id") == "opaque.v1"
+            for _, headers in opener.calls[1:]
+        ))
+        opener = FakeOpener(fault=("tools/list", "paged"))
+        self.assertEqual(len(probe.probe(opener=opener)), 3)
+        tools_calls = [
+            body for body, _ in opener.calls if body["method"] == "tools/list"
+        ]
+        self.assertEqual(
+            [body.get("params") for body in tools_calls],
+            [{}, {"cursor": "opaque.cursor"}],
+        )
+        self.assertEqual([body["id"] for body in tools_calls], [2, 3])
+        self.assertEqual(
+            [body["id"] for body, _ in opener.calls[-2:]], [4, 5],
+        )
+
+    def test_deep_json_nesting_returns_sanitized_probe_error(self):
+        # Build valid yet deeply nested JSON without relying on the encoder,
+        # which would hit its own recursion limit before the probe does.
+        payload = (
+            b'{"jsonrpc":"2.0","id":1,"result":{"nested":'
+            + b"[" * 1500 + b"0" + b"]" * 1500 + b"}}"
+        )
+        with self.assertRaisesRegex(probe.ProbeError, "malformed JSON") as exc:
+            probe._extract_message(payload, "application/json", 1)
+        self.assertNotIn("nested", str(exc.exception))
 
     def test_sse_trickling_without_newline_hits_total_deadline(self):
         # A socket idle timeout is NOT a total deadline. Simulate a blocked
         # chunk read from a server that keeps its stream open indefinitely.
         class SlowNoNewlineResponse(FakeResponse):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.finished_read = False
+
             def read1(self, limit):
                 del limit
                 time.sleep(0.2)
+                self.finished_read = True
                 return b"x"
 
             def readline(self, limit=-1):
@@ -188,21 +276,27 @@ class ProbeTests(TestCase):
 
         opener = FakeOpener()
         regular_open = opener.open
+        slow_responses = []
 
         def trickling_open(request, *, timeout):
             if json.loads(request.data)["method"] == "tools/list":
-                return SlowNoNewlineResponse(
+                slow = SlowNoNewlineResponse(
                     b"data: not-a-complete-event",
                     content_type="text/event-stream",
                 )
+                slow_responses.append(slow)
+                return slow
             return regular_open(request, timeout=timeout)
 
         opener.open = trickling_open
-        start = time.monotonic()
         with patch.object(probe, "RESPONSE_DEADLINE_SECONDS", 0.05):
             with self.assertRaisesRegex(probe.ProbeError, "time limit"):
                 probe.probe(opener=opener)
-        self.assertLess(time.monotonic() - start, 0.17)
+        self.assertEqual(len(slow_responses), 1)
+        self.assertFalse(
+            slow_responses[0].finished_read,
+            "the deadline did not interrupt the blocking response read",
+        )
 
     def test_injected_secret_rejected_before_network(self):
         for candidate in ("abc\nAuthorization: Bearer secret", "", "unsafe space"):
