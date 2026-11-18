@@ -328,19 +328,29 @@ def _valid_tool_descriptor(tool: object) -> bool:
     )
 
 
-def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
+def probe(
+    api_key: str | None = None, *, opener=None,
+    deadline: float | None = None,
+) -> tuple[str, ...]:
     """Prove the hosted MCP protocol and two public tool calls; no local writes.
 
     An empty/absent key uses anonymous access. Native agent and AGY OAuth
     authentication require separate agent-side verification.
     """
     client = _open_client() if opener is None else opener
+    # The same monotonic deadline may begin at the caller's /ping. Per
+    # request, _exchange additionally enforces RESPONSE_DEADLINE_SECONDS.
+    deadline = min(
+        time.monotonic() + TOTAL_TEST_SECONDS,
+        deadline if deadline is not None else float("inf"),
+    )
     session = None
     result, session = _exchange(
         client, method="initialize", request_id=1,
         params={"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
                 "clientInfo": {"name": "remote-dev-context7-probe", "version": "1.0.0"}},
-        api_key=api_key, protocol=PROTOCOL_VERSION, session=session)
+        api_key=api_key, protocol=PROTOCOL_VERSION, session=session,
+        overall_deadline=deadline)
     protocol = result.get("protocolVersion")
     if not isinstance(protocol, str) or protocol not in SUPPORTED_PROTOCOL_VERSIONS:
         raise ProbeError("MCP initialization negotiated an unsupported protocol version")
@@ -354,7 +364,8 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
         raise ProbeError("MCP initialization lacked tool capability or server information")
     _, session = _exchange(client, method="notifications/initialized",
                            request_id=None, params=None, api_key=api_key,
-                           protocol=protocol, session=session)
+                           protocol=protocol, session=session,
+                           overall_deadline=deadline)
     # tools/list is paginated. Bound both total pages and repeated cursors,
     # and keep JSON-RPC request IDs unique across all pages and tool calls.
     found_tools: set[str] = set()
@@ -365,7 +376,8 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
         params = {} if cursor is None else {"cursor": cursor}
         listed, session = _exchange(
             client, method="tools/list", request_id=request_id,
-            params=params, api_key=api_key, protocol=protocol, session=session)
+            params=params, api_key=api_key, protocol=protocol, session=session,
+            overall_deadline=deadline)
         tools = listed.get("tools")
         if not isinstance(tools, list):
             raise ProbeError("MCP tools/list returned invalid tools")
@@ -394,7 +406,7 @@ def probe(api_key: str | None = None, *, opener=None) -> tuple[str, ...]:
         response, session = _exchange(
             client, method="tools/call", request_id=request_id,
             params={"name": name, "arguments": arguments}, api_key=api_key,
-            protocol=protocol, session=session)
+            protocol=protocol, session=session, overall_deadline=deadline)
         if not _has_public_content(response, method=name):
             raise ProbeError(
                 "Context7 " + name + " returned no verified public documentation"
