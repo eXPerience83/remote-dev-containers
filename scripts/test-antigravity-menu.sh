@@ -140,6 +140,10 @@ set -euo pipefail
 case "${1:-}" in
   status)
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Antigravity Context7 status fixture failure' >&2
+      exit 17
+    fi
     echo 'Context7 (Antigravity): not installed'
     ;;
   menu-state)
@@ -148,8 +152,12 @@ case "${1:-}" in
     ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
-    echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
     echo plan >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Antigravity Context7 recovery plan fixture failure' >&2
+      exit 19
+    fi
+    echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
     ;;
   reinstall)
     [[ "$#" == 1 || ( "$#" == 2 && "$2" == --yes ) ||
@@ -572,6 +580,23 @@ printf '6\n1\n5\nNO\n\n0\n0\n0\n' | env \
   REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
 [[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
+# The same offline diagnostic error handling must apply to AGY without
+# invoking a test or modifying any role-private state.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n1\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL=1 \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == plan ]]
+[[ ! -e "$hardening_calls" ]]
+grep -Fq 'ERROR: Context7 status exited with status 17' "$output"
+grep -Fq 'ERROR: Context7 recovery plan exited with status 19' "$output"
+
 echo 'Antigravity Context7 consent/repair/removal/cancel end-to-end: OK'
 
 # Declining Guarded preset changes must not call the persistent policy writer.
