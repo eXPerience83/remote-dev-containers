@@ -508,24 +508,25 @@ MENU
 next_codex_mode=""
 choose_next_codex_mode() {
   local choice=""
-  clear
-  cat <<MENU
+  # Match Antigravity Approval navigation: an invalid selection stays here,
+  # and only a valid mode or Back returns to the parent menu.
+  while true; do
+    clear
+    cat <<MENU
 Codex approval settings
 ======================
 MENU
-  print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
-  echo '0) Back'
-  read -r -p "> " choice || return 1
-  case "$choice" in
-    1) next_codex_mode="" ;;
-    2) next_codex_mode=autonomous ;;
-    3) next_codex_mode=guarded ;;
-    0|4) return 1 ;;
-    *)
-      sleep 1
-      return 1
-      ;;
-  esac
+    print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
+    echo '0) Back'
+    read -r -p "> " choice || return 1
+    case "$choice" in
+      1) next_codex_mode=""; return 0 ;;
+      2) next_codex_mode=autonomous; return 0 ;;
+      3) next_codex_mode=guarded; return 0 ;;
+      0|4) return 1 ;;
+      *) sleep 1 ;;
+    esac
+  done
 }
 
 # One launch-mode summary contract for both providers. Keep the wrappers
