@@ -953,10 +953,13 @@ def remove_managed_block(
 ) -> bool:
     with locked_codex_config(paths):
         state = inspect_config(paths)
-        if require_healthy and state.kind != "managed":
-            raise Context7Error(
-                "menu removal blocked: Context7 registration changed; no configuration or key changes"
-            )
+        if require_healthy:
+            auth, _ = secret_status(paths)
+            if state.kind != "managed" or auth == "unsafe":
+                raise Context7Error(
+                    "menu removal blocked: Context7 registration or private key state changed; "
+                    "no configuration or key changes"
+                )
         if state.kind == "unmanaged":
             raise Context7Error(
                 "an unowned [mcp_servers.context7] entry exists; Remote Dev will not remove it"
