@@ -392,7 +392,7 @@ DELETE_WARNING
 }
 
 show_projects_menu() {
-  local summary=""
+  local summary="" choice=""
 
   while true; do
     refresh_project_selection
@@ -507,6 +507,7 @@ MENU
 
 next_codex_mode=""
 choose_next_codex_mode() {
+  local choice=""
   clear
   cat <<MENU
 Codex approval settings
@@ -527,12 +528,19 @@ MENU
   esac
 }
 
-next_codex_mode_summary() {
-  if [[ -n "$next_codex_mode" ]]; then
-    printf 'Next launch mode: %s (one launch)\n' "$next_codex_mode"
+# One launch-mode summary contract for both providers. Keep the wrappers
+# below as role-specific adapters; never mix their private override variables.
+print_next_launch_mode_summary() {
+  local override="$1" configured="$2"
+  if [[ -n "$override" ]]; then
+    printf 'Next launch mode: %s (one launch)\n' "$override"
   else
-    printf 'Next launch mode: configured (%s)\n' "$configured_codex_mode"
+    printf 'Next launch mode: configured (%s)\n' "$configured"
   fi
+}
+
+next_codex_mode_summary() {
+  print_next_launch_mode_summary "$next_codex_mode" "$configured_codex_mode"
 }
 
 run_codex_action() {
@@ -589,11 +597,7 @@ refresh_antigravity_policy() {
 
 next_antigravity_mode=""
 next_antigravity_mode_summary() {
-  if [[ -n "$next_antigravity_mode" ]]; then
-    printf 'Next launch mode: %s (one launch)\n' "$next_antigravity_mode"
-  else
-    printf 'Next launch mode: configured (%s)\n' "$configured_antigravity_mode"
-  fi
+  print_next_launch_mode_summary "$next_antigravity_mode" "$configured_antigravity_mode"
 }
 
 set_antigravity_guarded_preset() {
@@ -705,6 +709,25 @@ context7_menu_message() {
   pause_for_menu "Press Enter to return to the Context7 menu..."
 }
 
+# Offline status and recovery commands are shared by both Context7 menus.
+# Their failure must be visible, but must not exit the enclosing menu: the
+# operator still needs Back, Doctor and Shell to diagnose a broken registration.
+run_context7_diagnostic_command() {
+  local label="$1" action_status=0
+  shift
+  "$@" || action_status=$?
+  if (( action_status != 0 )); then
+    report_action_failure "$label" "$action_status"
+  fi
+}
+
+run_context7_offline_diagnosis() {
+  local manager="$1" note="$2"
+  run_context7_diagnostic_command "Context7 status" "$manager" status --menu
+  run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
+  context7_menu_message "$note"
+}
+
 # Shared Context7 confirmation surface: provider-specific backends remain
 # authoritative for config ownership, credentials, and explicit direct CLI.
 run_confirmed_context7_test() {
@@ -792,7 +815,7 @@ MENU
 }
 
 show_context7_menu() {
-  local status_summary="" state=""
+  local status_summary="" state="" choice=""
   local manager=/usr/local/bin/remote-dev-context7
 
   while true; do
@@ -810,9 +833,7 @@ MENU
     read -r -p "> " choice || return 0
     case "$choice" in
       1)
-        "$manager" status --menu || :
-        "$manager" plan || :
-        context7_menu_message "Live connectivity and MCP tools: not verified by this diagnosis."
+        run_context7_offline_diagnosis "$manager" "Live connectivity and MCP tools: not verified by this diagnosis."
         ;;
       2)
         run_confirmed_context7_test "Codex Context7 HTTP test" "$manager"
@@ -827,18 +848,18 @@ MENU
       4)
         case "$state" in
           absent)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             run_confirmed_context7_install "Codex Context7 installation" "$manager" install
             ;;
           repairable)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --menu-safe
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no repair or confirmation is necessary."
             ;;
           *)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             context7_menu_message "Context7 repair blocked: ownership, configuration or private state needs manual review."
             ;;
         esac
@@ -1049,7 +1070,7 @@ handle_shared_agent_menu_choice() {
 
 
 show_antigravity_context7_menu() {
-  local output="" state=""
+  local output="" state="" choice=""
   local manager=/usr/local/bin/remote-dev-context7-antigravity
   while true; do
     output="$("$manager" status --menu 2>&1)" || :
@@ -1066,9 +1087,7 @@ MENU
     read -r -p "> " choice || return 0
     case "$choice" in
       1)
-        "$manager" status --menu || :
-        "$manager" plan || :
-        context7_menu_message "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
+        run_context7_offline_diagnosis "$manager" "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
         ;;
       2)
         run_confirmed_context7_test "Antigravity Context7 HTTP test" "$manager"
@@ -1079,7 +1098,7 @@ MENU
       4)
         case "$state" in
           absent|repairable)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             if [[ "$state" == repairable ]]; then
               run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall
             else
@@ -1090,7 +1109,7 @@ MENU
             context7_menu_message "Context7 registration is already current; no reinstall is needed and OAuth state is preserved."
             ;;
           *)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             context7_menu_message "Context7 repair blocked: configuration is unsafe or user-managed. No entries changed."
             ;;
         esac
@@ -1113,6 +1132,7 @@ MENU
 }
 
 show_mcp_integrations_menu() {
+  local choice=""
   while true; do
     clear
     cat <<MENU
@@ -1269,6 +1289,7 @@ show_agent_menu() {
 }
 
 show_shell_menu() {
+  local choice=""
   while true; do
     clear
     cat <<MENU
