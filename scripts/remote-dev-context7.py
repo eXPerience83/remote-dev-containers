@@ -1167,14 +1167,21 @@ def command_test(paths: Paths, args: argparse.Namespace) -> int:
         raise Context7Error("Context7 API-key state is unsafe")
     bundled_codex_accepts_config(paths)
     print("Codex local MCP configuration: PASS")
-    hosted_ping()
-    print("Context7 hosted HTTP ping: PASS")
     try:
         probe = load_mcp_probe()
     except (OSError, SyntaxError, ImportError, ValueError, TypeError):
         raise Context7Error("Context7 MCP probe module could not be loaded") from None
+    deadline = time.monotonic() + probe.TOTAL_TEST_SECONDS
     try:
-        for line in probe.probe(api_key=key):
+        # Include /ping headers AND body in the same wall-clock budget as
+        # initialize, tools/list and both tool calls.
+        with probe._hard_read_deadline(deadline - time.monotonic()):
+            hosted_ping()
+    except probe.ProbeError:
+        raise Context7Error("Context7 hosted HTTP ping exceeded the time budget") from None
+    print("Context7 hosted HTTP ping: PASS")
+    try:
+        for line in probe.probe(api_key=key, deadline=deadline):
             print(line)
     except probe.ProbeError as exc:
         raise Context7Error(f"Context7 MCP tool verification FAILED: {exc}") from None
