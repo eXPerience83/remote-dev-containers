@@ -116,10 +116,11 @@ def _completed_sse_prefix(raw: bytes) -> bytes | None:
     """Return complete SSE frames only, retaining incomplete trailing bytes."""
     last_boundary = 0
     offset = 0
-    # bytes.splitlines deliberately recognizes only ASCII CR/LF, not U+2028.
-    for line in raw.splitlines(keepends=True):
-        offset += len(line)
-        if line in (b"\n", b"\r", b"\r\n"):
+    # Parse only SSE's CR, LF and CRLF line delimiters. The regex must
+    # never treat UTF-8 U+2028 or other bytes as event boundaries.
+    for match in re.finditer(rb"[^\r\n]*(?:\r\n|\r|\n)", raw):
+        offset = match.end()
+        if match.group(0) in (b"\n", b"\r", b"\r\n"):
             last_boundary = offset
     return raw[:last_boundary] if last_boundary else None
 
