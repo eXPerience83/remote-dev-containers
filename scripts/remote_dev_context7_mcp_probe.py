@@ -32,6 +32,8 @@ SUPPORTED_PROTOCOL_VERSIONS = frozenset({
     "2025-03-26", "2025-06-18", "2025-11-25",
 })
 MAX_TOOL_PAGES = 6
+TOTAL_TEST_SECONDS = 90  # Shared across /ping and every MCP operation.
+EXPECTED_LIBRARY_ID = "/psf/requests"
 REQUIRED_TOOLS = frozenset({"resolve-library-id", "query-docs"})
 
 
@@ -76,11 +78,17 @@ def _extract_message(raw: bytes, content_type: str, request_id: int) -> dict:
         raise ProbeError("MCP response used an unexpected content type")
     found = []
     for message in messages:
+        # A 2025-11-25 resumability priming event can contain "data:"
+        # without JSON. It is an SSE frame, NOT the RPC reply.
+        if not message.strip():
+            continue
         try:
             parsed = json.loads(message)
         except (ValueError, TypeError, RecursionError) as exc:
             raise ProbeError("MCP response contained malformed JSON") from exc
-        if isinstance(parsed, dict) and parsed.get("id") == request_id:
+        # bool is an int subclass in Python, but JSON-RPC id:true is not id:1.
+        if (isinstance(parsed, dict) and type(parsed.get("id")) is int
+                and parsed["id"] == request_id):
             found.append(parsed)
     if len(found) != 1:
         raise ProbeError("MCP response did not contain exactly one matching request ID")
@@ -134,7 +142,8 @@ def _completed_sse_prefix(raw: bytes) -> bytes | None:
 
 
 def _exchange(opener, *, method: str, request_id: int | None, params: dict | None,
-              api_key: str | None, protocol: str, session: str | None):
+              api_key: str | None, protocol: str, session: str | None,
+              overall_deadline: float | None = None):
     request = {"jsonrpc": "2.0", "method": method}
     if request_id is not None:
         request["id"] = request_id
@@ -159,6 +168,8 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
         # A socket timeout is only an idle timeout. Include slow response
         # headers in the same hard deadline used for SSE and JSON body reads.
         deadline = time.monotonic() + RESPONSE_DEADLINE_SECONDS
+        if overall_deadline is not None:
+            deadline = min(deadline, overall_deadline)
         with _hard_read_deadline(deadline - time.monotonic()):
             opened = opener.open(req, timeout=TIMEOUT_SECONDS)
         with opened as response:
@@ -167,15 +178,27 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                     "https", "mcp.context7.com", "/mcp", "", ""):
                 raise ProbeError("MCP request resolved to an unexpected host or path")
             status = response.status
-            next_session = response.headers.get("Mcp-Session-Id") or session
-            if next_session and (not isinstance(next_session, str) or len(next_session) > 128 or
-                                 not re.fullmatch(r"[\x21-\x7e]+", next_session)):
-                raise ProbeError("MCP server provided an unsafe session identifier")
+            assigned_session = response.headers.get("Mcp-Session-Id")
+            if assigned_session is not None:
+                if (not isinstance(assigned_session, str) or
+                        not 1 <= len(assigned_session) <= 128 or
+                        not re.fullmatch(r"[\x21-\x7e]+", assigned_session) or
+                        (api_key is not None and api_key in assigned_session)):
+                    raise ProbeError("MCP server provided an unsafe session identifier")
+                # Only initialize may establish the session; do not let later
+                # responses rewrite an ID that will become an HTTP header.
+                if method != "initialize" and assigned_session != session:
+                    raise ProbeError("MCP server changed the established session")
+            next_session = assigned_session if method == "initialize" else session
             if request_id is None:
-                if status not in (200, 202, 204):
-                    raise ProbeError("MCP initialization notification was rejected")
-                # Notifications have no JSON-RPC reply and may be answered
-                # by an open stream. Close immediately; never wait for EOF.
+                if status != 202:
+                    raise ProbeError("MCP notification was not accepted with HTTP 202")
+                # The transport requires HTTP 202 with NO body. Read one byte
+                # under the remaining budget; never accept a hidden error body.
+                with _hard_read_deadline(deadline - time.monotonic()):
+                    unexpected = response.read1(1)
+                if unexpected:
+                    raise ProbeError("MCP notification returned an unexpected body")
                 return {}, next_session
             if status != 200:
                 raise ProbeError("MCP request failed with HTTP status " + str(status))
@@ -184,9 +207,13 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                 # Read bounded chunks instead of readline(), which a server
                 # trickling bytes without a newline could keep open indefinitely.
                 # Recognize only complete SSE frames before parsing JSON.
-                pending = bytearray()
-                scan_at = 0
-                line_start = 0
+                # Parse CR, LF and CRLF as lines incrementally. A trailing CR
+                # terminates its line immediately, even on an OPEN stream.
+                # If the next fragment begins with LF, consume it as part of
+                # the preceding CRLF rather than a new blank line.
+                frame = bytearray()
+                line = bytearray()
+                after_cr = False
                 received = 0
                 while received <= MAX_RESPONSE_BYTES:
                     with _hard_read_deadline(deadline - time.monotonic()):
@@ -196,40 +223,29 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                     received += len(chunk)
                     if received > MAX_RESPONSE_BYTES:
                         raise ProbeError("MCP response exceeded its size limit")
-                    pending.extend(chunk)
-                    # Scan each byte once; CRLF may straddle two chunks.
-                    # A whitespace-only field is NOT an empty SSE line.
-                    while scan_at < len(pending):
-                        char = pending[scan_at]
-                        if char not in (10, 13):
-                            scan_at += 1
-                            continue
-                        if char == 13 and scan_at + 1 == len(pending):
-                            break
-                        end = (scan_at + 2 if char == 13 and pending[scan_at + 1] == 10
-                               else scan_at + 1)
-                        if scan_at == line_start:
-                            frame = bytes(pending[:end])
-                            del pending[:end]
-                            scan_at = 0
-                            line_start = 0
-                            try:
-                                parsed = _extract_message(frame, content_type, request_id)
-                            except ProbeError as exc:
-                                if "exactly one matching request ID" not in str(exc):
-                                    raise
-                            else:
-                                return parsed, next_session
+                    for char in chunk:
+                        if after_cr:
+                            after_cr = False
+                            if char == 10:
+                                continue
+                        if char in (10, 13):
+                            is_blank = not line
+                            frame.extend(line)
+                            frame.extend(b"\n")
+                            line.clear()
+                            after_cr = char == 13
+                            if is_blank:
+                                try:
+                                    parsed = _extract_message(
+                                        bytes(frame), content_type, request_id)
+                                except ProbeError as exc:
+                                    if "exactly one matching request ID" not in str(exc):
+                                        raise
+                                else:
+                                    return parsed, next_session
+                                frame.clear()
                         else:
-                            line_start = end
-                            scan_at = end
-                # A final CR is a legitimate SSE line ending, even without
-                # a following LF; do not synthesize an event without a blank.
-                if pending and pending[-1] == 13:
-                    pending.extend(b"\n")
-                    complete = _completed_sse_prefix(bytes(pending))
-                    if complete is not None:
-                        return _extract_message(complete, content_type, request_id), next_session
+                            line.append(char)
                 raise ProbeError("MCP event stream did not return the matching request ID")
             # read1 does not wait for the entire requested byte count. This
             # bounds slow-trickling or non-terminating JSON responses too.
