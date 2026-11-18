@@ -18,6 +18,7 @@ from pathlib import Path
 import secrets
 import stat
 import sys
+import time
 from urllib.parse import urlparse
 from urllib.request import build_opener, HTTPRedirectHandler, Request
 
@@ -326,21 +327,6 @@ def test(directory: Path) -> int:
     if state != "managed":
         print("Context7 (Antigravity): must install first")
         return 3
-    try:
-        with build_opener(NoRedirect()).open(Request(PING), timeout=10) as response:
-            url = urlparse(response.geturl())
-            if (url.scheme, url.hostname, url.path) != ("https", "mcp.context7.com", "/ping"):
-                raise MaintenanceError("unexpected ping target")
-            body = response.read(4097)
-            if len(body) > 4096:
-                raise MaintenanceError("ping oversized")
-        if json.loads(body) != {"status": "ok", "message": "pong"}:
-            raise MaintenanceError("unexpected ping response")
-    except (OSError, ValueError, MaintenanceError):
-        print("Context7 (Antigravity): hosted endpoint test failed")
-        return 3
-    print("Antigravity local MCP registration: PASS")
-    print("Context7 hosted HTTP ping: PASS")
     # Keep module loading separate: when the imported source is broken,
     # `probe` has not been assigned and cannot appear in an except clause.
     try:
@@ -348,8 +334,25 @@ def test(directory: Path) -> int:
     except (MaintenanceError, OSError, SyntaxError, ImportError, ValueError, TypeError):
         print("Context7 (Antigravity): MCP tool verification FAILED (probe unavailable)")
         return 3
+    deadline = time.monotonic() + probe.TOTAL_TEST_SECONDS
     try:
-        for line in probe.probe(api_key=None):
+        with probe._hard_read_deadline(deadline - time.monotonic()):
+            with build_opener(NoRedirect()).open(Request(PING), timeout=10) as response:
+                url = urlparse(response.geturl())
+                if (url.scheme, url.hostname, url.path) != ("https", "mcp.context7.com", "/ping"):
+                    raise MaintenanceError("unexpected ping target")
+                body = response.read(4097)
+                if len(body) > 4096:
+                    raise MaintenanceError("ping oversized")
+        if json.loads(body) != {"status": "ok", "message": "pong"}:
+            raise MaintenanceError("unexpected ping response")
+    except (OSError, ValueError, MaintenanceError, probe.ProbeError):
+        print("Context7 (Antigravity): hosted endpoint test failed")
+        return 3
+    print("Antigravity local MCP registration: PASS")
+    print("Context7 hosted HTTP ping: PASS")
+    try:
+        for line in probe.probe(api_key=None, deadline=deadline):
             print(line)
     except probe.ProbeError as exc:
         print(f"Context7 (Antigravity): MCP tool verification FAILED: {exc}")
