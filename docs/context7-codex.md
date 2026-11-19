@@ -31,11 +31,11 @@ remote-dev-context7 remove
 
 A plain interactive `install` or `repair` asks how authentication should be handled:
 
-1. **Sign in to Context7 with a device code (recommended)**.
-2. **Enter an existing Context7 API key** using the existing masked manual-key path.
-3. **Keep the current managed API key**, or stay anonymous when none exists.
-4. **Use anonymous access**, removing only the Remote Dev-managed API-key file.
-0. **Cancel** (historical `5` is still accepted).
+- **`1` — Sign in to Context7 with a device code (recommended).**
+- **`2` — Enter an existing Context7 API key** using the existing masked manual-key path.
+- **`3` — Keep the current managed API key**, or stay anonymous when none exists.
+- **`4` — Use anonymous access**, removing only the Remote Dev-managed API-key file.
+- **`0` — Cancel** (historical `5` is still accepted).
 
 The existing non-interactive manager contract remains available with `--yes`, `--anonymous` and `--api-key-stdin`. Device-login automation can additionally choose `--cli-channel reviewed` or `--cli-channel latest`; the interactive menu uses `auto`.
 
