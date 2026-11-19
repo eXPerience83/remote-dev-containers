@@ -31,11 +31,11 @@ remote-dev-context7 remove
 
 Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 
-1. **Iniciar sesión en Context7 con un código de dispositivo (recomendado)**.
-2. **Introducir una API key existente de Context7** mediante la ruta manual enmascarada.
-3. **Conservar la API key gestionada actual**, o seguir anónimo si no existe.
-4. **Usar acceso anónimo**, eliminando solo la API key gestionada por Remote Dev.
-0. **Cancelar** (el antiguo `5` sigue aceptándose como alias).
+- **`1` — Iniciar sesión en Context7 con un código de dispositivo (recomendado).**
+- **`2` — Introducir una API key existente de Context7** mediante la ruta manual enmascarada.
+- **`3` — Conservar la API key gestionada actual**, o seguir anónimo si no existe.
+- **`4` — Usar acceso anónimo**, eliminando solo la API key gestionada por Remote Dev.
+- **`0` — Cancelar** (el antiguo `5` sigue aceptándose como alias).
 
 El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous` y `--api-key-stdin`. La automatización del device login puede elegir además `--cli-channel reviewed` o `--cli-channel latest`; el menú interactivo utiliza `auto`.
 
