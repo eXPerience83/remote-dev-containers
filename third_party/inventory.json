@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-17",
+  "refreshed_on": "2026-11-21",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.104.0",
+      "version": "2.105.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.104.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.105.0/LICENSE"
         }
       ]
     },
@@ -94,14 +94,14 @@
       "name": "mise",
       "image_scope": "both",
       "version_key": "MISE_VERSION",
-      "version": "2026.11.9",
+      "version": "2026.11.11",
       "source": "https://github.com/jdx/mise",
       "license": "MIT",
       "notices": [
         {
           "path": "components/mise/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.11.9/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/jdx/mise/v2026.11.11/LICENSE"
         }
       ]
     },
@@ -165,7 +165,7 @@
       "name": "npm CLI and bundled dependencies",
       "image_scope": "both",
       "version_key": "NPM_VERSION",
-      "version": "12.2.2",
+      "version": "12.2.3",
       "source": "https://github.com/npm/cli",
       "license": "Artistic-2.0 plus dependency-specific terms",
       "notices": [
@@ -201,19 +201,19 @@
       "name": "OpenAI Codex CLI",
       "image_scope": "final",
       "version_key": "CODEX_RELEASE_TAG",
-      "version": "rust-v0.169.0",
+      "version": "rust-v0.171.0",
       "source": "https://github.com/openai/codex",
       "license": "Apache-2.0",
       "notices": [
         {
           "path": "components/codex/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.169.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.171.0/LICENSE"
         },
         {
           "path": "components/codex/NOTICE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.169.0/NOTICE"
+          "reviewed_from": "https://raw.githubusercontent.com/openai/codex/rust-v0.171.0/NOTICE"
         }
       ]
     },
@@ -270,14 +270,14 @@
       "name": "Playwright MCP and its Playwright library",
       "image_scope": "both",
       "version_key": "PLAYWRIGHT_MCP_VERSION",
-      "version": "0.0.85",
+      "version": "0.0.86",
       "source": "https://github.com/microsoft/playwright-mcp",
       "license": "Apache-2.0 (transitive npm dependencies retain their upstream licenses)",
       "notices": [
         {
           "path": "components/playwright-mcp/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.85/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/microsoft/playwright-mcp/v0.0.86/LICENSE"
         },
         {
           "path": "runtime/playwright/playwright/ThirdPartyNotices.txt",
@@ -293,7 +293,7 @@
       "id": "chromium-headless-shell",
       "name": "Playwright-provisioned Chromium headless shell",
       "image_scope": "both",
-      "version": "matching the installed Playwright version in @playwright/mcp 0.0.85",
+      "version": "matching the installed Playwright version in @playwright/mcp 0.0.86",
       "source": "https://chromium.googlesource.com/chromium/src",
       "license": "BSD-3-Clause and additional Chromium third-party licenses",
       "notices": [
@@ -524,12 +524,12 @@
       "id": "python-cli-ruff",
       "name": "ruff",
       "image_scope": "both",
-      "version": "0.17.5",
-      "source": "https://pypi.org/project/ruff/0.17.5/",
+      "version": "0.17.6",
+      "source": "https://pypi.org/project/ruff/0.17.6/",
       "license": "MIT",
       "notices": [
         {
-          "path": "components/python-clis/ruff-0.17.5/",
+          "path": "components/python-clis/ruff-0.17.6/",
           "source": "artifact"
         }
       ],
