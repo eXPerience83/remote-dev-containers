@@ -282,7 +282,22 @@ jobs:
             "--expect-ubuntu=$UBUNTU_VERSION" \
             "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
 
+      - name: Guard stable promotion against overwrite or downgrade
+        id: promotion_guard
+        env:
+          BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}
+          REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+        run: |
+          set -euo pipefail
+          python3 scripts/guard-stable-promotion.py \
+            --tag "$GITHUB_REF_NAME" \
+            --base "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_MANIFEST_INDEX}" \
+            --runtime "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_MANIFEST_INDEX}" \
+            --journal stable-promotion-preflight.json
+
       - name: Promote one scanned digest to canonical stable tags
+        if: steps.promotion_guard.outputs.mode == 'fresh'
         env:
           NAMESPACE: ${{ steps.registry.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
@@ -345,3 +360,15 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Upload stable promotion preflight and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: stable-promotion-journal
+          path: |
+            stable-promotion-preflight.json
+            base-promotion.json
+            runtime-promotion.json
+          if-no-files-found: ignore
+          retention-days: 14
