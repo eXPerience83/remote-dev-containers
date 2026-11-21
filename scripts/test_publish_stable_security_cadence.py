@@ -68,7 +68,6 @@ def validate(source: str, helper: str) -> None:
 def main() -> None:
     wf = STABLE.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
-    check(True, "no-op")
     validate(wf, helper)
     mutations = (
         ("omit smoke", wf.replace("      - name: Smoke-test the exact stable publication candidates\n",

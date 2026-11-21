@@ -178,6 +178,16 @@ Once stable releases exist, the normal stable AMD64 selector becomes:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 ```
 
+**Stable release identity:** Edge and stable can share a reviewed source SHA but
+cannot be assumed to share an OCI digest: the stable tag builds a separate image
+with channel/version metadata. Before moving the SemVer, `stable`,
+`stable-amd64` and `latest` tags, the publisher tests both exact AMD64
+candidate manifests (startup, bundled notices, isolation, authentication),
+records base/final SPDX and Trivy evidence, and enforces the fixable-critical
+gate. All four stable tags must resolve to that **separately verified stable
+candidate's digest**. Edge acceptance alone does not prove the stable image
+was deployed to TrueNAS.
+
 ## Operator channel choices
 
 Use one maturity channel in normal deployment configuration and switch it only intentionally:
