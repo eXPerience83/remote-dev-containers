@@ -10,8 +10,10 @@ import textwrap
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/validate-edge-publication-candidate.sh"
 STABLE = ROOT / ".github/workflows/publish-amd64.yml"
+EDGE = ROOT / ".github/workflows/publish-edge-amd64.yml"
 TAIL_MARKER = "# Exercise the exact runtime manifest rather than rebuilding a second image.\n"
 PROMOTE_MARKER = "      - name: Promote one scanned digest to canonical stable tags\n"
+EDGE_PROMOTE_MARKER = "      - name: Promote one scanned and smoke-tested digest to canonical edge tags\n"
 
 RUNTIME_STUB = r"""
 set -euo pipefail
@@ -36,6 +38,7 @@ PROMOTE_STUB = r"""
 set -euo pipefail
 NAMESPACE=experience83
 GITHUB_REF_NAME=v0.3.0
+GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 BASE_DIGEST=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 REMOTE_DEV_DIGEST=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 docker() {
@@ -73,14 +76,16 @@ def tail(helper: str) -> str:
     ensure(helper.count(TAIL_MARKER) == 1, "candidate probe marker absent/ambiguous")
     return helper.split(TAIL_MARKER, 1)[1]
 
-def promotion(workflow: str) -> str:
-    ensure(workflow.count(PROMOTE_MARKER) == 1, "stable promotion step absent")
-    block = workflow.split(PROMOTE_MARKER, 1)[1]
+def promotion(workflow: str, *, edge: bool = False) -> str:
+    marker = EDGE_PROMOTE_MARKER if edge else PROMOTE_MARKER
+    ensure(workflow.count(marker) == 1, "publication promotion step absent/ambiguous")
+    block = workflow.split(marker, 1)[1]
     ensure("        run: |\n" in block, "promotion run block absent")
     block = block.split("        run: |\n", 1)[1]
     end = block.find("\n      - name:")
-    ensure(end != -1, "promotion must be followed by journal upload")
-    return textwrap.dedent(block[:end]).strip() + "\n"
+    if not edge:
+        ensure(end != -1, "stable promotion must be followed by journal upload")
+    return textwrap.dedent(block if end == -1 else block[:end]).strip() + "\n"
 
 def execute(shell: str, stub: str, failure: str = "") -> tuple[int, list[str], str]:
     with tempfile.TemporaryDirectory(prefix="release-shell-test-") as td:
@@ -108,14 +113,15 @@ def probe_contract(helper: str) -> None:
         rc, _, _ = execute(snippet, RUNTIME_STUB, failure)
         ensure(rc != 0, "failure silently ignored by candidate probe: " + failure)
 
-def registry_contract(workflow: str) -> None:
-    snippet = promotion(workflow)
+def registry_contract(workflow: str, *, edge: bool = False) -> None:
+    snippet = promotion(workflow, edge=edge)
     rc, events, err = execute(snippet, PROMOTE_STUB)
     ensure(rc == 0, "registry simulation failed: " + err[-400:])
     writes = [e for e in events if e.startswith("docker:buildx imagetools create")]
     reads = [e for e in events if e.startswith("docker:buildx imagetools inspect")]
-    ensure(len(writes) == 2 and len(reads) == 6,
-           "expected two index writes and six registry readbacks")
+    expected_reads = 4 if edge else 6
+    ensure(len(writes) == 2 and len(reads) == expected_reads,
+           "unexpected OCI index writes/readbacks in " + ("Edge" if edge else "Stable"))
     for failure in ("base", "runtime"):
         rc, _, _ = execute(snippet, PROMOTE_STUB, failure)
         ensure(rc != 0, "mismatched registry readback did not block: " + failure)
@@ -123,8 +129,10 @@ def registry_contract(workflow: str) -> None:
 def main() -> None:
     helper = HELPER.read_text(encoding="utf-8")
     workflow = STABLE.read_text(encoding="utf-8")
+    edge_workflow = EDGE.read_text(encoding="utf-8")
     probe_contract(helper)
     registry_contract(workflow)
+    registry_contract(edge_workflow, edge=True)
     password = 'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"'
     isolation = 'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"'
     ensure(helper.count(password) == 1 and helper.count(isolation) == 1,
@@ -149,6 +157,20 @@ def main() -> None:
         pass
     else:
         raise AssertionError("false PASS for bypassed runtime registry readback")
+    for label, old, changed in (
+        ("Edge early exit", '          docker buildx imagetools create \\',
+         '          exit 0\n          docker buildx imagetools create \\'),
+        ("Edge base digest readback suppressed",
+         'if [[ "$actual_base_digest" != "$BASE_DIGEST" ]]; then', 'if false; then'),
+        ("Edge runtime digest readback suppressed",
+         'if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then', 'if false; then'),
+    ):
+        ensure(edge_workflow.count(old) >= 1, "Edge mutation fixture missing: " + label)
+        try:
+            registry_contract(edge_workflow.replace(old, changed, 1), edge=True)
+        except AssertionError:
+            continue
+        raise AssertionError("Edge promotion false PASS: " + label)
     print("Offline publication shell execution sentinels: OK")
 
 if __name__ == "__main__":
