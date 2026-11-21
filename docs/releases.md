@@ -185,7 +185,9 @@ with channel/version metadata. Before moving the SemVer, `stable`,
 runtime AMD64 child manifests, checks both images' identity labels and notices,
 and performs startup, isolation and authentication smoke tests on the **runtime**
 manifest. Base/final SPDX and Trivy reports target the exact corresponding
-AMD64 child manifests, and the fixable-critical gate must pass. All four stable
+AMD64 child manifests. Both SPDX reports include supplemental image-derived
+Chromium Headless Shell archive/binary/license provenance, which is **not a
+Chromium vulnerability scan**. The fixable-critical gate must pass. All four stable
 tags must resolve to the **separately validated stable OCI index digest**;
 the promoted index must contain the same AMD64 runtime child manifest that
 passed smoke and scanning. The index digest is not the child manifest digest.
