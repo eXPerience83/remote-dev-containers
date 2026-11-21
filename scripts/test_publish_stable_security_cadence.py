@@ -128,6 +128,20 @@ def validate(source: str, helper: str) -> None:
               ('--image "$BASE_MANIFEST_REF"' if ref == "base_manifest" else
                '--image "$REMOTE_DEV_MANIFEST_REF"') in chromium,
               "Chromium evidence is missing an exact image or SPDX binding")
+    independent = step(source, "Validate exact stable SPDX documents with independent parser")
+    check(source.index("Record exact Chromium identity and notices in stable SPDX images") <
+          source.index("Validate exact stable SPDX documents with independent parser") <
+          source.index("Scan exact stable base candidate for critical vulnerabilities"),
+          "independent SPDX semantics must precede stable vulnerability scan")
+    check("        if:" not in independent and "        continue-on-error:" not in independent,
+          "independent SPDX validator may not be skipped")
+    check(runnable_lines(independent, "SPDX semantic validation") == (
+        "set -euo pipefail",
+        'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
+    ), "both final stable SPDX files must pass an independent validator")
     for token in ("sbom-publish-base.spdx.json", "sbom-publish-remote-dev.spdx.json",
                   "chromium-evidence-publish-base.json",
                   "chromium-evidence-publish-remote-dev.json",
@@ -299,6 +313,12 @@ def main() -> None:
         ("premature gate exit", wf.replace(
             '          bash scripts/enforce-trivy-gate.sh \\',
             '          exit 0\n          bash scripts/enforce-trivy-gate.sh \\', 1), helper),
+        ("independent SPDX parser bypassed", wf.replace(
+            '          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
+            '          # "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json', 1), helper),
+        ("independent SPDX parser skipped", wf.replace(
+            '      - name: Validate exact stable SPDX documents with independent parser\n',
+            '      - name: Validate exact stable SPDX documents with independent parser\n        if: false\n', 1), helper),
         ("Chromium early bypass", wf.replace(
             '          python3 scripts/chromium-sbom-evidence.py \\',
             '          exit 0\n          python3 scripts/chromium-sbom-evidence.py \\', 1), helper),
