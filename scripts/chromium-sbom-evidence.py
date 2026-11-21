@@ -78,7 +78,30 @@ def inspect_image(image: str) -> dict:
     return json.loads(inspected.stdout)
 
 
-def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
+def validate_sbom_image_binding(sbom: dict, expected_image: str) -> None:
+    """Bind Trivy's SPDX document and primary container to the exact scanned image."""
+    demand(expected_image.startswith("ghcr.io/experience83/remote-dev") and
+           "@sha256:" in expected_image and len(expected_image.split("@sha256:")[-1]) == 64,
+           "expected immutable image reference missing or malformed")
+    demand(sbom.get("name") == expected_image,
+           "SPDX document describes a different scanned image")
+    namespace = sbom.get("documentNamespace")
+    demand(isinstance(namespace, str) and
+           namespace.startswith("http://trivy.dev/container_image/" + expected_image + "-"),
+           "SPDX namespace does not identify the expected image")
+    root_images = [p for p in sbom.get("packages", [])
+                   if p.get("name") == expected_image and
+                   str(p.get("SPDXID", "")).startswith("SPDXRef-ContainerImage-")]
+    demand(len(root_images) == 1, "SPDX primary container image differs from candidate")
+    demand(any(r.get("spdxElementId") == sbom.get("SPDXID") and
+               r.get("relatedSpdxElement") == root_images[0]["SPDXID"] and
+               r.get("relationshipType") == "DESCRIBES"
+               for r in sbom.get("relationships", [])),
+           "SPDX primary container is not described by the document")
+
+
+def add_package(sbom: dict, evidence: dict, pinned: dict, expected_image: str) -> dict:
+    validate_sbom_image_binding(sbom, expected_image)
     demand(sbom.get("spdxVersion") == "SPDX-2.3", "unexpected SPDX version")
     demand(isinstance(sbom.get("packages"), list) and
            isinstance(sbom.get("relationships"), list),
@@ -143,7 +166,7 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
     ):
         files.append({
             "SPDXID": file_id,
-            "fileName": path,
+            "fileName": "." + path,
             "checksums": [{"algorithm": "SHA1", "checksumValue": sha1},
                           {"algorithm": "SHA256", "checksumValue": digest}],
             "licenseConcluded": "NOASSERTION",
@@ -185,6 +208,10 @@ def validate_supplemental_spdx(sbom: dict) -> None:
     for file_id in (EXEC_ID, LICENSE_ID):
         matches = [f for f in files if f.get("SPDXID") == file_id]
         demand(len(matches) == 1, "missing or duplicate Chromium SPDX file: " + file_id)
+        file_name = matches[0].get("fileName")
+        demand(isinstance(file_name, str) and file_name.startswith("./") and
+               not file_name.startswith(".//") and len(file_name) > 2,
+               "SPDX 2.3 fileName must be a relative ./ path")
         checksums = matches[0].get("checksums")
         demand(isinstance(checksums, list), "SPDX file missing checksum records")
         for algorithm, size in (("SHA1", 40), ("SHA256", 64)):
@@ -211,7 +238,7 @@ def main() -> None:
     pinned = json.loads(MANIFEST.read_text(encoding="utf-8"))
     evidence = inspect_image(args.image)
     result = add_package(
-        json.loads(args.spdx.read_text(encoding="utf-8")), evidence, pinned)
+        json.loads(args.spdx.read_text(encoding="utf-8")), evidence, pinned, args.image)
     validate_supplemental_spdx(result)
     args.spdx.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     args.evidence.write_text(json.dumps({
