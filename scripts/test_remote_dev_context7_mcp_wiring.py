@@ -10,6 +10,7 @@ import builtins
 import contextlib
 import importlib.util
 from importlib.machinery import SourceFileLoader
+from http.client import IncompleteRead
 import io
 import json
 import os
@@ -18,6 +19,7 @@ import tempfile
 import time
 import types
 import unittest
+from urllib.request import ProxyHandler
 from unittest.mock import patch
 
 
@@ -211,6 +213,76 @@ class WiringTests(unittest.TestCase):
                   contextlib.redirect_stdout(io.StringIO())):
                 self.assertEqual(agy.test(agy_home), 3)
             self.assertEqual(called, [])
+
+    def test_both_pings_ignore_proxies_and_sanitize_broken_http_json(self):
+        """The preflight /ping must not consult HTTPS_PROXY or crash on JSON."""
+        deep_json = b"[" * 1200 + b"0" + b"]" * 1200
+        for label, payload, broken in (
+            ("valid", b'{"status":"ok","message":"pong"}', False),
+            ("deep-json", deep_json, False),
+            ("incomplete", None, True),
+        ):
+            with self.subTest(ping=label):
+                def checked_opener(*handlers):
+                    self.assertTrue(
+                        any(isinstance(h, ProxyHandler) and h.proxies == {}
+                            for h in handlers),
+                        "ping must explicitly disable environment proxies",
+                    )
+                    class Response(FakeHTTPResponse):
+                        def __init__(self, url):
+                            self.url = url
+                        def geturl(self):
+                            return self.url
+                        def read(self, count=-1):
+                            if broken:
+                                raise IncompleteRead(b"synthetic", 10)
+                            return payload if count < 0 else payload[:count]
+                    class Opener:
+                        def open(self, request, timeout=10):
+                            self_timeout = timeout
+                            assert self_timeout == 10
+                            return Response(request.full_url)
+                    return Opener()
+
+                with (patch.dict(os.environ, {
+                          "HTTPS_PROXY": "http://unsafe-proxy.invalid:4321",
+                          "https_proxy": "http://unsafe-proxy.invalid:4321",
+                      }),
+                      patch.object(codex, "build_opener", side_effect=checked_opener)):
+                    if label == "valid":
+                        self.assertIsNone(codex.hosted_ping())
+                    else:
+                        with self.assertRaises(codex.Context7Error) as err:
+                            codex.hosted_ping()
+                        self.assertNotIn("synthetic", str(err.exception))
+                        self.assertNotIn("RecursionError", str(err.exception))
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    home = Path(tmp)
+                    config = home / "mcp_config.json"
+                    config.write_text(
+                        json.dumps({"mcpServers": {"context7": agy.ENTRY}}),
+                        encoding="utf-8",
+                    )
+                    config.chmod(0o600)
+                    fake = FakeProbe()
+                    with (patch.dict(os.environ, {
+                              "REMOTE_DEV_ROLE": "antigravity",
+                              "HTTPS_PROXY": "http://unsafe-proxy.invalid:4321",
+                              "https_proxy": "http://unsafe-proxy.invalid:4321",
+                          }),
+                          patch.object(agy, "build_opener", side_effect=checked_opener),
+                          patch.object(agy, "load_mcp_probe", return_value=fake),
+                          contextlib.redirect_stdout(io.StringIO()) as output):
+                        code = agy.test(home)
+                    self.assertEqual(code, 0 if label == "valid" else 3)
+                    self.assertNotIn("synthetic", output.getvalue())
+                    if label == "valid":
+                        self.assertEqual(fake.calls, [None])
+                    else:
+                        self.assertEqual(fake.calls, [])
+                        self.assertIn("hosted endpoint test failed", output.getvalue())
 
     def test_codex_ping_propagates_exact_probe_timer_error(self):
         # The deadline exception must escape hosted_ping's network handler,
