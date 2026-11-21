@@ -298,6 +298,23 @@ def _has_public_content(result: dict, *, method: str) -> bool:
             continue
         if not line:
             continue
+        if not in_fence and re.match(r"^#{1,6}\s+", line):
+            # Markdown status headings are service failures, not documentation.
+            # An example comment such as "# request failed after ..." is not
+            # an unambiguous status heading; preserve legitimate examples.
+            heading = re.sub(r"^#{1,6}\s+", "", line).strip().rstrip("#").strip()
+            if re.match(
+                r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
+                r"(?:no (?:matching\s+)?(?:libraries|docs|documentation|results|"
+                r"code snippets?|context)(?:\s+(?:were\s+)?found)?"
+                r"|rate\s*limit(?:\s+exceeded|ed)|quota exceeded"
+                r"|too many requests|unauthorized|authentication required"
+                r"|upgrade your plan|service unavailable"
+                r"|request failed(?=$|[.!:\-]))",
+                heading,
+            ):
+                failed = True
+                break
         if in_fence or line.startswith(("#", ">", "-", "*")):
             # Code examples and quoted documentation are not service status.
             substantive.append(raw)
