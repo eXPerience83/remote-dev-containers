@@ -103,42 +103,62 @@ def validate(source: str, helper: str) -> None:
 
 
 def test_real_trivy_report_gate() -> None:
-    """An empty/invalid JSON object must never count as a clean scan."""
+    """Run the real gate and reject cross-image, missing-coverage and malformed scans."""
+    base = "ghcr.io/experience83/remote-dev-base@sha256:" + "a" * 64
+    runtime = "ghcr.io/experience83/remote-dev@sha256:" + "b" * 64
+    os_result = {"Target": "ubuntu:26.04", "Class": "os-pkgs", "Type": "ubuntu",
+                 "Vulnerabilities": []}
+    lang_result = {"Target": "node_modules", "Class": "lang-pkgs", "Type": "npm",
+                   "Vulnerabilities": []}
     clean = {
-        "SchemaVersion": 2,
-        "ArtifactName": "ghcr.io/experience83/remote-dev@sha256:" + "a" * 64,
-        "ArtifactType": "container_image",
-        "Results": [{"Target": "ubuntu", "Vulnerabilities": []}],
+        "SchemaVersion": 2, "ArtifactName": base, "ArtifactType": "container_image",
+        "Metadata": {"OS": {"Family": "ubuntu", "Name": "26.04"},
+                     "RepoDigests": [base]},
+        "Results": [os_result, lang_result],
     }
-    critical = {
-        **clean, "Results": [{"Target": "ubuntu", "Vulnerabilities": [{
-            "Severity": "CRITICAL", "FixedVersion": "2.0",
-            "PkgName": "sample", "VulnerabilityID": "CVE-SYNTHETIC-1",
-            "InstalledVersion": "1.0",
-        }]}],
-    }
+    vulnerability = {"Severity": "CRITICAL", "FixedVersion": "2.0",
+                     "PkgName": "sample", "VulnerabilityID": "CVE-SYNTHETIC-1",
+                     "InstalledVersion": "1.0"}
+    critical = {**clean, "Results": [
+        {**os_result, "Vulnerabilities": [vulnerability]}, lang_result]}
     no_fix = json.loads(json.dumps(critical))
     no_fix["Results"][0]["Vulnerabilities"][0]["FixedVersion"] = ""
     cases = (
-        ("empty placeholder", {}, False),
-        ("wrong artifact", {**clean, "ArtifactType": "filesystem"}, False),
-        ("wrong result shape", {**clean, "Results": {}}, False),
-        ("invalid vulnerability list", {**clean, "Results": [{"Vulnerabilities": {}}]}, False),
-        ("clean report", clean, True),
-        ("clean omitted Results", {k: v for k, v in clean.items() if k != "Results"}, True),
-        ("fixable critical", critical, False),
-        ("critical without fix", no_fix, True),
+        ("empty placeholder", {}, False, base),
+        ("wrong artifact type", {**clean, "ArtifactType": "filesystem"}, False, base),
+        ("cross-image substitution", clean, False, runtime),
+        ("wrong RepoDigests", {**clean, "Metadata": {"OS": clean["Metadata"]["OS"],
+                                                      "RepoDigests": [runtime]}}, False, base),
+        ("empty Results", {**clean, "Results": []}, False, base),
+        ("missing Results", {k: v for k, v in clean.items() if k != "Results"}, False, base),
+        ("missing OS coverage", {**clean, "Results": [lang_result]}, False, base),
+        ("missing language coverage", {**clean, "Results": [os_result]}, False, base),
+        ("empty scan result", {**clean, "Results": [{}, lang_result]}, False, base),
+        ("bad severity", {**clean, "Results": [
+            {**os_result, "Vulnerabilities": [{**vulnerability, "Severity": ""}]},
+            lang_result]}, False, base),
+        ("untyped vulnerability", {**clean, "Results": [
+            {**os_result, "Vulnerabilities": [{"FixedVersion": "2.0"}]},
+            lang_result]}, False, base),
+        ("invalid vulnerability array", {**clean, "Results": [
+            {**os_result, "Vulnerabilities": {}}, lang_result]}, False, base),
+        ("wrong OS", {**clean, "Metadata": {"OS": {"Family": "debian", "Name": "13"},
+                                            "RepoDigests": [base]}}, False, base),
+        ("clean report", clean, True, base),
+        ("fixable critical", critical, False, base),
+        ("critical without known fix", no_fix, True, base),
     )
     with tempfile.TemporaryDirectory(prefix="remote-dev-trivy-gate-") as directory:
-        for label, report, allowed in cases:
+        for label, report, allowed, expected in cases:
             path = Path(directory) / (label.replace(" ", "-") + ".json")
             path.write_text(json.dumps(report), encoding="utf-8")
-            result = subprocess.run(
-                ["bash", str(GATE), "synthetic:" + str(path)],
-                capture_output=True, text=True, timeout=15, check=False,
-            )
+            cmd = ["bash", str(GATE), "--expect-image=" + expected,
+                   "--expect-ubuntu=26.04", "synthetic:" + str(path)]
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=15, check=False)
             check((result.returncode == 0) == allowed,
-                  "Trivy gate misclassified " + label + ": " + result.stderr[-500:])
+                  "Trivy gate misclassified " + label + ": " +
+                  (result.stdout + result.stderr)[-450:])
 
 
 def main() -> None:
