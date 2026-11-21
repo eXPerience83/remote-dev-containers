@@ -97,6 +97,7 @@ class GuardTests(unittest.TestCase):
             "authorization failed: requested " + ref + ": not found",
             "unexpected status: 404 Not Found",
             "failed to fetch token: 404 Not Found",
+            "failed to fetch oauth bearer token: manifest unknown",
             "connection refused: " + ref + ": not found",
         )
         for error in failures:
