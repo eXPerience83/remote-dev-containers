@@ -30,6 +30,7 @@ def validate(source: str, helper: str) -> None:
         "Smoke-test the exact stable publication candidates",
         "Generate exact stable base SPDX SBOM",
         "Generate exact stable Remote Dev SPDX SBOM",
+        "Record exact Chromium identity and notices in stable SPDX images",
         "Scan exact stable base candidate for critical vulnerabilities",
         "Scan exact stable Remote Dev candidate for critical vulnerabilities",
         "Enforce no fixable critical vulnerabilities",
@@ -55,11 +56,27 @@ def validate(source: str, helper: str) -> None:
                   '"$BASE_MANIFEST_REF"', '"$REMOTE_DEV_MANIFEST_REF"',
                   '"$GITHUB_SHA"', '"$PROJECT_VERSION"'):
         check(token in smoke, "missing exact-candidate smoke binding: " + token)
-    for name, ref in zip(stages[5:9], ["base_manifest", "runtime_manifest",
-                                       "base_manifest", "runtime_manifest"]):
+    for name, ref in zip((stages[5], stages[6], stages[8], stages[9]),
+                         ("base_manifest", "runtime_manifest",
+                          "base_manifest", "runtime_manifest")):
         check("image-ref: ${{ steps." + ref + ".outputs.ref }}" in step(source, name),
               "non-exact manifest scanned: " + name)
+    chromium = step(source, "Record exact Chromium identity and notices in stable SPDX images")
+    check("run: |" in chromium and "set -euo pipefail" in chromium and
+          chromium.count("python3 scripts/chromium-sbom-evidence.py") == 2,
+          "Chromium provenance must execute on both published manifests")
+    for ref, sbom, evidence in (
+        ("base_manifest", "sbom-publish-base.spdx.json",
+         "chromium-evidence-publish-base.json"),
+        ("runtime_manifest", "sbom-publish-remote-dev.spdx.json",
+         "chromium-evidence-publish-remote-dev.json"),
+    ):
+        check("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in chromium and
+              "--spdx " + sbom in chromium and "--evidence " + evidence in chromium,
+              "Chromium evidence is missing an exact image or SPDX binding")
     for token in ("sbom-publish-base.spdx.json", "sbom-publish-remote-dev.spdx.json",
+                  "chromium-evidence-publish-base.json",
+                  "chromium-evidence-publish-remote-dev.json",
                   "trivy-publish-base.json", "trivy-publish-remote-dev.json"):
         check(token in step(source, "Upload exact stable publication evidence"),
               "missing retained evidence: " + token)
@@ -67,8 +84,13 @@ def validate(source: str, helper: str) -> None:
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
           'elif [[ "$expected_version" =~ ^v[0-9]+' in helper,
           "candidate smoke helper fails to bind stable channel/version")
-    check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in
-          step(source, stages[-1]), "stable alias digest verification missing")
+    promotion = step(source, stages[-1])
+    check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in promotion,
+          "stable runtime alias registry verification missing")
+    check('for tag in "$GITHUB_REF_NAME" stable-amd64; do' in promotion and
+          'tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"' in promotion and
+          'if [[ "$actual_digest" != "$BASE_DIGEST" ]]; then' in promotion,
+          "stable base alias registry read-back missing")
 
 
 def main() -> None:
@@ -85,6 +107,15 @@ def main() -> None:
                                           "BASE_IMAGE=${{ steps.base.outputs.digest }}", 1), helper),
         ("wrong SPDX", wf.replace("image-ref: ${{ steps.runtime_manifest.outputs.ref }}",
                                   "image-ref: ${{ steps.runtime.outputs.digest }}", 1), helper),
+        ("missing Chromium identity", wf.replace(
+            "python3 scripts/chromium-sbom-evidence.py",
+            "echo # skipped provenance", 1), helper),
+        ("wrong Chromium digest", wf.replace(
+            "BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}",
+            "BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}", 1), helper),
+        ("no stable base tag read-back", wf.replace(
+            'for tag in "$GITHUB_REF_NAME" stable-amd64; do',
+            'for tag in "disabled-base"; do', 1), helper),
         ("channel not checked", wf, helper.replace(
             'io.github.experience83.remote-dev.channel "$expected_channel"',
             "io.github.experience83.remote-dev.channel edge", 1)),
