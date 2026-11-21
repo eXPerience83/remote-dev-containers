@@ -25,8 +25,18 @@ for entry in "$@"; do
     echo "ERROR: Trivy report is missing or empty for $label: $report" >&2
     exit 1
   fi
-  if ! jq -e 'type == "object"' "$report" >/dev/null; then
-    echo "ERROR: Trivy report is not a valid JSON object for $label: $report" >&2
+  # A syntactically valid object (e.g. {}) is NOT proof that Trivy scanned
+  # an image. Reports with no findings may omit Results, but still carry the
+  # identity and type of the scanned artifact.
+  if ! jq -e '
+    type == "object" and
+    .SchemaVersion == 2 and
+    (.ArtifactName | type == "string" and length > 0) and
+    .ArtifactType == "container_image" and
+    (.Results == null or (.Results | type == "array")) and
+    all(.Results[]?; (.Vulnerabilities == null or (.Vulnerabilities | type == "array")))
+  ' "$report" >/dev/null; then
+    echo "ERROR: Trivy report is not a valid container-image vulnerability report for $label: $report" >&2
     exit 1
   fi
 
