@@ -45,6 +45,10 @@ class NoMatchingReply(ProbeError):
     """A complete SSE frame had no reply for this JSON-RPC request."""
 
 
+class UnverifiedDocumentation(ProbeError):
+    """The tool returned without an explicit error but no verified evidence."""
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ProbeError("MCP transport refused an HTTP redirect")
@@ -279,22 +283,44 @@ def _has_public_content(result: dict, *, method: str) -> bool:
     text = _tool_text(result)
     if not text:
         return False
-    # A non-error JSON-RPC reply can still contain a tool-level message
-    # such as "Could not retrieve documentation."  Recognize a leading
-    # failure status BEFORE evaluating topical markers or examples.
-    leading_line = next((line.strip() for line in text.splitlines()
-                         if line.strip()), "")
-    if re.match(
-        r"(?i)^(?:[>#*-]+\s*)?(?:(?:error|warning|status)\s*[:\-]\s*)?"
-        r"(?:no (?:matching )?(?:libraries|docs|documentation|results|"
-        r"code snippets?|context)|rate.limit(?:ed)?|quota exceeded|"
-        r"too many requests|unauthorized|authentication required|"
-        r"upgrade your plan|request failed|service unavailable|"
-        r"(?:could not|cannot|unable to|failed to)\s+"
-        r"(?:retrieve|fetch|find|load|resolve|query|get)\b)",
-        leading_line,
-    ):
+    # Tool output may echo our question before the actual result. Never
+    # count echoed questions as positive evidence, or overlook a subsequent
+    # 'No documentation found' / quota / unauthorized status line.
+    lines = text.splitlines()
+    substantive = []
+    failed = False
+    in_fence = False
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith("```"):
+            in_fence = not in_fence
+            substantive.append(raw)
+            continue
+        if not line:
+            continue
+        if in_fence or line.startswith(("#", ">", "-", "*")):
+            # Code examples and quoted documentation are not service status.
+            substantive.append(raw)
+            continue
+        if re.match(r"(?i)^(?:query|question|search(?:\\s+query)?)\\s*:", line):
+            continue
+        if re.match(
+            r"(?i)^(?:(?:error|warning|status)\\s*[:\\-]\\s*)?"
+            r"(?:no (?:matching\\s+)?(?:libraries|docs|documentation|results|"
+            r"code snippets?|context)(?:\\s+(?:were\\s+)?found)?"
+            r"|rate\\s*limit(?:\\s+exceeded|ed)?|quota exceeded"
+            r"|too many requests|unauthorized|authentication required"
+            r"|upgrade your plan|request failed|service unavailable"
+            r"|(?:could not|cannot|unable to|failed to)\\s+"
+            r"(?:retrieve|fetch|find|load|resolve|query|get)\\b)",
+            line,
+        ):
+            failed = True
+            break
+        substantive.append(raw)
+    if failed or not substantive:
         return False
+    text = "\\n".join(substantive)
     if method == "resolve-library-id":
         return (
             "Available Libraries:" in text
@@ -425,8 +451,10 @@ def probe(
             client, method="tools/call", request_id=request_id,
             params={"name": name, "arguments": arguments}, api_key=api_key,
             protocol=protocol, session=session, overall_deadline=deadline)
+        if response.get("isError") not in (None, False):
+            raise ProbeError("Context7 " + name + " tool returned an explicit error")
         if not _has_public_content(response, method=name):
-            raise ProbeError(
+            raise UnverifiedDocumentation(
                 "Context7 " + name + " documentation UNVERIFIED (no positive evidence)"
             )
     return (
