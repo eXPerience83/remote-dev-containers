@@ -327,7 +327,7 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
                 "${{ steps." + ref + ".outputs.ref }}",
                 "edge browser SPDX misbound to " + ref)
     upload = named_workflow_step(workflow, "Upload exact publication evidence")
-    require(step_metadata(upload).get("uses", "").split(" #", 1)[0] ==
+    require(step_metadata(upload, expected_if="always()").get("uses", "").split(" #", 1)[0] ==
             "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
             "Edge publication evidence uploader not pinned")
     require(set(active_upload_paths(upload)) == {
