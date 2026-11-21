@@ -105,6 +105,7 @@ jobs:
             scripts/test_guard_stable_promotion.py \
             scripts/validate-trivy-image-report.py \
             scripts/test_publish_stable_security_cadence.py \
+            scripts/test_publication_execution_sentinels.py \
             scripts/test_trivy_setup_reuse.py \
             web/ttyd-osc52/generate.py \
             web/ttyd-osc52/validate.py \
