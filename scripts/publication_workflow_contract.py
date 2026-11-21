@@ -52,6 +52,43 @@ def step_metadata(block: str, *, expected_if: str | None = None) -> dict[str, st
     return values
 
 
+
+def active_mapping_value(block: str, section: str, key: str) -> str:
+    """Get one canonical *active* YAML scalar from a step's with/env mapping.
+
+    Unlike searching a block for text, this rejects comments, duplicated keys,
+    quoted spellings, inline comments and malformed/ambiguous YAML lines.
+    """
+    if section not in ("with", "env"):
+        raise AssertionError("unsupported publication mapping section")
+    metadata = step_metadata(block, expected_if=None if "        if:" not in block
+                             else None)
+    if section not in metadata:
+        raise AssertionError("missing publication step mapping: " + section)
+    anchor = "        " + section + ":"
+    lines = block.splitlines()
+    marks = [i for i, line in enumerate(lines) if line == anchor]
+    if len(marks) != 1:
+        raise AssertionError("publication mapping missing or ambiguous: " + section)
+    matches: list[str] = []
+    for line in lines[marks[0] + 1:]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= 8:
+            break
+        if indent != 10:
+            continue
+        found = re.fullmatch(r"([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?", line.strip())
+        if not found:
+            raise AssertionError("non-canonical publication " + section + " key")
+        if found.group(1) == key:
+            matches.append(found.group(2) or "")
+    if len(matches) != 1 or not matches[0] or "#" in matches[0]:
+        raise AssertionError("missing, duplicate or commented publication scalar: " + key)
+    return matches[0]
+
+
 def active_upload_paths(block: str) -> tuple[str, ...]:
     """Read only active, canonical entries inside with.path: |."""
     metadata = step_metadata(block, expected_if="always()")
