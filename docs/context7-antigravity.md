@@ -4,6 +4,12 @@
 
 This is a per-agent **MCP registration manager**, not an installation of a Context7 server inside the image. The provider's current global MCP file is `~/.gemini/config/mcp_config.json`, using `mcpServers.context7.serverUrl` and Streamable HTTP.
 
+
+> **Probe framing/time limits:** The optional MCP functional test accepts SSE line boundaries only at CR/LF/CRLF (literal U+2028 inside JSON remains data), reads bounded chunks instead of waiting for a newline, and enforces an overall wall-clock response deadline even for a slowly trickling server. These are offline-tested transport protections; they do not establish agent-native OAuth or tool execution.
+
+> **Functional PASS rules (#355):** A successful probe requires valid MCP tool-capable initialization and tool schemas, HTTP 202 with an empty body for the initialized notification, a `resolve-library-id` result actually listing `/psf/requests`, and recognizable Requests timeout documentation from `query-docs`. Missing documentation, an echoed question or a source link alone yields `UNVERIFIED`. Explicit service errors (including quota or authentication failures) and invalid MCP replies yield `FAILED`. Status text inside a fenced documentation example is treated as example content. The standalone probes use a shared **90-second wall-clock budget**, starting before `/ping` and covering all MCP requests (each still capped at 25 seconds and 128 KiB). SSE priming and CR/LF/CRLF framing are handled without pretending that this proves agent-native execution.
+
+
 ## Codex and Antigravity are independent
 
 Codex keeps its existing API key in its own private state and may supply it to the Codex MCP through an environment-variable header mapping. Antigravity's current JSON remote-headers schema is not equivalent; **Remote Dev must not copy a key into a world-readable or persistent JSON field** or assume environment-variable substitution exists.
@@ -35,16 +41,16 @@ The passive commands do not modify state or make network calls. `reinstall` is e
 
 It **refuses to overwrite any customized Context7 entry**, including authentication (headers, OAuth, tokens, command/args or env) **and non-authentication options** such as `timeoutSeconds`, `disabled` or `disabledTools`. All such user-owned entries require manual review and are preserved unchanged, even with an outdated endpoint. Existing non-Context7 MCPs remain semantically unchanged. JSON formatting may be normalized for an eligible reinstall; the original bytes remain in the private backup.
 
-**TrueNAS Edge real-agent PASS (2026-11-14):** `agy /mcp` and real Context7 `resolve-library-id` + `query-docs` calls returned public `/psf/requests` documentation. For independent acceptance after any future reinstall, open Antigravity CLI and run `/mcp`, confirm Context7 connects, then ask a simple public documentation question. `test --yes` tests only the hosted `/ping` endpoint and local JSON contract.
+**TrueNAS Edge real-agent PASS (2026-11-14):** `agy /mcp` and real Context7 `resolve-library-id` + `query-docs` calls returned public `/psf/requests` documentation. For independent acceptance after any future reinstall, open Antigravity CLI and run `/mcp`, confirm Context7 connects, then ask a simple public documentation question. `test --yes` now checks the local JSON, hosted `/ping`, Streamable HTTP `initialize`/`tools/list`, and **two live MCP documentation tool calls**. Those direct calls use **anonymous** access and do not inspect Google/Antigravity OAuth tokens. The vendor OAuth session and **agent-native** tool routing still require a separate check in `agy /mcp` and a real in-agent call.
 
 Agent-global scope only: a project's `.agents/mcp_config.json` may supply another Context7 definition. Treat workspace-specific MCP settings as user-owned.
 
 ## Shared Context7 menu (#347)
 
-Both agents expose **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. **The menu now requires the same `y/N` consent for Test and initial Install in both roles**, and the same typed `REINSTALL`/`REMOVE` for eligible repair/removal. These prompt changes do not affect direct-CLI protections, Antigravity OAuth, or Codex private keys (except when a Codex user explicitly removes their own Context7 registration/key). See the [full menu audit](menu-interaction-audit.md). The Context7 submenu remains unchanged; the #351 main-menu entry is now **6**.
+Both agents expose **1 Status/diagnosis**, **2 Test hosted MCP tools**, **3 Manage authentication**, **4 Install/repair**, **5 Remove registration**, and **0 Back**. **The menu now requires the same `y/N` consent for Test and initial Install in both roles**, and the same typed `REINSTALL`/`REMOVE` for eligible repair/removal. These prompt changes do not affect direct-CLI protections, Antigravity OAuth, or Codex private keys (except when a Codex user explicitly removes their own Context7 registration/key). See the [full menu audit](menu-interaction-audit.md). The Context7 submenu remains unchanged; the #351 main-menu entry is now **6**.
 
 - **Status** and **plan** are passive and offline, without JSON changes. The OAuth token store is never inspected; a `serverUrl` registration **does not imply anonymous or authenticated OAuth**. The output says Antigravity owns authentication and refers to `/mcp`.
-- **Test** checks the hosted HTTPS `/ping` and local contract, not account login or successful MCP tool calls.
+- **Test** explicitly checks the hosted HTTPS `/ping`, performs a bounded Streamable HTTP session and invokes both real documentation tools on a public Requests example. It does **not** prove native AGY OAuth or that AGY itself can execute a tool. Check those from `agy /mcp`. Anonymous MCP may be rate limited and produces a non-PASS outcome if the hosted tool calls fail.
 - **Authentication**: start the Antigravity CLI, use `/mcp → context7 → Authenticate`, confirm `[Authed]` in the vendor interface, and run a real tool. Remote Dev neither copies Codex's key nor reads vendor tokens.
 - **Install/repair**: absent registrations can be installed; a simple drifted endpoint can be replaced after preview and confirmation. A healthy registration **does not request REINSTALL or change files**. Invalid JSON or user-customized entries are blocked.
 - **Remove** deletes only the provably managed global Context7 registration with a private backup. It neither touches other MCPs nor signs out vendor OAuth or revokes provider authorization; account actions are separate.

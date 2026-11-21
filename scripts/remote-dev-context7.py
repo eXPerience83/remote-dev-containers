@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import importlib.util
 import getpass
 import json
 import os
@@ -15,8 +16,9 @@ import sys
 import tempfile
 import time
 import tomllib
+from http.client import HTTPException
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 CONTEXT7_ENDPOINT = "https://mcp.context7.com/mcp"
@@ -1164,7 +1166,9 @@ def hosted_ping() -> None:
         headers={"User-Agent": "remote-dev-context7/0.1"},
         method="GET",
     )
-    opener = build_opener(_NoRedirect())
+    # Do not route the passive /ping through an untrusted environment proxy;
+    # the MCP tool transport already uses the same no-proxy policy.
+    opener = build_opener(ProxyHandler({}), _NoRedirect())
     try:
         with opener.open(request, timeout=10) as response:
             final = urlparse(response.geturl())
@@ -1175,11 +1179,13 @@ def hosted_ping() -> None:
                 raise Context7Error("Context7 ping response exceeded the supported size limit")
     except Context7Error:
         raise
-    except Exception as exc:
-        raise Context7Error(f"Context7 hosted endpoint is unreachable: {type(exc).__name__}") from exc
+    except (OSError, HTTPException, ValueError) as exc:
+        raise Context7Error(
+            f"Context7 hosted endpoint is unreachable: {type(exc).__name__}"
+        ) from exc
     try:
         data = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise Context7Error("Context7 ping returned an unexpected response") from exc
     if not isinstance(data, dict):
         raise Context7Error("Context7 ping returned an unexpected response")
@@ -1187,18 +1193,55 @@ def hosted_ping() -> None:
         raise Context7Error("Context7 ping returned an unexpected status")
 
 
+def load_mcp_probe():
+    path = Path("/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        path = Path(__file__).with_name("remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        raise Context7Error("Context7 MCP probe module is unavailable")
+    spec = importlib.util.spec_from_file_location("remote_dev_context7_mcp_probe", path)
+    if spec is None or spec.loader is None:
+        raise Context7Error("Context7 MCP probe module cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def command_test(paths: Paths, args: argparse.Namespace) -> int:
     confirm("Test", yes=args.yes, network=True)
     state = inspect_config(paths)
     if state.kind != "managed":
         raise Context7Error("Context7 must have a healthy Remote Dev-managed configuration before testing")
-    secret, _ = secret_status(paths)
+    secret, key = secret_status(paths)
     if secret == "unsafe":
         raise Context7Error("Context7 API-key state is unsafe")
     bundled_codex_accepts_config(paths)
-    print("Bundled Codex MCP configuration: OK")
-    hosted_ping()
-    print("Context7 hosted endpoint: OK")
+    print("Codex local MCP configuration: PASS")
+    try:
+        probe = load_mcp_probe()
+    except (OSError, SyntaxError, ImportError, ValueError, TypeError):
+        raise Context7Error("Context7 MCP probe module could not be loaded") from None
+    deadline = time.monotonic() + probe.TOTAL_TEST_SECONDS
+    try:
+        # Include /ping headers AND body in the same wall-clock budget as
+        # initialize, tools/list and both tool calls.
+        with probe._hard_read_deadline(deadline - time.monotonic()):
+            hosted_ping()
+    except probe.ProbeError as exc:
+        # A deadline, pre-existing alarm, or unsupported signal context
+        # has a different fixed cause; do not mislabel all as a timeout.
+        raise Context7Error(f"Context7 hosted HTTP ping FAILED: {exc}") from None
+    print("Context7 hosted HTTP ping: PASS")
+    try:
+        for line in probe.probe(api_key=key, deadline=deadline):
+            print(line)
+    except probe.UnverifiedDocumentation as exc:
+        raise Context7Error(f"Context7 MCP tool verification UNVERIFIED: {exc}") from None
+    except probe.ProbeError as exc:
+        raise Context7Error(f"Context7 MCP tool verification FAILED: {exc}") from None
+    print("Context7 request mode: Codex API key" if key else "Context7 request mode: anonymous (no stored API key)")
+    print("Codex agent-native MCP tool execution: NOT VERIFIED by this standalone probe.")
+    print("For agent acceptance, start Codex and call both Context7 tools on public docs.")
     return 0
 
 

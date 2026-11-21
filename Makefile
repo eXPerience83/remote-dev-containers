@@ -54,6 +54,8 @@ agent-contract-tests:
 	python3 scripts/test-menu-parity.py
 	python3 -m py_compile scripts/remote-dev-context7-antigravity.py scripts/test-remote-dev-context7-antigravity.py
 	python3 scripts/test-remote-dev-context7-antigravity.py
+	python3 scripts/test_remote_dev_context7_mcp_probe.py
+	python3 scripts/test_remote_dev_context7_mcp_wiring.py
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-remote-dev-menu.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-menu-selection.sh
 	REMOTE_DEV_MENU=./scripts/remote-dev-menu.sh bash scripts/test-antigravity-menu.sh

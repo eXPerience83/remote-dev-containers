@@ -11,6 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 INTERPRETER = '/usr/local/lib/remote-dev/python'
 # All Python programs installed in the final image are administrative. Host-only
 # validators, publisher scripts and project/test tools are deliberately excluded.
+MODULES = {
+    'remote_dev_context7_mcp_probe.py': '/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py',
+}
+
 PROGRAMS = {
     'remote-dev-agent-guidance.py': '/usr/local/bin/remote-dev-agent-guidance',
     'remote-dev-browser-config.py': '/usr/local/bin/remote-dev-browser-config',
@@ -31,11 +35,21 @@ class Contract(unittest.TestCase):
     def test_installed_inventory_and_binding(self):
         docker = (ROOT / 'images/codex/Dockerfile').read_text()
         copied = {}
+        copied_modules = {}
         for line in docker.splitlines():
             if line.startswith('COPY ') and 'scripts/' in line and '.py ' in line:
                 source, destination = line.split()[-2:]
-                copied[Path(source).name] = destination
+                basename = Path(source).name
+                if basename in MODULES:
+                    # Helper modules are import-only, root-owned and not
+                    # public CLI entrypoints rewritten by the Python shebang stage.
+                    self.assertIn('--chown=0:0', line)
+                    self.assertIn('--chmod=0444', line)
+                    copied_modules[basename] = destination
+                else:
+                    copied[basename] = destination
         self.assertEqual(copied, PROGRAMS)
+        self.assertEqual(copied_modules, MODULES)
         binding = docker.split("&& sed -i '1c\\#!" + INTERPRETER + " -I'", 1)[1].split('&&', 1)[0]
         self.assertEqual(set(binding.replace('\\', '').split()), set(PROGRAMS.values()))
         base = (ROOT / 'images/base/Dockerfile').read_text()

@@ -12,6 +12,12 @@ https://mcp.context7.com/mcp
 
 Remote Dev does **not** bundle or persist the Context7 CLI or an MCP server runtime. Device-code sign-in resolves an exact official `ctx7` npm package, downloads the exact top-level tarball from the fixed public npm origin, verifies its SHA-512 SRI against the selected registry metadata, runs that verified local tarball only for authentication, and removes the package, npm cache and temporary vendor state afterward. Only the API key adopted into Remote Dev's existing private Context7 state persists.
 
+
+> **Probe framing/time limits:** The optional MCP functional test accepts SSE line boundaries only at CR/LF/CRLF (literal U+2028 inside JSON remains data), reads bounded chunks instead of waiting for a newline, and enforces an overall wall-clock response deadline even for a slowly trickling server. These are offline-tested transport protections; they do not establish agent-native OAuth or tool execution.
+
+> **Functional PASS rules (#355):** A successful probe requires valid MCP tool-capable initialization and tool schemas, HTTP 202 with an empty body for the initialized notification, a `resolve-library-id` result actually listing `/psf/requests`, and recognizable Requests timeout documentation from `query-docs`. Missing documentation, an echoed question or a source link alone yields `UNVERIFIED`. Explicit service errors (including quota or authentication failures) and invalid MCP replies yield `FAILED`. Status text inside a fenced documentation example is treated as example content. The standalone probes use a shared **90-second wall-clock budget**, starting before `/ping` and covering all MCP requests (each still capped at 25 seconds and 128 KiB). SSE priming and CR/LF/CRLF framing are handled without pretending that this proves agent-native execution.
+
+
 ## Explicit lifecycle
 
 From Codex, open **6) MCP integrations... → 1) Context7...** or use these advanced CLI commands:
@@ -27,7 +33,7 @@ remote-dev-context7 update
 remote-dev-context7 remove
 ```
 
-`status` is passive. `install`, `repair`, `update` and `remove` can mutate Codex-private persistent state and require explicit confirmation. `test` also requires confirmation because it performs a live check against Context7's documented `/ping` endpoint.
+`status` is passive. `install`, `repair`, `update` and `remove` can mutate Codex-private persistent state and require explicit confirmation. `test` also requires confirmation because it performs a live check against Context7's documented `/ping` endpoint **and** sends two bounded public documentation queries through the Streamable HTTP MCP server (`initialize`, `tools/list`, `resolve-library-id`, `query-docs`). The active test uses the validated private Codex API key if present, or runs anonymously otherwise. It does not alter Codex sessions or credentials.
 
 A plain interactive `install` or `repair` asks how authentication should be handled:
 
@@ -43,11 +49,11 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 
 ### Simplified navigation and diagnosis (#347)
 
-The Codex main menu has **6) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
+The Codex main menu has **6) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test hosted MCP tools**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
 
 **Menu interaction (#357):** Context7 Test and initial Install ask the same `y/N` in Codex and Antigravity. Context7 selective repair asks for the exact word `REINSTALL`; removal asks for `REMOVE` and warns that Codex's private API key is also deleted. The Codex authentication wizard then preserves its own provider-specific choices (including `0 Cancel`); when newer official `ctx7` CLI metadata exists, the CLI version picker also offers `0 Cancel` (former `3` remains a silent alias). Direct CLI commands retain their original confirmations. See [complete tree audit](menu-interaction-audit.md).
 
-`status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The HTTP test requires confirmation and **does not establish real tool success or authentication**. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
+`status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The active test requires confirmation and checks **real MCP tool success at the hosted endpoint**, not merely HTTP ping. Successful standalone tool calls do **not** prove that the running Codex agent discovered or executed those tools; verify that separately in Codex. Results distinguish the Codex API-key request from anonymous mode. Neither credentials nor returned documentation text are logged. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
 
 Authentication management reuses the existing private-key/device-code flow. Missing or damaged registration must be installed or repaired first. Install/repair is a **no-op with no confirmation** on a healthy registration. Missing registration dispatches to `install`, safely repairable registration previews `plan` and invokes `reinstall`, preserving the API key. Ambiguous or custom entries fail closed. Remove deletes only the managed registration and local key, not the provider-side key or Playwright/OpenAI Developer Docs. All older CLI commands, including `repair` and `update`, remain supported.
 
@@ -156,7 +162,7 @@ Network boundaries:
 - manual-key/anonymous `install` or `repair`: local state only;
 - device login: explicit public-npm metadata lookup and exact transient top-level package download/verification, then npm resolution needed to execute the verified package and Context7 device authorization;
 - `update`/`remove`: local state only;
-- `test`: explicit live config + `https://mcp.context7.com/ping` check;
+- `test`: explicit config + hosted `/ping` + bounded Streamable HTTP MCP tool calls (`resolve-library-id`, `query-docs`) using public Python Requests documentation; **provider-agent invocation remains unverified** and requires a separate Codex run. No values from the responses or private key are printed; HTTPS origin, response size and redirects are restricted;
 - normal enabled Codex sessions: Codex may contact the hosted MCP endpoint for initialization and tool use.
 
 ## Privacy, terms and evidence

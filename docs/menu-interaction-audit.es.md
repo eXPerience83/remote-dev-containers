@@ -1,6 +1,6 @@
 # Auditoría integral de interacción de menús (Codex / Antigravity / Shell)
 
-Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test de Context7** pide `y/N` en Codex y escribir `TEST` en Antigravity. Revisamos **todo el recorrido, confirmaciones, ejecución real y vuelta**, no solo los rótulos. Las pruebas de herramientas MCP reales se mantienen aparte en #355/#356 (borrador).
+Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test de Context7** pide `y/N` en Codex y escribir `TEST` en Antigravity. Revisamos **todo el recorrido, confirmaciones, ejecución real y vuelta**, no solo los rótulos. La ejecución nativa de herramientas requiere comprobación dentro de cada agente.
 
 ## Todas las ramas y confirmaciones
 
@@ -21,7 +21,7 @@ Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test 
 | 5 → 0 Back | Sin cambios | Igual | Principal |
 | 6 MCP → 1 Context7 | Gestor de Codex | Gestor de AGY | Opciones 1–5 y 0 compartidas; credenciales privadas de cada agente |
 | Context7 → 1 Estado/diagnóstico | Status y plan offline | Igual | Sin red ni modificación; Enter para volver |
-| Context7 → 2 Test | Configuración Codex y HTTP | Configuración AGY y HTTP | **Mismo `[y/N]`**, divulgación del servicio Upstash. Cancelar omite el comando `test` y su petición HTTPS, aunque las consultas pasivas `status` / `menu-state` se ejecutan antes de preguntar y al redibujar. Aceptar llama a `test --yes`, informa del resultado, endurece y pausa |
+| Context7 → 2 Test | Configuración, /ping y llamadas MCP públicas con la clave privada si está configurada | Configuración, /ping y llamadas MCP públicas anónimas | **Mismo `[y/N]`**, divulgación del servicio Upstash. Cancelar omite el comando `test` y todas sus solicitudes de red, aunque las consultas pasivas `status` / `menu-state` se ejecutan antes de preguntar y al redibujar. Aceptar llama a `test --yes`, informa del resultado, endurece y pausa |
 | Context7 → 3 Autenticación | API key privada, alta/dispositivo | Instrucciones `agy /mcp` OAuth | Por diseño, distintos; jamás copiar tokens entre roles |
 | Context7 → 4 Install/repair | Alta con onboarding; reparación `reinstall --menu-safe` | Alta nativa; reparación `reinstall` | **El alta inicial pide el mismo y/N en ambos menús**; Codex abre después su asistente privado de autenticación y AGY delega en su gestor JSON. Los comandos directos conservan sus confirmaciones propias. El alta inicial desde el menú Antigravity exige además que Context7 **siga ausente dentro del bloqueo de escritura**; si otra sesión modifica su registro mientras aparece la confirmación, se bloquea el alta sin reemplazarlo silenciosamente. La **reparación** exige `REINSTALL` exacto en ambos menús, después `--yes`; Antigravity además comprueba **dentro del bloqueo de escritura** que la entrada siga desactualizada (`--expect-repairable`) y nunca recrea una entrada retirada por otra sesión; estado bloqueado nunca escribe |
 | Codex Context7 → 3/4 → asistente de autenticación | Login por dispositivo / clave existente / conservar clave / anónimo | AGY utiliza su `/mcp` nativo | El asistente Codex muestra **0 Cancel**, admite el 5 histórico sin efectos |
@@ -39,7 +39,7 @@ Seguimiento: issue #357. Motivación: en TrueNAS Edge la **misma opción 2 Test 
 - Mismo riesgo, misma interfaz: prueba de red `y/N`; reparar/eliminar Context7 `REINSTALL` / `REMOVE`; borrar un proyecto exige nombre exacto. Los logins específicos mantienen sus flujos nativos. Los comandos CLI invocados **fuera del menú conservan sus propias confirmaciones**.
 - Cancelar, responder incorrectamente, agotar stdin o pulsar Back nunca debe ejecutar tests/instalaciones/borrados ni manipular credenciales. El menú solo envía `--yes` cuando ya obtuvo confirmación.
 - Las etiquetas similares no implican mezclar comandos: cada rama ejecuta su gestor con el rol correcto; se preservan respaldos, permisos, límites del workspace y aislamiento OAuth/API key.
-- Un `/ping` de Context7 **no demuestra** llamadas MCP reales; mejoras técnicas en #355/#356. Las pruebas del CI no consultan la red.
+- Un `/ping` de Context7 **no demuestra** llamadas MCP reales; la sonda llama después a `resolve-library-id` y `query-docs` sobre documentación pública de Requests. Las pruebas del CI no consultan la red.
 - Colección de proyectos bloqueada: **Select/Create/Delete se interceptan antes de entrar en sus flujos**; la biblioteca runtime mantiene su propia comprobación de límites. Los fixtures de ambos proveedores verifican que no se presentan selectores ni confirmaciones de borrado, ni se ejecutan agentes.
 - Cobertura: contratos estructurales de **todos los menús** y fixtures reales de consentimiento/cancelación/acciones por rol, además de los tests existentes de operaciones y seguridad.
 

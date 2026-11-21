@@ -93,6 +93,7 @@ COPY scripts/validate-codex-project-boundary.py /usr/local/bin/validate-codex-pr
 COPY scripts/remote-dev-codex-runtime.py /usr/local/bin/remote-dev-codex-runtime
 COPY scripts/remote-dev-prepare-development-scratch.py /usr/local/bin/remote-dev-prepare-development-scratch
 COPY scripts/remote-dev-context7.py /usr/local/lib/remote-dev/remote-dev-context7.py
+COPY --chown=0:0 --chmod=0444 scripts/remote_dev_context7_mcp_probe.py /usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py
 COPY scripts/remote-dev-context7-entrypoint.sh /usr/local/bin/remote-dev-context7
 COPY scripts/remote-dev-context7-device-login.py /usr/local/bin/remote-dev-context7-device-login
 COPY scripts/remote-dev-context7-antigravity.py /usr/local/bin/remote-dev-context7-antigravity
@@ -129,6 +130,8 @@ RUN --network=none \
     --mount=type=bind,source=scripts/test-run-codex-context7.sh,target=/tmp/test-run-codex-context7,ro \
     --mount=type=bind,source=scripts/remote-dev-context7-antigravity.py,target=/tmp/remote-dev-context7-antigravity.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-context7-antigravity.py,target=/tmp/test-remote-dev-context7-antigravity.py,ro \
+    --mount=type=bind,source=scripts/test_remote_dev_context7_mcp_probe.py,target=/tmp/test_remote_dev_context7_mcp_probe.py,ro \
+    --mount=type=bind,source=scripts/test_remote_dev_context7_mcp_wiring.py,target=/tmp/test_remote_dev_context7_mcp_wiring.py,ro \
     --mount=type=bind,source=scripts/test-remote-dev-menu.sh,target=/tmp/test-remote-dev-menu,ro \
     --mount=type=bind,source=scripts/test-role-neutral-runtime.sh,target=/tmp/test-role-neutral-runtime,ro \
     --mount=type=bind,source=scripts/test-project-collection-boundary.sh,target=/tmp/test-project-collection-boundary,ro \
@@ -230,6 +233,8 @@ RUN --network=none \
     && rm -rf "$context7_smoke_home" \
     && bash /tmp/test-run-codex-context7 \
     && python /tmp/test-remote-dev-context7-antigravity.py \
+    && python /tmp/test_remote_dev_context7_mcp_probe.py \
+    && REMOTE_DEV_MCP_WIRING_IMAGE_SMOKE=1 python /tmp/test_remote_dev_context7_mcp_wiring.py \
     && python /tmp/test-antigravity-approval-policy.py \
     && REMOTE_DEV_RUN_ANTIGRAVITY=/usr/local/bin/run-antigravity bash /tmp/test-run-antigravity-policy.sh \
     && python /tmp/test-antigravity-oauth.py \

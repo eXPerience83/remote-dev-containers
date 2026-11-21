@@ -2,6 +2,8 @@
 
 Remote Dev puede configurar el servicio Codex incluido para utilizar Context7 como servicio MCP alojado y opcional de documentación.
 
+La sonda devuelve `UNVERIFIED` cuando falta documentación o solo recibe la pregunta o un enlace. Un error explícito de cuota, autenticación o servicio, o una respuesta MCP inválida, produce `FAILED`. Los mensajes dentro de un bloque de código se interpretan como parte del ejemplo.
+
 > **Estado verificado (14-11-2026):** la implementación de registro/reinstalación de Context7 del [PR #324](https://github.com/eXPerience83/remote-dev-containers/pull/324) está **fusionada y publicada en Edge experimental**. Las llamadas reales a herramientas Context7 funcionaron en Codex y Antigravity sobre TrueNAS; el uso de la API key de Codex quedó respaldado por una comprobación del contador de la cuenta, sin demostrar aislamiento absoluto frente a tráfico concurrente. **Persistencia OAuth de Antigravity tras recreación/rollback y decisión #53 específica de privacidad/servicio alojado siguen pendientes**, según [#95](https://github.com/eXPerience83/remote-dev-containers/issues/95). **No supone aceptación para stable.**
 
 Context7 está operado por **Upstash** y es externo a Remote Dev y OpenAI. Su [documentación de privacidad](https://context7.com/docs/security/data-privacy) indica que las peticiones MCP envían consultas formuladas por el agente, identificadores de bibliotecas y metadatos del cliente/conexión (incluidos sesión y datos de IP para limitación de uso); el proveedor indica que envía las consultas MCP a **proveedores externos de modelos LLM** para reordenar documentación y que también las almacena anonimizadas para evaluar la calidad (excepto las consultas de espacios Enterprise). **No especifica cuánto tiempo conserva esas consultas de evaluación; el plazo declarado de 30 días se aplica únicamente a los logs de la API.** Son afirmaciones del proveedor, **no** una garantía de que el agente nunca incluya datos sensibles en la consulta. No envíes secretos del proyecto, fragmentos de código privado ni datos personales regulados a Context7. La integración normal utiliza el cliente MCP Streamable HTTP nativo de Codex contra:
@@ -27,7 +29,7 @@ remote-dev-context7 update
 remote-dev-context7 remove
 ```
 
-`status` es pasivo. `install`, `repair`, `update` y `remove` pueden modificar estado persistente privado de Codex y exigen confirmación explícita. `test` también pide confirmación porque realiza una comprobación real contra el endpoint `/ping` documentado por Context7.
+`status` es pasivo. `install`, `repair`, `update` y `remove` pueden modificar estado persistente privado de Codex y exigen confirmación explícita. `test` también pide confirmación porque comprueba `/ping` **y realiza dos llamadas públicas reales** a herramientas MCP (`resolve-library-id` y `query-docs`) sobre documentación de Requests. No modifica credenciales ni sesiones y no acredita la ejecución nativa desde Codex.
 
 Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 
@@ -43,11 +45,11 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 ### Navegación simplificada y diagnóstico (#347)
 
-El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
+El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar herramientas MCP alojadas**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
 
 **Interacción del menú (#357):** Test y el alta inicial de Context7 solicitan el mismo `y/N` en Codex y Antigravity. La reparación selectiva pide `REINSTALL` y la eliminación `REMOVE`, con aviso de que Codex también borra su copia de la API key privada. El asistente de autenticación de Codex conserva opciones propias (incluido `0 Cancel`); si aparece una CLI oficial de Context7 más reciente, el selector de versión permite también `0 Cancel` (el antiguo `3` se admite como alias). Los comandos CLI directos mantienen sus confirmaciones. Véase la [auditoría completa de menús](menu-interaction-audit.es.md).
 
-`status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba HTTP requiere confirmación y **no acredita que las herramientas MCP respondan ni la autenticación**. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
+`status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba activa requiere confirmación y comprueba el protocolo MCP y dos herramientas de documentación; **no acredita por sí misma que el agente Codex las utilice** ni que el OAuth nativo esté autenticado. Un resultado documental ambiguo queda `UNVERIFIED`, nunca como éxito demostrado. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
 
 La gestión de autenticación sigue utilizando la clave privada y el flujo de dispositivo ya existente. Primero se instala o repara una configuración dañada. Al pulsar Instalar/reparar sobre una entrada sana, **no hay mutación ni confirmación**. Una configuración ausente usa `install`, una recuperable previsualiza `plan` y utiliza `reinstall`, conservando la clave. Las entradas ambiguas o personalizadas quedan bloqueadas. Eliminar borra solo registro y copia local de clave gestionados, no revoca la clave del proveedor ni elimina Playwright/OpenAI Developer Docs. Se conservan los comandos CLI anteriores, incluidos `repair` y `update`.
 
@@ -156,7 +158,7 @@ Límites de red:
 - `install`/`repair` manual o anónimo: solo estado local;
 - device login: consulta explícita de metadatos del npm público y descarga/verificación transitoria del paquete top-level exacto, seguida de la resolución npm necesaria para ejecutar el paquete verificado y de la autorización por dispositivo en Context7;
 - `update`/`remove`: solo estado local;
-- `test`: comprobación explícita de configuración + `https://mcp.context7.com/ping`;
+- `test`: configuración local + `https://mcp.context7.com/ping` + negociación MCP, listado y dos herramientas con documentación pública de Requests y `timeout`; los resultados textuales ambiguos son `UNVERIFIED`, no PASS; el gestor no imprime la documentación ni la clave y desactiva proxies del entorno en la comprobación.
 - sesión Codex con Context7 habilitado: Codex puede contactar el MCP alojado para inicialización y herramientas.
 
 ## Privacidad, términos y evidencia

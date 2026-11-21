@@ -12,14 +12,16 @@ import argparse
 import importlib.machinery
 import importlib.util
 import json
+from http.client import HTTPException
 import math
 import os
 from pathlib import Path
 import secrets
 import stat
 import sys
+import time
 from urllib.parse import urlparse
-from urllib.request import build_opener, HTTPRedirectHandler, Request
+from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler, Request
 
 ENDPOINT = "https://mcp.context7.com/mcp"
 PING = "https://mcp.context7.com/ping"
@@ -314,6 +316,20 @@ class NoRedirect(HTTPRedirectHandler):
         raise MaintenanceError("Context7 ping redirect denied")
 
 
+def load_mcp_probe():
+    path = Path("/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        path = Path(__file__).with_name("remote_dev_context7_mcp_probe.py")
+    if not path.is_file():
+        raise MaintenanceError("Context7 MCP probe module is unavailable")
+    spec = importlib.util.spec_from_file_location("remote_dev_context7_mcp_probe", path)
+    if spec is None or spec.loader is None:
+        raise MaintenanceError("Context7 MCP probe module cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test(directory: Path) -> int:
     code = status(directory)
     if code != 0:
@@ -322,20 +338,44 @@ def test(directory: Path) -> int:
     if state != "managed":
         print("Context7 (Antigravity): must install first")
         return 3
+    # Keep module loading separate: when the imported source is broken,
+    # `probe` has not been assigned and cannot appear in an except clause.
     try:
-        with build_opener(NoRedirect()).open(Request(PING), timeout=10) as response:
-            url = urlparse(response.geturl())
-            if (url.scheme, url.hostname, url.path) != ("https", "mcp.context7.com", "/ping"):
-                raise MaintenanceError("unexpected ping target")
-            body = response.read(4097)
-            if len(body) > 4096:
-                raise MaintenanceError("ping oversized")
+        probe = load_mcp_probe()
+    except (MaintenanceError, OSError, SyntaxError, ImportError, ValueError, TypeError):
+        print("Context7 (Antigravity): MCP tool verification FAILED (probe unavailable)")
+        return 3
+    deadline = time.monotonic() + probe.TOTAL_TEST_SECONDS
+    try:
+        with probe._hard_read_deadline(deadline - time.monotonic()):
+            # Like /mcp, the HTTP preflight must ignore proxy env variables.
+            with build_opener(ProxyHandler({}), NoRedirect()).open(Request(PING), timeout=10) as response:
+                url = urlparse(response.geturl())
+                if (url.scheme, url.hostname, url.path) != ("https", "mcp.context7.com", "/ping"):
+                    raise MaintenanceError("unexpected ping target")
+                body = response.read(4097)
+                if len(body) > 4096:
+                    raise MaintenanceError("ping oversized")
         if json.loads(body) != {"status": "ok", "message": "pong"}:
             raise MaintenanceError("unexpected ping response")
-    except (OSError, ValueError, MaintenanceError):
+    except (OSError, HTTPException, ValueError, RecursionError,
+            MaintenanceError, probe.ProbeError):
         print("Context7 (Antigravity): hosted endpoint test failed")
         return 3
-    print("Context7 (Antigravity): hosted HTTP ping PASS; authentication and MCP tool calls NOT VERIFIED (check agy /mcp)")
+    print("Antigravity local MCP registration: PASS")
+    print("Context7 hosted HTTP ping: PASS")
+    try:
+        for line in probe.probe(api_key=None, deadline=deadline):
+            print(line)
+    except probe.UnverifiedDocumentation as exc:
+        print(f"Context7 (Antigravity): MCP tool verification UNVERIFIED: {exc}")
+        return 3
+    except probe.ProbeError as exc:
+        print(f"Context7 (Antigravity): MCP tool verification FAILED: {exc}")
+        return 3
+    print("Context7 request mode: anonymous (Antigravity OAuth tokens never inspected)")
+    print("Antigravity OAuth and agent-native MCP tool execution: NOT VERIFIED by this standalone probe.")
+    print("For agent acceptance, use agy /mcp and call both Context7 tools on public docs.")
     return 0
 
 

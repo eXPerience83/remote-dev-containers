@@ -554,7 +554,7 @@ mapfile -t context7_actions <"$context7_calls"
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
 grep -Fq 'Authenticate' "$output"
-echo 'Antigravity Context7 guidance, installation and confirmed HTTP test: OK'
+echo 'Antigravity Context7 guidance, installation and confirmed MCP tool test: OK'
 
 rm -f "$hardening_calls" "$context7_calls"
 printf '6\n1\n4\n\n5\nREMOVE\n\n0\n0\n0\n' | env \
