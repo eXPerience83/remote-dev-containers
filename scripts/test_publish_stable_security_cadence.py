@@ -35,6 +35,30 @@ def runnable_lines(block: str, label: str) -> tuple[str, ...]:
                  not line.lstrip().startswith("#"))
 
 
+def validate_wheel_lock(contents: str) -> None:
+    # All 12 transitives are constrained to exact wheel hashes; pip itself
+    # verifies them. A new dependency requires an explicit lock review.
+    expected = {
+        "spdx_tools", "beartype", "boolean_py", "click", "license_expression",
+        "ply", "pyparsing", "pyyaml", "rdflib", "semantic_version",
+        "uritools", "xmltodict",
+    }
+    records = [x.split(" # ", 1)[0].strip()
+               for x in contents.splitlines()
+               if x.strip() and not x.lstrip().startswith("#")]
+    names = []
+    for record in records:
+        match = re.fullmatch(
+            r"([a-z_]+)==([0-9][0-9.]*) --hash=sha256:([0-9a-f]{64})",
+            record)
+        check(match is not None, "unhashed or unpinned SPDX validator dependency")
+        names.append(match.group(1))
+    check(len(names) == 12 and set(names) == expected,
+          "SPDX parser lock missing, duplicate or unexpected wheel")
+    check(any(x.startswith("spdx_tools==0.8.5 ") for x in records),
+          "SPDX parser version must match independent validation contract")
+
+
 def validate(source: str, helper: str) -> None:
     stages = [
         "Build untagged stable base candidate",
@@ -143,7 +167,7 @@ def validate(source: str, helper: str) -> None:
           runnable_lines(bootstrap, "SPDX validator prelogin") == (
               "set -euo pipefail",
               'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
-              '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
+              '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt',
           ), "independent parser bootstrap must run before credentials")
     independent = step(source, "Validate exact stable SPDX documents with independent parser")
     check(source.index("Record exact Chromium identity and notices in stable SPDX images") <
@@ -347,6 +371,16 @@ def main() -> None:
     wf = STABLE.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
     validate(wf, helper)
+    lock = (ROOT / "scripts/spdx-validator-requirements.lock.txt").read_text(encoding="utf-8")
+    validate_wheel_lock(lock)
+    for damaged in (lock.replace(" --hash=sha256:", " --unsafe-hash=", 1),
+                    lock.replace("spdx_tools==0.8.5 ", "spdx_tools==0.8.4 ", 1),
+                    lock + "click==8.5.1 --hash=sha256:" + "a" * 64 + "\n"):
+        try:
+            validate_wheel_lock(damaged)
+        except AssertionError:
+            continue
+        raise AssertionError("unreviewed SPDX parser wheel lock passed")
     test_real_trivy_report_gate()
     stages = [
         "Scan exact stable base candidate for critical vulnerabilities",
