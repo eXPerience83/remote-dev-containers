@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from publication_workflow_contract import step_metadata, active_upload_paths
+
 ROOT = Path(__file__).resolve().parents[1]
 STABLE = ROOT / ".github/workflows/publish-amd64.yml"
 HELPER = ROOT / "scripts/validate-edge-publication-candidate.sh"
@@ -79,9 +81,7 @@ def validate(source: str, helper: str) -> None:
     check(all(offset >= 0 for offset in offsets) and offsets == sorted(offsets),
           "stable promotion is missing a preceding candidate gate")
     for name in stages[:-1]:
-        block = step(source, name)
-        check(not re.search(r"(?m)^        (if|continue-on-error):", block),
-              "mandatory stable security step conditionally skipped: " + name)
+        step_metadata(step(source, name))
     gate = step(source, "Enforce no fixable critical vulnerabilities")
     check(
         runnable_lines(gate, "critical gate") == (
@@ -162,9 +162,8 @@ def validate(source: str, helper: str) -> None:
     check(source.index("Prepare isolated SPDX validator before registry login") <
           source.index("- uses: docker/login-action@"),
           "independent SPDX Python package installation must precede GHCR login")
-    check("        if:" not in bootstrap and
-          "        continue-on-error:" not in bootstrap and
-          runnable_lines(bootstrap, "SPDX validator prelogin") == (
+    step_metadata(bootstrap)
+    check(runnable_lines(bootstrap, "SPDX validator prelogin") == (
               "set -euo pipefail",
               'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
               '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt',
@@ -174,19 +173,21 @@ def validate(source: str, helper: str) -> None:
           source.index("Validate exact stable SPDX documents with independent parser") <
           source.index("Scan exact stable base candidate for critical vulnerabilities"),
           "independent SPDX semantics must precede stable vulnerability scan")
-    check("        if:" not in independent and "        continue-on-error:" not in independent,
-          "independent SPDX validator may not be skipped")
+    step_metadata(independent)
     check(runnable_lines(independent, "SPDX semantic validation") == (
         "set -euo pipefail",
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "both final stable SPDX files must pass an independent validator")
-    for token in ("sbom-publish-base.spdx.json", "sbom-publish-remote-dev.spdx.json",
-                  "chromium-evidence-publish-base.json",
-                  "chromium-evidence-publish-remote-dev.json",
-                  "trivy-publish-base.json", "trivy-publish-remote-dev.json"):
-        check(token in step(source, "Upload exact stable publication evidence"),
-              "missing retained evidence: " + token)
+    upload = step(source, "Upload exact stable publication evidence")
+    check(set(active_upload_paths(upload)) == {
+        "sbom-publish-base.spdx.json",
+        "sbom-publish-remote-dev.spdx.json",
+        "chromium-evidence-publish-base.json",
+        "chromium-evidence-publish-remote-dev.json",
+        "trivy-publish-base.json",
+        "trivy-publish-remote-dev.json",
+    }, "stable publication evidence must retain all six active artifacts")
     check("expected_channel=stable" in helper and
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
           'elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)' in helper,
@@ -224,6 +225,7 @@ def validate(source: str, helper: str) -> None:
         "stable registry downgrade/overwrite guard must execute on exact indexes",
     )
     promotion = step(source, stages[-1])
+    step_metadata(promotion, expected_if="steps.promotion_guard.outputs.mode == 'fresh'")
     promotion_commands = runnable_lines(promotion, "stable tag promotion")
     check("exit 0" not in promotion_commands and
           sum(line == 'docker buildx imagetools create \\' for line
@@ -464,6 +466,24 @@ def main() -> None:
         ("skip gate by condition", wf.replace(
             "      - name: Enforce no fixable critical vulnerabilities\n",
             "      - name: Enforce no fixable critical vulnerabilities\n        if: false\n", 1), helper),
+        ("quoted skipped gate", wf.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            '      - name: Enforce no fixable critical vulnerabilities\n        "if": false\n', 1), helper),
+        ("quoted ignored gate failure", wf.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            '      - name: Enforce no fixable critical vulnerabilities\n        "continue-on-error": true\n', 1), helper),
+        ("promotion ignores write/readback failures", wf.replace(
+            "      - name: Promote one scanned digest to canonical stable tags\n",
+            "      - name: Promote one scanned digest to canonical stable tags\n        continue-on-error: true\n", 1), helper),
+        ("quoted promotion failure ignored", wf.replace(
+            "      - name: Promote one scanned digest to canonical stable tags\n",
+            '      - name: Promote one scanned digest to canonical stable tags\n        "continue-on-error": true\n', 1), helper),
+        ("stable report path commented out", wf.replace(
+            "            trivy-publish-remote-dev.json\n",
+            "            # trivy-publish-remote-dev.json\n", 1), helper),
+        ("stable Chromium evidence path commented out", wf.replace(
+            "            chromium-evidence-publish-base.json\n",
+            "            # chromium-evidence-publish-base.json\n", 1), helper),
         ("ignore gate error", wf.replace(
             "      - name: Enforce no fixable critical vulnerabilities\n",
             "      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n", 1), helper),
