@@ -128,6 +128,17 @@ def validate(source: str, helper: str) -> None:
               ('--image "$BASE_MANIFEST_REF"' if ref == "base_manifest" else
                '--image "$REMOTE_DEV_MANIFEST_REF"') in chromium,
               "Chromium evidence is missing an exact image or SPDX binding")
+    bootstrap = step(source, "Prepare isolated SPDX validator before registry login")
+    check(source.index("Prepare isolated SPDX validator before registry login") <
+          source.index("- uses: docker/login-action@"),
+          "independent SPDX Python package installation must precede GHCR login")
+    check("        if:" not in bootstrap and
+          "        continue-on-error:" not in bootstrap and
+          runnable_lines(bootstrap, "SPDX validator prelogin") == (
+              "set -euo pipefail",
+              'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
+              '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
+          ), "independent parser bootstrap must run before credentials")
     independent = step(source, "Validate exact stable SPDX documents with independent parser")
     check(source.index("Record exact Chromium identity and notices in stable SPDX images") <
           source.index("Validate exact stable SPDX documents with independent parser") <
@@ -137,8 +148,6 @@ def validate(source: str, helper: str) -> None:
           "independent SPDX validator may not be skipped")
     check(runnable_lines(independent, "SPDX semantic validation") == (
         "set -euo pipefail",
-        'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
-        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "both final stable SPDX files must pass an independent validator")
@@ -316,6 +325,9 @@ def main() -> None:
         ("independent SPDX parser bypassed", wf.replace(
             '          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
             '          # "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json', 1), helper),
+        ("independent SPDX installation skipped", wf.replace(
+            '      - name: Prepare isolated SPDX validator before registry login\n',
+            '      - name: Prepare isolated SPDX validator before registry login\n        if: false\n', 1), helper),
         ("independent SPDX parser skipped", wf.replace(
             '      - name: Validate exact stable SPDX documents with independent parser\n',
             '      - name: Validate exact stable SPDX documents with independent parser\n        if: false\n', 1), helper),
