@@ -14,9 +14,9 @@ The permanent maturity order is:
 dev -> edge -> stable = latest
 ```
 
-These concepts stay separate from human-readable build identity and immutable provenance. The first stable `v0.2.0` was published on 2026-11-05. The prepared `0.2.1` source patch does **not** itself publish a new image: until its tag-triggered publisher passes, current `stable`/`latest` remain on the last successfully published stable digest. Continue using `edge`/`edge-amd64` only for experimental testing.
+These concepts stay separate from human-readable build identity and immutable provenance. The first stable `v0.2.0` was published on 2026-11-05. The prepared `0.2.1` source patch does **not** itself publish a new image: until a stable-tag publisher starts writing tags, the last published stable digest remains the intended target of `stable`/`latest`; a later failure during promotion can still leave a partial registry update. Continue using `edge`/`edge-amd64` only for experimental testing.
 
-The repository's local source version for this patch cut is `0.2.1`. The checked-out source number is not proof of a published image: edge embeds a dated identity, and only the successfully completed `v0.2.1` stable-tag workflow can update `stable` and `latest`. Runtime pins, lockfile metadata and changelog history remain governed by their reviewed owners; routine upstream updates do not silently create a new stable release.
+The repository's local source version for this patch cut is `0.2.1`. The checked-out source number is not proof of a published image: edge embeds a dated identity, and only an authorized `v0.2.1` stable-tag publication should advance `stable` and `latest`; a failed job can nevertheless have written some tags, so inspect the six aliases before declaring success or rollback. Runtime pins, lockfile metadata and changelog history remain governed by their reviewed owners; routine upstream updates do not silently create a new stable release.
 
 ## Identity layers
 
