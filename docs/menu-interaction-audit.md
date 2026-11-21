@@ -1,0 +1,54 @@
+# Complete terminal-menu interaction audit (Codex / Antigravity / Shell)
+
+Scope: issue #357, follow-up to the **actual TrueNAS Edge screenshots** showing a `y/N` Context7 test in Codex and typed `TEST` in Antigravity. This document covers the **end-to-end screen, prompt, cancellation, dispatch and return path**, not just label parity. It does not certify the native agent's MCP execution: that is a separate question (#355/#356, currently draft).
+
+## Main and every nested path
+
+| Level / visible key | Codex | Antigravity | Expected confirmation / return |
+| --- | --- | --- | --- |
+| Main 1 Start | `run-codex` in validated project | `run-antigravity` with `REMOTE_DEV_PROJECT` | Interactive agent, then harden and pause; no cross-provider fallback |
+| Main 2 Resume/Continue | `run-codex resume` | `run-antigravity --continue` | Same return/hardening contract; different native CLI semantics |
+| Main 3 Projects → 1 Select → project picker | Shared collection validation | Same implementation; role-private workspace | Picker shows **0 Back**; old N+1 alias is accepted; selected project returns to main |
+| Main 3 → 2 Create | Shared project-safe create helper | Same | Read project name; on success select it and return to main; failures stay in Projects |
+| Main 3 → 3 Delete → project picker | Shared project boundary and deletion | Same | Confirm by typing the **exact project name**, including whitespace-sensitive matching; spaces/tabs, incorrect names and EOF cannot delete anything. Return to Projects after success |
+| Main 3 → 0 Back | No mutation | Same | Return to main; old Projects 4 alias accepted invisibly |
+| Main 4 Approval → 1 Configured | One-launch override cleared | Same | No persistent write; returns to main |
+| Main 4 → 2 Autonomous | One-launch override | Same | No persistent write; returns to main |
+| Main 4 → 3 Guarded | Codex asks approval | AGY permission engine remains active | No persistent write; returns to main |
+| Main 4 → 4/5 Guarded presets | Not available | Change vendor-owned persistent `toolPermission` | **y/N explicit confirmation**, cancel no settings writer; normal pause & return |
+| Main 4 → 0 Back | No mode change | Same | Codex historic 4 / AGY historic 6 aliases retained |
+| Main 5 Manage → 1 | Optional Codex update from official OpenAI release | AGY install **only if absent** | Native, provider-specific release and security checks; `y/N` vendor confirmation; harden on invocation |
+| Main 5 → 2 | Optional Codex runtime removal/fallback | AGY update **only if installed/damaged** | Native `y/N`; no dispatch when status unknown or operation unavailable |
+| Main 5 → 3 | Codex device-code sign-in | AGY native sign-in guidance only | Provider-specific; AGY screen does **not** log in or mutate state |
+| Main 5 → 0 Back | No mutation | Same | Return to main |
+| Main 6 MCP → 1 Context7 | Codex private manager | AGY private manager | Shared numbered submenu; specific credential ownership |
+| Context7 → 1 Status and recovery diagnosis | Offline `status` and `plan` | Same | No network, no OAuth/key reads beyond safe status; Enter to return |
+| Context7 → 2 Test hosted connection | Codex config + HTTP check | AGY config + HTTP check | **Same menu prompt `[y/N]`**, consent disclosures. Cancelling skips the `test` command and its HTTPS request; passive `status` / `menu-state` calls still occur before the prompt and on redraw. Affirmative consent invokes the provider's `test --yes`, followed by hardening and pause |
+| Context7 → 3 Authentication | Codex private API key/device-login choice | Native `agy /mcp` OAuth instructions | Provider-specific by design; no copying OAuth into config |
+| Context7 → 4 Install/repair | Absent: Codex onboarding; repairable: scoped `reinstall --menu-safe` | Absent: native registration install; repairable: scoped `reinstall` | **Initial install asks the same y/N disclosure in both menu roles**; Codex then runs its private onboarding wizard, while AGY delegates to the provider JSON manager. The backend's own direct-CLI protections remain unchanged. Antigravity's menu-only initial-install command additionally requires the registration to **remain absent under the backend's write lock**; if it changed while confirmation was displayed, installation is blocked rather than silently replacing a drifted entry. **Repairable** requires typed `REINSTALL` in both menus before `--yes`; Antigravity additionally requires the registration to remain **drifted under the backend write lock** (`--expect-repairable`) and refuses to resurrect a concurrently removed entry; unavailable/blocked states never mutate |
+| Codex Context7 → 3/4 → authentication wizard | Device login / enter existing key / keep key / anonymous | AGY uses native `/mcp` instead | Codex wizard now shows **0 Cancel**, accepts historical 5 without side effects |
+| Codex device login → official CLI version selector | Reviewed pinned version / latest official, review pending | No Remote Dev AGY equivalent | CLI version picker now shows **0 Cancel**; historical 3 still cancels. This is not a launch or credential adoption |
+| Context7 → 5 Remove | Removes managed registration **and local key** | Removes managed registration, **not vendor OAuth** | Typed **`REMOVE`** in both menus before backend `--yes`; blocked states cannot remove |
+| Context7 → 0 Back; MCP → 0 Back | No mutation | Same | Returns one level at a time |
+| Main 7 Sign in to GitHub CLI | `gh auth login` and Git credential setup | Same | Native browser login; credentials remain in role-private state; harden |
+| Main 8 Run diagnostics | Provider-sensitive Doctor | Same | Read-only diagnostic; pause, no confirmation/no extra writes |
+| Main 9 Open container shell | `bash --login` | Same | Explicit shell, harden and pause after it exits |
+| Main 0 Exit tmux | Exit | Exit | No logout/removal of credentials |
+| Emergency Shell 1/2/3/0 | Shell / GitHub / Doctor / Exit | Role-neutral recovery menu | **0 Exit** visible, old 4 accepted invisibly; no agent integrations exposed |
+
+## Policy and regression requirements
+
+1. **Same risk, same UX:** network-only test = `[y/N]`; persistent Context7 removal or repair = typed `REMOVE` / `REINSTALL`; exact-name project deletion remains stronger, and provider-native logins remain provider-specific. A direct CLI invocation still has its own independent confirmation; the menu may pass `--yes` **only after menu consent**.
+2. **No unexpected execution:** prompt cancellation, empty/invalid responses and Back must not invoke test, remove, repair, preset write, or credential replacement; no hardening invocation is required when no child operation ran.
+3. **No wrong provider:** similar labels must resolve to the exact role-owned manager; Codex credentials are never sent to AGY, and AGY OAuth tokens are never inspected by the Codex manager.
+4. **Visible diagnostics:** interactive handlers report nonzero child exit statuses. Both Context7 diagnosis paths now use shared helpers to report failures of explicit `status --menu` and `plan` commands (while retaining safe navigation); passive redraw summaries may fall back to an unavailable/blocked state. `Context7 /ping` remains an HTTP check, **not proof of live MCP tools**, which is separately tracked under #355.
+5. **Provider/state safeguards:** a blocked project collection intercepts Select/Create/Delete before entering their workflows (in addition to the runtime's independent boundary checks), blocked/unknown installation states and guarded compatibility remain intact, and legitimate login differences are preserved.
+6. **Test inventory:** `scripts/test-menu-parity.py` checks all nested menu definitions, risk prompts, EOF and provider isolation; `scripts/test-remote-dev-menu.sh` and `scripts/test-antigravity-menu.sh` execute positive/cancelled flows, and the existing project/runtime/context7 unit fixtures test the underlying managers. CI must not access live network or secrets.
+
+**Approval invalid-choice parity:** both Codex and Antigravity now stay inside the Approval submenu on an invalid value; a valid selection returns to main and takes effect for one launch, whereas Back/EOF leaves it unchanged. Both providers have executed fixtures for invalid text/number followed by a valid Guarded selection.
+
+**Extracted helpers:** `print_next_launch_mode_summary` owns the configured/one-launch wording; role-owned adapters preserve private overrides. `run_context7_diagnostic_command` and `run_context7_offline_diagnosis` share offline status/plan dispatch and nonzero exit reporting; Context7 install/test/typed-change consent already uses shared helpers. Every interactive submenu declares its own local `choice` variable to avoid dynamically scoping input into its caller. Provider-native launch commands, auth storage, role-qualified management, and guarded presets deliberately remain separate.
+
+**Late-consent race protection (Codex):** the menu's absent registration state is carried through every Codex authentication-onboarding choice (including device login) as a backend precondition and revalidated under the same lock that controls configuration/key writes. The healthy-state authentication and removal routes similarly require that managed registration to remain healthy before any mutation. These restrictions do not change direct-CLI install/repair/remove semantics. EOF on a return pause is treated as clean navigation, not an action failure. Regression fixtures cover changed states, unchanged key/backup/config and both providers' cancelled Context7 tests.
+
+**Acceptance limit:** Passing fixtures and viewing screenshots do not prove the vendor login, real agent tool invocation, persistent OAuth after recreation or patched Chromium. Those are separate tracked work items. Stable/latest and TrueNAS deployment are not altered by this audit.

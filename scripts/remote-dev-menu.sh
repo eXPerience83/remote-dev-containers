@@ -39,7 +39,26 @@ harden_state_or_exit() {
 
 pause_for_menu() {
   local prompt="${1:-Press Enter to return to the menu...}"
-  read -r -p "$prompt" _
+  # End-of-input on a return pause is normal navigation termination. Do not
+  # leak read's status 1 into a completed/cancelled menu action under set -e.
+  read -r -p "$prompt" _ || return 0
+}
+
+# Menu-only consent helpers. Direct CLI managers retain their own prompts.
+# Network diagnostics use y/N; context7 registration removal/repair uses a
+# stronger typed word. Never pass --yes without prior consent.
+menu_confirm_yes_no() {
+  local question="$1" answer=""
+  printf '%s [y/N] ' "$question"
+  IFS= read -r answer || return 1
+  case "${answer,,}" in y|yes) return 0 ;; *) return 1 ;; esac
+}
+
+menu_confirm_word() {
+  local word="$1" operation="$2" answer=""
+  printf 'Type %s to confirm %s: ' "$word" "$operation"
+  IFS= read -r answer || return 1
+  [[ "$answer" == "$word" ]]
 }
 
 report_action_failure() {
@@ -267,8 +286,9 @@ choose_project_name() {
     printf '%d) %s\n' "$((index + 1))" "${projects[$index]}"
   done
   max_choice="$(( ${#projects[@]} + 1 ))"
-  printf '%s) Back\n' "$max_choice"
-  read -r -p "> " choice
+  # N+1 remains an invisible historical Back alias.
+  printf '0) Back\n'
+  read -r -p "> " choice || return 1
 
   if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
     return 1
@@ -321,7 +341,7 @@ create_project_action() {
   echo "Create project"
   echo "=============="
   echo "Projects are created as direct child directories of $workspace."
-  read -r -p "Project name: " name
+  read -r -p "Project name: " name || return 1
   if resolved="$(remote_dev_create_project "$workspace" "$name")"; then
     active_project_name="$name"
     active_project_path="$resolved"
@@ -355,7 +375,7 @@ Path: $resolved
 This permanently removes the entire project directory and all of its contents.
 Type the exact project name to confirm: $project_choice_name
 DELETE_WARNING
-  read -r -p "> " confirmation
+  IFS= read -r -p "> " confirmation || return 1
   if remote_dev_delete_project "$workspace" "$project_choice_name" "$confirmation"; then
     if [[ "$active_project_name" == "$project_choice_name" ]]; then
       active_project_name=""
@@ -374,7 +394,7 @@ DELETE_WARNING
 }
 
 show_projects_menu() {
-  local summary=""
+  local summary="" choice=""
 
   while true; do
     refresh_project_selection
@@ -393,7 +413,17 @@ MENU
       echo "Safety block: project mutations are disabled until the collection is repaired."
       echo "Use Back → Run diagnostics / Open container shell for inspection and recovery."
     fi
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
+    # Do not even enter project selection/mutation workflows while the
+    # collection is unsafe. The runtime helpers still revalidate ownership.
+    if (( project_collection_blocked == 1 )); then
+      case "$choice" in
+        1|2|3)
+          show_unavailable_action "Project collection is blocked; selection, creation and deletion are disabled. Run diagnostics before retrying."
+          continue
+          ;;
+      esac
+    fi
     case "$choice" in
       1)
         if select_project_action; then
@@ -479,32 +509,41 @@ MENU
 
 next_codex_mode=""
 choose_next_codex_mode() {
-  clear
-  cat <<MENU
+  local choice=""
+  # Match Antigravity Approval navigation: an invalid selection stays here,
+  # and only a valid mode or Back returns to the parent menu.
+  while true; do
+    clear
+    cat <<MENU
 Codex approval settings
 ======================
 MENU
-  print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
-  echo '0) Back'
-  read -r -p "> " choice
-  case "$choice" in
-    1) next_codex_mode="" ;;
-    2) next_codex_mode=autonomous ;;
-    3) next_codex_mode=guarded ;;
-    0|4) return 1 ;;
-    *)
-      sleep 1
-      return 1
-      ;;
-  esac
+    print_common_approval_mode_choices "$configured_codex_mode" "asks for confirmations"
+    echo '0) Back'
+    read -r -p "> " choice || return 1
+    case "$choice" in
+      1) next_codex_mode=""; return 0 ;;
+      2) next_codex_mode=autonomous; return 0 ;;
+      3) next_codex_mode=guarded; return 0 ;;
+      0|4) return 1 ;;
+      *) sleep 1 ;;
+    esac
+  done
+}
+
+# One launch-mode summary contract for both providers. Keep the wrappers
+# below as role-specific adapters; never mix their private override variables.
+print_next_launch_mode_summary() {
+  local override="$1" configured="$2"
+  if [[ -n "$override" ]]; then
+    printf 'Next launch mode: %s (one launch)\n' "$override"
+  else
+    printf 'Next launch mode: configured (%s)\n' "$configured"
+  fi
 }
 
 next_codex_mode_summary() {
-  if [[ -n "$next_codex_mode" ]]; then
-    printf 'Next launch mode: %s (one launch)\n' "$next_codex_mode"
-  else
-    printf 'Next launch mode: configured (%s)\n' "$configured_codex_mode"
-  fi
+  print_next_launch_mode_summary "$next_codex_mode" "$configured_codex_mode"
 }
 
 run_codex_action() {
@@ -561,15 +600,19 @@ refresh_antigravity_policy() {
 
 next_antigravity_mode=""
 next_antigravity_mode_summary() {
-  if [[ -n "$next_antigravity_mode" ]]; then
-    printf 'Next launch mode: %s (one launch)\n' "$next_antigravity_mode"
-  else
-    printf 'Next launch mode: configured (%s)\n' "$configured_antigravity_mode"
-  fi
+  print_next_launch_mode_summary "$next_antigravity_mode" "$configured_antigravity_mode"
 }
 
 set_antigravity_guarded_preset() {
   local preset="$1"
+
+  clear
+  echo 'This changes a persistent Antigravity Guarded preset; fine-grained rules remain unchanged.'
+  if ! menu_confirm_yes_no "Apply Guarded preset $preset?"; then
+    echo 'Guarded preset change cancelled; settings were not modified.'
+    pause_for_menu "Press Enter to return to Antigravity approval settings..."
+    return 0
+  fi
 
   run_interactive_and_harden_to \
     "Press Enter to return to Antigravity approval settings..." \
@@ -578,7 +621,7 @@ set_antigravity_guarded_preset() {
 }
 
 show_antigravity_approval_menu() {
-  local next_mode_summary=""
+  local next_mode_summary="" choice=""
 
   while true; do
     refresh_antigravity_policy
@@ -601,7 +644,7 @@ MENU
 5) Set Guarded preset: strict (more restrictive)
 0) Back
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         next_antigravity_mode=""
@@ -669,6 +712,83 @@ context7_menu_message() {
   pause_for_menu "Press Enter to return to the Context7 menu..."
 }
 
+# Offline status and recovery commands are shared by both Context7 menus.
+# Their failure must be visible, but must not exit the enclosing menu: the
+# operator still needs Back, Doctor and Shell to diagnose a broken registration.
+run_context7_diagnostic_command() {
+  local label="$1" action_status=0
+  shift
+  "$@" || action_status=$?
+  if (( action_status != 0 )); then
+    report_action_failure "$label" "$action_status"
+  fi
+}
+
+run_context7_offline_diagnosis() {
+  local manager="$1" note="$2"
+  run_context7_diagnostic_command "Context7 status" "$manager" status --menu
+  run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
+  context7_menu_message "$note"
+}
+
+# Shared Context7 confirmation surface: provider-specific backends remain
+# authoritative for config ownership, credentials, and explicit direct CLI.
+run_confirmed_context7_test() {
+  local label="$1" manager="$2"
+  clear
+  cat <<'NOTICE'
+Context7 is an external Upstash service.
+This test contacts Context7 over HTTPS; do not send private or regulated data.
+No credentials or provider OAuth state are changed by this network test.
+NOTICE
+  if ! menu_confirm_yes_no "Test Context7 integration?"; then
+    context7_menu_message "Context7 test cancelled; no network request was made."
+    return 0
+  fi
+  # The menu already obtained consent, avoiding Codex y/N vs AGY typed TEST.
+  if run_context7_action "$label" "$manager" test --yes; then :; fi
+}
+
+# Installation presents the same y/N disclosure to either role; Codex then
+# offers its private authentication-onboarding choices, while Antigravity
+# creates only the vendor-owned anonymous registration after --yes.
+run_confirmed_context7_install() {
+  local label="$1" manager="$2"
+  shift 2
+  clear
+  cat <<'NOTICE'
+Context7 is an optional external Upstash service.
+Installing registers a hosted MCP endpoint; authentication is provider-specific.
+No other MCP server is modified.
+NOTICE
+  if ! menu_confirm_yes_no "Install Context7 registration?"; then
+    context7_menu_message "Context7 installation cancelled; no configuration changes were made."
+    return 0
+  fi
+  if run_context7_action "$label" "$manager" "$@"; then :; fi
+}
+
+run_confirmed_context7_change() {
+  local word="$1" label="$2" manager="$3"
+  shift 3
+  clear
+  case "$role:$word" in
+    codex:REMOVE)
+      echo 'Removes the managed Context7 registration AND Codex-private API key.' ;;
+    antigravity:REMOVE)
+      echo 'Removes the managed Context7 registration; vendor OAuth remains intact.' ;;
+    codex:REINSTALL|antigravity:REINSTALL)
+      echo 'Repairs the eligible Context7 registration only; other MCP entries remain intact.' ;;
+    *) echo 'ERROR: unsupported Context7 confirmation action' >&2; return 2 ;;
+  esac
+  if ! menu_confirm_word "$word" "Context7 $label"; then
+    context7_menu_message "Context7 $label cancelled; configuration was not changed."
+    return 0
+  fi
+  # Both managers independently revalidate eligibility after --yes.
+  if run_context7_action "$label" "$manager" "$@" --yes; then :; fi
+}
+
 print_context7_menu_options() {
   # Keep the Context7 option numbers and semantics aligned. Only the
   # authentication and removal labels differ by agent credential ownership.
@@ -698,7 +818,7 @@ MENU
 }
 
 show_context7_menu() {
-  local status_summary="" state=""
+  local status_summary="" state="" choice=""
   local manager=/usr/local/bin/remote-dev-context7
 
   while true; do
@@ -713,19 +833,17 @@ Context7 is an optional hosted Upstash MCP service.
 Registration/authentication status is offline; connection and tools are NOT tested.
 MENU
     print_context7_menu_options
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
-        "$manager" status --menu || :
-        "$manager" plan || :
-        context7_menu_message "Live connectivity and MCP tools: not verified by this diagnosis."
+        run_context7_offline_diagnosis "$manager" "Live connectivity and MCP tools: not verified by this diagnosis."
         ;;
       2)
-        if run_context7_action "Codex Context7 HTTP test" "$manager" test; then :; fi
+        run_confirmed_context7_test "Codex Context7 HTTP test" "$manager"
         ;;
       3)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Codex Context7 authentication" "$manager" install; then :; fi
+          if run_context7_action "Codex Context7 authentication" "$manager" install --menu-expect-healthy; then :; fi
         else
           context7_menu_message "Authentication changes require a healthy managed registration. Use installation/repair first, or review blocked ownership manually."
         fi
@@ -733,24 +851,25 @@ MENU
       4)
         case "$state" in
           absent)
-            if run_context7_action "Codex Context7 installation" "$manager" install; then :; fi
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
+            run_confirmed_context7_install "Codex Context7 installation" "$manager" install --menu-expect-absent
             ;;
           repairable)
-            "$manager" plan || :
-            if run_context7_action "Codex Context7 selective repair" "$manager" reinstall --menu-safe; then :; fi
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
+            run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --menu-safe
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no repair or confirmation is necessary."
             ;;
           *)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             context7_menu_message "Context7 repair blocked: ownership, configuration or private state needs manual review."
             ;;
         esac
         ;;
       5)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Codex Context7 removal" "$manager" remove; then :; fi
+          run_confirmed_context7_change REMOVE "removal" "$manager" remove --expect-healthy
         else
           context7_menu_message "Removal is available only for a healthy, managed entry. No other MCPs or credentials were touched."
         fi
@@ -954,7 +1073,7 @@ handle_shared_agent_menu_choice() {
 
 
 show_antigravity_context7_menu() {
-  local output="" state=""
+  local output="" state="" choice=""
   local manager=/usr/local/bin/remote-dev-context7-antigravity
   while true; do
     output="$("$manager" status --menu 2>&1)" || :
@@ -968,15 +1087,13 @@ Context7 is a hosted Upstash MCP service.
 Antigravity handles OAuth itself; Remote Dev does not read its token store.
 MENU
     print_context7_menu_options
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
-        "$manager" status --menu || :
-        "$manager" plan || :
-        context7_menu_message "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
+        run_context7_offline_diagnosis "$manager" "OAuth status: check in a running Antigravity session via /mcp. A stored token alone is not proof of login."
         ;;
       2)
-        if run_context7_action "Antigravity Context7 HTTP test" "$manager" test; then :; fi
+        run_confirmed_context7_test "Antigravity Context7 HTTP test" "$manager"
         ;;
       3)
         context7_menu_message "Start Antigravity normally, enter /mcp, select context7, then Authenticate. Confirm [Authed] in /mcp and call a real documentation tool. Logging out or revoking provider authorization is separate from removing the MCP entry."
@@ -984,21 +1101,25 @@ MENU
       4)
         case "$state" in
           absent|repairable)
-            "$manager" plan || :
-            if run_context7_action "Antigravity Context7 registration maintenance" "$manager" reinstall; then :; fi
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
+            if [[ "$state" == repairable ]]; then
+              run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --expect-repairable
+            else
+              run_confirmed_context7_install "Antigravity Context7 installation" "$manager" reinstall --yes --expect-absent
+            fi
             ;;
           healthy)
             context7_menu_message "Context7 registration is already current; no reinstall is needed and OAuth state is preserved."
             ;;
           *)
-            "$manager" plan || :
+            run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             context7_menu_message "Context7 repair blocked: configuration is unsafe or user-managed. No entries changed."
             ;;
         esac
         ;;
       5)
         if [[ "$state" == healthy ]]; then
-          if run_context7_action "Antigravity Context7 removal" "$manager" remove; then :; fi
+          run_confirmed_context7_change REMOVE "removal" "$manager" remove
         else
           context7_menu_message "Only an exact Remote Dev-managed registration can be removed safely. OAuth session is not revoked."
         fi
@@ -1014,6 +1135,7 @@ MENU
 }
 
 show_mcp_integrations_menu() {
+  local choice=""
   while true; do
     clear
     cat <<MENU
@@ -1026,7 +1148,7 @@ Other MCP registrations (including Playwright and OpenAI Developer Docs,
 where configured) remain independent and are not changed here.
 Use the agent's native MCP commands to inspect individual registrations.
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         case "$role" in
@@ -1170,6 +1292,7 @@ show_agent_menu() {
 }
 
 show_shell_menu() {
+  local choice=""
   while true; do
     clear
     cat <<MENU
@@ -1179,9 +1302,9 @@ ${version_summary}
 1) Open container shell
 2) Sign in to GitHub CLI
 3) Run diagnostics
-4) Exit this tmux session
+0) Exit this tmux session
 MENU
-    read -r -p "> " choice
+    read -r -p "> " choice || return 0
     case "$choice" in
       1)
         if run_interactive_and_harden "Container shell" bash --login; then :; fi
@@ -1192,7 +1315,8 @@ MENU
       3)
         run_diagnostics
         ;;
-      4)
+      0|4)
+        # Historical 4 remains accepted, but 0 is shown like all other menus.
         exit 0
         ;;
       *)

@@ -146,11 +146,12 @@ def assert_masked_interactive_key_prompt(module, home: Path) -> None:
         module.getpass.getpass = fake_getpass
         module.sys.stdin = TtyInput()
         with codex_environment(home):
-            action, value = module.choose_key(
+            action, value, observed_status = module.choose_key(
                 module.Paths(),
                 argparse_namespace(anonymous=False, api_key_stdin=False, yes=False),
             )
-            if action != "replace" or value != SYNTHETIC_KEY:
+            if (action != "replace" or value != SYNTHETIC_KEY
+                    or observed_status not in ("missing", "safe")):
                 raise AssertionError("interactive Context7 key prompt did not return the supplied synthetic key")
             if calls != [(expected_prompt, "*")]:
                 raise AssertionError(f"interactive Context7 key prompt is not masked with '*': {calls!r}")
@@ -1083,6 +1084,293 @@ def assert_menu_safe_reinstall_rechecks_ownership(root: Path) -> None:
         raise AssertionError("menu-safe repair changed unrelated MCPs")
 
 
+def assert_menu_consent_preconditions_survive_races(module, root: Path) -> None:
+    """Menu state is advisory: enforce absent/healthy at the write lock."""
+    for expected, initial_state in (
+        ("absent", "absent"),
+        ("healthy", "managed"),
+    ):
+        home = root / f"menu-consent-install-{expected}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = ('model = "race"\n' if initial_state == "absent"
+                    else 'model = "race"\n\n' + module.MANAGED_BLOCK)
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        state_dir.mkdir(mode=0o700)
+        key = state_dir / "api-key"
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        # A concurrent writer can add a managed-but-drifted registration
+        # while the onboarding wizard is accepting a menu-only y/N.
+        drift = 'model = "race"\n\n' + module.MANAGED_BLOCK.replace(
+            module.CONTEXT7_ENDPOINT, "https://stale.example.invalid/mcp"
+        )
+        previous_choose_key = module.choose_key
+        def change_after_prompt(paths, args):
+            config.write_text(drift, encoding="utf-8")
+            return previous_choose_key(paths, args)
+        args = module.build_parser().parse_args([
+            "install", "--yes", "--anonymous", "--expect-" + expected,
+        ])
+        with codex_environment(home):
+            module.choose_key = change_after_prompt
+            try:
+                try:
+                    module.command_install(module.Paths(), args)
+                except module.Context7Error as exc:
+                    if "menu" not in str(exc) or "changed" not in str(exc):
+                        raise AssertionError(f"unexpected menu install rejection: {exc}") from exc
+                else:
+                    raise AssertionError(f"{expected}: stale menu consent overwrote registration")
+            finally:
+                module.choose_key = previous_choose_key
+        if config.read_text(encoding="utf-8") != drift:
+            raise AssertionError(f"{expected}: external edit changed by stale menu consent")
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(f"{expected}: rejected install deleted or replaced the private key")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{expected}: rejected install wrote a rollback backup")
+
+    for changed_to in ("managed-drift", "absent", "unsafe-key"):
+        home = root / f"menu-consent-remove-{changed_to}"
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = 'model = "race"\n\n' + module.MANAGED_BLOCK
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        state_dir.mkdir(mode=0o700)
+        key = state_dir / "api-key"
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        external = (
+            original.replace(module.CONTEXT7_ENDPOINT, "https://stale.example.invalid/mcp")
+            if changed_to == "managed-drift"
+            else 'model = "race"\n' if changed_to == "absent"
+            else original
+        )
+        # Inject the competing transaction immediately before entering
+        # Codex's configuration lock, after the operator confirmed REMOVE.
+        original_lock = module.locked_codex_config
+        @contextlib.contextmanager
+        def change_before_write_lock(paths):
+            if changed_to == "unsafe-key":
+                key.chmod(0o644)
+            else:
+                config.write_text(external, encoding="utf-8")
+            with original_lock(paths):
+                yield
+        with codex_environment(home):
+            module.locked_codex_config = change_before_write_lock
+            try:
+                result_args = module.build_parser().parse_args(
+                    ["remove", "--yes", "--expect-healthy"]
+                )
+                try:
+                    module.command_remove(module.Paths(), result_args)
+                except module.Context7Error as exc:
+                    if "menu removal blocked" not in str(exc):
+                        raise AssertionError(f"unexpected menu remove rejection: {exc}") from exc
+                else:
+                    raise AssertionError(f"{changed_to}: stale REMOVE consent succeeded")
+            finally:
+                module.locked_codex_config = original_lock
+        if config.read_text(encoding="utf-8") != external:
+            raise AssertionError(f"{changed_to}: rejected removal rewrote config")
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(f"{changed_to}: rejected removal deleted private key")
+        if changed_to == "unsafe-key" and stat.S_IMODE(key.stat().st_mode) != 0o644:
+            raise AssertionError("rejected removal silently changed unsafe private-key permissions")
+        if (home / "config.toml.remote-dev-context7.bak").exists():
+            raise AssertionError(f"{changed_to}: rejected removal wrote backup")
+
+    # The menu guards also permit their intended states on the real CLI.
+    good_install = root / "menu-consent-good-install"
+    good_install.mkdir(mode=0o700)
+    require_success(
+        run_manager(good_install, "install", "--yes", "--anonymous", "--expect-absent"),
+        "menu install with stable absent registration",
+    )
+    require_success(
+        run_manager(good_install, "install", "--yes", "--expect-healthy"),
+        "menu authentication with stable managed registration",
+    )
+    require_success(
+        run_manager(good_install, "remove", "--yes", "--expect-healthy"),
+        "menu remove with stable managed registration",
+    )
+
+
+def assert_implicit_anonymous_keeps_newly_added_key(module, root: Path) -> None:
+    """A default anonymous selection must not delete a later private key."""
+    for menu_state in ("absent", "healthy"):
+        home = root / ("implicit-anonymous-key-race-" + menu_state)
+        home.mkdir(mode=0o700)
+        config = home / "config.toml"
+        original = ('model = "race-key"\n' if menu_state == "absent"
+                    else 'model = "race-key"\n\n' + module.MANAGED_BLOCK)
+        config.write_text(original, encoding="utf-8")
+        state_dir = home / ".remote-dev-context7"
+        key = state_dir / "api-key"
+        backup = home / "config.toml.remote-dev-context7.bak"
+
+        original_choose = module.choose_key
+        def key_appears_after_selection(paths, args):
+            selection = original_choose(paths, args)
+            if selection != ("anonymous", None, "missing"):
+                raise AssertionError(
+                    f"unexpected implicit no-key selection: {selection!r}"
+                )
+            state_dir.mkdir(mode=0o700)
+            key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+            key.chmod(0o600)
+            return selection
+
+        with codex_environment(home):
+            args = module.build_parser().parse_args([
+                "install", "--yes", "--expect-" + menu_state,
+            ])
+            module.choose_key = key_appears_after_selection
+            try:
+                try:
+                    module.command_install(module.Paths(), args)
+                except module.Context7Error as exc:
+                    if ("state changed after anonymous selection" not in str(exc)
+                            or "no changes made" not in str(exc)):
+                        raise AssertionError(
+                            f"{menu_state}: incorrect concurrent-key error: {exc}"
+                        ) from exc
+                else:
+                    raise AssertionError(
+                        f"{menu_state}: implicit anonymous choice deleted a new key"
+                    )
+            finally:
+                module.choose_key = original_choose
+
+        if config.read_text(encoding="utf-8") != original:
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice rewrote config"
+            )
+        if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice deleted new key"
+            )
+        assert_private_file(key)
+        if backup.exists():
+            raise AssertionError(
+                f"{menu_state}: rejected implicit anonymous choice wrote backup"
+            )
+
+    # A stable missing key still permits default anonymous installation.
+    stable = root / "implicit-anonymous-key-stable"
+    stable.mkdir(mode=0o700)
+    require_success(
+        run_manager(stable, "install", "--yes", "--expect-absent"),
+        "implicit anonymous installation with no competing key",
+    )
+    if (stable / ".remote-dev-context7" / "api-key").exists():
+        raise AssertionError("implicit anonymous installation unexpectedly wrote a key")
+
+    # Explicit --anonymous is separately authorized to remove an owned key,
+    # even when a concurrent writer adds it after initial key selection.
+    explicit = root / "explicit-anonymous-key-race"
+    explicit.mkdir(mode=0o700)
+    config = explicit / "config.toml"
+    config.write_text('model = "explicit"\n', encoding="utf-8")
+    key_dir = explicit / ".remote-dev-context7"
+    key = key_dir / "api-key"
+
+    def explicit_key_appears_after_selection(paths, args):
+        selection = original_choose(paths, args)
+        if selection != ("anonymous", None, "missing"):
+            raise AssertionError(f"unexpected explicit selection: {selection!r}")
+        key_dir.mkdir(mode=0o700)
+        key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+        key.chmod(0o600)
+        return selection
+
+    with codex_environment(explicit):
+        module.choose_key = explicit_key_appears_after_selection
+        try:
+            args = module.build_parser().parse_args([
+                "install", "--yes", "--anonymous", "--expect-absent",
+            ])
+            if module.command_install(module.Paths(), args) != 0:
+                raise AssertionError("explicit anonymous installation failed")
+        finally:
+            module.choose_key = original_choose
+    if key.exists():
+        raise AssertionError(
+            "explicit --anonymous failed to remove the now-present owned key"
+        )
+
+
+def assert_key_write_failure_preserves_recovery_state(module, root: Path) -> None:
+    """Document recoverability of a partial config-then-key transaction."""
+    home = root / "key-write-failure-recovery"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    original = ('model = "recovery"\n'
+                '[mcp_servers.another]\ncommand = "user-owned"\n')
+    config.write_text(original, encoding="utf-8")
+    key_dir = home / ".remote-dev-context7"
+    key_dir.mkdir(mode=0o700)
+    key = key_dir / "api-key"
+    key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+    key.chmod(0o600)
+    backup = home / "config.toml.remote-dev-context7.bak"
+    original_choose = module.choose_key
+    original_store = module.store_key
+
+    def choose_replacement(paths, args):
+        del paths, args
+        return "replace", "ctx7-replacement-synthetic", "safe"
+
+    def fail_store(paths, new_value):
+        del paths, new_value
+        raise module.Context7Error("synthetic key write failed")
+
+    with codex_environment(home):
+        module.choose_key = choose_replacement
+        module.store_key = fail_store
+        try:
+            args = module.build_parser().parse_args(
+                ["install", "--yes", "--expect-absent"]
+            )
+            try:
+                module.command_install(module.Paths(), args)
+            except module.Context7Error as exc:
+                if "synthetic key write failed" not in str(exc):
+                    raise
+            else:
+                raise AssertionError("synthetic key-write failure was ignored")
+        finally:
+            module.choose_key = original_choose
+            module.store_key = original_store
+
+    if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+        raise AssertionError("failed new key write destroyed the old private key")
+    assert_private_file(key)
+    if not backup.exists() or backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("failed key write lost exact config rollback preimage")
+    assert_private_file(backup)
+    with codex_environment(home):
+        after = module.parse_toml(config.read_text(encoding="utf-8"),
+                                  label="after partial failure")
+        before = module.parse_toml(original, label="before partial failure")
+        if module.without_context7(after) != module.without_context7(before):
+            raise AssertionError("partial failure changed unrelated MCP entry")
+    # Reconciliation is possible with the intact old key and managed entry.
+    require_success(
+        run_manager(home, "install", "--yes", "--expect-healthy"),
+        "reconciliation after an interrupted key write",
+    )
+    if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+        raise AssertionError("retry lost the previous private key")
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("retry overwrote recovery backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1103,6 +1391,9 @@ args = ["--safe"]
 
         assert_menu_state_is_passive_and_owner_aware(root)
         assert_menu_safe_reinstall_rechecks_ownership(root)
+        assert_menu_consent_preconditions_survive_races(load_manager_module(), root)
+        assert_implicit_anonymous_keeps_newly_added_key(load_manager_module(), root)
+        assert_key_write_failure_preserves_recovery_state(load_manager_module(), root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)

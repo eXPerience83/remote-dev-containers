@@ -31,11 +31,11 @@ remote-dev-context7 remove
 
 A plain interactive `install` or `repair` asks how authentication should be handled:
 
-1. **Sign in to Context7 with a device code (recommended)**.
-2. **Enter an existing Context7 API key** using the existing masked manual-key path.
-3. **Keep the current managed API key**, or stay anonymous when none exists.
-4. **Use anonymous access**, removing only the Remote Dev-managed API-key file.
-5. **Cancel**.
+- **`1` — Sign in to Context7 with a device code (recommended).**
+- **`2` — Enter an existing Context7 API key** using the existing masked manual-key path.
+- **`3` — Keep the current managed API key**, or stay anonymous when none exists.
+- **`4` — Use anonymous access**, removing only the Remote Dev-managed API-key file.
+- **`0` — Cancel** (historical `5` is still accepted).
 
 The existing non-interactive manager contract remains available with `--yes`, `--anonymous` and `--api-key-stdin`. Device-login automation can additionally choose `--cli-channel reviewed` or `--cli-channel latest`; the interactive menu uses `auto`.
 
@@ -44,6 +44,8 @@ The existing non-interactive manager contract remains available with `--yes`, `-
 ### Simplified navigation and diagnosis (#347)
 
 The Codex main menu has **6) MCP integrations... → 1) Context7...**. Both agents share the submenu: **1 Status/diagnosis**, **2 Test connection**, **3 Manage authentication**, **4 Install/repair**, **5 Remove**, and **0 Back**.
+
+**Menu interaction (#357):** Context7 Test and initial Install ask the same `y/N` in Codex and Antigravity. Context7 selective repair asks for the exact word `REINSTALL`; removal asks for `REMOVE` and warns that Codex's private API key is also deleted. The Codex authentication wizard then preserves its own provider-specific choices (including `0 Cancel`); when newer official `ctx7` CLI metadata exists, the CLI version picker also offers `0 Cancel` (former `3` remains a silent alias). Direct CLI commands retain their original confirmations. See [complete tree audit](menu-interaction-audit.md).
 
 `status --menu`, `plan` and the new `menu-state` are passive. `menu-state` prints only `healthy`, `absent`, `repairable` or `blocked`, never secrets. The HTTP test requires confirmation and **does not establish real tool success or authentication**. `Not logged in` in `codex mcp list` refers to Codex native OAuth and does not prove the separately injected API key is invalid.
 

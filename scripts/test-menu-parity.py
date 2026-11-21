@@ -225,6 +225,29 @@ def assert_context7_contract() -> None:
         if handlers != [1, 2, 3, 4, 5, 0]:
             raise AssertionError(f"{name}: Context7 handler order drifted: {handlers}")
 
+    codex_context7 = function("show_context7_menu")
+    for marker in (
+        "install --menu-expect-absent",
+        "install --menu-expect-healthy",
+        "remove --expect-healthy",
+    ):
+        if marker not in codex_context7:
+            raise AssertionError(f"Codex menu action lost locked-state guard: {marker}")
+
+    codex_backend = (SOURCE.parent / "remote-dev-context7.py").read_text(encoding="utf-8")
+    codex_entrypoint = (SOURCE.parent / "remote-dev-context7-entrypoint.sh").read_text(encoding="utf-8")
+    codex_login = (SOURCE.parent / "remote-dev-context7-device-login.py").read_text(encoding="utf-8")
+    for marker in ('"menu install blocked:', '"menu authentication blocked:',
+                   '"menu removal blocked:', "with locked_codex_config(paths):"):
+        if marker not in codex_backend:
+            raise AssertionError(f"Codex manager lost menu consent guard: {marker}")
+    for marker in ("--menu-expect-absent", "--menu-expect-healthy",
+                   'exec "$device_login" --yes "$menu_precondition"'):
+        if marker not in codex_entrypoint:
+            raise AssertionError(f"Codex onboarding lost menu expectation: {marker}")
+    if '"--expect-" + expected_state' not in codex_login:
+        raise AssertionError("Codex device login lost locked expected-state forwarding")
+
     if 'reinstall --menu-safe' not in function("show_context7_menu"):
         raise AssertionError("Codex must use locked, menu-safe selective repair")
     if 'reinstall --menu-safe' in function("show_antigravity_context7_menu"):
@@ -235,10 +258,223 @@ def assert_context7_contract() -> None:
             raise AssertionError(f"fail-closed provider-specific Context7 navigation missing: {token}")
 
 
+def assert_full_nested_menu_contract() -> None:
+    """Audit *every* visible nested menu, prompt and provider path, not just the titles."""
+    projects = function("show_projects_menu")
+    if options(projects) != {
+        1: "Select project", 2: "Create project", 3: "Delete project", 0: "Back"
+    }:
+        raise AssertionError("Projects menu options or Back drifted")
+    # The blocked collection is visible but cannot enter any selectable,
+    # creating or destructive workflow, even before the runtime revalidates.
+    for guard in (
+        "if (( project_collection_blocked == 1 )); then",
+        '1|2|3)',
+        "Project collection is blocked; selection, creation and deletion are disabled.",
+        "continue",
+    ):
+        if guard not in projects:
+            raise AssertionError(f"blocked Projects menu lost pre-dispatch guard: {guard}")
+    picker = function("choose_project_name")
+    if ("printf '0) Back" not in picker
+            or "index == ${#projects[@]}" not in picker):
+        raise AssertionError("dynamic project picker must show 0 Back and preserve legacy N+1")
+    if "Type the exact project name to confirm:" not in function("delete_project_action"):
+        raise AssertionError("project deletion lost its exact-name confirmation")
+    if "remote_dev_delete_project" not in function("delete_project_action"):
+        raise AssertionError("project deletion lost its ownership/boundary validation")
+    if 'IFS= read -r -p "> " confirmation' not in function("delete_project_action"):
+        raise AssertionError("project deletion must preserve literal spaces/tabs in the confirmation")
+    if "0|4)" not in projects:
+        raise AssertionError("Projects lost historic 4 Back alias")
+
+    # Start/continue actions already have role-qualified explicit dispatch.
+    # Project selectors and nested approvals must not accidentally change mode
+    # for more than one launch.
+    for provider, approval_name in (
+        ("codex", "choose_next_codex_mode"),
+        ("antigravity", "show_antigravity_approval_menu"),
+    ):
+        approval = function(approval_name)
+        if 'print_common_approval_mode_choices' not in approval or "0) Back" not in approval:
+            raise AssertionError(f"{provider}: missing common approval choices or Back")
+        if "next_" + provider + "_mode=" not in approval:
+            raise AssertionError(f"{provider}: approval choice not scoped to provider")
+    guarded = function("set_antigravity_guarded_preset")
+    if ('menu_confirm_yes_no "Apply Guarded preset $preset?"' not in guarded
+            or "remote-dev-antigravity-policy set-preset" not in guarded):
+        raise AssertionError("persistent Guarded preset must be explicitly confirmed")
+    if "remote-dev-antigravity-policy" in function("choose_next_codex_mode"):
+        raise AssertionError("Codex approval must never invoke AGY settings writer")
+    for provider, runner in (
+        ("codex", "run_codex_action"),
+        ("antigravity", "run_antigravity_action"),
+    ):
+        body = function(runner)
+        if 'next_' + provider + '_mode=""' not in body:
+            raise AssertionError(f"{provider}: one-launch override was not consumed")
+
+    shell = function("show_shell_menu")
+    if options(shell) != {
+        1: "Open container shell", 2: "Sign in to GitHub CLI",
+        3: "Run diagnostics", 0: "Exit this tmux session",
+    } or "0|4)" not in shell:
+        raise AssertionError("emergency Shell navigation must show 0 Exit with historic alias")
+    if "bash --login" not in shell or "run_github_login" not in shell:
+        raise AssertionError("emergency Shell actions changed")
+    integrations = function("show_mcp_integrations_menu")
+    if options(integrations) != {1: "Context7...", 0: "Back"}:
+        raise AssertionError("MCP integrations menu changed unexpectedly")
+
+    # A nonmutating remote *test* is y/N in both menus, even though the
+    # underlying direct CLI contract still has provider-specific confirmations.
+    test = function("run_confirmed_context7_test")
+    for token in (
+        "menu_confirm_yes_no", "test --yes", "no network request was made",
+        'run_context7_action "$label" "$manager"',
+    ):
+        if token not in test:
+            raise AssertionError(f"shared Context7 test lost {token}")
+    install = function("run_confirmed_context7_install")
+    for marker in ("menu_confirm_yes_no", "Install Context7 registration?",
+                   'run_context7_action "$label" "$manager"'):
+        if marker not in install:
+            raise AssertionError(f"shared Context7 installation lost {marker}")
+    for name in ("show_context7_menu", "show_antigravity_context7_menu"):
+        if "run_confirmed_context7_install" not in function(name):
+            raise AssertionError(f"{name}: initial install bypassed shared consent")
+
+    change = function("run_confirmed_context7_change")
+    for token in (
+        "menu_confirm_word", "codex:REMOVE", "antigravity:REMOVE",
+        "codex:REINSTALL|antigravity:REINSTALL", '"$@" --yes',
+    ):
+        if token not in change:
+            raise AssertionError(f"Context7 scoped change confirmation lost {token}")
+    for name, provider, manager in (
+        ("show_context7_menu", "Codex", "remote-dev-context7"),
+        ("show_antigravity_context7_menu", "Antigravity", "remote-dev-context7-antigravity"),
+    ):
+        role = function(name)
+        for token in (
+            "run_confirmed_context7_test", "run_confirmed_context7_change REMOVE",
+            'print_context7_menu_options', "0)",
+        ):
+            if token not in role:
+                raise AssertionError(f"{provider} Context7 submenu lost {token}")
+        if manager not in role or "manager" not in role:
+            raise AssertionError(f"{provider} must dispatch its own Context7 manager")
+        if '"$manager" test;' in role:
+            raise AssertionError(f"{provider} bypassed the shared consent prompt")
+    if "reinstall --menu-safe" not in function("show_context7_menu"):
+        raise AssertionError("Codex manager repair changed")
+    if 'run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --expect-repairable' not in function("show_antigravity_context7_menu"):
+        raise AssertionError("Antigravity repair must require locked drift-state precondition")
+    if 'reinstall --yes --expect-absent' not in function("show_antigravity_context7_menu"):
+        raise AssertionError("Antigravity initial install must require locked absent state")
+    backend = (SOURCE.parent / "remote-dev-context7-antigravity.py").read_text(encoding="utf-8")
+    for marker in (
+        '"--expect-absent"',
+        '"--expect-repairable"',
+        'if require_absent and state != "absent":',
+        'if require_repairable and state != "drift":',
+        'require_repairable=args.expect_repairable',
+    ):
+        if marker not in backend:
+            raise AssertionError(f"Antigravity initial consent state guard lost: {marker}")
+
+    # Context7 has two *further* Codex-owned interactive menus after the
+    # parent Context7 submenu. They must also show 0 Cancel and retain their
+    # own former numeric aliases without ever triggering installation.
+    wrapper = (SOURCE.parent / "remote-dev-context7-entrypoint.sh").read_text(encoding="utf-8")
+    chooser = (SOURCE.parent / "remote-dev-context7-device-login.py").read_text(encoding="utf-8")
+    for marker in ('0) Cancel', '0|5)', 'exec "$device_login" --yes'):
+        if marker not in wrapper:
+            raise AssertionError(f"Context7 authentication wizard lost {marker}")
+    for marker in ('print("0) Cancel")', 'choice in {"0", "3"}'):
+        if marker not in chooser:
+            raise AssertionError(f"Context7 CLI-version chooser lost {marker}")
+
+    # Prevent EoF from implicitly executing other menu choices.
+    for name in (
+        "show_projects_menu", "show_antigravity_approval_menu",
+        "show_context7_menu", "show_antigravity_context7_menu",
+        "show_mcp_integrations_menu", "show_shell_menu",
+        "show_agent_menu", "show_agent_manage_menu",
+    ):
+        if 'read -r -p "> " choice || return 0' not in function(name):
+            raise AssertionError(f"{name} must exit on input EOF")
+    if 'read -r -p "$prompt" _ || return 0' not in function("pause_for_menu"):
+        raise AssertionError("EOF during a menu return pause must not trigger set -e")
+    for name in ("choose_project_name", "create_project_action", "delete_project_action"):
+        if "|| return 1" not in function(name):
+            raise AssertionError(f"{name} cannot treat missing input as consent")
+
+
+def assert_shared_helper_invariants() -> None:
+    """Catch future prompt/diagnostic divergence beyond visible menu labels."""
+    summary = function("print_next_launch_mode_summary")
+    for text in (
+        "Next launch mode: %s (one launch)",
+        "Next launch mode: configured (%s)",
+    ):
+        if text not in summary:
+            raise AssertionError(f"shared next-launch summary missing {text}")
+    for role in ("codex", "antigravity"):
+        adapter = function(f"next_{role}_mode_summary")
+        expected = (
+            f'print_next_launch_mode_summary "$next_{role}_mode" '
+            f'"$configured_{role}_mode"'
+        )
+        if expected not in adapter:
+            raise AssertionError(f"{role}: launch summary bypasses shared helper")
+
+    diagnostics = function("run_context7_diagnostic_command")
+    for token in ('action_status=$?', "report_action_failure", '"$@"'):
+        if token not in diagnostics:
+            raise AssertionError(f"shared Context7 diagnostics lost {token}")
+    offline = function("run_context7_offline_diagnosis")
+    for token in (
+        'run_context7_diagnostic_command "Context7 status" "$manager" status --menu',
+        'run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan',
+        'context7_menu_message "$note"',
+    ):
+        if token not in offline:
+            raise AssertionError(f"shared Context7 diagnosis lost {token}")
+    for name in ("show_context7_menu", "show_antigravity_context7_menu"):
+        body = function(name)
+        if body.count('run_context7_offline_diagnosis "$manager"') != 1:
+            raise AssertionError(f"{name}: offline diagnosis bypasses common helper")
+        if '"$manager" plan || :' in body or '"$manager" status --menu || :' in body:
+            raise AssertionError(f"{name}: a diagnostic exit code is still hidden")
+        if "run_context7_diagnostic_command" not in body:
+            raise AssertionError(f"{name}: preflight plan bypasses failure reporting")
+
+    # Approval invalid choices must redraw the same submenu on both roles.
+    for name in ("choose_next_codex_mode", "show_antigravity_approval_menu"):
+        approval = function(name)
+        if "while true; do" not in approval or not re.search(r"\*\)\s*sleep 1\s*;;", approval):
+            raise AssertionError(f"{name}: invalid Approval choice escapes to parent")
+
+    # Bash functions have dynamically scoped variables. Submenus must not
+    # alter their caller's menu selection by assigning to a shared choice.
+    for name in (
+        "show_projects_menu", "choose_next_codex_mode",
+        "show_antigravity_approval_menu", "show_context7_menu",
+        "show_antigravity_context7_menu", "show_mcp_integrations_menu",
+        "show_shell_menu", "show_agent_menu", "show_agent_manage_menu",
+        "choose_project_name",
+    ):
+        if not re.search(r"\blocal [^\n]*\bchoice=", function(name)):
+            raise AssertionError(f"{name}: menu choice is not locally scoped")
+
+
 def main() -> None:
     assert_agent_menu_contract()
     assert_context7_contract()
-    print("Codex/Antigravity main and Context7 menu parity: OK")
+    assert_full_nested_menu_contract()
+    assert_shared_helper_invariants()
+    print("Codex/Antigravity full menu tree, prompts, helpers and provider routing: OK")
 
 
 if __name__ == "__main__":
