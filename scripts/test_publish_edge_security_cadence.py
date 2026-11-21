@@ -168,6 +168,36 @@ def test_exact_edge_trivy_gate(workflow: str) -> None:
         raise AssertionError("Edge critical gate false PASS: " + label)
 
 
+def validate_shared_candidate_runtime_checks(helper: str) -> None:
+    """Both publication channels must execute password and isolation probes."""
+    active = tuple(line.strip() for line in helper.splitlines()
+                   if line.strip() and not line.lstrip().startswith("#"))
+    for required in (
+        '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
+        'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
+        'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
+        'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
+    ):
+        require(any(required in line for line in active),
+                "mandatory exact-candidate runtime check disabled: " + required)
+
+
+def test_shared_candidate_runtime_checks(helper: str) -> None:
+    validate_shared_candidate_runtime_checks(helper)
+    for label, original in (
+        ("internal channel", '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'),
+        ("password", 'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"'),
+        ("cross-service isolation", 'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"'),
+    ):
+        require(helper.count(original) == 1, "ambiguous shared-helper fixture: " + label)
+        altered = helper.replace(original, "# " + original, 1)
+        try:
+            validate_shared_candidate_runtime_checks(altered)
+        except AssertionError:
+            continue
+        raise AssertionError("shared runtime false PASS with omitted " + label)
+
+
 def validate_python_315_publisher_wiring(workflow: str) -> None:
     """Require the reviewed Python 3.15 pin in the owning metadata and build fields."""
     metadata = named_workflow_step(workflow, "Resolve image metadata")
@@ -304,6 +334,7 @@ def main() -> None:
     test_python_315_publisher_wiring(workflow)
     test_trivy_db_cache_reuse(workflow)
     test_exact_edge_trivy_gate(workflow)
+    test_shared_candidate_runtime_checks(helper)
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
