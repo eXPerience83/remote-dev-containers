@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 0 && $# != 2 )); then
-  echo "Usage: codex-smoke-test [expected-image-version expected-source-revision]" >&2
+if (( $# != 0 && $# != 2 && $# != 3 )); then
+  echo "Usage: codex-smoke-test [expected-image-version expected-source-revision [expected-image-channel]]" >&2
   exit 2
 fi
 
@@ -110,9 +110,11 @@ if ! remote-dev-version --check; then
 fi
 
 image_version="$(<"$metadata_dir/image-version")"
+image_channel="$(<"$metadata_dir/image-channel")"
 source_revision="$(<"$metadata_dir/source-revision")"
 expected_image_version="${1:-$image_version}"
 expected_source_revision="${2:-$source_revision}"
+expected_image_channel="${3:-$image_channel}"
 codex_version="$(/usr/local/bin/codex --version)"
 launcher_version="$(/usr/local/bin/run-codex --version)"
 
@@ -128,6 +130,10 @@ if [[ "$image_version" != "$expected_image_version" ]]; then
 fi
 if [[ "$source_revision" != "$expected_source_revision" ]]; then
   echo "ERROR: source revision metadata mismatch: expected $expected_source_revision, got $source_revision" >&2
+  exit 1
+fi
+if [[ "$image_channel" != "$expected_image_channel" ]]; then
+  echo "ERROR: embedded image channel mismatch: expected $expected_image_channel, got $image_channel" >&2
   exit 1
 fi
 
