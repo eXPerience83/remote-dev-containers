@@ -80,9 +80,14 @@ def inspect_image(image: str) -> dict:
 
 def validate_sbom_image_binding(sbom: dict, expected_image: str) -> None:
     """Bind Trivy's SPDX document and primary container to the exact scanned image."""
-    demand(expected_image.startswith("ghcr.io/experience83/remote-dev") and
-           "@sha256:" in expected_image and len(expected_image.split("@sha256:")[-1]) == 64,
-           "expected immutable image reference missing or malformed")
+    local_build = expected_image in ("remote-dev-base:local", "remote-dev:local")
+    remote_manifest = (expected_image.startswith("ghcr.io/experience83/remote-dev") and
+                       "@sha256:" in expected_image and
+                       len(expected_image.split("@sha256:")[-1]) == 64 and
+                       all(c in "0123456789abcdef"
+                           for c in expected_image.split("@sha256:")[-1]))
+    demand(local_build or remote_manifest,
+           "expected local Build or immutable release manifest reference missing")
     demand(sbom.get("name") == expected_image,
            "SPDX document describes a different scanned image")
     namespace = sbom.get("documentNamespace")
