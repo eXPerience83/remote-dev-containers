@@ -504,6 +504,35 @@ grep -Fq "Created project: $created_project_path" "$output"
 grep -Fxq 'Project: created-project' "$output"
 echo 'Successful project creation returns to Antigravity for immediate Start: OK'
 
+# An inexact project name must never authorize permanent deletion. Exercise
+# the real nested Projects → Delete path, including EOF while confirming.
+printf '%s\n' 'keep this content' >"$created_project_path/safety-canary"
+run_invalid_project_deletion() {
+  local input="$1"
+  rm -f "$invocations" "$hardening_calls"
+  printf '%s' "$input" | env -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+    PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+    REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+    REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+    timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+  [[ -f "$created_project_path/safety-canary" ]] || {
+    echo 'ERROR: Antigravity deleted a project on inexact confirmation' >&2
+    exit 1
+  }
+  [[ ! -e "$invocations" && ! -e "$hardening_calls" ]] || {
+    echo 'ERROR: Antigravity invalid project deletion dispatched an agent' >&2
+    exit 1
+  }
+  ! grep -Fq 'Deleted project: created-project' "$output"
+}
+for confirmation in '  created-project  ' $'\tcreated-project\t' wrong-project; do
+  run_invalid_project_deletion $'3\n3\n1\n'"$confirmation"$'\n\n4\n0\n'
+done
+run_invalid_project_deletion $'3\n3\n1\n'
+echo 'Antigravity project deletion exact-name, whitespace and EOF protections: OK'
+
 # Context7 uses native vendor OAuth; menu state never opens token storage.
 rm -f "$hardening_calls" "$context7_calls"
 printf '6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' | env \
