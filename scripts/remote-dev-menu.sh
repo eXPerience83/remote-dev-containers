@@ -375,7 +375,7 @@ Path: $resolved
 This permanently removes the entire project directory and all of its contents.
 Type the exact project name to confirm: $project_choice_name
 DELETE_WARNING
-  read -r -p "> " confirmation || return 1
+  IFS= read -r -p "> " confirmation || return 1
   if remote_dev_delete_project "$workspace" "$project_choice_name" "$confirmation"; then
     if [[ "$active_project_name" == "$project_choice_name" ]]; then
       active_project_name=""
@@ -1103,7 +1103,7 @@ MENU
           absent|repairable)
             run_context7_diagnostic_command "Context7 recovery plan" "$manager" plan
             if [[ "$state" == repairable ]]; then
-              run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall
+              run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --expect-repairable
             else
               run_confirmed_context7_install "Antigravity Context7 installation" "$manager" reinstall --yes --expect-absent
             fi
