@@ -106,6 +106,7 @@ fi
             ("python3", "scripts/test_edge_build_identity.py"),
             ("python3", "scripts/test_update_upstream_changelog.py"),
             ("python3", "scripts/test_publish_stable_security_cadence.py"),
+            ("python3", "scripts/test_guard_stable_promotion.py"),
             ("bash", "scripts/validate-version-pins.sh"),
             ("bash", "scripts/test-source-revision.sh"),
             ("jq", "-e . renovate.json"),
