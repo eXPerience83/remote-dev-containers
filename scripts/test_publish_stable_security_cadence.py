@@ -163,9 +163,14 @@ def validate(source: str, helper: str) -> None:
           "candidate smoke helper fails to bind stable channel/version")
     active_helper = tuple(line.strip() for line in helper.splitlines()
                           if line.strip() and not line.lstrip().startswith("#"))
-    check(any('"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
-              in line for line in active_helper),
-          "runtime candidate missing external identity arguments")
+    # These are two lines of one Bash continuation. Merely finding the
+    # argument substring would accept a trailing '|| true' and hide failure.
+    smoke_prefix = 'docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \\'
+    smoke_args = '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
+    check(active_helper.count(smoke_prefix) == 1 and
+          active_helper.count(smoke_args) == 1 and
+          active_helper.index(smoke_args) == active_helper.index(smoke_prefix) + 1,
+          "runtime Codex smoke must execute once with exact independent identity")
     for required in (
         'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
         'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
@@ -360,6 +365,12 @@ def main() -> None:
         ("internal channel not verified", wf, helper.replace(
             '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
             '"$runtime_ref" "$expected_version" "$expected_revision"', 1)),
+        ("codex smoke error ignored", wf, helper.replace(
+            '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
+            '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel" || true', 1)),
+        ("codex smoke replaced by no-op", wf, helper.replace(
+            'docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \\',
+            ': docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \\', 1)),
         ("wrong base binding", wf.replace("BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}",
                                           "BASE_IMAGE=${{ steps.base.outputs.digest }}", 1), helper),
         ("wrong SPDX", wf.replace("image-ref: ${{ steps.runtime_manifest.outputs.ref }}",
