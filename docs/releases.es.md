@@ -181,11 +181,15 @@ REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 **Identidad del candidato estable:** Edge y stable pueden compartir el
 SHA de código revisado, pero no necesariamente el digest OCI: el tag estable
 reconstruye la imagen con metadatos de canal y versión propios. Antes de mover
-los tags SemVer, `stable`, `stable-amd64` y `latest`, el publicador
-comprueba ambos manifiestos AMD64 exactos (arranque, avisos, aislamiento,
-autenticación), registra SPDX y Trivy de base/final y exige el veto a
+los tags SemVer, `stable`, `stable-amd64` y `latest`, el publicador resuelve
+los manifiestos AMD64 exactos de base y runtime, comprueba sus etiquetas y
+avisos, y ejecuta las pruebas de arranque, aislamiento y autenticación
+sobre el **manifiesto runtime**. Los dos informes SPDX y los dos Trivy se
+generan a partir de sus respectivos manifiestos AMD64, antes del veto a
 vulnerabilidades críticas corregibles. Los cuatro tags deben resolver al
-**digest del candidato stable que se ha probado**, no al de Edge.
+**digest del índice OCI estable validado**, que debe contener el mismo
+manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
+el del manifiesto hijo, ni debe coincidir con el de Edge.
 La aceptación previa de Edge no acredita un despliegue estable en TrueNAS.
 
 ## Elección de canal por el operador

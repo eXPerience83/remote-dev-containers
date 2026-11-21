@@ -181,12 +181,15 @@ REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 **Stable release identity:** Edge and stable can share a reviewed source SHA but
 cannot be assumed to share an OCI digest: the stable tag builds a separate image
 with channel/version metadata. Before moving the SemVer, `stable`,
-`stable-amd64` and `latest` tags, the publisher tests both exact AMD64
-candidate manifests (startup, bundled notices, isolation, authentication),
-records base/final SPDX and Trivy evidence, and enforces the fixable-critical
-gate. All four stable tags must resolve to that **separately verified stable
-candidate's digest**. Edge acceptance alone does not prove the stable image
-was deployed to TrueNAS.
+`stable-amd64` and `latest` tags, the publisher validates the exact base and
+runtime AMD64 child manifests, checks both images' identity labels and notices,
+and performs startup, isolation and authentication smoke tests on the **runtime**
+manifest. Base/final SPDX and Trivy reports target the exact corresponding
+AMD64 child manifests, and the fixable-critical gate must pass. All four stable
+tags must resolve to the **separately validated stable OCI index digest**;
+the promoted index must contain the same AMD64 runtime child manifest that
+passed smoke and scanning. The index digest is not the child manifest digest.
+Edge acceptance alone does not prove the stable image was deployed to TrueNAS.
 
 ## Operator channel choices
 

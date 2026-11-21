@@ -38,6 +38,12 @@ def validate(source: str, helper: str) -> None:
     offsets = [source.find("      - name: " + name + "\n") for name in stages]
     check(all(offset >= 0 for offset in offsets) and offsets == sorted(offsets),
           "stable promotion is missing a preceding candidate gate")
+    gate = step(source, "Enforce no fixable critical vulnerabilities")
+    check("run: |" in gate and
+          'bash scripts/enforce-trivy-gate.sh \\' in gate and
+          '"exact stable base publication candidate:trivy-publish-base.json"' in gate and
+          '"exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"' in gate,
+          "fixable-critical gate must execute against both exact stable candidate reports")
     check('echo "python_315_version=$PYTHON_315_VERSION"' in step(source, "Load versions"),
           "stable Python 3.15 metadata omitted")
     check("PYTHON_315_VERSION=" + "${{ steps.versions.outputs.python_315_version }}" in
@@ -72,8 +78,9 @@ def main() -> None:
     mutations = (
         ("omit smoke", wf.replace("      - name: Smoke-test the exact stable publication candidates\n",
                                    "      - name: Skip smoke\n", 1), helper),
-        ("omit critical gate", wf.replace("      - name: Enforce no fixable critical vulnerabilities\n",
-                                           "      - name: Skip critical gate\n", 1), helper),
+        ("empty critical gate", wf.replace(
+            'bash scripts/enforce-trivy-gate.sh \\',
+            'true # disabled critical gate', 1), helper),
         ("wrong base binding", wf.replace("BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}",
                                           "BASE_IMAGE=${{ steps.base.outputs.digest }}", 1), helper),
         ("wrong SPDX", wf.replace("image-ref: ${{ steps.runtime_manifest.outputs.ref }}",
