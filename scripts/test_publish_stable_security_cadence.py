@@ -95,15 +95,28 @@ def validate(source: str, helper: str) -> None:
         ),
         "exact-candidate smoke must really execute with all six expected arguments",
     )
+    for name in (stages[8], stages[9]):
+        scan = step(source, name)
+        for required in ("scanners: vuln", "vuln-type: os,library",
+                         "severity: CRITICAL", 'exit-code: "0"'):
+            check(required in scan, "stable Trivy must scan fixable CRITICAL: " + name)
     for name, ref in zip((stages[5], stages[6], stages[8], stages[9]),
                          ("base_manifest", "runtime_manifest",
                           "base_manifest", "runtime_manifest")):
         check("image-ref: ${{ steps." + ref + ".outputs.ref }}" in step(source, name),
               "non-exact manifest scanned: " + name)
     chromium = step(source, "Record exact Chromium identity and notices in stable SPDX images")
-    check("run: |" in chromium and "set -euo pipefail" in chromium and
-          chromium.count("python3 scripts/chromium-sbom-evidence.py") == 2,
-          "Chromium provenance must execute on both published manifests")
+    check(runnable_lines(chromium, "Chromium SPDX") == (
+        "set -euo pipefail",
+        'python3 scripts/chromium-sbom-evidence.py \\',
+        '--image "$BASE_MANIFEST_REF" \\',
+        "--spdx sbom-publish-base.spdx.json \\",
+        "--evidence chromium-evidence-publish-base.json",
+        'python3 scripts/chromium-sbom-evidence.py \\',
+        '--image "$REMOTE_DEV_MANIFEST_REF" \\',
+        "--spdx sbom-publish-remote-dev.spdx.json \\",
+        "--evidence chromium-evidence-publish-remote-dev.json",
+    ), "Chromium provenance must actually run on both exact manifests")
     for ref, sbom, evidence in (
         ("base_manifest", "sbom-publish-base.spdx.json",
          "chromium-evidence-publish-base.json"),
@@ -125,8 +138,16 @@ def validate(source: str, helper: str) -> None:
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
           'elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)' in helper,
           "candidate smoke helper fails to bind stable channel/version")
-    check('"$runtime_ref" "$expected_version" "$expected_revision"' in helper,
-          "runtime smoke must compare embedded identity to independent expected tag and SHA")
+    active_helper = tuple(line.strip() for line in helper.splitlines()
+                          if line.strip() and not line.lstrip().startswith("#"))
+    for required in (
+        '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
+        'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
+        'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
+        'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
+    ):
+        check(any(required in line for line in active_helper),
+              "runtime candidate missing active mandatory check: " + required)
     guard = step(source, "Guard stable promotion against overwrite or downgrade")
     check(
         runnable_lines(guard, "stable tag protection guard") == (
@@ -143,6 +164,12 @@ def validate(source: str, helper: str) -> None:
         "stable registry downgrade/overwrite guard must execute on exact indexes",
     )
     promotion = step(source, stages[-1])
+    promotion_commands = runnable_lines(promotion, "stable tag promotion")
+    check("exit 0" not in promotion_commands and
+          sum(line == 'docker buildx imagetools create \\' for line
+              in promotion_commands) == 2 and
+          promotion_commands.count("set -euo pipefail") == 1,
+          "promotion cannot skip writes or exit early")
     check("if: steps.promotion_guard.outputs.mode == 'fresh'" in promotion,
           "idempotent rerun must not write stable registry tags")
     check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in promotion,
@@ -272,6 +299,21 @@ def main() -> None:
         ("premature gate exit", wf.replace(
             '          bash scripts/enforce-trivy-gate.sh \\',
             '          exit 0\n          bash scripts/enforce-trivy-gate.sh \\', 1), helper),
+        ("Chromium early bypass", wf.replace(
+            '          python3 scripts/chromium-sbom-evidence.py \\',
+            '          exit 0\n          python3 scripts/chromium-sbom-evidence.py \\', 1), helper),
+        ("stable promote early bypass", wf.replace(
+            '          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"',
+            '          exit 0\n          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"', 1), helper),
+        ("runtime auth disabled", wf, helper.replace(
+            'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
+            '# bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"', 1)),
+        ("runtime isolation disabled", wf, helper.replace(
+            'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
+            '# bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"', 1)),
+        ("internal channel not verified", wf, helper.replace(
+            '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
+            '"$runtime_ref" "$expected_version" "$expected_revision"', 1)),
         ("wrong base binding", wf.replace("BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}",
                                           "BASE_IMAGE=${{ steps.base.outputs.digest }}", 1), helper),
         ("wrong SPDX", wf.replace("image-ref: ${{ steps.runtime_manifest.outputs.ref }}",
@@ -293,6 +335,9 @@ def main() -> None:
         ("ignore gate error", wf.replace(
             "      - name: Enforce no fixable critical vulnerabilities\n",
             "      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n", 1), helper),
+        ("critical scan downgraded to HIGH", wf.replace(
+            '          severity: CRITICAL',
+            '          severity: HIGH', 1), helper),
         ("missing guard", wf.replace(
             "      - name: Guard stable promotion against overwrite or downgrade\n",
             "      - name: Skip stable promotion guard\n", 1), helper),
