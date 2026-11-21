@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from publication_workflow_contract import step_metadata, active_upload_paths
+from publication_workflow_contract import step_metadata, active_upload_paths, active_mapping_value
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/publish-edge-amd64.yml"
@@ -123,18 +123,15 @@ def validate_edge_critical_scans(workflow: str) -> None:
     ):
         block = named_workflow_step(workflow, name)
         step_metadata(block)
-        lines = [x.strip() for x in block.splitlines()]
-        # Exact single YAML scalar: "HIGH # severity: CRITICAL" is HIGH.
-        require([x for x in lines if x.startswith("severity:")] ==
-                ["severity: CRITICAL"],
-                "Edge critical-only scan downgraded: " + name)
-        require([x for x in lines if x.startswith("image-ref:")] ==
-                ['image-ref: ${{ steps.' + manifest + '.outputs.ref }}'],
-                "Edge scan is not bound to its exact candidate: " + name)
-        for required in ("scanners: vuln", "vuln-type: os,library",
-                         'exit-code: "0"'):
-            require(lines.count(required) == 1,
-                    "Edge critical scan configuration missing: " + name)
+        for key, value in (
+            ("image-ref", "${{ steps." + manifest + ".outputs.ref }}"),
+            ("scanners", "vuln"),
+            ("vuln-type", "os,library"),
+            ("severity", "CRITICAL"),
+            ("exit-code", '"0"'),
+        ):
+            require(active_mapping_value(block, "with", key) == value,
+                    "Edge Trivy effective input changed: " + name + "/" + key)
 
 
 def test_edge_critical_scans(workflow: str) -> None:
@@ -176,12 +173,13 @@ def validate_exact_edge_trivy_gate(workflow: str) -> None:
         '"exact edge Remote Dev publication candidate:trivy-publish-remote-dev.json"',
     )
     require(actual == expected, "Edge Trivy gate is not an executable candidate-bound command")
-    for line in (
-        'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}',
-        'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}',
-        'UBUNTU_VERSION: ${{ steps.metadata.outputs.ubuntu_version }}',
+    for key, value in (
+        ("BASE_MANIFEST_REF", "${{ steps.base_manifest.outputs.ref }}"),
+        ("REMOTE_DEV_MANIFEST_REF", "${{ steps.runtime_manifest.outputs.ref }}"),
+        ("UBUNTU_VERSION", "${{ steps.metadata.outputs.ubuntu_version }}"),
     ):
-        require(line in gate, "Edge critical gate has the wrong source binding: " + line)
+        require(active_mapping_value(gate, "env", key) == value,
+                "Edge critical gate has wrong active source binding: " + key)
 
 
 def test_exact_edge_trivy_gate(workflow: str) -> None:
@@ -307,8 +305,10 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "Edge must run an independent SPDX 2.3 validator on both images")
-    for ref in ("base_manifest", "runtime_manifest"):
-        require("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in supplement,
+    for ref, key in (("base_manifest", "BASE_MANIFEST_REF"),
+                     ("runtime_manifest", "REMOTE_DEV_MANIFEST_REF")):
+        require(active_mapping_value(supplement, "env", key) ==
+                "${{ steps." + ref + ".outputs.ref }}",
                 "edge browser SPDX misbound to " + ref)
     upload = named_workflow_step(workflow, "Upload exact publication evidence")
     require(set(active_upload_paths(upload)) == {
