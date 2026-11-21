@@ -667,6 +667,30 @@ if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
 fi
 echo 'Successful project deletion remains in Projects: OK'
 
+# Destructive confirmation must preserve the caller's exact bytes: leading
+# spaces, tabs, an incorrect name and EOF must NOT delete the directory.
+mkdir -p -- "$new_project_path"
+printf '%s\n' 'keep this content' >"$new_project_path/safety-canary"
+for confirmation in '  new-project  ' $'\tnew-project\t' wrong-project; do
+  run_menu __unset__ $'3\n3\n1\n'"$confirmation"$'\n\n4\n0\n' "$output"
+  assert_file_lines "$invocations" 'invalid delete confirmation must not launch'
+  [[ -f "$new_project_path/safety-canary" ]] || {
+    echo 'ERROR: Codex accepted inexact project deletion confirmation' >&2
+    exit 1
+  }
+  if grep -Fq 'Deleted project: new-project' "$output"; then
+    echo 'ERROR: Codex reported deletion after invalid confirmation' >&2
+    exit 1
+  fi
+done
+run_menu __unset__ $'3\n3\n1\n' "$output"
+[[ -f "$new_project_path/safety-canary" ]] || {
+  echo 'ERROR: Codex deleted project after EOF during confirmation' >&2
+  exit 1
+}
+echo 'Codex project deletion exact-name, whitespace and EOF protections: OK'
+
+
 run_menu __unset__ $'3\n1\n2\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'cancelled project selection'
 if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
