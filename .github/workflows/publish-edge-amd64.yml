@@ -52,6 +52,13 @@ jobs:
         run: |
           bash scripts/validate-publication-source.sh edge
 
+      # Install the independent parser before Docker/GHCR credentials are loaded.
+      - name: Prepare isolated SPDX validator before registry login
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5
+
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
@@ -227,8 +234,6 @@ jobs:
       - name: Validate exact edge SPDX documents with independent parser
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
-          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5
           "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json
           "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json
 
