@@ -290,6 +290,7 @@ def _has_public_content(result: dict, *, method: str,
     lines = text.splitlines()
     substantive = []
     failed = False
+    failure_status = ""
     in_fence = False
     for raw in lines:
         line = raw.strip()
@@ -315,6 +316,7 @@ def _has_public_content(result: dict, *, method: str,
                 heading,
             ):
                 failed = True
+                failure_status = heading
                 break
         if in_fence or line.startswith(("#", ">", "-", "*")):
             # Code examples and quoted documentation are not service status.
@@ -334,10 +336,20 @@ def _has_public_content(result: dict, *, method: str,
             line,
         ):
             failed = True
+            failure_status = line
             break
         substantive.append(raw)
     if failed:
-        if raise_on_failure:
+        # A missing document cannot establish a service outage; keep it
+        # UNVERIFIED. Only explicit quota/auth/network failures are FAILED.
+        explicit_service_error = re.match(
+            r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
+            r"(?:rate\s*limit(?:\s+exceeded|ed)?|quota exceeded|"
+            r"too many requests|unauthorized|authentication required|"
+            r"upgrade your plan|request failed|service unavailable)",
+            failure_status,
+        ) is not None
+        if raise_on_failure and explicit_service_error:
             raise ProbeError("Context7 " + method + " tool reported an explicit service failure")
         return False
     if not substantive:
