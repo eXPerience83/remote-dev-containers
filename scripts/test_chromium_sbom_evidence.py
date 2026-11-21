@@ -25,6 +25,7 @@ def evidence(arch: str = "amd64") -> dict:
                   entry["revision"] + "/" + entry["executable"])
     return {
         "arch": arch, "manifest": copy.deepcopy(PINNED),
+        "image_id": "sha256:" + "c" * 64,
         "executable": executable,
         "executable_sha256": "a" * 64,
         "executable_sha1": "d" * 40,
@@ -38,13 +39,25 @@ def evidence(arch: str = "amd64") -> dict:
 
 IMAGE = "ghcr.io/experience83/remote-dev-base@sha256:" + "a" * 64
 OTHER_IMAGE = "ghcr.io/experience83/remote-dev@sha256:" + "b" * 64
+LOCAL_IMAGE = "remote-dev-base:local"
+LOCAL_IMAGE_ID = "sha256:" + "c" * 64
 
 
 def sbom(image: str = IMAGE) -> dict:
+    is_local = image.endswith(":local")
+    name = ("codex-" + image.split(":")[0]) if is_local else image.split("@")[0].split("/")[-1]
+    digest = LOCAL_IMAGE_ID if is_local else "sha256:" + image.split("@sha256:")[-1]
+    repository = ("index.docker.io/library/" if is_local else
+                  "ghcr.io/experience83/") + name
+    purl = ("pkg:oci/" + name + "@" + digest +
+            "?arch=amd64&repository_url=" + repository.replace("/", "%2F"))
     return {"spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
             "name": image,
             "documentNamespace": "http://trivy.dev/container_image/" + image + "-fixture",
-            "packages": [{"SPDXID": "SPDXRef-ContainerImage-fixture", "name": image}],
+            "packages": [{"SPDXID": "SPDXRef-ContainerImage-fixture", "name": image,
+                          "externalRefs": [{"referenceCategory": "PACKAGE-MANAGER",
+                                            "referenceType": "purl",
+                                            "referenceLocator": purl}]}],
             "relationships": [{"spdxElementId": "SPDXRef-DOCUMENT",
                                "relatedSpdxElement": "SPDXRef-ContainerImage-fixture",
                                "relationshipType": "DESCRIBES"}]}
@@ -104,6 +117,27 @@ class ChromiumSbomContract(unittest.TestCase):
         wrong_namespace["documentNamespace"] = "http://trivy.dev/container_image/other"
         with self.assertRaisesRegex(ValueError, "namespace"):
             mod.add_package(wrong_namespace, evidence(), PINNED, IMAGE)
+
+    def test_oci_root_purl_disagrees_with_candidate(self):
+        for original in (IMAGE, OTHER_IMAGE):
+            with self.subTest(image=original):
+                sb = sbom(original)
+                sb["packages"][0]["externalRefs"] = (
+                    copy.deepcopy(sbom(OTHER_IMAGE if original == IMAGE else IMAGE)
+                                  ["packages"][0]["externalRefs"]))
+                with self.assertRaisesRegex(ValueError, "PURL"):
+                    mod.add_package(sb, evidence(), PINNED, original)
+
+    def test_local_spdx_requires_exact_docker_config_digest(self):
+        mod.add_package(sbom(LOCAL_IMAGE), evidence(), PINNED, LOCAL_IMAGE)
+        wrong = evidence()
+        wrong["image_id"] = "sha256:" + "f" * 64
+        with self.assertRaisesRegex(ValueError, "PURL"):
+            mod.add_package(sbom(LOCAL_IMAGE), wrong, PINNED, LOCAL_IMAGE)
+        wrong = evidence()
+        wrong.pop("image_id")
+        with self.assertRaisesRegex(ValueError, "local image config digest"):
+            mod.add_package(sbom(LOCAL_IMAGE), wrong, PINNED, LOCAL_IMAGE)
 
     def test_spdx_absolute_path_is_rejected(self):
         built = mod.add_package(sbom(), evidence(), PINNED, IMAGE)
