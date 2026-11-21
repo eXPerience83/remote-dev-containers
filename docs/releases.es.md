@@ -194,6 +194,29 @@ manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
 el del manifiesto hijo, ni debe coincidir con el de Edge.
 La aceptación previa de Edge no acredita un despliegue estable en TrueNAS.
 
+**Guarda de tags y antirretroceso:** Antes de modificar ningún tag, el
+publicador comprueba los dos tags SemVer y todos los alias estables de base y
+runtime. No sobrescribe una versión ya publicada con otro índice OCI ni
+permite que un tag antiguo haga retroceder `stable/latest`. Una segunda
+ejecución con digests y alias idénticos es de **solo lectura**; si reconstruye
+digests distintos, la rechaza aunque comparta SHA de código. Conserva el
+registro `stable-promotion-preflight.json` y los metadatos de promoción.
+
+**Límite de publicación parcial:** Los dos repositorios GHCR **no admiten
+una promoción atómica conjunta**. Un workflow rojo puede haber movido la base
+o algunos alias del runtime. Por tanto, **fallo del workflow no garantiza
+que stable/latest permanezcan intactos**. Inspeccionar el registro previo y
+los digests actuales, detener nuevos intentos de publicación y obtener
+autorización del operador para reconciliar manualmente utilizando únicamente
+los **índices OCI inmutables conocidos anteriores**. Leer de nuevo cada alias.
+No repetir a ciegas un tag histórico ni reconstruir una imagen no aceptada.
+
+**Requisito administrativo:** Verificar explícitamente las reglas GitHub
+para crear, modificar y borrar tags `v*`, así como quién puede reejecutar
+publicadores de tags históricos. La guarda nueva no protege retroactivamente
+los workflows guardados en tags antiguos. Sin verificar estas protecciones,
+la release sigue en **NO GO** incluso con CI verde.
+
 ## Elección de canal por el operador
 
 Usa un canal de madurez en la configuración normal y cámbialo solo de forma intencionada:
