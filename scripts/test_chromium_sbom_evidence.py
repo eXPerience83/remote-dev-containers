@@ -99,6 +99,17 @@ class ChromiumSbomContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "paths differ"):
             mod.add_package(sbom(), item, PINNED)
 
+    def test_both_final_spdx_files_reject_sha1_removal(self):
+        built = mod.add_package(sbom(), evidence(), PINNED)
+        mod.validate_supplemental_spdx(built)
+        for record_id in (mod.EXEC_ID, mod.LICENSE_ID):
+            damaged = copy.deepcopy(built)
+            record = next(x for x in damaged["files"] if x["SPDXID"] == record_id)
+            record["checksums"] = [x for x in record["checksums"]
+                                   if x["algorithm"] != "SHA1"]
+            with self.assertRaisesRegex(ValueError, "requires one SHA1"):
+                mod.validate_supplemental_spdx(damaged)
+
     def test_missing_or_invalid_file_sha1_fails(self):
         item = evidence()
         item.pop("executable_sha1")
