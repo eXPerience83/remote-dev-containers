@@ -153,111 +153,60 @@ La fase histórica `0.2.0-beta.1` fue una aceptación local, no una prerelease S
 
 ## Stable y latest
 
-La publicación estable solo se activa mediante un tag SemVer exacto sin prerelease:
+La publicación estable exige un tag exacto `vMAJOR.MINOR.PATCH` que coincida
+con `versions.env` en el historial de `main`. Edge y Stable pueden compartir
+un SHA de código, pero construyen candidatos distintos con su versión y canal.
 
-```text
-vMAJOR.MINOR.PATCH
-```
+El publicador verifica la identidad y los avisos de los dos manifiestos AMD64.
+El arranque, la autenticación y el aislamiento se prueban sobre el manifiesto
+Runtime. Ambos manifiestos tienen informes SPDX y Trivy. Los registros del ZIP,
+binario y licencia de Chromium acreditan procedencia. Trivy no analiza el
+Chromium de ese ZIP. Los dos SPDX finales pasan `pyspdxtools` con las ruedas
+fijadas en `scripts/spdx-validator-requirements.lock.txt`. La instalación usa
+`pip --require-hashes` y solo ruedas. Si cambia la ABI del runner, revisar y
+validar los nuevos hashes antes de publicar. Las vulnerabilidades CRITICAL
+corregibles bloquean la promoción.
 
-El commit etiquetado debe pertenecer a `main` y superar los gates de publicación estable. Las imágenes estables embeben la identidad SemVer y un canal `stable` separado.
+Cada alias debe resolver al **índice OCI** validado de su repositorio, que
+contiene el manifiesto AMD64 probado:
 
-Después de construir y escanear correctamente el candidato estable exacto, el mismo digest se promociona a:
+| Repositorio | Alias |
+| --- | --- |
+| `ghcr.io/experience83/remote-dev-base` | `vMAJOR.MINOR.PATCH`, `stable-amd64` |
+| `ghcr.io/experience83/remote-dev` | `vMAJOR.MINOR.PATCH`, `stable`, `stable-amd64`, `latest` |
 
-```text
-ghcr.io/experience83/remote-dev:vMAJOR.MINOR.PATCH
-ghcr.io/experience83/remote-dev:stable
-ghcr.io/experience83/remote-dev:stable-amd64
-ghcr.io/experience83/remote-dev:latest
-```
+Usar `ghcr.io/experience83/remote-dev:stable-amd64` como selector estable AMD64.
 
-Por tanto, `latest` es únicamente el alias convencional del digest estable más reciente. Publicar `dev` o `edge` nunca lo mueve.
+Antes de escribir, la guarda lee los seis alias, impide sobrescribir tags de
+versión o retroceder y solo permite una reejecución de lectura si coinciden
+exactamente ambos índices candidatos y todos los alias. La promoción en GHCR
+no es atómica. Un fallo puede dejar actualizado un subconjunto de los seis.
 
-Cuando existan releases estables, el selector AMD64 normal será:
+### Reconciliar una promoción parcial
 
-```dotenv
-REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
-```
+1. Detener todos los escritores del registro y las reejecuciones históricas.
+   Conservar los logs, `stable-promotion-preflight.json`, los metadatos de
+   promoción y los digests de los índices candidatos y aceptados. Inventariar
+   los seis alias de la tabla, con digest o ausencia anterior y actual.
+2. Identificar las escrituras completadas. Si existía una release anterior,
+   el operador puede restaurar sus alias con los índices previos registrados.
+   Conciliar también ambos tags de versión. Si se publicó Base y falló Runtime,
+   restaurar únicamente `stable-amd64` de Base deja un tag de versión huérfano
+   y bloquea el reintento. Para autorizar la finalización se deben usar los
+   índices exactos del candidato revisado y escaneado.
+3. En la primera publicación, los alias antes ausentes carecen de digest
+   previo. Recuperar la ausencia exige autorización del operador y verificar
+   cada tag y dependencia afectados. Borrar una versión GHCR puede eliminar
+   todos los alias ligados al digest. Si no hay retirada segura, documentar
+   el bloqueo y conservar la versión compartida.
+4. Tras la reconciliación autorizada, releer los seis alias, incluidas las
+   ausencias esperadas. Verificar las condiciones de la guarda antes de
+   decidir otro intento.
 
-**Identidad del candidato estable:** Edge y stable pueden compartir el
-SHA de código revisado, pero no necesariamente el digest OCI: el tag estable
-reconstruye la imagen con metadatos de canal y versión propios. Antes de mover
-los tags SemVer, `stable`, `stable-amd64` y `latest`, el publicador resuelve
-los manifiestos AMD64 exactos de base y runtime, comprueba sus etiquetas y
-avisos, y ejecuta las pruebas de arranque, aislamiento y autenticación
-sobre el **manifiesto runtime**. Los dos informes SPDX y los dos Trivy se
-generan a partir de sus respectivos manifiestos AMD64. Ambos SPDX incluyen
-la identidad suplementaria del ZIP, binario y licencia Chromium obtenida de
-la imagen; esto **no equivale a un análisis de CVE de Chromium**. Después
-se aplica el veto a vulnerabilidades críticas corregibles. Los cuatro tags deben resolver al
-**digest del índice OCI estable validado**, que debe contener el mismo
-manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
-el del manifiesto hijo, ni debe coincidir con el de Edge.
-La aceptación previa de Edge no acredita un despliegue estable en TrueNAS.
-
-**Validador SPDX reproducible:** Build, Edge y Stable ejecutan `pyspdxtools`
-sobre **ambos documentos finales**, con las 12 ruedas (dependencias
-transitivas incluidas) fijadas por versión y SHA-256 en
-`scripts/spdx-validator-requirements.lock.txt`. `pip --require-hashes`
-rechaza cambios del contenido y no permite paquetes fuente. Este lock se
-obtuvo en CI con Python 3.14 AMD64: un cambio de ABI del runner debe **fallar
-de forma segura** y requerir revisión explícita de nuevas ruedas/hashes,
-no eliminar `--require-hashes`. La renovación del lock exige justificar la
-necesidad, comprobar las fuentes y ejecutar tests y CI del SHA actualizado.
-No actualizar estas dependencias silenciosamente durante una release.
-
-**Guarda de tags y antirretroceso:** Antes de modificar ningún tag, el
-publicador comprueba los dos tags SemVer y todos los alias estables de base y
-runtime. No sobrescribe una versión ya publicada con otro índice OCI ni
-permite que un tag antiguo haga retroceder `stable/latest`. Una segunda
-ejecución con digests y alias idénticos es de **solo lectura**; si reconstruye
-digests distintos, la rechaza aunque comparta SHA de código. Conserva el
-registro `stable-promotion-preflight.json` y los metadatos de promoción.
-
-**Límite de publicación parcial:** GHCR no permite una publicación atómica
-entre los dos repositorios. Un workflow rojo puede haber cambiado cualquier
-subconjunto de los seis tags; **no garantiza que `stable/latest` permanezcan intactos**.
-
-**Reconciliación exclusivamente por el operador (sin reintentos automáticos):**
-
-1. Detener todos los publicadores, incluidas las reejecuciones históricas y
-   otros escritores del registro. Conservar el journal de preflight, los
-   digests de los **índices OCI** candidatos y aceptados previamente (si
-   existen), y los logs del fallo. Leer y registrar los **seis tags**:
-   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
-   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
-   `remote-dev:stable-amd64` y `remote-dev:latest`.
-   Distinguir explícitamente los tags **ausentes antes** del intento.
-2. Identificar qué escrituras llegaron a completarse. Si existía una release
-   estable anterior, restaurar los alias afectados solo tras aprobación, con
-   los **índices inmutables anteriores registrados**, no con tags mutables,
-   reconstrucciones ni digests supuestos. Conciliar también **ambos tags de
-   versión**: si solo se creó `remote-dev-base:vX.Y.Z`, restaurar
-   `stable-amd64` no basta, porque la guarda bloqueará un reintento mientras
-   quede el tag de versión sin pareja. Como alternativa, una decisión humana
-   explícita puede autorizar completar la release con los **índices candidatos
-   exactos que ya pasaron smoke y escaneos**, nunca con otro build.
-3. Si era la **primera publicación estable**, puede que no exista ningún
-   índice anterior. El estado de reversión es la **ausencia** de los tags
-   nuevos, no un digest inventado. Localizar los alias creados y sus versiones
-   GHCR. Borrar requiere autorización expresa y comprobar el alcance:
-   la operación oficial **Delete package version** puede borrar *todos los
-   tags asociados al mismo digest*, no solo uno. Si no se puede eliminar un
-   tag individual sin afectar a otros válidos, detenerse y documentar el
-   estado parcial/bloqueado; **no borrar versiones compartidas**.
-4. Tras cualquier reconciliación autorizada, releer **los seis tags**,
-   incluidos los que deberían estar ausentes, y verificar los requisitos
-   de consistencia de la guarda para ambos tags SemVer y todos los alias.
-   Solo después decidir un nuevo intento. Nunca relanzar a ciegas un
-   publicador histórico.
-
-Consultar la [documentación oficial de borrado/restauración de versiones](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
-El proyecto no dispone de rollback automático de GHCR.
-
-**Requisito administrativo:** Verificar explícitamente las reglas GitHub
-para crear, modificar y borrar tags `v*`, así como quién puede reejecutar
-publicadores de tags históricos. La guarda nueva no protege retroactivamente
-los workflows guardados en tags antiguos. Sin verificar estas protecciones,
-la release sigue en **NO GO** incluso con CI verde.
+Consultar la [guía de borrado y restauración de versiones de GitHub](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
+Antes de publicar, verificar la protección de creación, modificación y
+borrado de tags `v*` y el control de reejecuciones históricas.
+Los workflows de tags anteriores a la guarda carecen de ese control.
 
 ## Elección de canal por el operador
 

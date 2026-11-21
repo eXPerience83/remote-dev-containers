@@ -153,110 +153,60 @@ The historical source `0.2.0-beta.1` was an acceptance phase, not a GitHub SemVe
 
 ## Stable and latest
 
-Stable publication is triggered only by an exact non-prerelease SemVer tag:
+Stable publication requires an exact `vMAJOR.MINOR.PATCH` tag matching
+`versions.env` on a commit in `main` history. Edge and Stable can share a source
+SHA, but they build separate candidates with their own version and channel.
 
-```text
-vMAJOR.MINOR.PATCH
-```
+The publisher verifies identity and notices on both exact AMD64 child
+manifests. Startup, authentication and isolation run on the Runtime child.
+Both children get SPDX and Trivy reports. The Chromium ZIP, binary and license
+records establish provenance. Trivy does not scan Chromium from that ZIP.
+Both final SPDX documents pass `pyspdxtools` with wheels pinned by
+`scripts/spdx-validator-requirements.lock.txt`. Installation uses
+`pip --require-hashes` and wheels only. If the runner ABI changes, review and
+validate the new wheel hashes before releasing. Fixable CRITICAL findings
+block promotion.
 
-The tagged commit must belong to `main` and pass the stable publication gates. Stable images embed the SemVer identity and a separate `stable` channel.
+Each repository's aliases must resolve to its validated OCI **index**, which
+contains the tested AMD64 child:
 
-After the exact stable candidate is built and scanned successfully, the same digest is promoted to:
+| Repository | Aliases |
+| --- | --- |
+| `ghcr.io/experience83/remote-dev-base` | `vMAJOR.MINOR.PATCH`, `stable-amd64` |
+| `ghcr.io/experience83/remote-dev` | `vMAJOR.MINOR.PATCH`, `stable`, `stable-amd64`, `latest` |
 
-```text
-ghcr.io/experience83/remote-dev:vMAJOR.MINOR.PATCH
-ghcr.io/experience83/remote-dev:stable
-ghcr.io/experience83/remote-dev:stable-amd64
-ghcr.io/experience83/remote-dev:latest
-```
+Use `ghcr.io/experience83/remote-dev:stable-amd64` as the stable AMD64 selector.
 
-`latest` is therefore only the conventional alias for the newest stable digest. Publishing `dev` or `edge` never moves it.
+Before writing, the guard reads all six aliases, rejects version-tag overwrites
+and downgrades, and treats a rerun as read-only only if both candidate indexes
+and every alias match exactly. GHCR promotion is non-atomic. A failed run can
+leave a subset of the six aliases updated.
 
-Once stable releases exist, the normal stable AMD64 selector becomes:
+### Reconcile a partial promotion
 
-```dotenv
-REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
-```
+1. Freeze all registry writers and historical reruns. Keep the logs,
+   `stable-promotion-preflight.json`, promotion metadata and the accepted and
+   candidate index digests. Inventory all six aliases from the table,
+   recording the prior and current digest or absence for each.
+2. Identify which writes succeeded. For an existing release, the operator may
+   restore stable aliases using their recorded previous indexes. Reconcile both
+   version tags as well. If Base was published but Runtime failed, restoring
+   Base `stable-amd64` alone leaves an orphaned version tag and blocks retry.
+   An explicitly authorized completion must use the exact reviewed and
+   scanned candidate indexes.
+3. On the first release, aliases that were absent have no previous digest.
+   Restoring absence requires operator approval and verification of every
+   affected tag and dependency. Deleting a GHCR package version can delete
+   every alias attached to the digest. If safe removal is unavailable, record
+   the blocked state and leave the shared version intact.
+4. Reread all six aliases after authorized reconciliation, including expected
+   absences. Verify the guard's consistency requirements before deciding on
+   another attempt.
 
-**Stable release identity:** Edge and stable can share a reviewed source SHA but
-cannot be assumed to share an OCI digest: the stable tag builds a separate image
-with channel/version metadata. Before moving the SemVer, `stable`,
-`stable-amd64` and `latest` tags, the publisher validates the exact base and
-runtime AMD64 child manifests, checks both images' identity labels and notices,
-and performs startup, isolation and authentication smoke tests on the **runtime**
-manifest. Base/final SPDX and Trivy reports target the exact corresponding
-AMD64 child manifests. Both SPDX reports include supplemental image-derived
-Chromium Headless Shell archive/binary/license provenance, which is **not a
-Chromium vulnerability scan**. The fixable-critical gate must pass. All four stable
-tags must resolve to the **separately validated stable OCI index digest**;
-the promoted index must contain the same AMD64 runtime child manifest that
-passed smoke and scanning. The index digest is not the child manifest digest.
-Edge acceptance alone does not prove the stable image was deployed to TrueNAS.
-
-**Reproducible SPDX validator:** Build, Edge and Stable validate **both final**
-SBOMs with `pyspdxtools` from the twelve version- and SHA-256-locked wheels
-(including transitives) in `scripts/spdx-validator-requirements.lock.txt`.
-`pip --require-hashes` rejects changed contents, and source distributions
-are disallowed. The lock was captured for CI Python 3.14 AMD64: if the runner
-ABI changes, installation must **fail closed** pending explicit review of
-new wheels/hashes; never drop `--require-hashes`. Re-lock only with verified
-upstream provenance and the updated exact-head tests/CI, not silently during
-a release.
-
-**Version-tag and downgrade preflight:** The stable publisher checks both version
-tags and all existing base/runtime stable aliases **before its first tag write**.
-Already-published version tags cannot be rebound to a different OCI index, and
-an old source tag cannot move stable/latest backwards. A second run with identical
-digests and aliases is a **read-only no-op**; a rebuilt candidate with new digests
-is intentionally rejected even if its source SHA is the same. The runner records
-`stable-promotion-preflight.json` and its Docker promotion metadata.
-
-**Important partial-promotion limitation:** Publishing into two GHCR repositories
-is **not atomic**. A failed workflow can leave any subset of the six target tags
-modified; a red workflow does **not** prove that `stable/latest` stayed unchanged.
-
-**Operator-only reconciliation after failure (no automatic retry):**
-
-1. Freeze all publishers, including historical workflow reruns and other
-   registry writers. Retain the preflight journal, both candidate **index**
-   digests, the last accepted stable **index** digests (if any), and the failed
-   workflow logs. Read the **six current tag-to-digest mappings**:
-   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
-   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
-   `remote-dev:stable-amd64` and `remote-dev:latest`.
-   Record explicitly which tags were **absent before** the attempt.
-2. Check which writes actually happened. For a previously published stable
-   release, operator-approved restoration of affected stable aliases must use
-   their **recorded prior immutable indexes**, not rebuilds or guessed tags.
-   Also reconcile the **two version tags**: if only base `vX.Y.Z` was created,
-   restoring `stable-amd64` alone is insufficient because the guard will
-   reject the unmatched version tag on retry. An alternate explicit decision
-   may authorize completing the release using only the exact previously
-   smoke-tested and scanned candidate indexes; never fill a missing runtime
-   version tag with an untested digest.
-3. If this was the **first** stable publication, no previous alias/index may
-   exist to restore. The intended rollback state is **absence**, not a guessed
-   image. Identify any newly created version and stable aliases and their
-   GHCR package versions. Deletion requires explicit operator approval and
-   verified package administration: GitHub's supported **Delete package
-   version** operation may delete *every tag attached to that digest*, not
-   just the selected alias. Inspect all affected tags and dependencies before
-   using it; if safe tag-specific removal is unavailable, stop with a recorded
-   blocked/partial state rather than deleting shared or previously valid tags.
-4. After an authorized recovery, reread **all six tags**, including those
-   expected to be absent, and confirm both version tags and all stable aliases
-   meet the guard's consistency requirements. Only then decide on a new
-   release attempt. Never rerun a historic source-tag workflow blindly.
-
-See GitHub's package-version [deletion and restoration guidance](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package)
-for the destructive operation's scope; this repository does not implement
-automatic GHCR rollback.
-
-**Administrator prerequisite for a new release:** Explicitly verify GitHub
-rules protecting creation, modification and deletion of `v*` tags, plus who
-can rerun historical tag workflows. The preflight cannot retroactively protect
-a workflow embedded in an older tag. If those protections cannot be verified,
-the release remains **NO GO**, regardless of a green PR build.
+See GitHub's [package-version deletion and restoration guidance](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
+Before a new release, administrators must verify protection for creation,
+modification and deletion of `v*` tags and control their historical reruns.
+Older tag workflows predate the guard.
 
 ## Operator channel choices
 
