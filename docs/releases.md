@@ -193,6 +193,16 @@ the promoted index must contain the same AMD64 runtime child manifest that
 passed smoke and scanning. The index digest is not the child manifest digest.
 Edge acceptance alone does not prove the stable image was deployed to TrueNAS.
 
+**Reproducible SPDX validator:** Build, Edge and Stable validate **both final**
+SBOMs with `pyspdxtools` from the twelve version- and SHA-256-locked wheels
+(including transitives) in `scripts/spdx-validator-requirements.lock.txt`.
+`pip --require-hashes` rejects changed contents, and source distributions
+are disallowed. The lock was captured for CI Python 3.14 AMD64: if the runner
+ABI changes, installation must **fail closed** pending explicit review of
+new wheels/hashes; never drop `--require-hashes`. Re-lock only with verified
+upstream provenance and the updated exact-head tests/CI, not silently during
+a release.
+
 **Version-tag and downgrade preflight:** The stable publisher checks both version
 tags and all existing base/runtime stable aliases **before its first tag write**.
 Already-published version tags cannot be rebound to a different OCI index, and
