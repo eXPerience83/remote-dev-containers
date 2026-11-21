@@ -33,19 +33,6 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.compare_images == true && '0' || '1' }}
 
-      - name: Record complete SPDX validator wheel hashes for review
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/spdx-validator-wheels"
-          python3 -m pip download --only-binary=:all: --dest "$RUNNER_TEMP/spdx-validator-wheels" spdx-tools==0.8.5
-          python3 - "$RUNNER_TEMP/spdx-validator-wheels" <<'PY'
-          import hashlib, pathlib, sys
-          for wheel in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")):
-              name, version, *_ = wheel.name.split("-")
-              digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-              print(f"LOCK_WHEEL {name}=={version} --hash=sha256:{digest} # {wheel.name}", flush=True)
-          PY
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
@@ -284,7 +271,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
-          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt
           "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-base.spdx.json
           "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-remote-dev.spdx.json
 
