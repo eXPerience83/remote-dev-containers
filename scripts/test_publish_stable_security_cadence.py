@@ -163,14 +163,16 @@ def validate(source: str, helper: str) -> None:
           "candidate smoke helper fails to bind stable channel/version")
     active_helper = tuple(line.strip() for line in helper.splitlines()
                           if line.strip() and not line.lstrip().startswith("#"))
+    check(any('"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
+              in line for line in active_helper),
+          "runtime candidate missing external identity arguments")
     for required in (
-        '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
         'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
         'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
         'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
     ):
-        check(any(required in line for line in active_helper),
-              "runtime candidate missing active mandatory check: " + required)
+        check(active_helper.count(required) == 1,
+              "runtime candidate must execute unmodified, failing probe: " + required)
     guard = step(source, "Guard stable promotion against overwrite or downgrade")
     check(
         runnable_lines(guard, "stable tag protection guard") == (
@@ -343,6 +345,18 @@ def main() -> None:
         ("runtime isolation disabled", wf, helper.replace(
             'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
             '# bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"', 1)),
+        ("password probe error ignored", wf, helper.replace(
+            'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
+            'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref" || true', 1)),
+        ("password probe no-op", wf, helper.replace(
+            'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
+            ': bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"', 1)),
+        ("isolation probe error ignored", wf, helper.replace(
+            'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
+            'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref" || true', 1)),
+        ("runtime smoke probe error ignored", wf, helper.replace(
+            'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
+            'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref" || true', 1)),
         ("internal channel not verified", wf, helper.replace(
             '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
             '"$runtime_ref" "$expected_version" "$expected_revision"', 1)),
