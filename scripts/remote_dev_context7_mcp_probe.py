@@ -279,7 +279,8 @@ def _tool_text(result: dict) -> str:
     ).strip()
 
 
-def _has_public_content(result: dict, *, method: str) -> bool:
+def _has_public_content(result: dict, *, method: str,
+                        raise_on_failure: bool = False) -> bool:
     text = _tool_text(result)
     if not text:
         return False
@@ -335,7 +336,11 @@ def _has_public_content(result: dict, *, method: str) -> bool:
             failed = True
             break
         substantive.append(raw)
-    if failed or not substantive:
+    if failed:
+        if raise_on_failure:
+            raise ProbeError("Context7 " + method + " tool reported an explicit service failure")
+        return False
+    if not substantive:
         return False
     text = "\n".join(substantive)
     if method == "resolve-library-id":
@@ -470,7 +475,8 @@ def probe(
             protocol=protocol, session=session, overall_deadline=deadline)
         if response.get("isError") not in (None, False):
             raise ProbeError("Context7 " + name + " tool returned an explicit error")
-        if not _has_public_content(response, method=name):
+        if not _has_public_content(
+                response, method=name, raise_on_failure=True):
             raise UnverifiedDocumentation(
                 "Context7 " + name + " documentation UNVERIFIED (no positive evidence)"
             )
