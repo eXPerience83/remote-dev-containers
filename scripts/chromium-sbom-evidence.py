@@ -28,8 +28,8 @@ INSPECT_IMAGE = r"""
 import hashlib, json, os
 from pathlib import Path
 
-def sha(path):
-    h = hashlib.sha256()
+def sha(path, algorithm="sha256"):
+    h = hashlib.new(algorithm)
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(chunk)
@@ -53,12 +53,15 @@ if license_file.stat().st_size < 100_000:
     raise SystemExit("Chromium archive license unexpectedly small")
 binary_digest, license_digest, notice_digest = (
     sha(exe), sha(license_file), sha(notice))
+binary_sha1, notice_sha1 = sha(exe, "sha1"), sha(notice, "sha1")
 if license_digest != notice_digest:
     raise SystemExit("bundled Chromium notice differs from installed ZIP license")
 print(json.dumps({"arch": arch, "manifest": manifest,
                   "executable": str(exe), "executable_sha256": binary_digest,
+                  "executable_sha1": binary_sha1,
                   "license_file": str(license_file), "license_sha256": license_digest,
-                  "installed_notice": str(notice), "notice_sha256": notice_digest}))
+                  "installed_notice": str(notice), "notice_sha256": notice_digest,
+                  "notice_sha1": notice_sha1}))
 """
 
 def demand(ok: bool, message: str) -> None:
@@ -98,6 +101,11 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
         demand(isinstance(digest, str) and len(digest) == 64 and
                all(c in "0123456789abcdef" for c in digest),
                "invalid image-derived SHA-256: " + key)
+    for key in ("executable_sha1", "notice_sha1"):
+        digest = evidence.get(key)
+        demand(isinstance(digest, str) and len(digest) == 40 and
+               all(c in "0123456789abcdef" for c in digest),
+               "invalid image-derived SHA-1: " + key)
     demand(evidence["license_sha256"] == evidence["notice_sha256"],
            "Chromium archive license and bundled notice disagree")
     existing_ids = {p["SPDXID"] for p in sbom["packages"]}
@@ -129,14 +137,15 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
         }],
     })
     files = sbom.setdefault("files", [])
-    for file_id, path, digest in (
-        (EXEC_ID, exe, evidence["executable_sha256"]),
-        (LICENSE_ID, NOTICE, evidence["notice_sha256"]),
+    for file_id, path, digest, sha1 in (
+        (EXEC_ID, exe, evidence["executable_sha256"], evidence["executable_sha1"]),
+        (LICENSE_ID, NOTICE, evidence["notice_sha256"], evidence["notice_sha1"]),
     ):
         files.append({
             "SPDXID": file_id,
             "fileName": path,
-            "checksums": [{"algorithm": "SHA256", "checksumValue": digest}],
+            "checksums": [{"algorithm": "SHA1", "checksumValue": sha1},
+                          {"algorithm": "SHA256", "checksumValue": digest}],
             "licenseConcluded": "NOASSERTION",
             "licenseInfoInFiles": ["NOASSERTION"],
             "copyrightText": "NOASSERTION",
@@ -182,7 +191,9 @@ def main() -> None:
         "archive_sha256": pinned["archives"][evidence["arch"]]["chromium-headless-shell"]["sha256"],
         "executable": evidence["executable"],
         "executable_sha256": evidence["executable_sha256"],
+        "executable_sha1": evidence["executable_sha1"],
         "notice_path": NOTICE, "notice_sha256": evidence["notice_sha256"],
+        "notice_sha1": evidence["notice_sha1"],
         "scan_status": "supplemental SPDX identity only; not a Chromium CVE scan",
     }, indent=2) + "\n", encoding="utf-8")
     print("Chromium identity recorded in SPDX:", args.image, evidence["arch"])
