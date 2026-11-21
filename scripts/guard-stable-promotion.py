@@ -45,7 +45,7 @@ def read_tag(image: str, tag: str) -> str | None:
             ref + ": manifest unknown",
             ref + ": manifest not found",
         )
-        normalized = re.sub(r"^(?:ERROR:\\s*)", "", message, flags=re.I).strip()
+        normalized = re.sub(r"^(?:ERROR:\s*)", "", message, flags=re.I).strip()
         if any(normalized.lower() == item.lower() for item in missing):
             return None
         # Never print raw registry stderr: token, account and credential
