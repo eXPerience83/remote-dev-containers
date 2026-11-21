@@ -64,14 +64,20 @@ class SyntheticProbeError(Exception):
     pass
 
 
+class SyntheticUnverifiedDocumentation(SyntheticProbeError):
+    pass
+
+
 class FakeProbe:
     ProbeError = SyntheticProbeError
+    UnverifiedDocumentation = SyntheticUnverifiedDocumentation
     TOTAL_TEST_SECONDS = 90
 
-    def __init__(self, *, failed=False):
+    def __init__(self, *, failed=False, unverified=False):
         self.calls = []
         self.deadlines = []
         self.failed = failed
+        self.unverified = unverified
 
     @staticmethod
     def _hard_read_deadline(_remaining):
@@ -82,6 +88,10 @@ class FakeProbe:
         self.deadlines.append(deadline)
         if self.failed:
             raise self.ProbeError("synthetic MCP failure")
+        if self.unverified:
+            raise self.UnverifiedDocumentation(
+                "Context7 query-docs documentation UNVERIFIED (no positive evidence)"
+            )
         return (
             "Context7 MCP protocol initialize: PASS",
             "Context7 MCP tools/list: PASS (resolve-library-id, query-docs)",
@@ -313,6 +323,46 @@ class WiringTests(unittest.TestCase):
                     "hosted HTTP ping FAILED: MCP response exceeded its time limit",
                 ):
                     codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
+
+    def test_unverified_does_not_report_tool_failed_in_both_managers(self):
+        """Ambiguous docs require nonzero outcome but not a FAILED label."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            codex_home = root / "codex"
+            codex_home.mkdir(mode=0o700)
+            config = codex_home / "config.toml"
+            config.write_text(codex.MANAGED_BLOCK, encoding="utf-8")
+            config.chmod(0o600)
+            with (patch.dict(os.environ, {"CODEX_HOME": str(codex_home),
+                                          "REMOTE_DEV_ROLE": "codex"}),
+                  patch.object(codex, "bundled_codex_accepts_config"),
+                  patch.object(codex, "hosted_ping"),
+                  patch.object(codex, "load_mcp_probe",
+                               return_value=FakeProbe(unverified=True)),
+                  contextlib.redirect_stdout(io.StringIO()) as output):
+                with self.assertRaises(codex.Context7Error) as exc:
+                    codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
+            self.assertIn("MCP tool verification UNVERIFIED", str(exc.exception))
+            self.assertNotIn("MCP tool verification FAILED", str(exc.exception))
+            self.assertNotIn(SECRET, str(exc.exception) + output.getvalue())
+
+            home = root / "antigravity"
+            home.mkdir(mode=0o700)
+            config = home / "mcp_config.json"
+            config.write_text(
+                json.dumps({"mcpServers": {"context7": agy.ENTRY}}),
+                encoding="utf-8",
+            )
+            config.chmod(0o600)
+            with (patch.dict(os.environ, {"REMOTE_DEV_ROLE": "antigravity"}),
+                  patch.object(agy, "build_opener", return_value=FakeOpener()),
+                  patch.object(agy, "load_mcp_probe",
+                               return_value=FakeProbe(unverified=True)),
+                  contextlib.redirect_stdout(io.StringIO()) as output):
+                self.assertEqual(agy.test(home), 3)
+            self.assertIn("MCP tool verification UNVERIFIED", output.getvalue())
+            self.assertNotIn("MCP tool verification FAILED", output.getvalue())
+            self.assertNotIn(SECRET, output.getvalue())
 
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):
         with tempfile.TemporaryDirectory() as temp:
