@@ -34,11 +34,20 @@ def read_tag(image: str, tag: str) -> str | None:
                  "--format", "{{json .Manifest.Digest}}")
     if result.returncode != 0:
         message = (result.stderr + result.stdout).lower()
-        if ("manifest unknown" in message or "manifest not found" in message or
-            ("not found" in message and not any(word in message for word in (
-                "connection", "network", "server not found", "dns", "timeout",
-                "unauthorized", "forbidden", "permission")))):
-            return None
+        # Auth/token errors can themselves contain "404 Not Found"; this is
+        # never proof that the requested version tag does not exist.
+        auth_or_transport = (
+            "authorize", "authorization", "authenticat", "anonymous token",
+            "token endpoint", "token service", "fetch token", "unauthorized",
+            "forbidden", "permission", "denied", "credential", "401", "403",
+            "connection", "network", "dns", "timeout", "tls", "rate limit",
+        )
+        if not any(term in message for term in auth_or_transport):
+            # Only explicit manifest absence or an exact ref's not-found
+            # response may permit the first publication of a version.
+            if ("manifest unknown" in message or "manifest not found" in message or
+                ref.lower() + ": not found" in message):
+                return None
         raise ValueError("cannot inspect existing GHCR tag " + ref + ": " +
                          result.stderr[-300:])
     try:
