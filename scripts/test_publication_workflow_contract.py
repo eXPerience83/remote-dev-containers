@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from publication_workflow_contract import active_upload_paths, step_metadata
+from publication_workflow_contract import active_upload_paths, step_metadata, active_mapping_value
 
 
 class PublicationStepContract(unittest.TestCase):
@@ -51,6 +51,41 @@ class PublicationStepContract(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     step_metadata(altered,
                                   expected_if="steps.promotion_guard.outputs.mode == 'fresh'")
+
+    def test_effective_nested_env_and_with_values(self):
+        block = (
+            "      - name: Scan\n"
+            "        env:\n"
+            "          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}\n"
+            "        uses: aquasecurity/trivy-action@sha256\n"
+            "        with:\n"
+            "          image-ref: ${{ steps.base_manifest.outputs.ref }}\n"
+            "          severity: CRITICAL\n"
+            "          exit-code: \"0\"\n"
+        )
+        self.assertEqual(
+            active_mapping_value(block, "env", "BASE_MANIFEST_REF"),
+            "${{ steps.base_manifest.outputs.ref }}",
+        )
+        self.assertEqual(active_mapping_value(block, "with", "severity"), "CRITICAL")
+        for mutation in (
+            block.replace("          severity: CRITICAL\n",
+                          "          # severity: CRITICAL\n"),
+            block.replace("          severity: CRITICAL\n",
+                          "          severity: HIGH # severity: CRITICAL\n"),
+            block.replace("          severity: CRITICAL\n",
+                          '          "severity": CRITICAL\n'),
+            block.replace("          severity: CRITICAL\n",
+                          "          severity: CRITICAL\n          severity: CRITICAL\n"),
+        ):
+            with self.subTest(mutation=mutation):
+                with self.assertRaises(AssertionError):
+                    active_mapping_value(mutation, "with", "severity")
+        bad_env = block.replace(
+            "          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}\n",
+            "          # BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}\n")
+        with self.assertRaises(AssertionError):
+            active_mapping_value(bad_env, "env", "BASE_MANIFEST_REF")
 
     def test_active_artifact_paths(self):
         upload = (
