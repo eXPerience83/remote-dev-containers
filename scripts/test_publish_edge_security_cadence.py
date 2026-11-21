@@ -270,7 +270,7 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
     require("        if:" not in bootstrap and
             "        continue-on-error:" not in bootstrap and
             bootstrap.count("python3 -m venv") == 1 and
-            bootstrap.count("pip install --disable-pip-version-check spdx-tools==0.8.5") == 1,
+            bootstrap.count("pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt") == 1,
             "Edge independent SPDX parser must install before credentials")
     for label, block in (("Chromium", supplement), ("independent SPDX", semantic)):
         require("        if:" not in block and "        continue-on-error:" not in block,
