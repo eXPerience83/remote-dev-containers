@@ -139,29 +139,9 @@ for runtime_command in python python3 node npm uv; do
 done
 echo "Non-root mise canonical fallback resolution: OK"
 
-docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$remote_dev_image"
-docker run --rm \
-  --network none \
-  --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$ROOT/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
-  -e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
-  "$remote_dev_image" /tmp/test-remote-dev-context7-runtime-isolation.py
-codex_noexec_smoke_command=(
-  docker run --rm
-  --user 0:0
-  --network none
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
-  --entrypoint /opt/remote-dev/mise/shims/python
-  -v "$ROOT/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro"
-  -e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime
-  "$remote_dev_image" /tmp/test-codex-runtime-noexec-staging.py
-)
-timeout --foreground 60s "${codex_noexec_smoke_command[@]}"
+bash "$ROOT/scripts/run-runtime-publication-probes.sh" "$remote_dev_image"
 bash "$ROOT/scripts/test-mise-project-resolution.sh" "$remote_dev_image"
 bash "$ROOT/scripts/test-validation-tools.sh" "$remote_dev_image"
-bash "$ROOT/scripts/runtime-smoke-test.sh" "$remote_dev_image"
-bash "$ROOT/scripts/test-web-password-runtime.sh" "$remote_dev_image"
-bash "$ROOT/scripts/test-cross-service-isolation.sh" "$remote_dev_image"
 
 canonical_base_id="$(docker image inspect remote-dev-base:local --format '{{.Id}}')"
 legacy_base_id="$(docker image inspect codex-remote-dev-base:local --format '{{.Id}}')"

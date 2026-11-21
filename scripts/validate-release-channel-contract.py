@@ -243,30 +243,6 @@ def validate_other_channels(root: Path) -> None:
         )
     )
     require(edge_guard, ('if [[ "$GITHUB_REF" != "refs/heads/main" ]]',), "edge main guard")
-    edge_publish = active(
-        bounded(
-            edge,
-            "      - name: Promote one scanned and smoke-tested digest to canonical edge tags\n",
-            None,
-            "edge publication",
-        )
-    )
-    require(
-        edge_publish,
-        (
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:edge"',
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:edge-amd64"',
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:sha-${GITHUB_SHA}"',
-            'for tag in edge edge-amd64 "sha-${GITHUB_SHA}"; do',
-        ),
-        "edge publication",
-    )
-    reject(
-        edge_publish,
-        (':dev"', ':dev-amd64"', ':stable"', ':stable-amd64"', ':latest"'),
-        "edge publication",
-    )
-
     stable_trigger = active(bounded(stable, "on:\n", "\npermissions:", "stable trigger"))
     require(stable_trigger, ('tags:\n      - "v*"',), "stable trigger")
     stable_tag_validation = active(
@@ -299,30 +275,6 @@ def validate_other_channels(root: Path) -> None:
         stable_main_guard,
         ('if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then',),
         "stable main guard",
-    )
-    stable_publish = active(
-        bounded(
-            stable,
-            "      - name: Promote one scanned digest to canonical stable tags\n",
-            None,
-            "stable publication",
-        )
-    )
-    require(
-        stable_publish,
-        (
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}"',
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:stable"',
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64"',
-            '--tag "ghcr.io/${NAMESPACE}/remote-dev:latest"',
-            'for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do',
-        ),
-        "stable publication",
-    )
-    reject(
-        stable_publish,
-        (':dev"', ':dev-amd64"', ':edge"', ':edge-amd64"'),
-        "stable publication",
     )
 
 

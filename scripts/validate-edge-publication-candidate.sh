@@ -232,27 +232,7 @@ strict_launcher_preflight \
 docker run --rm --entrypoint remote-dev-notices "$base_ref" --check
 docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
 
-# Exercise the exact runtime manifest rather than rebuilding a second image.
-docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \
+bash "$root/scripts/run-runtime-publication-probes.sh" \
   "$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"
-docker run --rm \
-  --network none \
-  --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
-  -e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
-  "$runtime_ref" /tmp/test-remote-dev-context7-runtime-isolation.py
-
-timeout --foreground 60s docker run --rm \
-  --user 0:0 \
-  --network none \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-  --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro" \
-  -e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
-  "$runtime_ref" /tmp/test-codex-runtime-noexec-staging.py
-
-bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"
-bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"
-bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"
 
 echo "Exact edge publication candidate validation: OK"

@@ -284,13 +284,10 @@ jobs:
           UBUNTU_VERSION: ${{ steps.metadata.outputs.ubuntu_version }}
         run: |
           set -euo pipefail
-          bash scripts/enforce-trivy-gate.sh \
-            "--expect-image=$BASE_MANIFEST_REF" \
-            "--expect-ubuntu=$UBUNTU_VERSION" \
-            "exact edge base publication candidate:trivy-publish-base.json" \
-            "--expect-image=$REMOTE_DEV_MANIFEST_REF" \
-            "--expect-ubuntu=$UBUNTU_VERSION" \
-            "exact edge Remote Dev publication candidate:trivy-publish-remote-dev.json"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-base.json \
+            --expect-image "$BASE_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
+            --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
 
       - name: Promote one scanned and smoke-tested digest to canonical edge tags
         env:
@@ -299,54 +296,6 @@ jobs:
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
         run: |
           set -euo pipefail
-          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
-          runtime_ref="ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file base-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:edge-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:sha-${GITHUB_SHA}" \
-            "$base_ref"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file runtime-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:edge" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:edge-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:sha-${GITHUB_SHA}" \
-            "$runtime_ref"
-
-          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
-
-          if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: promoted base digest $promoted_base differs from validated digest $BASE_DIGEST" >&2
-            exit 1
-          fi
-          if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
-            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from validated digest $REMOTE_DEV_DIGEST" >&2
-            exit 1
-          fi
-
-          base_tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:edge-amd64"
-          actual_base_digest="$(
-            docker buildx imagetools inspect "$base_tag_ref" \
-              --format '{{json .Manifest.Digest}}' | tr -d '"'
-          )"
-          if [[ "$actual_base_digest" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: $base_tag_ref resolved to $actual_base_digest instead of $BASE_DIGEST" >&2
-            exit 1
-          fi
-
-          for tag in edge edge-amd64 "sha-${GITHUB_SHA}"; do
-            tag_ref="ghcr.io/${NAMESPACE}/remote-dev:${tag}"
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-              exit 1
-            fi
-          done
+          bash scripts/promote-publication-indexes.sh edge \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_SHA"

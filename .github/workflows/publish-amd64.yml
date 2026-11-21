@@ -288,13 +288,10 @@ jobs:
           UBUNTU_VERSION: ${{ steps.versions.outputs.ubuntu_version }}
         run: |
           set -euo pipefail
-          bash scripts/enforce-trivy-gate.sh \
-            "--expect-image=$BASE_MANIFEST_REF" \
-            "--expect-ubuntu=$UBUNTU_VERSION" \
-            "exact stable base publication candidate:trivy-publish-base.json" \
-            "--expect-image=$REMOTE_DEV_MANIFEST_REF" \
-            "--expect-ubuntu=$UBUNTU_VERSION" \
-            "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-base.json \
+            --expect-image "$BASE_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
+            --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
 
       - name: Guard stable promotion against overwrite or downgrade
         id: promotion_guard
@@ -318,62 +315,9 @@ jobs:
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
         run: |
           set -euo pipefail
-          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
-          runtime_ref="ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file base-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:stable-amd64" \
-            "$base_ref"
-
-          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
-            exit 1
-          fi
-
-          # Check the registry aliases, not only the local promotion metadata.
-          for tag in "$GITHUB_REF_NAME" stable-amd64; do
-            tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$BASE_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $BASE_DIGEST" >&2
-              exit 1
-            fi
-          done
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file runtime-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
-            "$runtime_ref"
-
-          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
-
-          if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
-            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
-            exit 1
-          fi
-
-          for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do
-            tag_ref="ghcr.io/${NAMESPACE}/remote-dev:${tag}"
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-              exit 1
-            fi
-          done
+          bash scripts/promote-publication-indexes.sh stable \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_REF_NAME"
 
       - name: Upload stable promotion preflight and results
         if: always()

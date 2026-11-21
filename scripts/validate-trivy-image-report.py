@@ -11,6 +11,8 @@ import json
 import re
 from pathlib import Path, PurePosixPath
 
+LOCAL_IMAGES = {"remote-dev-base:local", "remote-dev:local"}
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 DIGEST_REF = re.compile(r"^ghcr\.io/experience83/remote-dev(?:-base)?@sha256:[0-9a-f]{64}$")
 # These tool binaries are included in both supported AMD64 image roles.
 # Validate analyzer, installation location and root package identity together.
@@ -30,7 +32,17 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
-def validate(report: object, expected_image: str | None = None, ubuntu: str | None = None) -> tuple[int, int]:
+def ubuntu_package_version(package: dict) -> str:
+    version = package["Version"]
+    if package.get("Epoch"):
+        version = f'{package["Epoch"]}:{version}'
+    if package.get("Release"):
+        version = f'{version}-{package["Release"]}'
+    return version
+
+
+def validate(report: object, expected_image: str | None = None,
+             ubuntu: str | None = None, local_id: str | None = None) -> tuple[int, int]:
     require(isinstance(report, dict), "Trivy report is not a JSON object")
     require(report.get("SchemaVersion") == 2, "wrong Trivy schema version")
     require(report.get("ArtifactType") == "container_image", "not an image scan")
@@ -46,12 +58,19 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
     if ubuntu:
         require(os_release == ubuntu or os_release.startswith(ubuntu + "."),
                 "wrong Ubuntu release; expected " + ubuntu)
-    if expected_image:
-        require(bool(DIGEST_REF.fullmatch(expected_image)), "invalid expected manifest ref")
-        require(name == expected_image, "Trivy scanned a different image: " + name)
-        digests = meta.get("RepoDigests")
-        require(isinstance(digests, list) and expected_image in digests,
-                "exact candidate is missing from RepoDigests")
+    if expected_image in LOCAL_IMAGES:
+        require(local_id is not None and bool(DIGEST.fullmatch(local_id)),
+                "local scan requires an expected Docker image ID")
+        require(name == expected_image and meta.get("ImageID") == local_id,
+                "Trivy report does not match the expected local image and ID")
+    else:
+        require(local_id is None, "--expect-local-id requires a known local image")
+        if expected_image:
+            require(bool(DIGEST_REF.fullmatch(expected_image)), "invalid expected manifest ref")
+            require(name == expected_image, "Trivy scanned a different image: " + name)
+            digests = meta.get("RepoDigests")
+            require(isinstance(digests, list) and expected_image in digests,
+                    "exact candidate is missing from RepoDigests")
     results = report.get("Results")
     require(isinstance(results, list) and bool(results), "missing scan coverage: Results")
     seen: set[tuple[str, str]] = set()
@@ -101,6 +120,10 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                             for p in packages),
                         "tool binary lacks expected root package: " + basename)
                 verified_tools.add(basename)
+        ubuntu_inventory = (
+            {(p["Name"], ubuntu_package_version(p)) for p in packages}
+            if klass == "os-pkgs" else set()
+        )
         vulnerabilities = result.get("Vulnerabilities", [])
         require(isinstance(vulnerabilities, list), "malformed vulnerability array")
         for vuln in vulnerabilities:
@@ -109,6 +132,9 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                 value = vuln.get(field)
                 require(isinstance(value, str) and bool(value.strip()),
                         "vulnerability is missing " + field)
+            if klass == "os-pkgs":
+                require((vuln["PkgName"], vuln["InstalledVersion"]) in ubuntu_inventory,
+                        "Ubuntu finding is missing from its package inventory: " + vuln["PkgName"])
             # Workflows request only CRITICAL. A report with HIGH and no CRITICAL
             # must not be mistaken for a clean critical-only scan.
             require(vuln["Severity"] == "CRITICAL",
@@ -120,14 +146,13 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
             require(status != "fixed" or
                     (isinstance(fixed, str) and bool(fixed.strip())),
                     "contradictory Trivy finding: fixed status without FixedVersion")
-            if vuln["Severity"] == "CRITICAL":
-                if isinstance(fixed, str) and fixed.strip():
-                    fixable += 1
-                    print("FIXABLE CRITICAL: " + " | ".join(
-                        (vuln["VulnerabilityID"], vuln["PkgName"],
-                         vuln["InstalledVersion"] + " -> " + fixed, result["Target"])))
-                else:
-                    unfixed += 1
+            if isinstance(fixed, str) and fixed.strip():
+                fixable += 1
+                print("FIXABLE CRITICAL: " + " | ".join(
+                    (vuln["VulnerabilityID"], vuln["PkgName"],
+                     vuln["InstalledVersion"] + " -> " + fixed, result["Target"])))
+            else:
+                unfixed += 1
     # These installed tool families and binaries are present in both
     # supported AMD64 image roles; do not pin an arbitrary number of results
     # or the versions encoded in their paths.
@@ -152,10 +177,11 @@ def main() -> int:
     parser.add_argument("report", type=Path)
     parser.add_argument("--expect-image")
     parser.add_argument("--expect-ubuntu")
+    parser.add_argument("--expect-local-id")
     args = parser.parse_args()
     try:
         result = json.loads(args.report.read_text(encoding="utf-8"))
-        fixable, unfixed = validate(result, args.expect_image, args.expect_ubuntu)
+        fixable, unfixed = validate(result, args.expect_image, args.expect_ubuntu, args.expect_local_id)
     except (OSError, ValueError, UnicodeError) as exc:
         print("ERROR: incomplete or invalid Trivy scan: " + str(exc))
         return 1
