@@ -688,6 +688,8 @@ run_menu __unset__ $'3\n3\n1\n' "$output"
   echo 'ERROR: Codex deleted project after EOF during confirmation' >&2
   exit 1
 }
+# Restore the original fixture layout for the subsequent project-picker tests.
+rm -rf -- "$new_project_path"
 echo 'Codex project deletion exact-name, whitespace and EOF protections: OK'
 
 
