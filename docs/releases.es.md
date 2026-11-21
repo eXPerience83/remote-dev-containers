@@ -185,8 +185,10 @@ los tags SemVer, `stable`, `stable-amd64` y `latest`, el publicador resuelve
 los manifiestos AMD64 exactos de base y runtime, comprueba sus etiquetas y
 avisos, y ejecuta las pruebas de arranque, aislamiento y autenticación
 sobre el **manifiesto runtime**. Los dos informes SPDX y los dos Trivy se
-generan a partir de sus respectivos manifiestos AMD64, antes del veto a
-vulnerabilidades críticas corregibles. Los cuatro tags deben resolver al
+generan a partir de sus respectivos manifiestos AMD64. Ambos SPDX incluyen
+la identidad suplementaria del ZIP, binario y licencia Chromium obtenida de
+la imagen; esto **no equivale a un análisis de CVE de Chromium**. Después
+se aplica el veto a vulnerabilidades críticas corregibles. Los cuatro tags deben resolver al
 **digest del índice OCI estable validado**, que debe contener el mismo
 manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
 el del manifiesto hijo, ni debe coincidir con el de Edge.
