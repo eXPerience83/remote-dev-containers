@@ -234,7 +234,7 @@ docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
 
 # Exercise the exact runtime manifest rather than rebuilding a second image.
 docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \
-  "$runtime_ref" "$expected_version" "$expected_revision"
+  "$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"
 docker run --rm \
   --network none \
   --entrypoint /opt/remote-dev/mise/shims/python \
