@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from publication_workflow_contract import step_metadata, active_upload_paths
+
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/publish-edge-amd64.yml"
 HELPER = ROOT / "scripts/validate-edge-publication-candidate.sh"
@@ -120,6 +122,7 @@ def validate_edge_critical_scans(workflow: str) -> None:
          "runtime_manifest"),
     ):
         block = named_workflow_step(workflow, name)
+        step_metadata(block)
         lines = [x.strip() for x in block.splitlines()]
         # Exact single YAML scalar: "HIGH # severity: CRITICAL" is HIGH.
         require([x for x in lines if x.startswith("severity:")] ==
@@ -157,8 +160,7 @@ def test_edge_critical_scans(workflow: str) -> None:
 def validate_exact_edge_trivy_gate(workflow: str) -> None:
     """Fail when the Edge gate is skipped, commented out or bound to wrong images."""
     gate = named_workflow_step(workflow, "Enforce no fixable critical vulnerabilities")
-    require("        if:" not in gate and "        continue-on-error:" not in gate,
-            "Edge critical gate must never be conditional or ignored")
+    step_metadata(gate)
     marker = "\n        run: |\n"
     require(gate.count(marker) == 1, "Edge critical gate has no unique executable run")
     actual = tuple(line.strip() for line in gate.split(marker, 1)[1].splitlines()
@@ -188,6 +190,12 @@ def test_exact_edge_trivy_gate(workflow: str) -> None:
         ("comment gate, keep matching text", workflow.replace(
             '          bash scripts/enforce-trivy-gate.sh \\',
             '          # bash scripts/enforce-trivy-gate.sh \\', 1)),
+        ("quoted skipped gate", workflow.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            '      - name: Enforce no fixable critical vulnerabilities\n        "if": false\n', 1)),
+        ("quoted ignored gate failure", workflow.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            '      - name: Enforce no fixable critical vulnerabilities\n        "continue-on-error": true\n', 1)),
         ("skip gate", workflow.replace(
             '      - name: Enforce no fixable critical vulnerabilities\n',
             '      - name: Enforce no fixable critical vulnerabilities\n        if: false\n', 1)),
@@ -263,24 +271,26 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
         workflow, "Record exact Chromium identity and notices in edge SPDX images")
     semantic = named_workflow_step(
         workflow, "Validate exact edge SPDX documents with independent parser")
+    marker = "\n        run: |\n"
+    def active(block: str) -> tuple[str, ...]:
+        require(block.count(marker) == 1, "expected one executable run block")
+        return tuple(x.strip() for x in block.split(marker, 1)[1].splitlines()
+                     if x.strip() and not x.lstrip().startswith("#"))
     bootstrap = named_workflow_step(workflow, "Prepare isolated SPDX validator before registry login")
     require(workflow.index("Prepare isolated SPDX validator before registry login") <
             workflow.index("- uses: docker/login-action@"),
             "Edge SPDX package installation must precede registry login")
-    require("        if:" not in bootstrap and
-            "        continue-on-error:" not in bootstrap and
-            bootstrap.count("python3 -m venv") == 1 and
-            bootstrap.count("pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt") == 1,
-            "Edge independent SPDX parser must install before credentials")
+    step_metadata(bootstrap)
+    require(active(bootstrap) == (
+        "set -euo pipefail",
+        'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt',
+    ), "Edge SPDX parser must install exact locked wheels before credentials")
     for label, block in (("Chromium", supplement), ("independent SPDX", semantic)):
-        require("        if:" not in block and "        continue-on-error:" not in block,
-                label + " gate must not be skipped")
+        step_metadata(block)
     marker = "\n        run: |\n"
     require(supplement.count(marker) == 1 and semantic.count(marker) == 1,
             "Chromium and independent validation require unique run blocks")
-    def active(block: str) -> tuple[str, ...]:
-        return tuple(x.strip() for x in block.split(marker, 1)[1].splitlines()
-                     if x.strip() and not x.lstrip().startswith("#"))
     require(active(supplement) == (
         "set -euo pipefail",
         'python3 scripts/chromium-sbom-evidence.py \\',
@@ -300,10 +310,15 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
     for ref in ("base_manifest", "runtime_manifest"):
         require("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in supplement,
                 "edge browser SPDX misbound to " + ref)
-    for file in ("chromium-evidence-publish-base.json",
-                 "chromium-evidence-publish-remote-dev.json"):
-        require(file in named_workflow_step(workflow, "Upload exact publication evidence"),
-                "Edge publication evidence must retain " + file)
+    upload = named_workflow_step(workflow, "Upload exact publication evidence")
+    require(set(active_upload_paths(upload)) == {
+        "sbom-publish-base.spdx.json",
+        "sbom-publish-remote-dev.spdx.json",
+        "chromium-evidence-publish-base.json",
+        "chromium-evidence-publish-remote-dev.json",
+        "trivy-publish-base.json",
+        "trivy-publish-remote-dev.json",
+    }, "Edge publication must retain all six active artifact files")
 
 
 def test_edge_chromium_spdx(workflow: str) -> None:
@@ -315,6 +330,15 @@ def test_edge_chromium_spdx(workflow: str) -> None:
         ("comment Chromium", workflow.replace(
             '          python3 scripts/chromium-sbom-evidence.py \\',
             '          # python3 scripts/chromium-sbom-evidence.py \\', 1)),
+        ("commented parser install", workflow.replace(
+            '          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt',
+            '          # "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt', 1)),
+        ("commented runtime Chromium artifact", workflow.replace(
+            "            chromium-evidence-publish-remote-dev.json\n",
+            "            # chromium-evidence-publish-remote-dev.json\n", 1)),
+        ("quoted disabled parser", workflow.replace(
+            "      - name: Validate exact edge SPDX documents with independent parser\n",
+            '      - name: Validate exact edge SPDX documents with independent parser\n        "if": false\n', 1)),
         ("skip parser bootstrap", workflow.replace(
             '      - name: Prepare isolated SPDX validator before registry login\n',
             '      - name: Prepare isolated SPDX validator before registry login\n        if: false\n', 1)),
@@ -472,6 +496,26 @@ def main() -> None:
     test_edge_critical_scans(workflow)
     test_shared_candidate_runtime_checks(helper)
     test_edge_chromium_spdx(workflow)
+
+    # The canonical metadata contract applies to *all* publication gates,
+    # not only the Trivy gate. Quoted if/continue-on-error must never suppress
+    # smoke, the evidence collectors, security scans or the promotion.
+    for name in (
+        "Build untagged edge base candidate",
+        "Resolve exact edge base AMD64 manifest",
+        "Build untagged edge Remote Dev candidate",
+        "Resolve exact edge Remote Dev AMD64 manifest",
+        "Smoke-test the exact publication candidates",
+        "Generate exact edge base SPDX SBOM",
+        "Generate exact edge Remote Dev SPDX SBOM",
+        "Record exact Chromium identity and notices in edge SPDX images",
+        "Validate exact edge SPDX documents with independent parser",
+        "Scan exact edge base candidate for critical vulnerabilities",
+        "Scan exact edge Remote Dev candidate for critical vulnerabilities",
+        "Enforce no fixable critical vulnerabilities",
+        "Promote one scanned and smoke-tested digest to canonical edge tags",
+    ):
+        step_metadata(named_workflow_step(workflow, name))
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
