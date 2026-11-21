@@ -2,6 +2,7 @@
 """Offline, fail-closed stable publication wiring and ordering regressions."""
 
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -38,14 +39,24 @@ def validate(source: str, helper: str) -> None:
         "Scan exact stable base candidate for critical vulnerabilities",
         "Scan exact stable Remote Dev candidate for critical vulnerabilities",
         "Enforce no fixable critical vulnerabilities",
+        "Guard stable promotion against overwrite or downgrade",
         "Promote one scanned digest to canonical stable tags",
     ]
     offsets = [source.find("      - name: " + name + "\n") for name in stages]
     check(all(offset >= 0 for offset in offsets) and offsets == sorted(offsets),
           "stable promotion is missing a preceding candidate gate")
+    for name in stages[:-1]:
+        block = step(source, name)
+        check(not re.search(r"(?m)^        (if|continue-on-error):", block),
+              "mandatory stable security step conditionally skipped: " + name)
     gate = step(source, "Enforce no fixable critical vulnerabilities")
     check("run: |" in gate and
           'bash scripts/enforce-trivy-gate.sh \\' in gate and
+          '"--expect-image=$BASE_MANIFEST_REF"' in gate and
+          '"--expect-image=$REMOTE_DEV_MANIFEST_REF"' in gate and
+          '"--expect-ubuntu=$UBUNTU_VERSION"' in gate and
+          'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}' in gate and
+          'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}' in gate and
           '"exact stable base publication candidate:trivy-publish-base.json"' in gate and
           '"exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"' in gate,
           "fixable-critical gate must execute against both exact stable candidate reports")
@@ -90,12 +101,23 @@ def validate(source: str, helper: str) -> None:
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
           'elif [[ "$expected_version" =~ ^v[0-9]+' in helper,
           "candidate smoke helper fails to bind stable channel/version")
+    guard = step(source, "Guard stable promotion against overwrite or downgrade")
+    check("run: |" in guard and "python3 scripts/guard-stable-promotion.py" in guard and
+          "--journal stable-promotion-preflight.json" in guard and
+          "id: promotion_guard" in guard and
+          'BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}' in guard and
+          'REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}' in guard,
+          "stable registry downgrade/overwrite guard omitted or misbound")
     promotion = step(source, stages[-1])
+    check("if: steps.promotion_guard.outputs.mode == 'fresh'" in promotion,
+          "idempotent rerun must not write stable registry tags")
     check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in promotion,
           "stable runtime alias registry verification missing")
     check(0 <= promotion.find('promoted_base="$(jq -r') <
+          promotion.find('--metadata-file runtime-promotion.json') and
+          0 <= promotion.find('for tag in "$GITHUB_REF_NAME" stable-amd64; do') <
           promotion.find('--metadata-file runtime-promotion.json'),
-          "base must be checked before moving runtime stable tags")
+          "base digest and aliases must be checked before runtime tag writes")
     check('for tag in "$GITHUB_REF_NAME" stable-amd64; do' in promotion and
           'tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"' in promotion and
           'if [[ "$actual_digest" != "$BASE_DIGEST" ]]; then' in promotion,
@@ -182,8 +204,25 @@ def main() -> None:
         ("wrong Chromium digest", wf.replace(
             "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}",
             "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}", 1), helper),
-        ("base check too late", wf.replace(
-            'promoted_base="$(jq -r', 'promoted_base_late="$(jq -r', 1), helper),
+        ("base alias verification moved after runtime tags", wf.replace(
+            '          # Check the registry aliases, not only the local promotion metadata.\n' +
+            '          for tag in "$GITHUB_REF_NAME" stable-amd64; do',
+            '          # base verification deferred beyond runtime promotion\n' +
+            '          for tag in "$GITHUB_REF_NAME" stable-amd64; do', 1).replace(
+            '          docker buildx imagetools create \\\n            --prefer-index=false \\\n            --metadata-file runtime-promotion.json',
+            '          docker buildx imagetools create \\\n            --prefer-index=false \\\n            --metadata-file runtime-promotion.json', 1), helper),
+        ("skip smoke by condition", wf.replace(
+            "      - name: Smoke-test the exact stable publication candidates\\n",
+            "      - name: Smoke-test the exact stable publication candidates\\n        if: false\\n", 1), helper),
+        ("skip gate by condition", wf.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\\n",
+            "      - name: Enforce no fixable critical vulnerabilities\\n        if: false\\n", 1), helper),
+        ("ignore gate error", wf.replace(
+            "      - name: Enforce no fixable critical vulnerabilities\\n",
+            "      - name: Enforce no fixable critical vulnerabilities\\n        continue-on-error: true\\n", 1), helper),
+        ("missing guard", wf.replace(
+            "      - name: Guard stable promotion against overwrite or downgrade\\n",
+            "      - name: Skip stable promotion guard\\n", 1), helper),
         ("no stable base tag read-back", wf.replace(
             'for tag in "$GITHUB_REF_NAME" stable-amd64; do',
             'for tag in "disabled-base"; do', 1), helper),
