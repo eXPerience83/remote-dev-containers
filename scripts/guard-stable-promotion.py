@@ -68,14 +68,24 @@ def image_release(ref: str) -> str:
     demand(child.returncode == 0, "old stable index has no unique linux/amd64 child")
     child_ref = child.stdout.strip()
     demand(bool(IMAGE.fullmatch(child_ref)), "invalid old stable AMD64 ref")
-    pulled = run("docker", "pull", "--quiet", child_ref)
-    demand(pulled.returncode == 0, "cannot inspect previous stable image")
-    checked = run("docker", "image", "inspect", child_ref, "--format",
-                  '{{index .Config.Labels "org.opencontainers.image.version"}}')
-    demand(checked.returncode == 0, "cannot read previous stable version label")
-    version = checked.stdout.strip()
-    demand(VERSION.fullmatch(version) is not None,
-           "existing stable image has invalid version label: " + version)
+    # Buildx can read the immutable child's image configuration directly
+    # from GHCR. Unlike 'docker pull', this does NOT download large image layers
+    # to a cold Actions runner under the global 90-second metadata timeout.
+    checked = run("docker", "buildx", "imagetools", "inspect", child_ref,
+                  "--format", "{{json .Image}}")
+    demand(checked.returncode == 0, "cannot inspect previous stable image config")
+    try:
+        config = json.loads(checked.stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise ValueError("invalid previous stable OCI image config JSON") from exc
+    demand(isinstance(config, dict) and
+           config.get("os") == "linux" and config.get("architecture") == "amd64",
+           "previous stable image config has invalid platform")
+    labels = config.get("config", {}).get("Labels")
+    demand(isinstance(labels, dict), "previous stable image config has no labels")
+    version = labels.get("org.opencontainers.image.version")
+    demand(isinstance(version, str) and VERSION.fullmatch(version) is not None,
+           "existing stable image has invalid version label")
     return version
 
 
