@@ -18,7 +18,7 @@ import time
 import tomllib
 from http.client import HTTPException
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 CONTEXT7_ENDPOINT = "https://mcp.context7.com/mcp"
@@ -1121,7 +1121,9 @@ def hosted_ping() -> None:
         headers={"User-Agent": "remote-dev-context7/0.1"},
         method="GET",
     )
-    opener = build_opener(_NoRedirect())
+    # Do not route the passive /ping through an untrusted environment proxy;
+    # the MCP tool transport already uses the same no-proxy policy.
+    opener = build_opener(ProxyHandler({}), _NoRedirect())
     try:
         with opener.open(request, timeout=10) as response:
             final = urlparse(response.geturl())
@@ -1138,7 +1140,7 @@ def hosted_ping() -> None:
         ) from exc
     try:
         data = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise Context7Error("Context7 ping returned an unexpected response") from exc
     if not isinstance(data, dict):
         raise Context7Error("Context7 ping returned an unexpected response")
