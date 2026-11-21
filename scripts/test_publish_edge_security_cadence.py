@@ -112,6 +112,48 @@ def named_workflow_step(workflow: str, name: str) -> str:
     return workflow[start:] if end == -1 else workflow[start:end]
 
 
+def validate_edge_critical_scans(workflow: str) -> None:
+    for name, manifest in (
+        ("Scan exact edge base candidate for critical vulnerabilities",
+         "base_manifest"),
+        ("Scan exact edge Remote Dev candidate for critical vulnerabilities",
+         "runtime_manifest"),
+    ):
+        block = named_workflow_step(workflow, name)
+        lines = [x.strip() for x in block.splitlines()]
+        # Exact single YAML scalar: "HIGH # severity: CRITICAL" is HIGH.
+        require([x for x in lines if x.startswith("severity:")] ==
+                ["severity: CRITICAL"],
+                "Edge critical-only scan downgraded: " + name)
+        require([x for x in lines if x.startswith("image-ref:")] ==
+                ['image-ref: ${{ steps.' + manifest + '.outputs.ref }}'],
+                "Edge scan is not bound to its exact candidate: " + name)
+        for required in ("scanners: vuln", "vuln-type: os,library",
+                         'exit-code: "0"'):
+            require(lines.count(required) == 1,
+                    "Edge critical scan configuration missing: " + name)
+
+
+def test_edge_critical_scans(workflow: str) -> None:
+    validate_edge_critical_scans(workflow)
+    for name in (
+        "Scan exact edge base candidate for critical vulnerabilities",
+        "Scan exact edge Remote Dev candidate for critical vulnerabilities",
+    ):
+        block = named_workflow_step(workflow, name)
+        require(block.count("severity: CRITICAL") == 1,
+                "edge Trivy mutation fixture missing")
+        for severity in ("HIGH", "HIGH # severity: CRITICAL"):
+            altered = workflow.replace(
+                block, block.replace("severity: CRITICAL",
+                                     "severity: " + severity, 1), 1)
+            try:
+                validate_edge_critical_scans(altered)
+            except AssertionError:
+                continue
+            raise AssertionError("Edge critical scan false PASS: " + name + " " + severity)
+
+
 def validate_exact_edge_trivy_gate(workflow: str) -> None:
     """Fail when the Edge gate is skipped, commented out or bound to wrong images."""
     gate = named_workflow_step(workflow, "Enforce no fixable critical vulnerabilities")
@@ -427,6 +469,7 @@ def main() -> None:
     test_python_315_publisher_wiring(workflow)
     test_trivy_db_cache_reuse(workflow)
     test_exact_edge_trivy_gate(workflow)
+    test_edge_critical_scans(workflow)
     test_shared_candidate_runtime_checks(helper)
     test_edge_chromium_spdx(workflow)
 
