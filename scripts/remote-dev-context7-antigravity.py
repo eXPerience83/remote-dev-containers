@@ -357,6 +357,9 @@ def test(directory: Path) -> int:
     try:
         for line in probe.probe(api_key=None, deadline=deadline):
             print(line)
+    except probe.UnverifiedDocumentation as exc:
+        print(f"Context7 (Antigravity): MCP tool verification UNVERIFIED: {exc}")
+        return 3
     except probe.ProbeError as exc:
         print(f"Context7 (Antigravity): MCP tool verification FAILED: {exc}")
         return 3
