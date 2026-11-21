@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Context7 `Test` now performs consent-gated, read-only Streamable HTTP MCP calls to `resolve-library-id` and `query-docs` in both agent roles, distinguishing hosted tool success from agent-native authentication/usage; no Antigravity OAuth access or new persistent secrets (#355, PR #356).
 - Bundled pinned Playwright MCP and a Chromium headless shell in the common image, with conservative per-role MCP enrollment for Codex and experimental Antigravity. Claude can reuse the same executable if installed later; no new HTTP endpoint or persistent browser profile.
 
 ### Changed
