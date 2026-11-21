@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Offline, fail-closed stable publication wiring and ordering regressions."""
 
+import json
 from pathlib import Path
+import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 STABLE = ROOT / ".github/workflows/publish-amd64.yml"
 HELPER = ROOT / "scripts/validate-edge-publication-candidate.sh"
+GATE = ROOT / "scripts/enforce-trivy-gate.sh"
 
 
 def check(ok: bool, message: str) -> None:
@@ -98,10 +102,50 @@ def validate(source: str, helper: str) -> None:
           "stable base alias registry read-back missing")
 
 
+def test_real_trivy_report_gate() -> None:
+    """An empty/invalid JSON object must never count as a clean scan."""
+    clean = {
+        "SchemaVersion": 2,
+        "ArtifactName": "ghcr.io/experience83/remote-dev@sha256:" + "a" * 64,
+        "ArtifactType": "container_image",
+        "Results": [{"Target": "ubuntu", "Vulnerabilities": []}],
+    }
+    critical = {
+        **clean, "Results": [{"Target": "ubuntu", "Vulnerabilities": [{
+            "Severity": "CRITICAL", "FixedVersion": "2.0",
+            "PkgName": "sample", "VulnerabilityID": "CVE-SYNTHETIC-1",
+            "InstalledVersion": "1.0",
+        }]}],
+    }
+    no_fix = json.loads(json.dumps(critical))
+    no_fix["Results"][0]["Vulnerabilities"][0]["FixedVersion"] = ""
+    cases = (
+        ("empty placeholder", {}, False),
+        ("wrong artifact", {**clean, "ArtifactType": "filesystem"}, False),
+        ("wrong result shape", {**clean, "Results": {}}, False),
+        ("invalid vulnerability list", {**clean, "Results": [{"Vulnerabilities": {}}]}, False),
+        ("clean report", clean, True),
+        ("clean omitted Results", {k: v for k, v in clean.items() if k != "Results"}, True),
+        ("fixable critical", critical, False),
+        ("critical without fix", no_fix, True),
+    )
+    with tempfile.TemporaryDirectory(prefix="remote-dev-trivy-gate-") as directory:
+        for label, report, allowed in cases:
+            path = Path(directory) / (label.replace(" ", "-") + ".json")
+            path.write_text(json.dumps(report), encoding="utf-8")
+            result = subprocess.run(
+                ["bash", str(GATE), "synthetic:" + str(path)],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+            check((result.returncode == 0) == allowed,
+                  "Trivy gate misclassified " + label + ": " + result.stderr[-500:])
+
+
 def main() -> None:
     wf = STABLE.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
     validate(wf, helper)
+    test_real_trivy_report_gate()
     mutations = (
         ("omit smoke", wf.replace("      - name: Smoke-test the exact stable publication candidates\n",
                                    "      - name: Skip smoke\n", 1), helper),
