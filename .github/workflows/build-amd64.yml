@@ -143,6 +143,7 @@ jobs:
           python3 scripts/test_antigravity_official_url.py
           python3 scripts/validate-release-channel-contract.py --root .
           python3 scripts/test_publish_stable_security_cadence.py
+          python3 scripts/test_publication_execution_sentinels.py
           python3 scripts/test_guard_stable_promotion.py
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
