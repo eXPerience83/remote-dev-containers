@@ -202,14 +202,45 @@ ejecución con digests y alias idénticos es de **solo lectura**; si reconstruye
 digests distintos, la rechaza aunque comparta SHA de código. Conserva el
 registro `stable-promotion-preflight.json` y los metadatos de promoción.
 
-**Límite de publicación parcial:** Los dos repositorios GHCR **no admiten
-una promoción atómica conjunta**. Un workflow rojo puede haber movido la base
-o algunos alias del runtime. Por tanto, **fallo del workflow no garantiza
-que stable/latest permanezcan intactos**. Inspeccionar el registro previo y
-los digests actuales, detener nuevos intentos de publicación y obtener
-autorización del operador para reconciliar manualmente utilizando únicamente
-los **índices OCI inmutables conocidos anteriores**. Leer de nuevo cada alias.
-No repetir a ciegas un tag histórico ni reconstruir una imagen no aceptada.
+**Límite de publicación parcial:** GHCR no permite una publicación atómica
+entre los dos repositorios. Un workflow rojo puede haber cambiado cualquier
+subconjunto de los seis tags; **no garantiza que `stable/latest` permanezcan intactos**.
+
+**Reconciliación exclusivamente por el operador (sin reintentos automáticos):**
+
+1. Detener todos los publicadores, incluidas las reejecuciones históricas y
+   otros escritores del registro. Conservar el journal de preflight, los
+   digests de los **índices OCI** candidatos y aceptados previamente (si
+   existen), y los logs del fallo. Leer y registrar los **seis tags**:
+   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
+   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
+   `remote-dev:stable-amd64` y `remote-dev:latest`.
+   Distinguir explícitamente los tags **ausentes antes** del intento.
+2. Identificar qué escrituras llegaron a completarse. Si existía una release
+   estable anterior, restaurar los alias afectados solo tras aprobación, con
+   los **índices inmutables anteriores registrados**, no con tags mutables,
+   reconstrucciones ni digests supuestos. Conciliar también **ambos tags de
+   versión**: si solo se creó `remote-dev-base:vX.Y.Z`, restaurar
+   `stable-amd64` no basta, porque la guarda bloqueará un reintento mientras
+   quede el tag de versión sin pareja. Como alternativa, una decisión humana
+   explícita puede autorizar completar la release con los **índices candidatos
+   exactos que ya pasaron smoke y escaneos**, nunca con otro build.
+3. Si era la **primera publicación estable**, puede que no exista ningún
+   índice anterior. El estado de reversión es la **ausencia** de los tags
+   nuevos, no un digest inventado. Localizar los alias creados y sus versiones
+   GHCR. Borrar requiere autorización expresa y comprobar el alcance:
+   la operación oficial **Delete package version** puede borrar *todos los
+   tags asociados al mismo digest*, no solo uno. Si no se puede eliminar un
+   tag individual sin afectar a otros válidos, detenerse y documentar el
+   estado parcial/bloqueado; **no borrar versiones compartidas**.
+4. Tras cualquier reconciliación autorizada, releer **los seis tags**,
+   incluidos los que deberían estar ausentes, y verificar los requisitos
+   de consistencia de la guarda para ambos tags SemVer y todos los alias.
+   Solo después decidir un nuevo intento. Nunca relanzar a ciegas un
+   publicador histórico.
+
+Consultar la [documentación oficial de borrado/restauración de versiones](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
+El proyecto no dispone de rollback automático de GHCR.
 
 **Requisito administrativo:** Verificar explícitamente las reglas GitHub
 para crear, modificar y borrar tags `v*`, así como quién puede reejecutar
