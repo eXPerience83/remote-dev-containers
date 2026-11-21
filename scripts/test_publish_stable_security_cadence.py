@@ -194,7 +194,7 @@ def validate(source: str, helper: str) -> None:
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "both final stable SPDX files must pass an independent validator")
     upload = step(source, "Upload exact stable publication evidence")
-    check(step_metadata(upload).get("uses", "").split(" #", 1)[0] ==
+    check(step_metadata(upload, expected_if="always()").get("uses", "").split(" #", 1)[0] ==
           "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
           "stable publication evidence uploader not pinned")
     check(set(active_upload_paths(upload)) == {
