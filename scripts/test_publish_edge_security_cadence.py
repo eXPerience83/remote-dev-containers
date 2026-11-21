@@ -172,14 +172,16 @@ def validate_shared_candidate_runtime_checks(helper: str) -> None:
     """Both publication channels must execute password and isolation probes."""
     active = tuple(line.strip() for line in helper.splitlines()
                    if line.strip() and not line.lstrip().startswith("#"))
+    require(any('"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
+                in line for line in active),
+            "mandatory exact-candidate identity arguments missing")
     for required in (
-        '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"',
         'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
         'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
         'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"',
     ):
-        require(any(required in line for line in active),
-                "mandatory exact-candidate runtime check disabled: " + required)
+        require(active.count(required) == 1,
+                "mandatory exact-candidate probe disabled or non-blocking: " + required)
 
 
 def test_shared_candidate_runtime_checks(helper: str) -> None:
@@ -190,12 +192,15 @@ def test_shared_candidate_runtime_checks(helper: str) -> None:
         ("cross-service isolation", 'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"'),
     ):
         require(helper.count(original) == 1, "ambiguous shared-helper fixture: " + label)
-        altered = helper.replace(original, "# " + original, 1)
-        try:
-            validate_shared_candidate_runtime_checks(altered)
-        except AssertionError:
-            continue
-        raise AssertionError("shared runtime false PASS with omitted " + label)
+        variants = ("# " + original,) if label == "internal channel" else (
+            "# " + original, original + " || true", ": " + original)
+        for variant in variants:
+            altered = helper.replace(original, variant, 1)
+            try:
+                validate_shared_candidate_runtime_checks(altered)
+            except AssertionError:
+                continue
+            raise AssertionError("shared runtime false PASS with " + label + ": " + variant)
 
 
 def validate_edge_chromium_spdx(workflow: str) -> None:
