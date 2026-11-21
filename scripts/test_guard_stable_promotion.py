@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline regression tests for immutable/monotonic stable registry promotion."""
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import unittest
@@ -126,6 +127,49 @@ class GuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cannot inspect") as raised:
                 guard.read_tag("remote-dev", "stable")
             self.assertNotIn(secret, str(raised.exception))
+
+    def test_immutable_child_config_without_pulling_layers(self):
+        old_ref = "ghcr.io/experience83/remote-dev@sha256:" + "d" * 64
+        child = "ghcr.io/experience83/remote-dev@sha256:" + "e" * 64
+        def fake_run(*argv):
+            if argv[0] == "bash":
+                self.assertEqual(argv[2:], (old_ref, "linux", "amd64"))
+                return subprocess.CompletedProcess(argv, 0, child + "\n", "")
+            self.assertEqual(argv, ("docker", "buildx", "imagetools", "inspect",
+                                    child, "--format", "{{json .Image}}"))
+            return subprocess.CompletedProcess(argv, 0, json.dumps({
+                "os": "linux", "architecture": "amd64",
+                "config": {"Labels": {"org.opencontainers.image.version": "v0.2.0"}},
+            }), "")
+        with patch.object(guard, "run", side_effect=fake_run) as remote:
+            self.assertEqual(guard.image_release(old_ref), "v0.2.0")
+            self.assertEqual(remote.call_count, 2)
+            self.assertFalse(any("pull" in str(call) for call in remote.call_args_list))
+
+    def test_previous_config_platform_labels_and_identity_fail_closed(self):
+        old_ref = "ghcr.io/experience83/remote-dev-base@sha256:" + "c" * 64
+        child = "ghcr.io/experience83/remote-dev-base@sha256:" + "f" * 64
+        original = {"os": "linux", "architecture": "amd64",
+                    "config": {"Labels": {"org.opencontainers.image.version": "v0.2.0"}}}
+        cases = (
+            ("wrong platform", {**original, "architecture": "arm64"}),
+            ("missing config labels", {**original, "config": {}}),
+            ("noncanonical version", {**original, "config": {"Labels": {
+                "org.opencontainers.image.version": "v0.2.0-beta"}}}),
+            ("missing OS", {**original, "os": None}),
+            ("malformed JSON", "not json"),
+        )
+        for label, response in cases:
+            with self.subTest(label=label):
+                payload = response if isinstance(response, str) else json.dumps(response)
+                responses = [
+                    subprocess.CompletedProcess([], 0, child + "\n", ""),
+                    subprocess.CompletedProcess([], 0, payload, ""),
+                ]
+                with patch.object(guard, "run", side_effect=responses) as remote:
+                    with self.assertRaises(ValueError):
+                        guard.image_release(old_ref)
+                    self.assertEqual(remote.call_count, 2)
 
     def test_failed_old_image_lookup_cannot_downgrade(self):
         with patch.object(guard, "read_tag", side_effect=lambda image, tag:
