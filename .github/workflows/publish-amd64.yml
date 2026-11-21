@@ -55,7 +55,6 @@ jobs:
         run: |
           bash scripts/validate-publication-source.sh stable
 
-      # Install the independent parser before Docker/GHCR credentials are loaded.
       - name: Prepare isolated SPDX validator before registry login
         run: |
           set -euo pipefail
