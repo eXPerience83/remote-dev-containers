@@ -173,6 +173,35 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
     return sbom
 
 
+def validate_supplemental_spdx(sbom: dict) -> None:
+    """Semantically verify the Chromium additions in the final SPDX 2.3 JSON."""
+    demand(sbom.get("spdxVersion") == "SPDX-2.3", "wrong SPDX document version")
+    packages = [p for p in sbom.get("packages", [])
+                if p.get("SPDXID") == PACKAGE_ID]
+    demand(len(packages) == 1, "Chromium package must appear exactly once")
+    demand(packages[0].get("filesAnalyzed") is False,
+           "supplemental Chromium package must not claim full file inventory")
+    files = sbom.get("files", [])
+    for file_id in (EXEC_ID, LICENSE_ID):
+        matches = [f for f in files if f.get("SPDXID") == file_id]
+        demand(len(matches) == 1, "missing or duplicate Chromium SPDX file: " + file_id)
+        checksums = matches[0].get("checksums")
+        demand(isinstance(checksums, list), "SPDX file missing checksum records")
+        for algorithm, size in (("SHA1", 40), ("SHA256", 64)):
+            records = [c for c in checksums
+                       if isinstance(c, dict) and c.get("algorithm") == algorithm]
+            demand(len(records) == 1, "SPDX 2.3 file requires one " + algorithm)
+            digest = records[0].get("checksumValue")
+            demand(isinstance(digest, str) and len(digest) == size and
+                   all(ch in "0123456789abcdef" for ch in digest),
+                   "malformed SPDX " + algorithm + " checksum")
+        relationships = sbom.get("relationships", [])
+        demand(any(rel.get("spdxElementId") == sbom.get("SPDXID") and
+                   rel.get("relatedSpdxElement") == file_id and
+                   rel.get("relationshipType") == "DESCRIBES"
+                   for rel in relationships), "SPDX file is not described by the document")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
@@ -183,6 +212,7 @@ def main() -> None:
     evidence = inspect_image(args.image)
     result = add_package(
         json.loads(args.spdx.read_text(encoding="utf-8")), evidence, pinned)
+    validate_supplemental_spdx(result)
     args.spdx.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     args.evidence.write_text(json.dumps({
         "schema_version": 1, "image": args.image, "arch": evidence["arch"],
