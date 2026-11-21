@@ -72,7 +72,9 @@ def validate(source: str, helper: str) -> None:
          "chromium-evidence-publish-remote-dev.json"),
     ):
         check("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in chromium and
-              "--spdx " + sbom in chromium and "--evidence " + evidence in chromium,
+              "--spdx " + sbom in chromium and "--evidence " + evidence in chromium and
+              ('--image "$BASE_MANIFEST_REF"' if ref == "base_manifest" else
+               '--image "$REMOTE_DEV_MANIFEST_REF"') in chromium,
               "Chromium evidence is missing an exact image or SPDX binding")
     for token in ("sbom-publish-base.spdx.json", "sbom-publish-remote-dev.spdx.json",
                   "chromium-evidence-publish-base.json",
@@ -87,6 +89,9 @@ def validate(source: str, helper: str) -> None:
     promotion = step(source, stages[-1])
     check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in promotion,
           "stable runtime alias registry verification missing")
+    check(promotion.index('promoted_base="$(jq -r') <
+          promotion.index('--metadata-file runtime-promotion.json'),
+          "base must be checked before moving runtime stable tags")
     check('for tag in "$GITHUB_REF_NAME" stable-amd64; do' in promotion and
           'tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"' in promotion and
           'if [[ "$actual_digest" != "$BASE_DIGEST" ]]; then' in promotion,
@@ -111,8 +116,10 @@ def main() -> None:
             "python3 scripts/chromium-sbom-evidence.py",
             "echo # skipped provenance", 1), helper),
         ("wrong Chromium digest", wf.replace(
-            "BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}",
-            "BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}", 1), helper),
+            "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}",
+            "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}", 1), helper),
+        ("base check too late", wf.replace(
+            'promoted_base="$(jq -r', 'promoted_base_late="$(jq -r', 1), helper),
         ("no stable base tag read-back", wf.replace(
             'for tag in "$GITHUB_REF_NAME" stable-amd64; do',
             'for tag in "disabled-base"; do', 1), helper),
