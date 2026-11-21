@@ -14,9 +14,9 @@ The permanent maturity order is:
 dev -> edge -> stable = latest
 ```
 
-These concepts stay separate from human-readable build identity and immutable provenance. The first stable `v0.2.0` was published on 2026-11-05. The prepared `0.2.1` source patch does **not** itself publish a new image: until its tag-triggered publisher passes, current `stable`/`latest` remain on the last successfully published stable digest. Continue using `edge`/`edge-amd64` only for experimental testing.
+These concepts stay separate from human-readable build identity and immutable provenance. The first stable `v0.2.0` was published on 2026-11-05. The prepared `0.2.1` source patch does **not** itself publish a new image: until a stable-tag publisher starts writing tags, the last published stable digest remains the intended target of `stable`/`latest`; a later failure during promotion can still leave a partial registry update. Continue using `edge`/`edge-amd64` only for experimental testing.
 
-The repository's local source version for this patch cut is `0.2.1`. The checked-out source number is not proof of a published image: edge embeds a dated identity, and only the successfully completed `v0.2.1` stable-tag workflow can update `stable` and `latest`. Runtime pins, lockfile metadata and changelog history remain governed by their reviewed owners; routine upstream updates do not silently create a new stable release.
+The repository's local source version for this patch cut is `0.2.1`. The checked-out source number is not proof of a published image: edge embeds a dated identity, and only an authorized `v0.2.1` stable-tag publication should advance `stable` and `latest`; a failed job can nevertheless have written some tags, so inspect the six aliases before declaring success or rollback. Runtime pins, lockfile metadata and changelog history remain governed by their reviewed owners; routine upstream updates do not silently create a new stable release.
 
 ## Identity layers
 
@@ -178,6 +178,76 @@ Once stable releases exist, the normal stable AMD64 selector becomes:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 ```
 
+**Stable release identity:** Edge and stable can share a reviewed source SHA but
+cannot be assumed to share an OCI digest: the stable tag builds a separate image
+with channel/version metadata. Before moving the SemVer, `stable`,
+`stable-amd64` and `latest` tags, the publisher validates the exact base and
+runtime AMD64 child manifests, checks both images' identity labels and notices,
+and performs startup, isolation and authentication smoke tests on the **runtime**
+manifest. Base/final SPDX and Trivy reports target the exact corresponding
+AMD64 child manifests. Both SPDX reports include supplemental image-derived
+Chromium Headless Shell archive/binary/license provenance, which is **not a
+Chromium vulnerability scan**. The fixable-critical gate must pass. All four stable
+tags must resolve to the **separately validated stable OCI index digest**;
+the promoted index must contain the same AMD64 runtime child manifest that
+passed smoke and scanning. The index digest is not the child manifest digest.
+Edge acceptance alone does not prove the stable image was deployed to TrueNAS.
+
+**Version-tag and downgrade preflight:** The stable publisher checks both version
+tags and all existing base/runtime stable aliases **before its first tag write**.
+Already-published version tags cannot be rebound to a different OCI index, and
+an old source tag cannot move stable/latest backwards. A second run with identical
+digests and aliases is a **read-only no-op**; a rebuilt candidate with new digests
+is intentionally rejected even if its source SHA is the same. The runner records
+`stable-promotion-preflight.json` and its Docker promotion metadata.
+
+**Important partial-promotion limitation:** Publishing into two GHCR repositories
+is **not atomic**. A failed workflow can leave any subset of the six target tags
+modified; a red workflow does **not** prove that `stable/latest` stayed unchanged.
+
+**Operator-only reconciliation after failure (no automatic retry):**
+
+1. Freeze all publishers, including historical workflow reruns and other
+   registry writers. Retain the preflight journal, both candidate **index**
+   digests, the last accepted stable **index** digests (if any), and the failed
+   workflow logs. Read the **six current tag-to-digest mappings**:
+   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
+   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
+   `remote-dev:stable-amd64` and `remote-dev:latest`.
+   Record explicitly which tags were **absent before** the attempt.
+2. Check which writes actually happened. For a previously published stable
+   release, operator-approved restoration of affected stable aliases must use
+   their **recorded prior immutable indexes**, not rebuilds or guessed tags.
+   Also reconcile the **two version tags**: if only base `vX.Y.Z` was created,
+   restoring `stable-amd64` alone is insufficient because the guard will
+   reject the unmatched version tag on retry. An alternate explicit decision
+   may authorize completing the release using only the exact previously
+   smoke-tested and scanned candidate indexes; never fill a missing runtime
+   version tag with an untested digest.
+3. If this was the **first** stable publication, no previous alias/index may
+   exist to restore. The intended rollback state is **absence**, not a guessed
+   image. Identify any newly created version and stable aliases and their
+   GHCR package versions. Deletion requires explicit operator approval and
+   verified package administration: GitHub's supported **Delete package
+   version** operation may delete *every tag attached to that digest*, not
+   just the selected alias. Inspect all affected tags and dependencies before
+   using it; if safe tag-specific removal is unavailable, stop with a recorded
+   blocked/partial state rather than deleting shared or previously valid tags.
+4. After an authorized recovery, reread **all six tags**, including those
+   expected to be absent, and confirm both version tags and all stable aliases
+   meet the guard's consistency requirements. Only then decide on a new
+   release attempt. Never rerun a historic source-tag workflow blindly.
+
+See GitHub's package-version [deletion and restoration guidance](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package)
+for the destructive operation's scope; this repository does not implement
+automatic GHCR rollback.
+
+**Administrator prerequisite for a new release:** Explicitly verify GitHub
+rules protecting creation, modification and deletion of `v*` tags, plus who
+can rerun historical tag workflows. The preflight cannot retroactively protect
+a workflow embedded in an older tag. If those protections cannot be verified,
+the release remains **NO GO**, regardless of a green PR build.
+
 ## Operator channel choices
 
 Use one maturity channel in normal deployment configuration and switch it only intentionally:
@@ -203,23 +273,28 @@ Do not rely on a mutable tag or the human-readable edge date when exact reproduc
 
 ## Stable-release checklist
 
-Before creating the first or any later stable version tag, verify on one exact `main` source revision/digest that:
+Before creating the first or any later **Git stable-version tag**, verify on one exact reviewed `main` source revision and its accepted Edge digest that:
 
 1. Repository validation and the complete AMD64 build/smoke suite pass.
-2. Base and final Remote Dev images pass the publication vulnerability gate; fixable `CRITICAL` findings block promotion.
-3. Notices and SBOM generation pass and the retained reports match the image being promoted.
-4. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
-5. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
-6. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
-7. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
-8. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
-9. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
-10. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
-11. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
-12. Optional external integrations included in the support claim retain their documented privacy/credential boundaries.
-13. `CHANGELOG.md` has a dated stable section derived from the reviewed `Unreleased` content.
-14. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
-15. #31 has no unresolved issue that contradicts the stable support claim actually being made.
+2. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
+3. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
+4. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
+5. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
+6. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
+7. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
+8. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
+9. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
+10. Optional external integrations included in the support claim retain their documented privacy/credential boundaries.
+11. `CHANGELOG.md` has a dated stable section derived from the reviewed `Unreleased` content.
+12. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
+13. #31 has no unresolved issue that contradicts the stable support claim actually being made.
+
+**After creating the reviewed Git tag: stable-candidate gates, promotion and post-publication acceptance** (in that order):
+
+1. Build the separate stable base and runtime candidates and bind the index and exact runnable AMD64 manifest digests to the tagged source SHA, channel and version; run startup, authentication and isolation smoke tests on that candidate.
+2. Verify notices and both SPDX documents, including supplemental Chromium package/file provenance, and validate both candidate-bound Trivy image reports with Ubuntu and language-package scan coverage. Reject fixable `CRITICAL` findings.
+3. Run the immutable SemVer tag/monotonic-stable promotion guard, then promote and read back all base/runtime registry aliases. Verify that the promoted OCI index contains the exact tested AMD64 child. Registry updates are non-atomic: a failed job can have moved some aliases, requiring human reconciliation by immutable digest.
+4. Test the resulting stable image on TrueNAS under the operator's acceptance plan before declaring the release complete.
 
 Optional/future #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 work is not automatically a stable blocker unless #31 or the corresponding issue identifies a concrete dependency for the release claim.
 

@@ -28,8 +28,8 @@ INSPECT_IMAGE = r"""
 import hashlib, json, os
 from pathlib import Path
 
-def sha(path):
-    h = hashlib.sha256()
+def sha(path, algorithm="sha256"):
+    h = hashlib.new(algorithm)
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(chunk)
@@ -53,12 +53,15 @@ if license_file.stat().st_size < 100_000:
     raise SystemExit("Chromium archive license unexpectedly small")
 binary_digest, license_digest, notice_digest = (
     sha(exe), sha(license_file), sha(notice))
+binary_sha1, notice_sha1 = sha(exe, "sha1"), sha(notice, "sha1")
 if license_digest != notice_digest:
     raise SystemExit("bundled Chromium notice differs from installed ZIP license")
 print(json.dumps({"arch": arch, "manifest": manifest,
                   "executable": str(exe), "executable_sha256": binary_digest,
+                  "executable_sha1": binary_sha1,
                   "license_file": str(license_file), "license_sha256": license_digest,
-                  "installed_notice": str(notice), "notice_sha256": notice_digest}))
+                  "installed_notice": str(notice), "notice_sha256": notice_digest,
+                  "notice_sha1": notice_sha1}))
 """
 
 def demand(ok: bool, message: str) -> None:
@@ -75,7 +78,35 @@ def inspect_image(image: str) -> dict:
     return json.loads(inspected.stdout)
 
 
-def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
+def validate_sbom_image_binding(sbom: dict, expected_image: str) -> None:
+    """Bind Trivy's SPDX document and primary container to the exact scanned image."""
+    local_build = expected_image in ("remote-dev-base:local", "remote-dev:local")
+    remote_manifest = (expected_image.startswith("ghcr.io/experience83/remote-dev") and
+                       "@sha256:" in expected_image and
+                       len(expected_image.split("@sha256:")[-1]) == 64 and
+                       all(c in "0123456789abcdef"
+                           for c in expected_image.split("@sha256:")[-1]))
+    demand(local_build or remote_manifest,
+           "expected local Build or immutable release manifest reference missing")
+    demand(sbom.get("name") == expected_image,
+           "SPDX document describes a different scanned image")
+    namespace = sbom.get("documentNamespace")
+    demand(isinstance(namespace, str) and
+           namespace.startswith("http://trivy.dev/container_image/" + expected_image + "-"),
+           "SPDX namespace does not identify the expected image")
+    root_images = [p for p in sbom.get("packages", [])
+                   if p.get("name") == expected_image and
+                   str(p.get("SPDXID", "")).startswith("SPDXRef-ContainerImage-")]
+    demand(len(root_images) == 1, "SPDX primary container image differs from candidate")
+    demand(any(r.get("spdxElementId") == sbom.get("SPDXID") and
+               r.get("relatedSpdxElement") == root_images[0]["SPDXID"] and
+               r.get("relationshipType") == "DESCRIBES"
+               for r in sbom.get("relationships", [])),
+           "SPDX primary container is not described by the document")
+
+
+def add_package(sbom: dict, evidence: dict, pinned: dict, expected_image: str) -> dict:
+    validate_sbom_image_binding(sbom, expected_image)
     demand(sbom.get("spdxVersion") == "SPDX-2.3", "unexpected SPDX version")
     demand(isinstance(sbom.get("packages"), list) and
            isinstance(sbom.get("relationships"), list),
@@ -98,6 +129,11 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
         demand(isinstance(digest, str) and len(digest) == 64 and
                all(c in "0123456789abcdef" for c in digest),
                "invalid image-derived SHA-256: " + key)
+    for key in ("executable_sha1", "notice_sha1"):
+        digest = evidence.get(key)
+        demand(isinstance(digest, str) and len(digest) == 40 and
+               all(c in "0123456789abcdef" for c in digest),
+               "invalid image-derived SHA-1: " + key)
     demand(evidence["license_sha256"] == evidence["notice_sha256"],
            "Chromium archive license and bundled notice disagree")
     existing_ids = {p["SPDXID"] for p in sbom["packages"]}
@@ -129,14 +165,15 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
         }],
     })
     files = sbom.setdefault("files", [])
-    for file_id, path, digest in (
-        (EXEC_ID, exe, evidence["executable_sha256"]),
-        (LICENSE_ID, NOTICE, evidence["notice_sha256"]),
+    for file_id, path, digest, sha1 in (
+        (EXEC_ID, exe, evidence["executable_sha256"], evidence["executable_sha1"]),
+        (LICENSE_ID, NOTICE, evidence["notice_sha256"], evidence["notice_sha1"]),
     ):
         files.append({
             "SPDXID": file_id,
-            "fileName": path,
-            "checksums": [{"algorithm": "SHA256", "checksumValue": digest}],
+            "fileName": "." + path,
+            "checksums": [{"algorithm": "SHA1", "checksumValue": sha1},
+                          {"algorithm": "SHA256", "checksumValue": digest}],
             "licenseConcluded": "NOASSERTION",
             "licenseInfoInFiles": ["NOASSERTION"],
             "copyrightText": "NOASSERTION",
@@ -164,6 +201,39 @@ def add_package(sbom: dict, evidence: dict, pinned: dict) -> dict:
     return sbom
 
 
+def validate_supplemental_spdx(sbom: dict) -> None:
+    """Semantically verify the Chromium additions in the final SPDX 2.3 JSON."""
+    demand(sbom.get("spdxVersion") == "SPDX-2.3", "wrong SPDX document version")
+    packages = [p for p in sbom.get("packages", [])
+                if p.get("SPDXID") == PACKAGE_ID]
+    demand(len(packages) == 1, "Chromium package must appear exactly once")
+    demand(packages[0].get("filesAnalyzed") is False,
+           "supplemental Chromium package must not claim full file inventory")
+    files = sbom.get("files", [])
+    for file_id in (EXEC_ID, LICENSE_ID):
+        matches = [f for f in files if f.get("SPDXID") == file_id]
+        demand(len(matches) == 1, "missing or duplicate Chromium SPDX file: " + file_id)
+        file_name = matches[0].get("fileName")
+        demand(isinstance(file_name, str) and file_name.startswith("./") and
+               not file_name.startswith(".//") and len(file_name) > 2,
+               "SPDX 2.3 fileName must be a relative ./ path")
+        checksums = matches[0].get("checksums")
+        demand(isinstance(checksums, list), "SPDX file missing checksum records")
+        for algorithm, size in (("SHA1", 40), ("SHA256", 64)):
+            records = [c for c in checksums
+                       if isinstance(c, dict) and c.get("algorithm") == algorithm]
+            demand(len(records) == 1, "SPDX 2.3 file requires one " + algorithm)
+            digest = records[0].get("checksumValue")
+            demand(isinstance(digest, str) and len(digest) == size and
+                   all(ch in "0123456789abcdef" for ch in digest),
+                   "malformed SPDX " + algorithm + " checksum")
+        relationships = sbom.get("relationships", [])
+        demand(any(rel.get("spdxElementId") == sbom.get("SPDXID") and
+                   rel.get("relatedSpdxElement") == file_id and
+                   rel.get("relationshipType") == "DESCRIBES"
+                   for rel in relationships), "SPDX file is not described by the document")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
@@ -173,7 +243,8 @@ def main() -> None:
     pinned = json.loads(MANIFEST.read_text(encoding="utf-8"))
     evidence = inspect_image(args.image)
     result = add_package(
-        json.loads(args.spdx.read_text(encoding="utf-8")), evidence, pinned)
+        json.loads(args.spdx.read_text(encoding="utf-8")), evidence, pinned, args.image)
+    validate_supplemental_spdx(result)
     args.spdx.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     args.evidence.write_text(json.dumps({
         "schema_version": 1, "image": args.image, "arch": evidence["arch"],
@@ -182,7 +253,9 @@ def main() -> None:
         "archive_sha256": pinned["archives"][evidence["arch"]]["chromium-headless-shell"]["sha256"],
         "executable": evidence["executable"],
         "executable_sha256": evidence["executable_sha256"],
+        "executable_sha1": evidence["executable_sha1"],
         "notice_path": NOTICE, "notice_sha256": evidence["notice_sha256"],
+        "notice_sha1": evidence["notice_sha1"],
         "scan_status": "supplemental SPDX identity only; not a Chromium CVE scan",
     }, indent=2) + "\n", encoding="utf-8")
     print("Chromium identity recorded in SPDX:", args.image, evidence["arch"])

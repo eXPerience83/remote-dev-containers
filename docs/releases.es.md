@@ -14,9 +14,9 @@ El orden permanente de madurez es:
 dev -> edge -> stable = latest
 ```
 
-Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable `v0.2.0` se publicó el 5/11/2026. El código `0.2.1` preparado **no** publica por sí mismo otra imagen: hasta que termine satisfactoriamente su workflow de tag, `stable` y `latest` seguirán apuntando al último digest estable publicado. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
+Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable `v0.2.0` se publicó el 5/11/2026. El código `0.2.1` preparado **no** publica por sí mismo otra imagen: hasta que el publicador por tag empiece a modificar alias, `stable` y `latest` deberían conservar el último digest estable; un fallo durante la promoción todavía puede dejar una actualización parcial del registro. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
 
-La versión local de código de este corte de mantenimiento es `0.2.1`. El número de código no acredita la publicación: edge conserva su identidad fechada y solo el workflow del tag estable `v0.2.1`, tras terminar correctamente, puede mover `stable` y `latest`. Los pines, los locks y el changelog pertenecen a sus procesos de revisión; las actualizaciones rutinarias no crean una nueva release estable automáticamente.
+La versión local de código de este corte de mantenimiento es `0.2.1`. El número de código no acredita la publicación: edge conserva su identidad fechada y solo una publicación autorizada por el tag estable `v0.2.1` debería avanzar `stable` y `latest`; un job fallido también podría haber escrito algunos tags, por lo que deben releerse los seis alias antes de aceptar o revertir. Los pines, los locks y el changelog pertenecen a sus procesos de revisión; las actualizaciones rutinarias no crean una nueva release estable automáticamente.
 
 ## Capas de identidad
 
@@ -178,6 +178,76 @@ Cuando existan releases estables, el selector AMD64 normal será:
 REMOTE_DEV_IMAGE=ghcr.io/experience83/remote-dev:stable-amd64
 ```
 
+**Identidad del candidato estable:** Edge y stable pueden compartir el
+SHA de código revisado, pero no necesariamente el digest OCI: el tag estable
+reconstruye la imagen con metadatos de canal y versión propios. Antes de mover
+los tags SemVer, `stable`, `stable-amd64` y `latest`, el publicador resuelve
+los manifiestos AMD64 exactos de base y runtime, comprueba sus etiquetas y
+avisos, y ejecuta las pruebas de arranque, aislamiento y autenticación
+sobre el **manifiesto runtime**. Los dos informes SPDX y los dos Trivy se
+generan a partir de sus respectivos manifiestos AMD64. Ambos SPDX incluyen
+la identidad suplementaria del ZIP, binario y licencia Chromium obtenida de
+la imagen; esto **no equivale a un análisis de CVE de Chromium**. Después
+se aplica el veto a vulnerabilidades críticas corregibles. Los cuatro tags deben resolver al
+**digest del índice OCI estable validado**, que debe contener el mismo
+manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
+el del manifiesto hijo, ni debe coincidir con el de Edge.
+La aceptación previa de Edge no acredita un despliegue estable en TrueNAS.
+
+**Guarda de tags y antirretroceso:** Antes de modificar ningún tag, el
+publicador comprueba los dos tags SemVer y todos los alias estables de base y
+runtime. No sobrescribe una versión ya publicada con otro índice OCI ni
+permite que un tag antiguo haga retroceder `stable/latest`. Una segunda
+ejecución con digests y alias idénticos es de **solo lectura**; si reconstruye
+digests distintos, la rechaza aunque comparta SHA de código. Conserva el
+registro `stable-promotion-preflight.json` y los metadatos de promoción.
+
+**Límite de publicación parcial:** GHCR no permite una publicación atómica
+entre los dos repositorios. Un workflow rojo puede haber cambiado cualquier
+subconjunto de los seis tags; **no garantiza que `stable/latest` permanezcan intactos**.
+
+**Reconciliación exclusivamente por el operador (sin reintentos automáticos):**
+
+1. Detener todos los publicadores, incluidas las reejecuciones históricas y
+   otros escritores del registro. Conservar el journal de preflight, los
+   digests de los **índices OCI** candidatos y aceptados previamente (si
+   existen), y los logs del fallo. Leer y registrar los **seis tags**:
+   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
+   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
+   `remote-dev:stable-amd64` y `remote-dev:latest`.
+   Distinguir explícitamente los tags **ausentes antes** del intento.
+2. Identificar qué escrituras llegaron a completarse. Si existía una release
+   estable anterior, restaurar los alias afectados solo tras aprobación, con
+   los **índices inmutables anteriores registrados**, no con tags mutables,
+   reconstrucciones ni digests supuestos. Conciliar también **ambos tags de
+   versión**: si solo se creó `remote-dev-base:vX.Y.Z`, restaurar
+   `stable-amd64` no basta, porque la guarda bloqueará un reintento mientras
+   quede el tag de versión sin pareja. Como alternativa, una decisión humana
+   explícita puede autorizar completar la release con los **índices candidatos
+   exactos que ya pasaron smoke y escaneos**, nunca con otro build.
+3. Si era la **primera publicación estable**, puede que no exista ningún
+   índice anterior. El estado de reversión es la **ausencia** de los tags
+   nuevos, no un digest inventado. Localizar los alias creados y sus versiones
+   GHCR. Borrar requiere autorización expresa y comprobar el alcance:
+   la operación oficial **Delete package version** puede borrar *todos los
+   tags asociados al mismo digest*, no solo uno. Si no se puede eliminar un
+   tag individual sin afectar a otros válidos, detenerse y documentar el
+   estado parcial/bloqueado; **no borrar versiones compartidas**.
+4. Tras cualquier reconciliación autorizada, releer **los seis tags**,
+   incluidos los que deberían estar ausentes, y verificar los requisitos
+   de consistencia de la guarda para ambos tags SemVer y todos los alias.
+   Solo después decidir un nuevo intento. Nunca relanzar a ciegas un
+   publicador histórico.
+
+Consultar la [documentación oficial de borrado/restauración de versiones](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
+El proyecto no dispone de rollback automático de GHCR.
+
+**Requisito administrativo:** Verificar explícitamente las reglas GitHub
+para crear, modificar y borrar tags `v*`, así como quién puede reejecutar
+publicadores de tags históricos. La guarda nueva no protege retroactivamente
+los workflows guardados en tags antiguos. Sin verificar estas protecciones,
+la release sigue en **NO GO** incluso con CI verde.
+
 ## Elección de canal por el operador
 
 Usa un canal de madurez en la configuración normal y cámbialo solo de forma intencionada:
@@ -203,23 +273,28 @@ No dependas de un tag mutable ni de la fecha legible de edge cuando importe la r
 
 ## Checklist de release estable
 
-Antes de crear la primera o cualquier release estable posterior, verifica sobre una única revisión/digest exactos de `main` que:
+Antes de crear el primer tag Git de versión estable (o uno posterior), verifica sobre una revisión exacta de `main` ya revisada y el digest Edge aceptado que:
 
 1. La validación del repositorio y toda la suite AMD64 de build/smoke pasan.
-2. Las imágenes base y Remote Dev final superan el gate de vulnerabilidades de publicación; un `CRITICAL` corregible bloquea la promoción.
-3. Notices y generación de SBOM pasan y los informes retenidos corresponden a la imagen que se promociona.
-4. Existe la raíz TrueNAS prevista creada por el administrador y bootstrap/preflight de la misma revisión pasan.
-5. El layout Host Path de referencia TrueNAS cumple el contrato Generic/POSIX de estado privado o existe una decisión equivalente explícitamente documentada; ejecuta el audit ACL del host cuando corresponda.
-6. Launcher y agentes habilitados utilizan la referencia/digest común previsto manteniendo montajes escribibles/privados disjuntos.
-7. Se verifica origen/CSP/navegación del launcher sin contraseña; no recibe estado/contraseña de agentes ni socket del motor de contenedores y está vinculado únicamente a la red privada/de confianza prevista. Una futura entrada segura central no forma parte de la afirmación estable actual salvo que #181 cambie explícitamente ese límite antes.
-8. Los endpoints Codex y Antigravity habilitado se autentican mediante sus entradas de configuración separadas; el soporte actual no exige que esos valores de contraseña sean distintos ni que cumplan una longitud mínima/composición impuesta por el proyecto.
-9. Workspace/proyectos, estado del agente, GitHub/Git/SSH y estado runtime que deba persistir sobreviven stop/start y recreación.
-10. Login de dispositivo Codex, Resume de sesiones y las rutas soportadas autonomous/guarded funcionan en el despliegue objetivo.
-11. Si Antigravity forma parte del soporte anunciado, su ruta explícita de runtime del proveedor, estado actual de admisión/integridad y restricciones experimentales siguen siendo válidos; #53 no tiene un bloqueo out-of-cycle pendiente para esa afirmación exacta.
-12. Las integraciones externas opcionales incluidas en el soporte anunciado mantienen sus límites documentados de privacidad/credenciales.
-13. `CHANGELOG.md` tiene una sección estable fechada derivada del contenido revisado de `Unreleased`.
-14. La evidencia del repositorio/release no contiene credenciales, rutas de infraestructura privada ni datos sensibles de cuenta/sesión.
-15. #31 no contiene ningún issue pendiente que contradiga la afirmación estable que realmente se va a realizar.
+2. Existe la raíz TrueNAS prevista creada por el administrador y bootstrap/preflight de la misma revisión pasan.
+3. El layout Host Path de referencia TrueNAS cumple el contrato Generic/POSIX de estado privado o existe una decisión equivalente explícitamente documentada; ejecuta el audit ACL del host cuando corresponda.
+4. Launcher y agentes habilitados utilizan la referencia/digest común previsto manteniendo montajes escribibles/privados disjuntos.
+5. Se verifica origen/CSP/navegación del launcher sin contraseña; no recibe estado/contraseña de agentes ni socket del motor de contenedores y está vinculado únicamente a la red privada/de confianza prevista. Una futura entrada segura central no forma parte de la afirmación estable actual salvo que #181 cambie explícitamente ese límite antes.
+6. Los endpoints Codex y Antigravity habilitado se autentican mediante sus entradas de configuración separadas; el soporte actual no exige que esos valores de contraseña sean distintos ni que cumplan una longitud mínima/composición impuesta por el proyecto.
+7. Workspace/proyectos, estado del agente, GitHub/Git/SSH y estado runtime que deba persistir sobreviven stop/start y recreación.
+8. Login de dispositivo Codex, Resume de sesiones y las rutas soportadas autonomous/guarded funcionan en el despliegue objetivo.
+9. Si Antigravity forma parte del soporte anunciado, su ruta explícita de runtime del proveedor, estado actual de admisión/integridad y restricciones experimentales siguen siendo válidos; #53 no tiene un bloqueo out-of-cycle pendiente para esa afirmación exacta.
+10. Las integraciones externas opcionales incluidas en el soporte anunciado mantienen sus límites documentados de privacidad/credenciales.
+11. `CHANGELOG.md` tiene una sección estable fechada derivada del contenido revisado de `Unreleased`.
+12. La evidencia del repositorio/release no contiene credenciales, rutas de infraestructura privada ni datos sensibles de cuenta/sesión.
+13. #31 no contiene ningún issue pendiente que contradiga la afirmación estable que realmente se va a realizar.
+
+**Después de crear el tag Git revisado: controles del candidato stable, promoción y aceptación posterior** (en ese orden):
+
+1. Construir los candidatos independientes de base y runtime stable; vincular los digests del índice OCI y los manifiestos AMD64 exactos al SHA, versión y canal del código etiquetado; ejecutar smoke de arranque, autenticación y aislamiento sobre ese candidato.
+2. Validar avisos y ambos SPDX, incluida la evidencia suplementaria del paquete/archivos Chromium, y los dos informes Trivy vinculados al candidato con cobertura de paquetes Ubuntu y lenguajes. Rechazar hallazgos `CRITICAL` corregibles.
+3. Ejecutar la guarda de inmutabilidad de tags SemVer y avance monótono de stable; después, promocionar y releer todos los alias de base/runtime. Comprobar que el índice OCI promocionado contiene el manifiesto AMD64 exacto ya probado. Las escrituras registrales no son atómicas: un job fallido puede haber movido algunos alias y exigir reconciliación humana por digest inmutable.
+4. Comprobar la imagen estable resultante en TrueNAS conforme a la aceptación del operador antes de dar la release por completada.
 
 El trabajo opcional/futuro #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 no se convierte automáticamente en bloqueo estable salvo que #31 o su issue correspondiente identifique una dependencia concreta para la release.
 
