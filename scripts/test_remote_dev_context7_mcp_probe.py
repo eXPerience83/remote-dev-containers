@@ -445,6 +445,61 @@ class ProbeTests(TestCase):
         with self.assertRaisesRegex(probe.ProbeError, "UNVERIFIED"):
             probe.probe(opener=opener)
 
+    def test_echoed_question_followed_by_no_docs_cannot_pass_full_probe(self):
+        """A question echoed by query-docs is not actual evidence."""
+        echo_failure = (
+            "Query: How do I set a timeout in Requests?\n"
+            "No documentation found."
+        )
+        valid = (
+            "Query: How do I set a timeout in Requests?\n"
+            "For Python Requests, set a timeout to bound how long the "
+            "client waits for data."
+        )
+        self.assertFalse(probe._has_public_content(
+            {"content": [{"type": "text", "text": echo_failure}]},
+            method="query-docs",
+        ))
+        self.assertTrue(probe._has_public_content(
+            {"content": [{"type": "text", "text": valid}]},
+            method="query-docs",
+        ))
+        for content, error_flag, expected_error in (
+            (echo_failure, False, probe.UnverifiedDocumentation),
+            (valid, True, probe.ProbeError),
+        ):
+            with self.subTest(error_flag=error_flag):
+                opener = FakeOpener()
+                normal = opener.open
+
+                def inject(request, *, timeout):
+                    response = normal(request, timeout=timeout)
+                    rpc = json.loads(request.data)
+                    if (rpc["method"] == "tools/call"
+                            and rpc["params"]["name"] == "query-docs"):
+                        return FakeResponse({
+                            "jsonrpc": "2.0", "id": rpc["id"],
+                            "result": {
+                                "isError": error_flag,
+                                "content": [{"type": "text", "text": content}],
+                            },
+                        }, session=opener.session)
+                    return response
+                opener.open = inject
+                with self.assertRaises(expected_error) as captured:
+                    probe.probe(opener=opener)
+                self.assertEqual(
+                    len([call for call, _ in opener.calls
+                         if call["method"] == "tools/call"]), 2,
+                )
+                if error_flag:
+                    self.assertNotIsInstance(
+                        captured.exception, probe.UnverifiedDocumentation,
+                    )
+                    self.assertIn("explicit error", str(captured.exception))
+                else:
+                    self.assertIn("UNVERIFIED", str(captured.exception))
+
     def test_explicit_failure_status_with_positive_markers_is_not_pass(self):
         content = (
             "Rate limit exceeded; upgrade your plan\n"
