@@ -99,7 +99,7 @@ def validate(source: str, helper: str) -> None:
               "missing retained evidence: " + token)
     check("expected_channel=stable" in helper and
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
-          'elif [[ "$expected_version" =~ ^v[0-9]+' in helper,
+          'elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)' in helper,
           "candidate smoke helper fails to bind stable channel/version")
     guard = step(source, "Guard stable promotion against overwrite or downgrade")
     check("run: |" in guard and "python3 scripts/guard-stable-promotion.py" in guard and
