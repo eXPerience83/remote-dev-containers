@@ -203,6 +203,15 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
         workflow, "Record exact Chromium identity and notices in edge SPDX images")
     semantic = named_workflow_step(
         workflow, "Validate exact edge SPDX documents with independent parser")
+    bootstrap = named_workflow_step(workflow, "Prepare isolated SPDX validator before registry login")
+    require(workflow.index("Prepare isolated SPDX validator before registry login") <
+            workflow.index("- uses: docker/login-action@"),
+            "Edge SPDX package installation must precede registry login")
+    require("        if:" not in bootstrap and
+            "        continue-on-error:" not in bootstrap and
+            bootstrap.count("python3 -m venv") == 1 and
+            bootstrap.count("pip install --disable-pip-version-check spdx-tools==0.8.5") == 1,
+            "Edge independent SPDX parser must install before credentials")
     for label, block in (("Chromium", supplement), ("independent SPDX", semantic)):
         require("        if:" not in block and "        continue-on-error:" not in block,
                 label + " gate must not be skipped")
@@ -225,8 +234,6 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
     ), "Edge Chromium evidence must execute on both exact images")
     require(active(semantic) == (
         "set -euo pipefail",
-        'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
-        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "Edge must run an independent SPDX 2.3 validator on both images")
@@ -248,6 +255,9 @@ def test_edge_chromium_spdx(workflow: str) -> None:
         ("comment Chromium", workflow.replace(
             '          python3 scripts/chromium-sbom-evidence.py \\',
             '          # python3 scripts/chromium-sbom-evidence.py \\', 1)),
+        ("skip parser bootstrap", workflow.replace(
+            '      - name: Prepare isolated SPDX validator before registry login\n',
+            '      - name: Prepare isolated SPDX validator before registry login\n        if: false\n', 1)),
         ("skip independent parser", workflow.replace(
             '      - name: Validate exact edge SPDX documents with independent parser\n',
             '      - name: Validate exact edge SPDX documents with independent parser\n        if: false\n', 1)),
