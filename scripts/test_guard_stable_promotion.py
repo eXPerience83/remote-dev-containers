@@ -99,6 +99,10 @@ class GuardTests(unittest.TestCase):
             "failed to fetch token: 404 Not Found",
             "failed to fetch oauth bearer token: manifest unknown",
             "connection refused: " + ref + ": not found",
+            "gateway 503: manifest unknown",
+            "upstream 503: manifest not found",
+            "manifest unknown\\nHTTP 503 bad gateway",
+            "ERROR: manifest unknown\\nfailed to fetch credentials",
         )
         for error in failures:
             with self.subTest(error=error):
@@ -114,6 +118,14 @@ class GuardTests(unittest.TestCase):
                 with patch.object(guard, "run", return_value=subprocess.CompletedProcess(
                     [], 1, "", missing)):
                     self.assertIsNone(guard.read_tag("remote-dev", "v0.3.0"))
+
+    def test_registry_error_does_not_expose_remote_stderr(self):
+        secret = "SENSITIVE-REMOTE-REGISTRY-TOKEN-PLACEHOLDER"
+        with patch.object(guard, "run", return_value=subprocess.CompletedProcess(
+                [], 1, "", "gateway 503: manifest unknown " + secret)):
+            with self.assertRaisesRegex(ValueError, "cannot inspect") as raised:
+                guard.read_tag("remote-dev", "stable")
+            self.assertNotIn(secret, str(raised.exception))
 
     def test_failed_old_image_lookup_cannot_downgrade(self):
         with patch.object(guard, "read_tag", side_effect=lambda image, tag:
