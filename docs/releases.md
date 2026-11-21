@@ -193,6 +193,29 @@ the promoted index must contain the same AMD64 runtime child manifest that
 passed smoke and scanning. The index digest is not the child manifest digest.
 Edge acceptance alone does not prove the stable image was deployed to TrueNAS.
 
+**Version-tag and downgrade preflight:** The stable publisher checks both version
+tags and all existing base/runtime stable aliases **before its first tag write**.
+Already-published version tags cannot be rebound to a different OCI index, and
+an old source tag cannot move stable/latest backwards. A second run with identical
+digests and aliases is a **read-only no-op**; a rebuilt candidate with new digests
+is intentionally rejected even if its source SHA is the same. The runner records
+`stable-promotion-preflight.json` and its Docker promotion metadata.
+
+**Important partial-promotion limitation:** Publishing aliases into two GHCR
+repositories is **not atomic**. A failed workflow can have moved base or some
+runtime tags. A red workflow is therefore **not proof that stable/latest stayed
+unchanged**. Inspect the recorded preflight and current GHCR digests, stop
+other publishing attempts, and obtain operator approval for a manual
+reconciliation using only the **previously known immutable OCI indexes**.
+Read back each corrected alias. Never resolve a partial failure by
+blindly rerunning a historical source tag or rebuilding an unaccepted image.
+
+**Administrator prerequisite for a new release:** Explicitly verify GitHub
+rules protecting creation, modification and deletion of `v*` tags, plus who
+can rerun historical tag workflows. The preflight cannot retroactively protect
+a workflow embedded in an older tag. If those protections cannot be verified,
+the release remains **NO GO**, regardless of a green PR build.
+
 ## Operator channel choices
 
 Use one maturity channel in normal deployment configuration and switch it only intentionally:
