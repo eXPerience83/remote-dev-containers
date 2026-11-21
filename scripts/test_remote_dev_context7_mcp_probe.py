@@ -2,7 +2,7 @@
 """Offline regression tests for the real Context7 MCP probe. Never access network."""
 import importlib.util
 import io
-from http.client import IncompleteRead
+from http.client import HTTPResponse, IncompleteRead
 import json
 import time
 from pathlib import Path
@@ -303,6 +303,38 @@ class ProbeTests(TestCase):
                 with self.assertRaises(probe.ProbeError) as exc:
                     probe.probe(api_key=SECRET, opener=opener)
                 self.assertNotIn(SECRET, str(exc.exception))
+
+    def test_truncated_http_response_with_complete_json_or_empty_notification(self):
+        class MemorySocket:
+            def __init__(self, wire):
+                self.wire = wire
+
+            def makefile(self, mode):
+                return io.BytesIO(self.wire)
+
+        for method in ("initialize", "notifications/initialized"):
+            with self.subTest(method=method):
+                opener = FakeOpener()
+                normal = opener.open
+
+                def truncated(request, *, timeout):
+                    response = normal(request, timeout=timeout)
+                    if json.loads(request.data)["method"] != method:
+                        return response
+                    wire = (
+                        f"HTTP/1.1 {response.status} test\r\n"
+                        "Content-Type: application/json\r\n"
+                        f"Content-Length: {len(response.value) + 9}\r\n\r\n"
+                    ).encode() + response.value
+                    reader = HTTPResponse(MemorySocket(wire))
+                    reader.begin()
+                    reader.url = request.full_url
+                    return reader
+
+                opener.open = truncated
+                with self.assertRaisesRegex(probe.ProbeError, "declared length|unexpected body"):
+                    probe.probe(opener=opener)
+                self.assertEqual(opener.calls[-1][0]["method"], method)
 
     def test_invalid_tool_content_is_a_protocol_failure(self):
         with self.assertRaisesRegex(probe.ProbeError, "invalid content") as caught:

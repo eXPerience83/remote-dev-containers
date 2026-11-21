@@ -194,7 +194,7 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                 # under the remaining budget; never accept a hidden error body.
                 with _hard_read_deadline(deadline - time.monotonic()):
                     unexpected = response.read1(1)
-                if unexpected:
+                if unexpected or getattr(response, "length", None):
                     raise ProbeError("MCP notification returned an unexpected body")
                 return {}, next_session
             if status != 200:
@@ -257,6 +257,10 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                 with _hard_read_deadline(deadline - time.monotonic()):
                     chunk = response.read1(min(8192, MAX_RESPONSE_BYTES + 1 - len(data)))
                 if not chunk:
+                    # HTTPResponse.read1 can return EOF with Content-Length
+                    # bytes still outstanding, even after a complete JSON object.
+                    if getattr(response, "length", None):
+                        raise ProbeError("MCP response ended before its declared length")
                     break
                 data.extend(chunk)
             raw = bytes(data)
