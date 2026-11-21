@@ -40,6 +40,10 @@ remote_dev_validate_project_name() {
 
 remote_dev_list_projects() {
   local path name
+  if [[ "${REMOTE_DEV_TEST_BLOCK_PROJECTS:-0}" == 1 ]]; then
+    echo 'ERROR: synthetic blocked project collection' >&2
+    return 2
+  fi
   for path in "$1"/*; do
     [[ -d "$path" && ! -L "$path" ]] || continue
     name="${path##*/}"
@@ -136,6 +140,10 @@ set -euo pipefail
 case "${1:-}" in
   status)
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Antigravity Context7 status fixture failure' >&2
+      exit 17
+    fi
     echo 'Context7 (Antigravity): not installed'
     ;;
   menu-state)
@@ -144,12 +152,22 @@ case "${1:-}" in
     ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
-    echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
     echo plan >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Antigravity Context7 recovery plan fixture failure' >&2
+      exit 19
+    fi
+    echo 'Context7 (Antigravity): NOT INSTALLED; installation available'
     ;;
-  reinstall|test|remove)
-    [[ "$#" == 1 ]] || exit 2
-    echo "$1" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+  reinstall)
+    [[ "$#" == 1 || ( "$#" == 2 && "$2" == --yes ) ||
+       ( "$#" == 3 && "$2" == --yes && "$3" == --expect-absent ) ||
+       ( "$#" == 3 && "$2" == --expect-repairable && "$3" == --yes ) ]] || exit 2
+    echo "$*" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
+    ;;
+  test|remove)
+    [[ "$#" == 2 && "$2" == --yes ]] || exit 2
+    echo "$*" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
   *) exit 2 ;;
 esac
@@ -233,7 +251,7 @@ PY
 chmod 0755 "$fixture_menu"
 
 output="$workdir/output"
-printf '1\n\n2\n\n4\n3\n1\n\n4\n4\n\n5\n\n0\n1\n\n0\n' | env \
+printf '1\n\n2\n\n4\n3\n1\n\n4\n4\ny\n\n5\ny\n\n0\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   PATH="$bin_dir:$PATH" \
   WORKSPACE="$workdir/workspace" \
@@ -285,6 +303,22 @@ if grep -Fq 'Browse/resume Antigravity conversations' "$output"; then
 fi
 if grep -Fq -- '--remote-dev-open-resume-picker' "$invocations"; then
   echo 'ERROR: menu still invokes the screen-scraping Antigravity picker helper' >&2
+  exit 1
+fi
+
+# Invalid choices in Approval must redraw the same submenu for both roles.
+rm -f "$invocations" "$hardening_calls"
+printf '4\ninvalid\n9\n3\n1\n\n0\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$invocations")" == '[project=project][--approval-mode][guarded]' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+if (( $(grep -Fxc 'Antigravity approval settings' "$output") != 3 )); then
+  echo 'ERROR: AGY approval invalid choices did not redraw the submenu' >&2
   exit 1
 fi
 
@@ -413,6 +447,42 @@ mapfile -t calls <"$invocations"
 grep -Fxq 'Project: second-project' "$output"
 echo 'Successful project selection returns to Antigravity for immediate Start: OK'
 
+# The project picker must show 0 Back, and Back at each nesting level
+# must not launch the agent or harden/mutate any persistent state.
+rm -f "$invocations" "$hardening_calls"
+printf '3\n1\n0\n0\n0\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" \
+  WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$invocations" && ! -e "$hardening_calls" ]]
+(( $(grep -Fxc '0) Back' "$output") >= 2 ))
+echo 'Antigravity nested project 0 Back does not dispatch an agent: OK'
+
+# Collection-wide safety blocks must intercept all three project actions
+# before entering a picker, asking for a name, or attempting to delete files.
+rm -f "$invocations" "$hardening_calls"
+printf '3\n1\n\n2\n\n3\n\n0\n0\n' | env \
+  REMOTE_DEV_TEST_BLOCK_PROJECTS=1 \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$invocations" && ! -e "$hardening_calls" ]]
+[[ -d "$workdir/workspace/project" ]]
+[[ "$(grep -Fc 'Project collection is blocked; selection, creation and deletion are disabled.' "$output")" == 3 ]]
+if grep -Fxq 'Create project' "$output" || grep -Fxq 'Select project' "$output" || grep -Fxq 'Delete project' "$output"; then
+  echo 'ERROR: blocked Antigravity project collection entered a workflow' >&2
+  exit 1
+fi
+grep -Fq 'Project: BLOCKED (collection safety check failed; run diagnostics)' "$output"
+echo 'Antigravity blocked Projects refuses Select/Create/Delete before dispatch: OK'
+
 rm -f "$invocations" "$hardening_calls"
 printf '3\n2\ncreated-project\n\n1\n\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
@@ -434,9 +504,38 @@ grep -Fq "Created project: $created_project_path" "$output"
 grep -Fxq 'Project: created-project' "$output"
 echo 'Successful project creation returns to Antigravity for immediate Start: OK'
 
+# An inexact project name must never authorize permanent deletion. Exercise
+# the real nested Projects → Delete path, including EOF while confirming.
+printf '%s\n' 'keep this content' >"$created_project_path/safety-canary"
+run_invalid_project_deletion() {
+  local input="$1"
+  rm -f "$invocations" "$hardening_calls"
+  printf '%s' "$input" | env -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+    PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+    REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+    REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+    timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+  [[ -f "$created_project_path/safety-canary" ]] || {
+    echo 'ERROR: Antigravity deleted a project on inexact confirmation' >&2
+    exit 1
+  }
+  [[ ! -e "$invocations" && ! -e "$hardening_calls" ]] || {
+    echo 'ERROR: Antigravity invalid project deletion dispatched an agent' >&2
+    exit 1
+  }
+  ! grep -Fq 'Deleted project: created-project' "$output"
+}
+for confirmation in '  created-project  ' $'\tcreated-project\t' wrong-project; do
+  run_invalid_project_deletion $'3\n3\n1\n'"$confirmation"$'\n\n4\n0\n'
+done
+run_invalid_project_deletion $'3\n3\n1\n'
+echo 'Antigravity project deletion exact-name, whitespace and EOF protections: OK'
+
 # Context7 uses native vendor OAuth; menu state never opens token storage.
 rm -f "$hardening_calls" "$context7_calls"
-printf '6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' | env \
+printf '6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -449,16 +548,16 @@ printf '6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' | env \
 mapfile -t context7_actions <"$context7_calls"
 [[ "${#context7_actions[@]}" == 4 ]]
 [[ "${context7_actions[0]}" == plan ]]
-[[ "${context7_actions[1]}" == test ]]
+[[ "${context7_actions[1]}" == 'test --yes' ]]
 [[ "${context7_actions[2]}" == plan ]]
-[[ "${context7_actions[3]}" == reinstall ]]
+[[ "${context7_actions[3]}" == 'reinstall --yes --expect-absent' ]]
 [[ "$(wc -l <"$hardening_calls")" == 2 ]]
 grep -Fq 'Remote Dev — Antigravity — Context7' "$output"
 grep -Fq 'Authenticate' "$output"
-echo 'Antigravity Context7 guidance, installation and HTTP test: OK'
+echo 'Antigravity Context7 guidance, installation and confirmed MCP tool test: OK'
 
 rm -f "$hardening_calls" "$context7_calls"
-printf '6\n1\n4\n\n5\n\n0\n0\n0\n' | env \
+printf '6\n1\n4\n\n5\nREMOVE\n\n0\n0\n0\n' | env \
   -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
   REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
   PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
@@ -468,10 +567,123 @@ printf '6\n1\n4\n\n5\n\n0\n0\n0\n' | env \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
   REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
-[[ "$(cat "$context7_calls")" == remove ]]
+[[ "$(cat "$context7_calls")" == 'remove --yes' ]]
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 grep -Fq 'no reinstall is needed' "$output"
 echo 'Antigravity Context7 healthy no-op and selective removal: OK'
+
+# Confirmed network tests, including invalid or typed TEST, must cancel
+# before invoking the provider binary (and must not trigger hardening).
+for decision in n TEST ""; do
+  rm -f "$hardening_calls" "$context7_calls"
+  printf '6\n1\n2\n%s\n\n0\n0\n0\n' "$decision" | env \
+    REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+    PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+    REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+    REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+    REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+    REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+    timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+  [[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
+  grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+done
+
+# Both roles require y/N for initial registration, but keep their
+# different authentication schemas (Codex onboarding vs AGY native OAuth).
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n4\nn\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == plan ]]
+[[ ! -e "$hardening_calls" ]]
+grep -Fq 'Context7 installation cancelled; no configuration changes were made.' "$output"
+
+# A repairable AGY registration requires exactly REINSTALL before --yes.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n4\nREINSTALL\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=repairable \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == $'plan\nreinstall --expect-repairable --yes' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n5\nNO\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
+# Shared y/N accepts mixed-case Yes without requiring typed TEST.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n2\nYes\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == 'test --yes' ]]
+[[ "$(wc -l <"$hardening_calls")" == 1 ]]
+
+# EOF at shared Context7 y/N is a normal cancelled exit, not status 1.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n2\n' | env \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=healthy \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$context7_calls" && ! -e "$hardening_calls" ]]
+grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+
+# The same offline diagnostic error handling must apply to AGY without
+# invoking a test or modifying any role-private state.
+rm -f "$hardening_calls" "$context7_calls"
+printf '6\n1\n1\n\n0\n0\n0\n' | env \
+  REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL=1 \
+  REMOTE_DEV_MENU_AGY_CONTEXT7_STATE=absent \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ "$(cat "$context7_calls")" == plan ]]
+[[ ! -e "$hardening_calls" ]]
+grep -Fq 'ERROR: Context7 status exited with status 17' "$output"
+grep -Fq 'ERROR: Context7 recovery plan exited with status 19' "$output"
+
+echo 'Antigravity Context7 consent/repair/removal/cancel end-to-end: OK'
+
+# Declining Guarded preset changes must not call the persistent policy writer.
+rm -f "$hardening_calls" "$policy_calls"
+printf '4\n4\nn\n\n5\nn\n\n0\n0\n' | env \
+  -u REMOTE_DEV_ANTIGRAVITY_APPROVAL_MODE \
+  PATH="$bin_dir:$PATH" WORKSPACE="$workdir/workspace" \
+  REMOTE_DEV_MENU_INVOCATIONS="$invocations" \
+  REMOTE_DEV_MENU_PRESET_STATE="$preset_state" \
+  REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
+  REMOTE_DEV_MENU_POLICY_CALLS="$policy_calls" \
+  timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
+[[ ! -e "$policy_calls" && ! -e "$hardening_calls" ]]
+grep -Fq 'Guarded preset change cancelled' "$output"
+echo 'Guarded persistent preset consent/cancellation: OK'
 
 # Shared main-menu login and diagnostics must dispatch identically for AGY.
 # Codex's fixture also tests option 9 (container shell); shell has its own role menu.

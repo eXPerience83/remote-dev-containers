@@ -324,8 +324,16 @@ class WiringTests(unittest.TestCase):
                 ):
                     codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
 
-    def test_unverified_does_not_report_tool_failed_in_both_managers(self):
-        """Ambiguous docs require nonzero outcome but not a FAILED label."""
+    def test_failed_and_unverified_results_in_both_managers(self):
+        """Both managers distinguish tool failures from insufficient evidence."""
+        for ambiguous, expected, excluded in (
+            (True, "UNVERIFIED", "FAILED"),
+            (False, "FAILED", "UNVERIFIED"),
+        ):
+            with self.subTest(outcome=expected):
+                self.check_manager_outcome(ambiguous, expected, excluded)
+
+    def check_manager_outcome(self, ambiguous, expected, excluded):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             codex_home = root / "codex"
@@ -338,12 +346,12 @@ class WiringTests(unittest.TestCase):
                   patch.object(codex, "bundled_codex_accepts_config"),
                   patch.object(codex, "hosted_ping"),
                   patch.object(codex, "load_mcp_probe",
-                               return_value=FakeProbe(unverified=True)),
+                               return_value=FakeProbe(unverified=ambiguous, failed=not ambiguous)),
                   contextlib.redirect_stdout(io.StringIO()) as output):
                 with self.assertRaises(codex.Context7Error) as exc:
                     codex.command_test(codex.Paths(), argparse.Namespace(yes=True))
-            self.assertIn("MCP tool verification UNVERIFIED", str(exc.exception))
-            self.assertNotIn("MCP tool verification FAILED", str(exc.exception))
+            self.assertIn(f"MCP tool verification {expected}", str(exc.exception))
+            self.assertNotIn(f"MCP tool verification {excluded}", str(exc.exception))
             self.assertNotIn(SECRET, str(exc.exception) + output.getvalue())
 
             home = root / "antigravity"
@@ -357,11 +365,11 @@ class WiringTests(unittest.TestCase):
             with (patch.dict(os.environ, {"REMOTE_DEV_ROLE": "antigravity"}),
                   patch.object(agy, "build_opener", return_value=FakeOpener()),
                   patch.object(agy, "load_mcp_probe",
-                               return_value=FakeProbe(unverified=True)),
+                               return_value=FakeProbe(unverified=ambiguous, failed=not ambiguous)),
                   contextlib.redirect_stdout(io.StringIO()) as output):
                 self.assertEqual(agy.test(home), 3)
-            self.assertIn("MCP tool verification UNVERIFIED", output.getvalue())
-            self.assertNotIn("MCP tool verification FAILED", output.getvalue())
+            self.assertIn(f"MCP tool verification {expected}", output.getvalue())
+            self.assertNotIn(f"MCP tool verification {excluded}", output.getvalue())
             self.assertNotIn(SECRET, output.getvalue())
 
     def test_codex_key_forwarded_only_to_codex_mcp_probe(self):

@@ -31,11 +31,11 @@ remote-dev-context7 remove
 
 Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 
-1. **Iniciar sesión en Context7 con un código de dispositivo (recomendado)**.
-2. **Introducir una API key existente de Context7** mediante la ruta manual enmascarada.
-3. **Conservar la API key gestionada actual**, o seguir anónimo si no existe.
-4. **Usar acceso anónimo**, eliminando solo la API key gestionada por Remote Dev.
-5. **Cancelar**.
+- **`1` — Iniciar sesión en Context7 con un código de dispositivo (recomendado).**
+- **`2` — Introducir una API key existente de Context7** mediante la ruta manual enmascarada.
+- **`3` — Conservar la API key gestionada actual**, o seguir anónimo si no existe.
+- **`4` — Usar acceso anónimo**, eliminando solo la API key gestionada por Remote Dev.
+- **`0` — Cancelar** (el antiguo `5` sigue aceptándose como alias).
 
 El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous` y `--api-key-stdin`. La automatización del device login puede elegir además `--cli-channel reviewed` o `--cli-channel latest`; el menú interactivo utiliza `auto`.
 
@@ -43,7 +43,9 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 ### Navegación simplificada y diagnóstico (#347)
 
-El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
+El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar herramientas MCP alojadas**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
+
+**Interacción del menú (#357):** Test y el alta inicial de Context7 solicitan el mismo `y/N` en Codex y Antigravity. La reparación selectiva pide `REINSTALL` y la eliminación `REMOVE`, con aviso de que Codex también borra su copia de la API key privada. El asistente de autenticación de Codex conserva opciones propias (incluido `0 Cancel`); si aparece una CLI oficial de Context7 más reciente, el selector de versión permite también `0 Cancel` (el antiguo `3` se admite como alias). Los comandos CLI directos mantienen sus confirmaciones. Véase la [auditoría completa de menús](menu-interaction-audit.es.md).
 
 `status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba activa requiere confirmación y comprueba el protocolo MCP y dos herramientas de documentación; **no acredita por sí misma que el agente Codex las utilice** ni que el OAuth nativo esté autenticado. Un resultado documental ambiguo queda `UNVERIFIED`, nunca como éxito demostrado. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
 

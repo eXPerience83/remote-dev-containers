@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Bundled pinned Playwright MCP and a Chromium headless shell in the common image, with conservative per-role MCP enrollment for Codex and experimental Antigravity. Claude can reuse the same executable if installed later; no new HTTP endpoint or persistent browser profile.
 
+### Changed
+
+- Harmonized the complete Codex/Antigravity menu interaction tree (#357): Context7 Test and initial Install now share explicit `[y/N]` consent, while repair/removal keep the intentional `REINSTALL`/`REMOVE` confirmations; cancel/EOF/Back exit without launching the requested action. Provider-specific authentication remains separate.
+- Added fail-closed menu-origin Context7 registration/key-state checks under the write lock, including protections against racing registration edits and newly created private keys. Explicit `--anonymous` remains intentionally destructive to the owned key; direct CLI contracts are unchanged.
+- Improved read-only Context7 diagnostics to surface failure exit codes, unified next-launch approval summaries, guarded Antigravity preset changes behind confirmation, and kept historical numeric menu aliases for compatibility. Full EN/ES interaction audits and runtime regression fixtures cover the changes; no persistent layout or image-channel change.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->

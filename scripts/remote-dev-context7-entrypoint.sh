@@ -14,13 +14,24 @@ if [[ "$command" != install && "$command" != repair ]]; then
   delegate_manager "$@"
 fi
 
-# Explicit flags and automation retain the existing manager contract. The
-# onboarding choice is only inserted for the plain interactive install/repair
-# action used by the Remote Dev menu.
-if (( $# > 1 )); then
+# The menu-only expected-state token preserves the interactive onboarding
+# wizard while delivering its original consent precondition to every backend
+# route, including the separately executed device-login helper.
+menu_precondition=""
+if (( $# == 2 )); then
+  case "$2" in
+    --menu-expect-absent) menu_precondition=--expect-absent ;;
+    --menu-expect-healthy) menu_precondition=--expect-healthy ;;
+  esac
+fi
+# Ordinary direct CLI invocations retain their previous semantics.
+if (( $# > 1 )) && [[ -z "$menu_precondition" ]]; then
   delegate_manager "$@"
 fi
 if [[ ! -t 0 || ! -t 1 ]]; then
+  if [[ -n "$menu_precondition" ]]; then
+    delegate_manager "$command" "$menu_precondition"
+  fi
   delegate_manager "$@"
 fi
 
@@ -36,7 +47,7 @@ or that exact latest version with a clear review-pending warning.
 2) Enter an existing Context7 API key
 3) Keep the current API key, or stay anonymous if none exists
 4) Use anonymous access and remove the Remote Dev-managed API key
-5) Cancel
+0) Cancel
 MENU
 
 choice=""
@@ -47,18 +58,31 @@ fi
 
 case "$choice" in
   1)
+    if [[ -n "$menu_precondition" ]]; then
+      exec "$device_login" --yes "$menu_precondition"
+    fi
     exec "$device_login" --yes
     ;;
   2)
+    if [[ -n "$menu_precondition" ]]; then
+      delegate_manager "$command" "$menu_precondition"
+    fi
     delegate_manager "$command"
     ;;
   3)
+    if [[ -n "$menu_precondition" ]]; then
+      delegate_manager "$command" --yes "$menu_precondition"
+    fi
     delegate_manager "$command" --yes
     ;;
   4)
+    if [[ -n "$menu_precondition" ]]; then
+      delegate_manager "$command" --yes --anonymous "$menu_precondition"
+    fi
     delegate_manager "$command" --yes --anonymous
     ;;
-  5)
+  0|5)
+    # Preserve the historical 5 alias without displaying it.
     echo "ERROR: cancelled" >&2
     exit 2
     ;;

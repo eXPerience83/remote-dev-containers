@@ -320,6 +320,131 @@ class Context7Antigravity(unittest.TestCase):
                 self.assertEqual(self.file.read_bytes(), raw)
                 self.assertFalse(self.backup.exists())
 
+    def test_menu_absent_install_requires_same_state_under_write_lock(self):
+        # The regular direct-CLI reinstall can intentionally repair a drifted
+        # endpoint. A menu's initial INSTALL consent cannot authorize that.
+        # First prove a still-absent entry remains installable.
+        with patch("sys.stdin", new=io.StringIO("")):
+            self.assertEqual(self.call("reinstall", "--expect-absent")[0], 2)
+        self.assertFalse(self.file.exists())
+        self.assertEqual(self.call("reinstall", "--yes", "--expect-absent")[0], 0)
+        self.assertEqual(
+            json.loads(self.file.read_bytes())["mcpServers"]["context7"],
+            manager.ENTRY,
+        )
+        self.assertFalse(self.backup.exists())
+
+        # Simulate a second session writing the vendor JSON after the first
+        # menu-state/preflight read but before reinstall acquires its own lock.
+        # The first read sees absent; the locked mutation sees the new entry.
+        changes = (
+            b'{"mcpServers":{"context7":{"serverUrl":"https://old.example/mcp"}}}',
+            b'{"mcpServers":{"context7":{"serverUrl":"https://mcp.context7.com/mcp"}}}',
+            b'{"mcpServers":{"context7":{"command":"user-owned"}}}',
+        )
+        for changed in changes:
+            with self.subTest(entry=changed):
+                self.file.unlink()
+                self.backup.unlink(missing_ok=True)
+                original_using_config = manager.using_config
+                calls = 0
+
+                def change_after_preflight(directory, mutator):
+                    nonlocal calls
+                    # Count attempts before entering the backend: the second
+                    # locked invocation deliberately raises MaintenanceError.
+                    calls += 1
+                    result = original_using_config(directory, mutator)
+                    if calls == 1:
+                        self.file.write_bytes(changed)
+                    return result
+
+                with patch.object(
+                    manager, "using_config", side_effect=change_after_preflight
+                ):
+                    code, out, err = self.call(
+                        "reinstall", "--yes", "--expect-absent"
+                    )
+                self.assertEqual(
+                    calls, 2,
+                    f"preflight/lock calls={calls}, code={code}, out={out!r}, err={err!r}",
+                )
+                self.assertEqual(code, 3)
+                self.assertIn("BLOCKED", out)
+                self.assertNotIn("user-owned", out)
+                self.assertEqual(err, "")
+                self.assertEqual(self.file.read_bytes(), changed)
+                self.assertFalse(self.backup.exists())
+
+    def test_menu_repair_does_not_resurrect_removed_registration(self):
+        """REINSTALL consent for drift cannot install after another session removes."""
+        other = {"command": "user-mcp", "args": ["--safe"]}
+        drift = {"mcpServers": {
+            "context7": {"serverUrl": "https://old.example/mcp"},
+            "other": other,
+        }}
+        absent = {"mcpServers": {"other": other}}
+        oauth = self.configdir / "mcp_oauth_tokens.json"
+        oauth.write_text("synthetic private OAuth sentinel", encoding="utf-8")
+        oauth.chmod(0o600)
+        oauth_before = oauth.read_bytes()
+        for changed_to, second_state in (
+            ("absent", absent),
+            ("managed", {"mcpServers": {"context7": manager.ENTRY, "other": other}}),
+            ("custom", {"mcpServers": {
+                "context7": {"command": "user-owned"}, "other": other,
+            }}),
+        ):
+            with self.subTest(changed_to=changed_to):
+                self.file.write_text(json.dumps(drift), encoding="utf-8")
+                self.backup.unlink(missing_ok=True)
+                new_bytes = json.dumps(second_state).encode("utf-8")
+                original_using = manager.using_config
+                calls = 0
+
+                def change_after_preflight(directory, mutator):
+                    nonlocal calls
+                    calls += 1
+                    outcome = original_using(directory, mutator)
+                    if calls == 1:
+                        # The first call was the read-only menu preflight.
+                        self.file.write_bytes(new_bytes)
+                    return outcome
+
+                with patch.object(manager, "using_config",
+                                  side_effect=change_after_preflight):
+                    code, output, _ = self.call(
+                        "reinstall", "--yes", "--expect-repairable",
+                    )
+                self.assertEqual((calls, code), (2, 3))
+                self.assertIn("BLOCKED", output)
+                self.assertEqual(self.file.read_bytes(), new_bytes)
+                self.assertFalse(self.backup.exists())
+                self.assertEqual(oauth.read_bytes(), oauth_before)
+                self.assertEqual(
+                    json.loads(self.file.read_bytes())["mcpServers"]["other"], other,
+                )
+
+        # A still-repairable entry remains available and is backed up exactly.
+        before = json.dumps(drift).encode("utf-8")
+        self.file.write_bytes(before)
+        self.assertEqual(
+            self.call("reinstall", "--yes", "--expect-repairable")[0], 0,
+        )
+        self.assertEqual(self.backup.read_bytes(), before)
+        self.assertEqual(
+            json.loads(self.file.read_bytes())["mcpServers"]["context7"],
+            manager.ENTRY,
+        )
+        self.assertEqual(oauth.read_bytes(), oauth_before)
+
+        # The direct CLI contract intentionally allows absent installation.
+        self.file.write_bytes(json.dumps(absent).encode("utf-8"))
+        self.assertEqual(self.call("reinstall", "--yes")[0], 0)
+        self.assertIn(
+            "context7", json.loads(self.file.read_bytes())["mcpServers"],
+        )
+
     def test_noop_preflight_must_recheck_under_lock(self):
         # Simulate a changed entry after a successful *earlier* preflight.
         # The privileged no-prompt no-op path may never become a write.

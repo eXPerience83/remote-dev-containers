@@ -31,11 +31,13 @@ La prueba real con `agy /mcp` y `resolve-library-id` + `query-docs` para `/psf/r
 
 ## Menú compartido de Context7 (#347)
 
-El submenú de ambos agentes utiliza **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar registro** y **0 Volver**. El submenú Context7 no cambia; el acceso desde el menú general pasa al número **6** por #351.
+El submenú de ambos agentes utiliza **1 Estado/diagnóstico**, **2 Probar herramientas MCP alojadas**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar registro** y **0 Volver**. El submenú Context7 no cambia; el acceso desde el menú general pasa al número **6** por #351.
 
 - **Estado** y **plan** son pasivos, no usan la red ni modifican el JSON. No se examina el archivo OAuth; la presencia del registro `serverUrl` **no implica modo anónimo ni OAuth autenticado**. La salida indica que Antigravity gestiona la autenticación y remite a `/mcp`.
 - **Prueba**: el presupuesto total es de **90 s compartidos** entre `/ping` y los intercambios MCP. El `/ping` está limitado a **4096 bytes**, utiliza timeout de socket de **10 s** y respeta el presupuesto restante. Cada respuesta MCP tiene un máximo independiente de **25 s** y **128 KiB**. El resultado ambiguo es `UNVERIFIED`, los errores explícitos son `FAILED` y ambos terminan sin PASS; no confirma OAuth ni uso nativo por AGY. Ninguna de las dos conexiones utiliza proxies del entorno.
 - **Autenticación**: inicia el CLI de Antigravity, entra en `/mcp → context7 → Authenticate` y confirma `[Authed]` desde el propio agente. Comprueba con una consulta real. Remote Dev no copia la API key de Codex ni lee tokens.
+La interacción del menú principal de Context7 es coherente en ambos agentes (#357): **Test y el alta inicial piden `y/N`**, la reparación selectiva exige `REINSTALL` y la eliminación `REMOVE`. Los comandos CLI directos mantienen sus propias confirmaciones. No se leen ni modifican las credenciales OAuth de Google. Véase la [auditoría del árbol completo](menu-interaction-audit.es.md).
+
 - **Instalar/reparar**: si falta el registro, permite instalarlo. Si hay un endpoint simple desactualizado, previsualiza el cambio y permite reinstalación selectiva. Una entrada sana **no solicita REINSTALL ni modifica archivos**. Si el JSON es inválido o hay personalizaciones, se bloquea.
 - **Eliminar**: elimina solo el registro global Context7 gestionado y guarda una copia privada. No elimina otros MCP, ni cierra la sesión OAuth, ni revoca el permiso en el proveedor. Esas operaciones de cuenta son independientes.
 

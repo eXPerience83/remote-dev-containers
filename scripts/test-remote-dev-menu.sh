@@ -66,6 +66,10 @@ remote_dev_validate_project_name() {
 
 remote_dev_list_projects() {
   local path name count=0
+  if [[ "${REMOTE_DEV_TEST_BLOCK_PROJECTS:-0}" == 1 ]]; then
+    echo 'ERROR: synthetic blocked project collection' >&2
+    return 2
+  fi
   if [[ "${REMOTE_DEV_TEST_LIST_PROJECTS_FAIL:-0}" == 1 ]]; then
     echo 'ERROR: synthetic project listing failure' >&2
     return 7
@@ -184,6 +188,10 @@ set -euo pipefail
 case "${1:-}" in
   status)
     [[ "${2:-}" == --menu && "$#" == 2 ]] || exit 2
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Codex Context7 status fixture failure' >&2
+      exit 17
+    fi
     printf '%s\n' 'Context7: not configured'
     ;;
   menu-state)
@@ -192,17 +200,33 @@ case "${1:-}" in
     ;;
   plan)
     [[ "$#" == 1 ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    if [[ "${REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL:-0}" == 1 ]]; then
+      echo 'Codex Context7 recovery plan fixture failure' >&2
+      exit 19
+    fi
     printf '%s\n' 'Context7 recovery: NOT INSTALLED (read-only)'
+    ;;
+  install)
+    # This fixture stands in for the TTY-aware onboarding entrypoint;
+    # an initial menu install must carry its locked expected state.
+    [[ "$#" == 2 && ( "$2" == --menu-expect-absent || "$2" == --menu-expect-healthy ) ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
-  install|test|update|remove)
-    # Production deliberately omits --yes here so the real manager owns the
-    # disclosure/confirmation prompt. Reject any accidental extra arguments.
+  update)
     [[ "$#" == 1 ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
+  test)
+    [[ "$#" == 2 && "$2" == --yes ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
+  remove)
+    [[ "$#" == 3 && "$2" == --expect-healthy && "$3" == --yes ]] || exit 2
+    printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
+    ;;
   reinstall)
-    [[ "$#" == 2 && "$2" == --menu-safe ]] || exit 2
+    [[ "$#" == 3 && "$2" == --menu-safe && "$3" == --yes ]] || exit 2
     printf '%s\n' "$*" >> "$REMOTE_DEV_MENU_CONTEXT7_INVOCATIONS"
     ;;
   *) exit 2 ;;
@@ -449,32 +473,105 @@ assert_file_lines "$invocations" 'Projects legacy Back 4'
 assert_hardening_count 0
 echo 'Projects shared Back 0 and legacy 4 are nonmutating: OK'
 
+# The inner project picker is also a submenu: display 0 Back and exit
+# without selecting/mutating, regardless of the collection's current size.
+run_menu __unset__ $'3\n1\n0\n0\n0\n' "$output"
+assert_file_lines "$invocations" 'Project picker 0 Back'
+assert_hardening_count 0
+(( $(grep -Fxc '0) Back' "$output") >= 2 ))
+echo 'Project picker, Projects menu and main navigation all use 0 Back: OK'
+
+# A blocked project collection must refuse *every* project workflow before
+# entering the picker, create prompt or deletion confirmation. The runtime
+# checks again, but the menu must not advertise disabled actions and run them.
+export REMOTE_DEV_TEST_BLOCK_PROJECTS=1
+run_menu __unset__ $'3\n1\n\n2\n\n3\n\n0\n0\n' "$output"
+unset REMOTE_DEV_TEST_BLOCK_PROJECTS
+assert_file_lines "$invocations" 'blocked project collection'
+assert_hardening_count 0
+[[ -d "$workdir/workspace/project" ]]
+[[ ! -e "$workdir/workspace/blocked-create" ]]
+[[ "$(grep -Fc 'Project collection is blocked; selection, creation and deletion are disabled.' "$output")" == 3 ]]
+if grep -Fxq 'Create project' "$output" || grep -Fxq 'Select project' "$output" || grep -Fxq 'Delete project' "$output"; then
+  echo 'ERROR: blocked project collection entered a project workflow' >&2
+  exit 1
+fi
+grep -Fq 'Project: BLOCKED (collection safety check failed; run diagnostics)' "$output"
+echo 'Codex blocked Projects refuses Select/Create/Delete before dispatch: OK'
+
 # Context7 retains its submenu contract; main entry moves from 7 to 6.
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
-run_menu __unset__ $'6\n1\n1\n\n2\n\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
+run_menu __unset__ $'6\n1\n1\n\n2\ny\n\n3\n\n4\ny\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 absent menu actions' \
-  'plan' 'test' 'install'
+  'plan' 'test --yes' 'plan' 'install --menu-expect-absent'
 assert_hardening_count 2
 grep -Fxq 'Remote Dev — Codex — Context7' "$output"
 grep -Fq 'Press Enter to return to the Context7 menu...' "$fixture_menu"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
-run_menu __unset__ $'6\n1\n3\n\n4\n\n5\n\n0\n0\n0\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install' 'remove'
+run_menu __unset__ $'6\n1\n3\n\n4\n\n5\nREMOVE\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 healthy menu actions' 'install --menu-expect-healthy' 'remove --expect-healthy --yes'
 assert_hardening_count 2
 grep -Fq 'no repair or confirmation is necessary' "$output"
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
-run_menu __unset__ $'6\n1\n4\n\n0\n0\n0\n' "$output"
-assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe'
+run_menu __unset__ $'6\n1\n4\nREINSTALL\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 repair actions' 'plan' 'reinstall --menu-safe --yes'
 assert_hardening_count 1
 
 export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=blocked
 run_menu __unset__ $'6\n1\n4\n\n5\n\n0\n0\n0\n' "$output"
 assert_file_lines "$context7_invocations" 'Context7 blocked actions' 'plan'
 assert_hardening_count 0
+# Initial Context7 installation can be declined before any credential
+# prompt or configuration write; a read-only recovery plan is allowed.
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=absent
+run_menu __unset__ $'6\n1\n4\nn\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 installation cancel' 'plan'
+assert_hardening_count 0
+grep -Fq 'Context7 installation cancelled; no configuration changes were made.' "$output"
+
+# Rejecting the same nonmutating network test must never launch either
+# manager or trigger persistent-state hardening.
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=healthy
+for decision in n TEST ""; do
+  run_menu __unset__ "$(printf '6\n1\n2\n%s\n\n0\n0\n0\n' "$decision")" "$output"
+  assert_file_lines "$context7_invocations" "Context7 test decline $decision"
+  assert_hardening_count 0
+  grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+done
+# A failed typed removal or repair confirmation must not mutate state.
+run_menu __unset__ $'6\n1\n5\nNO\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 removal cancellation'
+assert_hardening_count 0
+export REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE=repairable
+run_menu __unset__ $'6\n1\n4\nNOT-REINSTALL\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Context7 repair cancellation' 'plan'
+assert_hardening_count 0
+# The same shared y/N helper accepts mixed-case Yes in either role.
+run_menu __unset__ $'6\n1\n2\nYes\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Codex mixed-case yes test' 'test --yes'
+assert_hardening_count 1
+
+# EOF at the y/N question cancels normally, and the later empty pause
+# must not turn that cancellation into a set -e failure.
+run_menu __unset__ $'6\n1\n2\n' "$output"
+assert_file_lines "$context7_invocations" 'Codex EOF during Context7 y/N'
+assert_hardening_count 0
+grep -Fq 'Context7 test cancelled; no network request was made.' "$output"
+
+# A failing offline status/plan must report both real exit codes without
+# triggering test, mutation, credential changes, or hardening.
+export REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL=1
+run_menu __unset__ $'6\n1\n1\n\n0\n0\n0\n' "$output"
+assert_file_lines "$context7_invocations" 'Codex failed offline plan attempt' 'plan'
+assert_hardening_count 0
+grep -Fq 'ERROR: Context7 status exited with status 17' "$output"
+grep -Fq 'ERROR: Context7 recovery plan exited with status 19' "$output"
+unset REMOTE_DEV_MENU_CONTEXT7_DIAGNOSTIC_FAIL
+
 unset REMOTE_DEV_MENU_CONTEXT7_FIXTURE_STATE
-echo 'Context7 state-aware offline menu and scoped maintenance: OK'
+echo 'Context7 end-to-end confirmations/cancellation and scoped maintenance: OK'
 
 run_menu __unset__ $'5\n3\n\n0\n7\n\n8\n\n9\n\n0\n' "$output"
 assert_file_lines "$codex_cli_invocations" 'Codex device login' '[login][--device-auth]'
@@ -491,6 +588,17 @@ assert_file_lines "$shell_environment" 'container shell environment' \
   "TMPDIR=$development_root/tmp TMP=$development_root/tmp TEMP=$development_root/tmp UV_CACHE_DIR=$development_root/uv-cache UV_TOOL_DIR=$development_root/uv-tools NPM_CONFIG_CACHE=$development_root/npm-cache PIP_CACHE_DIR=$development_root/pip-cache PRE_COMMIT_HOME=$development_root/pre-commit-cache"
 assert_hardening_count 3
 echo 'Codex login/GitHub/diagnostics/shell result pauses: OK'
+
+# Approval invalid-input UX must match AGY: redraw the same submenu, never
+# treat an invalid selection as Back or arm a hidden agent action.
+run_menu __unset__ $'4\ninvalid\n9\n3\n1\n\n0\n' "$output"
+assert_file_lines "$invocations" 'Codex approval invalid choices stay in submenu' \
+  "[--approval-mode][guarded][--cd][$project_path]"
+assert_hardening_count 1
+if (( $(grep -Fxc 'Codex approval settings' "$output") != 3 )); then
+  echo 'ERROR: Codex approval invalid choices did not redraw the submenu' >&2
+  exit 1
+fi
 
 run_menu __unset__ $'4\n3\n2\n2\n1\n1\n0\n' "$output"
 assert_file_lines "$invocations" 'guarded resume then configured start' \
@@ -559,6 +667,32 @@ if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
 fi
 echo 'Successful project deletion remains in Projects: OK'
 
+# Destructive confirmation must preserve the caller's exact bytes: leading
+# spaces, tabs, an incorrect name and EOF must NOT delete the directory.
+mkdir -p -- "$new_project_path"
+printf '%s\n' 'keep this content' >"$new_project_path/safety-canary"
+for confirmation in '  new-project  ' $'\tnew-project\t' wrong-project; do
+  run_menu __unset__ $'3\n3\n1\n'"$confirmation"$'\n\n4\n0\n' "$output"
+  assert_file_lines "$invocations" 'invalid delete confirmation must not launch'
+  [[ -f "$new_project_path/safety-canary" ]] || {
+    echo 'ERROR: Codex accepted inexact project deletion confirmation' >&2
+    exit 1
+  }
+  if grep -Fq 'Deleted project: new-project' "$output"; then
+    echo 'ERROR: Codex reported deletion after invalid confirmation' >&2
+    exit 1
+  fi
+done
+run_menu __unset__ $'3\n3\n1\n' "$output"
+[[ -f "$new_project_path/safety-canary" ]] || {
+  echo 'ERROR: Codex deleted project after EOF during confirmation' >&2
+  exit 1
+}
+# Restore the original fixture layout for the subsequent project-picker tests.
+rm -rf -- "$new_project_path"
+echo 'Codex project deletion exact-name, whitespace and EOF protections: OK'
+
+
 run_menu __unset__ $'3\n1\n2\n4\n0\n' "$output"
 assert_file_lines "$invocations" 'cancelled project selection'
 if (( $(grep -Fxc 'Remote Dev — Projects' "$output") < 2 )); then
@@ -620,7 +754,7 @@ if grep -Fq 'ERROR: no projects are available under' "$output"; then
 fi
 echo 'Action-time project discovery failures block stale-project launches: OK'
 
-run_menu __unset__ $'1\n1\n2\n2\n3\n3\n4\n' "$output" shell
+run_menu __unset__ $'1\n1\n2\n2\n3\n3\n0\n' "$output" shell
 assert_file_lines "$shell_invocations" 'Shell container shell' shell
 assert_file_lines "$github_invocations" 'Shell GitHub CLI setup' \
   '[auth][login][--hostname][github.com][--git-protocol][https][--web]' \
@@ -631,6 +765,13 @@ grep -Fxq 'Remote Dev — Shell' "$output"
 grep -Fxq '1) Open container shell' "$output"
 grep -Fxq '2) Sign in to GitHub CLI' "$output"
 grep -Fxq '3) Run diagnostics' "$output"
-grep -Fxq '4) Exit this tmux session' "$output"
+grep -Fxq '0) Exit this tmux session' "$output"
 
 echo 'Shell menu result pauses: OK'
+
+# Historical 4 Exit remains accepted without appearing on the screen.
+run_menu __unset__ $'4\n' "$output" shell
+assert_file_lines "$shell_invocations" 'Legacy Shell exit 4'
+assert_hardening_count 0
+grep -Fxq '0) Exit this tmux session' "$output"
+echo 'Shell 0 Exit and 4 legacy alias: OK'
