@@ -122,7 +122,9 @@ def validate_edge_critical_scans(workflow: str) -> None:
          "runtime_manifest"),
     ):
         block = named_workflow_step(workflow, name)
-        step_metadata(block)
+        require(step_metadata(block).get("uses", "").split(" #", 1)[0] ==
+                "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+                "Edge critical scanner action not pinned: " + name)
         for key, value in (
             ("image-ref", "${{ steps." + manifest + ".outputs.ref }}"),
             ("scanners", "vuln"),
@@ -305,12 +307,29 @@ def validate_edge_chromium_spdx(workflow: str) -> None:
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "Edge must run an independent SPDX 2.3 validator on both images")
+    for name, manifest, output in (
+        ("Generate exact edge base SPDX SBOM", "base_manifest",
+         "sbom-publish-base.spdx.json"),
+        ("Generate exact edge Remote Dev SPDX SBOM", "runtime_manifest",
+         "sbom-publish-remote-dev.spdx.json"),
+    ):
+        sbom = named_workflow_step(workflow, name)
+        require(step_metadata(sbom).get("uses", "").split(" #", 1)[0] ==
+                "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+                "Edge Trivy SPDX action not pinned: " + name)
+        for key, value in (("image-ref", "${{ steps." + manifest + ".outputs.ref }}"),
+                           ("format", "spdx-json"), ("output", output)):
+            require(active_mapping_value(sbom, "with", key) == value,
+                    "Edge SPDX effective input changed: " + name + "/" + key)
     for ref, key in (("base_manifest", "BASE_MANIFEST_REF"),
                      ("runtime_manifest", "REMOTE_DEV_MANIFEST_REF")):
         require(active_mapping_value(supplement, "env", key) ==
                 "${{ steps." + ref + ".outputs.ref }}",
                 "edge browser SPDX misbound to " + ref)
     upload = named_workflow_step(workflow, "Upload exact publication evidence")
+    require(step_metadata(upload).get("uses", "").split(" #", 1)[0] ==
+            "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+            "Edge publication evidence uploader not pinned")
     require(set(active_upload_paths(upload)) == {
         "sbom-publish-base.spdx.json",
         "sbom-publish-remote-dev.spdx.json",
