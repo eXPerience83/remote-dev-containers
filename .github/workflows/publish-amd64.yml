@@ -87,6 +87,7 @@ jobs:
           echo "mise_amd64_sha256=$MISE_AMD64_SHA256" >> "$GITHUB_OUTPUT"
           echo "mise_arm64_sha256=$MISE_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT"
+          echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"
           echo "node_version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
           echo "npm_version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "uv_version=$UV_VERSION" >> "$GITHUB_OUTPUT"
@@ -113,6 +114,7 @@ jobs:
             MISE_AMD64_SHA256=${{ steps.versions.outputs.mise_amd64_sha256 }}
             MISE_ARM64_SHA256=${{ steps.versions.outputs.mise_arm64_sha256 }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
+            PYTHON_315_VERSION=${{ steps.versions.outputs.python_315_version }}
             NODE_VERSION=${{ steps.versions.outputs.node_version }}
             NPM_VERSION=${{ steps.versions.outputs.npm_version }}
             UV_VERSION=${{ steps.versions.outputs.uv_version }}
@@ -124,16 +126,17 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact stable base candidate for critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
-          format: json
-          output: trivy-publish-base.json
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
-          exit-code: "0"
+      - name: Resolve exact stable base AMD64 manifest
+        id: base_manifest
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 
       - name: Build untagged stable Remote Dev candidate
         id: runtime
@@ -144,7 +147,7 @@ jobs:
           platforms: linux/amd64
           outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+            BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
             CODEX_AMD64_SHA256=${{ steps.versions.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.versions.outputs.codex_arm64_sha256 }}
@@ -159,23 +162,86 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Resolve exact stable Remote Dev AMD64 manifest
+        id: runtime_manifest
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the exact stable publication candidates
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+          PROJECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bash scripts/validate-edge-publication-candidate.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "$BASE_MANIFEST_REF" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" \
+            "$REMOTE_DEV_MANIFEST_REF" \
+            "$GITHUB_SHA" \
+            "$PROJECT_VERSION"
+
+      - name: Generate exact stable base SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
+          format: spdx-json
+          output: sbom-publish-base.spdx.json
+
+      - name: Generate exact stable Remote Dev SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
+          format: spdx-json
+          output: sbom-publish-remote-dev.spdx.json
+          skip-setup-trivy: true
+          cache: false
+
+      - name: Scan exact stable base candidate for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
+          format: json
+          output: trivy-publish-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+          skip-setup-trivy: true
+          cache: false
+
       - name: Scan exact stable Remote Dev candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
           format: json
           output: trivy-publish-remote-dev.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
           exit-code: "0"
+          skip-setup-trivy: true
+          cache: false
 
-      - name: Upload publication vulnerability reports
+      - name: Upload exact stable publication evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: trivy-publication-reports
+          name: stable-publication-reports
           path: |
+            sbom-publish-base.spdx.json
+            sbom-publish-remote-dev.spdx.json
             trivy-publish-base.json
             trivy-publish-remote-dev.json
           if-no-files-found: warn
