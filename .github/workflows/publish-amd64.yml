@@ -208,6 +208,24 @@ jobs:
           skip-setup-trivy: true
           cache: false
 
+      # Trivy omits Chromium Headless Shell when provisioned from a raw ZIP.
+      # Supplement SPDX with image-derived archive/binary/license evidence.
+      # This is provenance only, not a Chromium CVE scan.
+      - name: Record exact Chromium identity and notices in stable SPDX images
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+        run: |
+          set -euo pipefail
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$BASE_MANIFEST_REF" \
+            --spdx sbom-publish-base.spdx.json \
+            --evidence chromium-evidence-publish-base.json
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$REMOTE_DEV_MANIFEST_REF" \
+            --spdx sbom-publish-remote-dev.spdx.json \
+            --evidence chromium-evidence-publish-remote-dev.json
+
       - name: Scan exact stable base candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -242,6 +260,8 @@ jobs:
           path: |
             sbom-publish-base.spdx.json
             sbom-publish-remote-dev.spdx.json
+            chromium-evidence-publish-base.json
+            chromium-evidence-publish-remote-dev.json
             trivy-publish-base.json
             trivy-publish-remote-dev.json
           if-no-files-found: warn
@@ -286,6 +306,20 @@ jobs:
             echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
             exit 1
           fi
+
+          # Check the registry aliases, not only the local promotion metadata.
+          for tag in "$GITHUB_REF_NAME" stable-amd64; do
+            tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"
+            actual_digest="$(
+              docker buildx imagetools inspect "$tag_ref" \
+                --format '{{json .Manifest.Digest}}' | tr -d '"'
+            )"
+            if [[ "$actual_digest" != "$BASE_DIGEST" ]]; then
+              echo "ERROR: $tag_ref resolved to $actual_digest instead of $BASE_DIGEST" >&2
+              exit 1
+            fi
+          done
+
           if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
             echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
             exit 1
