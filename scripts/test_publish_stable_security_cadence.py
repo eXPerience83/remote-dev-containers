@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from publication_workflow_contract import step_metadata, active_upload_paths
+from publication_workflow_contract import step_metadata, active_upload_paths, active_mapping_value
 
 ROOT = Path(__file__).resolve().parents[1]
 STABLE = ROOT / ".github/workflows/publish-amd64.yml"
@@ -94,9 +94,12 @@ def validate(source: str, helper: str) -> None:
             '"--expect-ubuntu=$UBUNTU_VERSION" \\',
             '"exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"',
         ) and
-        'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}' in gate and
-        'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}' in gate and
-        'UBUNTU_VERSION: ${{ steps.versions.outputs.ubuntu_version }}' in gate,
+        active_mapping_value(gate, "env", "BASE_MANIFEST_REF") ==
+            "${{ steps.base_manifest.outputs.ref }}" and
+        active_mapping_value(gate, "env", "REMOTE_DEV_MANIFEST_REF") ==
+            "${{ steps.runtime_manifest.outputs.ref }}" and
+        active_mapping_value(gate, "env", "UBUNTU_VERSION") ==
+            "${{ steps.versions.outputs.ubuntu_version }}",
         "critical gate must execute both exact candidate-bound reports",
     )
     check('echo "python_315_version=$PYTHON_315_VERSION"' in step(source, "Load versions"),
@@ -119,22 +122,21 @@ def validate(source: str, helper: str) -> None:
         ),
         "exact-candidate smoke must really execute with all six expected arguments",
     )
-    for name in (stages[8], stages[9]):
+    for name, ref in ((stages[8], "base_manifest"), (stages[9], "runtime_manifest")):
         scan = step(source, name)
-        for required in ("scanners: vuln", "vuln-type: os,library",
-                         'exit-code: "0"'):
-            check(required in scan, "stable Trivy scan binding changed: " + name)
-        # Exact unique scalar in the actual owning action step. String containment
-        # accepts "severity: HIGH # severity: CRITICAL" as a false PASS.
-        severity = [line.strip() for line in scan.splitlines()
-                    if re.match(r"^\s*severity\s*:", line)]
-        check(severity == ["severity: CRITICAL"],
-              "stable Trivy effective severity must be CRITICAL: " + name)
-    for name, ref in zip((stages[5], stages[6], stages[8], stages[9]),
-                         ("base_manifest", "runtime_manifest",
-                          "base_manifest", "runtime_manifest")):
-        check("image-ref: ${{ steps." + ref + ".outputs.ref }}" in step(source, name),
-              "non-exact manifest scanned: " + name)
+        for key, value in (
+            ("scanners", "vuln"),
+            ("vuln-type", "os,library"),
+            ("severity", "CRITICAL"),
+            ("exit-code", '"0"'),
+            ("image-ref", "${{ steps." + ref + ".outputs.ref }}"),
+        ):
+            check(active_mapping_value(scan, "with", key) == value,
+                  "stable Trivy effective input changed: " + name + "/" + key)
+    for name, ref in zip((stages[5], stages[6]), ("base_manifest", "runtime_manifest")):
+        check(active_mapping_value(step(source, name), "with", "image-ref") ==
+              "${{ steps." + ref + ".outputs.ref }}",
+              "non-exact manifest scanned for SPDX: " + name)
     chromium = step(source, "Record exact Chromium identity and notices in stable SPDX images")
     check(runnable_lines(chromium, "Chromium SPDX") == (
         "set -euo pipefail",
@@ -153,7 +155,9 @@ def validate(source: str, helper: str) -> None:
         ("runtime_manifest", "sbom-publish-remote-dev.spdx.json",
          "chromium-evidence-publish-remote-dev.json"),
     ):
-        check("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in chromium and
+        check(active_mapping_value(chromium, "env", "BASE_MANIFEST_REF" if ref == "base_manifest"
+                                   else "REMOTE_DEV_MANIFEST_REF") ==
+              "${{ steps." + ref + ".outputs.ref }}" and
               "--spdx " + sbom in chromium and "--evidence " + evidence in chromium and
               ('--image "$BASE_MANIFEST_REF"' if ref == "base_manifest" else
                '--image "$REMOTE_DEV_MANIFEST_REF"') in chromium,
@@ -219,9 +223,11 @@ def validate(source: str, helper: str) -> None:
             '--runtime "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_MANIFEST_INDEX}" \\',
             "--journal stable-promotion-preflight.json",
         ) and
-        "id: promotion_guard" in guard and
-        'BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}' in guard and
-        'REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}' in guard,
+        step_metadata(guard).get("id") == "promotion_guard" and
+        active_mapping_value(guard, "env", "BASE_MANIFEST_INDEX") ==
+            "${{ steps.base.outputs.digest }}" and
+        active_mapping_value(guard, "env", "REMOTE_DEV_MANIFEST_INDEX") ==
+            "${{ steps.runtime.outputs.digest }}",
         "stable registry downgrade/overwrite guard must execute on exact indexes",
     )
     promotion = step(source, stages[-1])
