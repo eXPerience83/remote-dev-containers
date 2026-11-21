@@ -12,6 +12,7 @@ import argparse
 import importlib.machinery
 import importlib.util
 import json
+from http.client import HTTPException
 import math
 import os
 from pathlib import Path
@@ -20,7 +21,7 @@ import stat
 import sys
 import time
 from urllib.parse import urlparse
-from urllib.request import build_opener, HTTPRedirectHandler, Request
+from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler, Request
 
 ENDPOINT = "https://mcp.context7.com/mcp"
 PING = "https://mcp.context7.com/ping"
@@ -337,7 +338,8 @@ def test(directory: Path) -> int:
     deadline = time.monotonic() + probe.TOTAL_TEST_SECONDS
     try:
         with probe._hard_read_deadline(deadline - time.monotonic()):
-            with build_opener(NoRedirect()).open(Request(PING), timeout=10) as response:
+            # Like /mcp, the HTTP preflight must ignore proxy env variables.
+            with build_opener(ProxyHandler({}), NoRedirect()).open(Request(PING), timeout=10) as response:
                 url = urlparse(response.geturl())
                 if (url.scheme, url.hostname, url.path) != ("https", "mcp.context7.com", "/ping"):
                     raise MaintenanceError("unexpected ping target")
@@ -346,7 +348,8 @@ def test(directory: Path) -> int:
                     raise MaintenanceError("ping oversized")
         if json.loads(body) != {"status": "ok", "message": "pong"}:
             raise MaintenanceError("unexpected ping response")
-    except (OSError, ValueError, MaintenanceError, probe.ProbeError):
+    except (OSError, HTTPException, ValueError, RecursionError,
+            MaintenanceError, probe.ProbeError):
         print("Context7 (Antigravity): hosted endpoint test failed")
         return 3
     print("Antigravity local MCP registration: PASS")
