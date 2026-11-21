@@ -397,6 +397,54 @@ class ProbeTests(TestCase):
         opener.open = with_error_example
         self.assertEqual(len(probe.probe(opener=opener)), 3)
 
+    def test_astra_documentation_counterexamples_and_unverified_results(self):
+        # Reproduced on the previous HEAD: a failed documentation retrieval
+        # with an unrelated code fence was PASS, genuine explanatory prose
+        # about Requests timeout was a false negative.
+        failed = (
+            "Could not retrieve Requests timeout documentation.\n"
+            "\`\`\`text\n503 Service Unavailable\n\`\`\`"
+        )
+        valid = (
+            "For Python Requests, set a timeout to bound how long the "
+            "client waits for data."
+        )
+        ambiguous = "Requests timeout documentation may be available later."
+        for text, expected in ((failed, False), (valid, True),
+                               (ambiguous, False)):
+            with self.subTest(content=text):
+                self.assertIs(
+                    probe._has_public_content(
+                        {"content": [{"type": "text", "text": text}],
+                         "isError": False},
+                        method="query-docs",
+                    ),
+                    expected,
+                )
+        self.assertFalse(probe._has_public_content(
+            {"isError": True, "content": [{"type": "text", "text": valid}]},
+            method="query-docs",
+        ))
+
+        # Verify the complete synthetic tool-call path rejects an ambiguous
+        # result as UNVERIFIED, never as an authenticated service failure.
+        opener = FakeOpener()
+        regular_open = opener.open
+        def ambiguous_query(request, *, timeout):
+            response = regular_open(request, timeout=timeout)
+            body = json.loads(request.data)
+            if (body["method"] == "tools/call"
+                    and body["params"]["name"] == "query-docs"):
+                result = {"jsonrpc": "2.0", "id": body["id"],
+                          "result": {"isError": False,
+                                     "content": [{"type": "text",
+                                                  "text": ambiguous}]}}
+                return FakeResponse(result, session=opener.session)
+            return response
+        opener.open = ambiguous_query
+        with self.assertRaisesRegex(probe.ProbeError, "UNVERIFIED"):
+            probe.probe(opener=opener)
+
     def test_explicit_failure_status_with_positive_markers_is_not_pass(self):
         content = (
             "Rate limit exceeded; upgrade your plan\n"
