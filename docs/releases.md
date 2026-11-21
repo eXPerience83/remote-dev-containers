@@ -241,23 +241,28 @@ Do not rely on a mutable tag or the human-readable edge date when exact reproduc
 
 ## Stable-release checklist
 
-Before creating the first or any later stable version tag, verify on one exact `main` source revision/digest that:
+Before creating the first or any later **Git stable-version tag**, verify on one exact reviewed `main` source revision and its accepted Edge digest that:
 
 1. Repository validation and the complete AMD64 build/smoke suite pass.
-2. Base and final Remote Dev images pass the publication vulnerability gate; fixable `CRITICAL` findings block promotion.
-3. Notices and SBOM generation pass and the retained reports match the image being promoted.
-4. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
-5. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
-6. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
-7. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
-8. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
-9. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
-10. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
-11. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
-12. Optional external integrations included in the support claim retain their documented privacy/credential boundaries.
-13. `CHANGELOG.md` has a dated stable section derived from the reviewed `Unreleased` content.
-14. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
-15. #31 has no unresolved issue that contradicts the stable support claim actually being made.
+2. The intended administrator-owned TrueNAS root exists and the same-revision bootstrap/preflight succeed.
+3. The reference TrueNAS Host Path layout satisfies the Generic/POSIX private-state ACL contract or an explicitly documented equivalent migration decision; run the host ACL audit where applicable.
+4. Launcher and enabled agent services use the intended common image digest/reference while keeping disjoint writable/private mounts.
+5. The password-free launcher origin/CSP/navigation behavior is verified; it has no agent state/password or container-engine socket and is bound only to the intended trusted/private network. A future central secure-entry design is not part of the current stable claim unless #181 explicitly changes that boundary first.
+6. Codex and enabled Antigravity endpoints authenticate through their separate configuration entries; current support does not require those password values to differ or meet a project-imposed minimum length/composition policy.
+7. Workspace/project, agent state, GitHub/Git/SSH state and intended runtime state persist across stop/start and recreation.
+8. Codex device login, session Resume and the supported autonomous/guarded launch paths work on the target deployment.
+9. If Antigravity is included in the support claim, its explicit vendor runtime path, current admission/integrity state and documented experimental support restrictions remain valid; #53 has no unresolved out-of-cycle blocker for the exact claim.
+10. Optional external integrations included in the support claim retain their documented privacy/credential boundaries.
+11. `CHANGELOG.md` has a dated stable section derived from the reviewed `Unreleased` content.
+12. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
+13. #31 has no unresolved issue that contradicts the stable support claim actually being made.
+
+**After creating the reviewed Git tag, before writing any GHCR stable/version aliases** (automated fail-closed publisher gates):
+
+1. Build the separate stable base and runtime candidates and bind the index and exact runnable AMD64 manifest digests to the tagged source SHA, channel and version; run startup, authentication and isolation smoke tests on that candidate.
+2. Verify notices and both SPDX documents, including supplemental Chromium package/file provenance, and validate both candidate-bound Trivy image reports with Ubuntu and language-package scan coverage. Reject fixable `CRITICAL` findings.
+3. Run the immutable SemVer tag/monotonic-stable promotion guard, then promote and read back all base/runtime registry aliases. Verify that the promoted OCI index contains the exact tested AMD64 child. Registry updates are non-atomic: a failed job can have moved some aliases, requiring human reconciliation by immutable digest.
+4. Test the resulting stable image on TrueNAS under the operator's acceptance plan before declaring the release complete.
 
 Optional/future #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 work is not automatically a stable blocker unless #31 or the corresponding issue identifies a concrete dependency for the release claim.
 
