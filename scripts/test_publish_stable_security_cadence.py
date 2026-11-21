@@ -101,6 +101,8 @@ def validate(source: str, helper: str) -> None:
           'io.github.experience83.remote-dev.channel "$expected_channel"' in helper and
           'elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)' in helper,
           "candidate smoke helper fails to bind stable channel/version")
+    check('"$runtime_ref" "$expected_version" "$expected_revision"' in helper,
+          "runtime smoke must compare embedded identity to independent expected tag and SHA")
     guard = step(source, "Guard stable promotion against overwrite or downgrade")
     check("run: |" in guard and "python3 scripts/guard-stable-promotion.py" in guard and
           "--journal stable-promotion-preflight.json" in guard and
@@ -230,6 +232,9 @@ def main() -> None:
         ("no stable base tag read-back", wf.replace(
             'for tag in "$GITHUB_REF_NAME" stable-amd64; do',
             'for tag in "disabled-base"; do', 1), helper),
+        ("self-comparing embedded identity", wf, helper.replace(
+            '"$runtime_ref" "$expected_version" "$expected_revision"',
+            '"$runtime_ref"', 1)),
         ("channel not checked", wf, helper.replace(
             'io.github.experience83.remote-dev.channel "$expected_channel"',
             "io.github.experience83.remote-dev.channel edge", 1)),
