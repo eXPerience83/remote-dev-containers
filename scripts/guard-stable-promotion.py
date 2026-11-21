@@ -33,23 +33,26 @@ def read_tag(image: str, tag: str) -> str | None:
     result = run("docker", "buildx", "imagetools", "inspect", ref,
                  "--format", "{{json .Manifest.Digest}}")
     if result.returncode != 0:
-        message = (result.stderr + result.stdout).lower()
-        # Auth/token errors can themselves contain "404 Not Found"; this is
-        # never proof that the requested version tag does not exist.
-        auth_or_transport = (
-            "authorize", "authorization", "authenticat", "anonymous token",
-            "token", "unauthorized",
-            "forbidden", "permission", "denied", "credential", "401", "403",
-            "connection", "network", "dns", "timeout", "tls", "rate limit",
+        # A substring is not proof of tag absence: gateways, auth servers
+        # and registries may mention "manifest unknown" in a larger failure.
+        # Accept ONLY one unambiguous, whole-line missing-manifest response.
+        # Everything else (including 503 + manifest unknown) fails closed.
+        message = (result.stderr + result.stdout).strip()
+        missing = (
+            "manifest unknown",
+            "manifest not found",
+            ref + ": not found",
+            ref + ": manifest unknown",
+            ref + ": manifest not found",
         )
-        if not any(term in message for term in auth_or_transport):
-            # Only explicit manifest absence or an exact ref's not-found
-            # response may permit the first publication of a version.
-            if ("manifest unknown" in message or "manifest not found" in message or
-                ref.lower() + ": not found" in message):
-                return None
-        raise ValueError("cannot inspect existing GHCR tag " + ref + ": " +
-                         result.stderr[-300:])
+        normalized = re.sub(r"^(?:ERROR:\\s*)", "", message, flags=re.I).strip()
+        if any(normalized.lower() == item.lower() for item in missing):
+            return None
+        # Never print raw registry stderr: token, account and credential
+        # context can be included by an upstream docker helper.
+        raise ValueError("cannot inspect existing GHCR tag " + ref +
+                         " (exit " + str(result.returncode) +
+                         "); absence not established")
     try:
         value = json.loads(result.stdout.strip())
     except json.JSONDecodeError as exc:
