@@ -112,6 +112,58 @@ def named_workflow_step(workflow: str, name: str) -> str:
     return workflow[start:] if end == -1 else workflow[start:end]
 
 
+def validate_exact_edge_trivy_gate(workflow: str) -> None:
+    """Fail when the Edge gate is skipped, commented out or bound to wrong images."""
+    gate = named_workflow_step(workflow, "Enforce no fixable critical vulnerabilities")
+    require("        if:" not in gate and "        continue-on-error:" not in gate,
+            "Edge critical gate must never be conditional or ignored")
+    marker = "\n        run: |\n"
+    require(gate.count(marker) == 1, "Edge critical gate has no unique executable run")
+    actual = tuple(line.strip() for line in gate.split(marker, 1)[1].splitlines()
+                   if line.strip() and not line.lstrip().startswith("#"))
+    expected = (
+        "set -euo pipefail",
+        'bash scripts/enforce-trivy-gate.sh \\',
+        '"--expect-image=$BASE_MANIFEST_REF" \\',
+        '"--expect-ubuntu=$UBUNTU_VERSION" \\',
+        '"exact edge base publication candidate:trivy-publish-base.json" \\',
+        '"--expect-image=$REMOTE_DEV_MANIFEST_REF" \\',
+        '"--expect-ubuntu=$UBUNTU_VERSION" \\',
+        '"exact edge Remote Dev publication candidate:trivy-publish-remote-dev.json"',
+    )
+    require(actual == expected, "Edge Trivy gate is not an executable candidate-bound command")
+    for line in (
+        'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}',
+        'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}',
+        'UBUNTU_VERSION: ${{ steps.metadata.outputs.ubuntu_version }}',
+    ):
+        require(line in gate, "Edge critical gate has the wrong source binding: " + line)
+
+
+def test_exact_edge_trivy_gate(workflow: str) -> None:
+    validate_exact_edge_trivy_gate(workflow)
+    mutations = (
+        ("comment gate, keep matching text", workflow.replace(
+            '          bash scripts/enforce-trivy-gate.sh \\',
+            '          # bash scripts/enforce-trivy-gate.sh \\', 1)),
+        ("skip gate", workflow.replace(
+            '      - name: Enforce no fixable critical vulnerabilities\n',
+            '      - name: Enforce no fixable critical vulnerabilities\n        if: false\n', 1)),
+        ("wrong base manifest", workflow.replace(
+            'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}',
+            'BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}', 1)),
+        ("ignore gate failure", workflow.replace(
+            '      - name: Enforce no fixable critical vulnerabilities\n',
+            '      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n', 1)),
+    )
+    for label, candidate in mutations:
+        try:
+            validate_exact_edge_trivy_gate(candidate)
+        except AssertionError:
+            continue
+        raise AssertionError("Edge critical gate false PASS: " + label)
+
+
 def validate_python_315_publisher_wiring(workflow: str) -> None:
     """Require the reviewed Python 3.15 pin in the owning metadata and build fields."""
     metadata = named_workflow_step(workflow, "Resolve image metadata")
@@ -247,6 +299,7 @@ def main() -> None:
     )
     test_python_315_publisher_wiring(workflow)
     test_trivy_db_cache_reuse(workflow)
+    test_exact_edge_trivy_gate(workflow)
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
