@@ -283,6 +283,8 @@ def assert_full_nested_menu_contract() -> None:
         raise AssertionError("project deletion lost its exact-name confirmation")
     if "remote_dev_delete_project" not in function("delete_project_action"):
         raise AssertionError("project deletion lost its ownership/boundary validation")
+    if 'IFS= read -r -p "> " confirmation' not in function("delete_project_action"):
+        raise AssertionError("project deletion must preserve literal spaces/tabs in the confirmation")
     if "0|4)" not in projects:
         raise AssertionError("Projects lost historic 4 Back alias")
 
@@ -366,15 +368,17 @@ def assert_full_nested_menu_contract() -> None:
             raise AssertionError(f"{provider} bypassed the shared consent prompt")
     if "reinstall --menu-safe" not in function("show_context7_menu"):
         raise AssertionError("Codex manager repair changed")
-    if 'run_confirmed_context7_change REINSTALL' not in function("show_antigravity_context7_menu"):
-        raise AssertionError("Antigravity repair bypasses scoped confirmation")
+    if 'run_confirmed_context7_change REINSTALL "selective repair" "$manager" reinstall --expect-repairable' not in function("show_antigravity_context7_menu"):
+        raise AssertionError("Antigravity repair must require locked drift-state precondition")
     if 'reinstall --yes --expect-absent' not in function("show_antigravity_context7_menu"):
         raise AssertionError("Antigravity initial install must require locked absent state")
     backend = (SOURCE.parent / "remote-dev-context7-antigravity.py").read_text(encoding="utf-8")
     for marker in (
         '"--expect-absent"',
+        '"--expect-repairable"',
         'if require_absent and state != "absent":',
-        'return (reinstall(target, require_absent=args.expect_absent)',
+        'if require_repairable and state != "drift":',
+        'require_repairable=args.expect_repairable',
     ):
         if marker not in backend:
             raise AssertionError(f"Antigravity initial consent state guard lost: {marker}")
