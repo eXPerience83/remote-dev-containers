@@ -446,8 +446,10 @@ class ProbeTests(TestCase):
             return response
 
         opener.open = inject_failure_heading
-        with self.assertRaises(probe.UnverifiedDocumentation):
+        with self.assertRaisesRegex(probe.ProbeError, "explicit service failure") as error:
             probe.probe(opener=opener)
+        self.assertNotIsInstance(error.exception, probe.UnverifiedDocumentation)
+        self.assertNotIn("Rate limit exceeded", str(error.exception))
 
     def test_astra_documentation_counterexamples_and_unverified_results(self):
         # Reproduced on the previous HEAD: a failed documentation retrieval
