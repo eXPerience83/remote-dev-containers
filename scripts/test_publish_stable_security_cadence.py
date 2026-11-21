@@ -159,26 +159,41 @@ def validate(source: str, helper: str) -> None:
 
 
 def test_real_trivy_report_gate() -> None:
-    """Run the real gate and reject cross-image, missing-coverage and malformed scans."""
+    """Exercise the real gate with complete and truncated package inventories."""
     base = "ghcr.io/experience83/remote-dev-base@sha256:" + "a" * 64
     runtime = "ghcr.io/experience83/remote-dev@sha256:" + "b" * 64
-    os_result = {"Target": "ubuntu:26.04", "Class": "os-pkgs", "Type": "ubuntu",
-                 "Vulnerabilities": []}
-    lang_result = {"Target": "node_modules", "Class": "lang-pkgs", "Type": "npm",
-                   "Vulnerabilities": []}
-    clean = {
-        "SchemaVersion": 2, "ArtifactName": base, "ArtifactType": "container_image",
-        "Metadata": {"OS": {"Family": "ubuntu", "Name": "26.04"},
-                     "RepoDigests": [base]},
-        "Results": [os_result, lang_result],
-    }
-    vulnerability = {"Severity": "CRITICAL", "FixedVersion": "2.0",
-                     "PkgName": "sample", "VulnerabilityID": "CVE-SYNTHETIC-1",
-                     "InstalledVersion": "1.0"}
-    critical = {**clean, "Results": [
-        {**os_result, "Vulnerabilities": [vulnerability]}, lang_result]}
+
+    def entry(target: str, kind: str, klass: str, name: str) -> dict:
+        return {"Target": target, "Class": klass, "Type": kind,
+                "Packages": [{"Name": name}], "Vulnerabilities": []}
+
+    os_result = entry("ubuntu:26.04", "ubuntu", "os-pkgs", "coreutils")
+    node_result = entry("Node.js", "node-pkg", "lang-pkgs", "npm")
+    python_result = entry("Python", "python-pkg", "lang-pkgs", "pip")
+    binaries = [
+        entry("opt/remote-dev/mise/installs/" + tool + "/1/" + tool,
+              kind, "lang-pkgs", tool)
+        for kind, tool in (("gobinary", "actionlint"), ("gobinary", "shfmt"),
+                           ("rustbinary", "uv"), ("rustbinary", "uvx"),
+                           ("gobinary", "yq"), ("gobinary", "pebble"),
+                           ("gobinary", "gh"))
+    ]
+    complete = [os_result, node_result, python_result, *binaries]
+    clean = {"SchemaVersion": 2, "ArtifactName": base,
+             "ArtifactType": "container_image",
+             "Metadata": {"OS": {"Family": "ubuntu", "Name": "26.04"},
+                          "RepoDigests": [base]},
+             "Results": complete}
+    vuln = {"Severity": "CRITICAL", "FixedVersion": "2.0",
+            "PkgName": "sample", "VulnerabilityID": "CVE-SYNTHETIC-1",
+            "InstalledVersion": "1.0", "Status": "fixed"}
+    critical = {**clean, "Results": [{**os_result, "Vulnerabilities": [vuln]},
+                                      *complete[1:]]}
     no_fix = json.loads(json.dumps(critical))
-    no_fix["Results"][0]["Vulnerabilities"][0]["FixedVersion"] = ""
+    no_fix["Results"][0]["Vulnerabilities"][0].update(
+        {"FixedVersion": "", "Status": "affected"})
+    inconsistent = json.loads(json.dumps(critical))
+    inconsistent["Results"][0]["Vulnerabilities"][0]["FixedVersion"] = "   "
     cases = (
         ("empty placeholder", {}, False, base),
         ("wrong artifact type", {**clean, "ArtifactType": "filesystem"}, False, base),
@@ -187,26 +202,34 @@ def test_real_trivy_report_gate() -> None:
                                                       "RepoDigests": [runtime]}}, False, base),
         ("empty Results", {**clean, "Results": []}, False, base),
         ("missing Results", {k: v for k, v in clean.items() if k != "Results"}, False, base),
-        ("missing OS coverage", {**clean, "Results": [lang_result]}, False, base),
+        ("missing OS coverage", {**clean, "Results": complete[1:]}, False, base),
         ("missing language coverage", {**clean, "Results": [os_result]}, False, base),
-        ("empty scan result", {**clean, "Results": [{}, lang_result]}, False, base),
+        ("truncated real-like scan (Ubuntu Node)", {**clean,
+             "Results": [os_result, node_result]}, False, base),
+        ("missing package evidence", {**clean, "Results": [
+            {k: v for k, v in os_result.items() if k != "Packages"},
+            *complete[1:]]}, False, base),
+        ("missing Go tool", {**clean, "Results": [
+            x for x in complete if not x["Target"].endswith("/gh")]}, False, base),
+        ("missing Rust inventory", {**clean, "Results": [
+            x for x in complete if x["Type"] != "rustbinary"]}, False, base),
+        ("empty scan result", {**clean, "Results": [{}, *complete[1:]]}, False, base),
         ("bad severity", {**clean, "Results": [
-            {**os_result, "Vulnerabilities": [{**vulnerability, "Severity": ""}]},
-            lang_result]}, False, base),
+            {**os_result, "Vulnerabilities": [{**vuln, "Severity": ""}]},
+            *complete[1:]]}, False, base),
         ("untyped vulnerability", {**clean, "Results": [
             {**os_result, "Vulnerabilities": [{"FixedVersion": "2.0"}]},
-            lang_result]}, False, base),
-        ("invalid vulnerability array", {**clean, "Results": [
-            {**os_result, "Vulnerabilities": {}}, lang_result]}, False, base),
+            *complete[1:]]}, False, base),
         ("wrong OS", {**clean, "Metadata": {"OS": {"Family": "debian", "Name": "13"},
                                             "RepoDigests": [base]}}, False, base),
-        ("clean report", clean, True, base),
+        ("clean report with empty vulnerability lists", clean, True, base),
         ("fixable critical", critical, False, base),
-        ("critical without known fix", no_fix, True, base),
+        ("contradictory fixed status without fix", inconsistent, False, base),
+        ("critical affected without fix", no_fix, True, base),
     )
     with tempfile.TemporaryDirectory(prefix="remote-dev-trivy-gate-") as directory:
         for label, report, allowed, expected in cases:
-            path = Path(directory) / (label.replace(" ", "-") + ".json")
+            path = Path(directory) / (label.replace(" ", "-").replace("/", "-") + ".json")
             path.write_text(json.dumps(report), encoding="utf-8")
             cmd = ["bash", str(GATE), "--expect-image=" + expected,
                    "--expect-ubuntu=26.04", "synthetic:" + str(path)]
