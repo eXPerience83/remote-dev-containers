@@ -27,10 +27,12 @@ def evidence(arch: str = "amd64") -> dict:
         "arch": arch, "manifest": copy.deepcopy(PINNED),
         "executable": executable,
         "executable_sha256": "a" * 64,
+        "executable_sha1": "d" * 40,
         "license_file": executable.rsplit("/", 1)[0] + "/LICENSE.headless_shell",
         "license_sha256": "b" * 64,
         "installed_notice": mod.NOTICE,
         "notice_sha256": "b" * 64,
+        "notice_sha1": "e" * 40,
     }
 
 
@@ -55,6 +57,14 @@ class ChromiumSbomContract(unittest.TestCase):
                 self.assertEqual(len(result["files"]), 2)
                 self.assertEqual({f["SPDXID"] for f in result["files"]},
                                  {mod.EXEC_ID, mod.LICENSE_ID})
+                # SPDX 2.3 §8.4 requires exactly one SHA1 per file.
+                for file_record in result["files"]:
+                    digests = [x for x in file_record["checksums"]
+                               if x["algorithm"] == "SHA1"]
+                    self.assertEqual(len(digests), 1)
+                    self.assertEqual(len(digests[0]["checksumValue"]), 40)
+                    self.assertEqual({x["algorithm"] for x in file_record["checksums"]},
+                                     {"SHA1", "SHA256"})
                 # SPDX 2.3 forbids CONTAINS when filesAnalyzed=False.
                 # Selected digest evidence is independently document-described,
                 # not asserted to be a complete Chromium package file listing.
@@ -87,6 +97,16 @@ class ChromiumSbomContract(unittest.TestCase):
         item = evidence()
         item["installed_notice"] = "/etc/passwd"
         with self.assertRaisesRegex(ValueError, "paths differ"):
+            mod.add_package(sbom(), item, PINNED)
+
+    def test_missing_or_invalid_file_sha1_fails(self):
+        item = evidence()
+        item.pop("executable_sha1")
+        with self.assertRaisesRegex(ValueError, "SHA-1"):
+            mod.add_package(sbom(), item, PINNED)
+        item = evidence()
+        item["notice_sha1"] = "bad"
+        with self.assertRaisesRegex(ValueError, "SHA-1"):
             mod.add_package(sbom(), item, PINNED)
 
     def test_idempotence_requires_explicit_review(self):
