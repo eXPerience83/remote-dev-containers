@@ -257,7 +257,7 @@ Before creating the first or any later **Git stable-version tag**, verify on one
 12. Repository/release evidence contains no credentials, private infrastructure paths or sensitive account/session data.
 13. #31 has no unresolved issue that contradicts the stable support claim actually being made.
 
-**After creating the reviewed Git tag, before writing any GHCR stable/version aliases** (automated fail-closed publisher gates):
+**After creating the reviewed Git tag: stable-candidate gates, promotion and post-publication acceptance** (in that order):
 
 1. Build the separate stable base and runtime candidates and bind the index and exact runnable AMD64 manifest digests to the tagged source SHA, channel and version; run startup, authentication and isolation smoke tests on that candidate.
 2. Verify notices and both SPDX documents, including supplemental Chromium package/file provenance, and validate both candidate-bound Trivy image reports with Ubuntu and language-package scan coverage. Reject fixable `CRITICAL` findings.
