@@ -98,8 +98,14 @@ def validate(source: str, helper: str) -> None:
     for name in (stages[8], stages[9]):
         scan = step(source, name)
         for required in ("scanners: vuln", "vuln-type: os,library",
-                         "severity: CRITICAL", 'exit-code: "0"'):
-            check(required in scan, "stable Trivy must scan fixable CRITICAL: " + name)
+                         'exit-code: "0"'):
+            check(required in scan, "stable Trivy scan binding changed: " + name)
+        # Exact unique scalar in the actual owning action step. String containment
+        # accepts "severity: HIGH # severity: CRITICAL" as a false PASS.
+        severity = [line.strip() for line in scan.splitlines()
+                    if re.match(r"^\s*severity\s*:", line)]
+        check(severity == ["severity: CRITICAL"],
+              "stable Trivy effective severity must be CRITICAL: " + name)
     for name, ref in zip((stages[5], stages[6], stages[8], stages[9]),
                          ("base_manifest", "runtime_manifest",
                           "base_manifest", "runtime_manifest")):
@@ -220,20 +226,34 @@ def test_real_trivy_report_gate() -> None:
     base = "ghcr.io/experience83/remote-dev-base@sha256:" + "a" * 64
     runtime = "ghcr.io/experience83/remote-dev@sha256:" + "b" * 64
 
+    binary_root_names = {
+        "actionlint": "github.com/rhysd/actionlint",
+        "shfmt": "mvdan.cc/sh/v3",
+        "uv": "uv", "uvx": "uv",
+        "yq": "github.com/mikefarah/yq/v4",
+        "pebble": "github.com/canonical/pebble",
+        "gh": "github.com/cli/cli/v2",
+    }
     def entry(target: str, kind: str, klass: str, name: str) -> dict:
         return {"Target": target, "Class": klass, "Type": kind,
-                "Packages": [{"Name": name}], "Vulnerabilities": []}
+                "Packages": [{"Name": binary_root_names.get(name, name),
+                              "Version": "1.0", "Relationship": "root"}],
+                "Vulnerabilities": []}
 
-    os_result = entry("ubuntu:26.04", "ubuntu", "os-pkgs", "coreutils")
+    os_result = entry(base + " (ubuntu 26.04)", "ubuntu", "os-pkgs", "coreutils")
     node_result = entry("Node.js", "node-pkg", "lang-pkgs", "npm")
     python_result = entry("Python", "python-pkg", "lang-pkgs", "pip")
     binaries = [
-        entry("opt/remote-dev/mise/installs/" + tool + "/1/" + tool,
-              kind, "lang-pkgs", tool)
-        for kind, tool in (("gobinary", "actionlint"), ("gobinary", "shfmt"),
-                           ("rustbinary", "uv"), ("rustbinary", "uvx"),
-                           ("gobinary", "yq"), ("gobinary", "pebble"),
-                           ("gobinary", "gh"))
+        entry(target, kind, "lang-pkgs", tool)
+        for kind, tool, target in (
+            ("gobinary", "actionlint", "opt/remote-dev/mise/installs/actionlint/1/actionlint"),
+            ("gobinary", "shfmt", "opt/remote-dev/mise/installs/shfmt/1/shfmt"),
+            ("rustbinary", "uv", "opt/remote-dev/mise/installs/uv/1/uv"),
+            ("rustbinary", "uvx", "opt/remote-dev/mise/installs/uv/1/uvx"),
+            ("gobinary", "yq", "opt/remote-dev/mise/installs/yq/1/yq"),
+            ("gobinary", "pebble", "usr/bin/pebble"),
+            ("gobinary", "gh", "usr/local/bin/gh"),
+        )
     ]
     complete = [os_result, node_result, python_result, *binaries]
     clean = {"SchemaVersion": 2, "ArtifactName": base,
@@ -270,6 +290,23 @@ def test_real_trivy_report_gate() -> None:
             x for x in complete if not x["Target"].endswith("/gh")]}, False, base),
         ("missing Rust inventory", {**clean, "Results": [
             x for x in complete if x["Type"] != "rustbinary"]}, False, base),
+        ("HIGH-only truncated severity", {**clean, "Results": [
+            {**os_result, "Vulnerabilities": [{**vuln, "Severity": "HIGH"}]},
+            *complete[1:]]}, False, base),
+        ("wrong Ubuntu target", {**clean, "Results": [
+            {**os_result, "Target": "alien:v20 (ubuntu 22.04)"},
+            *complete[1:]]}, False, base),
+        ("missing package version", {**clean, "Results": [
+            {**os_result, "Packages": [{"Name": "coreutils"}]},
+            *complete[1:]]}, False, base),
+        ("gh inventoried as Rust", {**clean, "Results": [
+            *complete[:-1], {**complete[-1], "Type": "rustbinary",
+                              "Target": "tmp/gh",
+                              "Packages": [{"Name": "uv", "Version": "1.0",
+                                            "Relationship": "root"}]}]}, False, base),
+        ("gh wrong root library", {**clean, "Results": [
+            *complete[:-1], {**complete[-1], "Packages": [
+                {"Name": "uv", "Version": "1.0", "Relationship": "root"}]}]}, False, base),
         ("empty scan result", {**clean, "Results": [{}, *complete[1:]]}, False, base),
         ("bad severity", {**clean, "Results": [
             {**os_result, "Vulnerabilities": [{**vuln, "Severity": ""}]},
@@ -311,6 +348,10 @@ def main() -> None:
     helper = HELPER.read_text(encoding="utf-8")
     validate(wf, helper)
     test_real_trivy_report_gate()
+    stages = [
+        "Scan exact stable base candidate for critical vulnerabilities",
+        "Scan exact stable Remote Dev candidate for critical vulnerabilities",
+    ]
     mutations = (
         ("omit smoke", wf.replace("      - name: Smoke-test the exact stable publication candidates\n",
                                    "      - name: Skip smoke\n", 1), helper),
@@ -392,9 +433,24 @@ def main() -> None:
         ("ignore gate error", wf.replace(
             "      - name: Enforce no fixable critical vulnerabilities\n",
             "      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n", 1), helper),
-        ("critical scan downgraded to HIGH", wf.replace(
-            '          severity: CRITICAL',
-            '          severity: HIGH', 1), helper),
+        ("critical base scan downgraded to HIGH", wf.replace(
+            step(wf, stages[0]),
+            step(wf, stages[0]).replace('severity: CRITICAL', 'severity: HIGH', 1),
+            1), helper),
+        ("critical runtime scan downgraded to HIGH", wf.replace(
+            step(wf, stages[1]),
+            step(wf, stages[1]).replace('severity: CRITICAL', 'severity: HIGH', 1),
+            1), helper),
+        ("critical base with misleading comment", wf.replace(
+            step(wf, stages[0]),
+            step(wf, stages[0]).replace('severity: CRITICAL',
+                                        'severity: HIGH # severity: CRITICAL', 1),
+            1), helper),
+        ("critical runtime with misleading comment", wf.replace(
+            step(wf, stages[1]),
+            step(wf, stages[1]).replace('severity: CRITICAL',
+                                        'severity: HIGH # severity: CRITICAL', 1),
+            1), helper),
         ("missing guard", wf.replace(
             "      - name: Guard stable promotion against overwrite or downgrade\n",
             "      - name: Skip stable promotion guard\n", 1), helper),
