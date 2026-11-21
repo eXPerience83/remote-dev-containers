@@ -194,6 +194,17 @@ manifiesto AMD64 runtime probado y escaneado. El digest del índice no es
 el del manifiesto hijo, ni debe coincidir con el de Edge.
 La aceptación previa de Edge no acredita un despliegue estable en TrueNAS.
 
+**Validador SPDX reproducible:** Build, Edge y Stable ejecutan `pyspdxtools`
+sobre **ambos documentos finales**, con las 12 ruedas (dependencias
+transitivas incluidas) fijadas por versión y SHA-256 en
+`scripts/spdx-validator-requirements.lock.txt`. `pip --require-hashes`
+rechaza cambios del contenido y no permite paquetes fuente. Este lock se
+obtuvo en CI con Python 3.14 AMD64: un cambio de ABI del runner debe **fallar
+de forma segura** y requerir revisión explícita de nuevas ruedas/hashes,
+no eliminar `--require-hashes`. La renovación del lock exige justificar la
+necesidad, comprobar las fuentes y ejecutar tests y CI del SHA actualizado.
+No actualizar estas dependencias silenciosamente durante una release.
+
 **Guarda de tags y antirretroceso:** Antes de modificar ningún tag, el
 publicador comprueba los dos tags SemVer y todos los alias estables de base y
 runtime. No sobrescribe una versión ya publicada con otro índice OCI ni
