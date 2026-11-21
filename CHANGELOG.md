@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Automated upstream refreshes
+
+<!-- remote-dev-upstream-refreshes -->
+
+### Renovate image refreshes
+
+<!-- remote-dev-renovate-runtime-refreshes:start -->
+<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db -->
+<!-- remote-dev-renovate-runtime-refreshes:end -->
+
+## [0.3.0] - 2026-11-21
+
+### Release scope — AMD64, single user, private network
+
+The v0.3.0 source cut includes optional hosted Context7 for Codex and experimental Antigravity, the official read-only OpenAI Docs MCP for Codex, and pinned Playwright MCP with a matching Chromium Headless Shell in the image. The launcher remains navigation-only; no new public listener, shared agent credentials, expanded host mounts, automatic agent installation, ARM64 runtime support or persistent-data migration is introduced.
+
+Antigravity remains optional, vendor-installed and experimental, without endorsement by Google. Context7 uses an external Upstash service and is enabled only through explicit per-role configuration; do not send private code or secrets in documentation requests. The ttyd/terminal upgrade and a fresh Google wrapper-policy review are separate follow-ups (#97, #174, #53).
+
+### Security and validation
+
+- Updated the official matched Playwright MCP / Playwright Core / Chromium Headless Shell source and verified the chromium security patch provenance for CVE-2026-125350 (#320, PR #359); future Chromium advisories remain tracked by #360.
+- Added real hosted Context7 MCP protocol/tool smoke and agent-native checks for both Codex and Antigravity, with explicit network-test consent, strict result classifications and no cross-role OAuth/key access (#355, PR #356).
+- Hardened the stable tag publisher to check immutable AMD64 runnable manifests and their labels/notices, run runtime smoke/auth/isolation, produce SPDX for base/final and Trivy reports, enforce fixable-critical vulnerability policy, and promote only the candidate OCI **index digest** whose AMD64 child manifest was tested (#346, PR #361).
+
+### Publication boundary
+
+This changelog section is a **source-release preparation**, not proof that `v0.3.0`, `stable`, `stable-amd64` or `latest` were published. The stable tag workflow rebuilds its own stable-channel OCI index from the reviewed source SHA; its digest need not equal the Edge index digest. Final TrueNAS acceptance, release-time third-party inventory review, the exact-head build/security gates and explicit operator authorization are tracked in #346 and #53.
+
 ### Added
 
 - Context7 `Test` now performs consent-gated, read-only Streamable HTTP MCP calls to `resolve-library-id` and `query-docs` in both agent roles, distinguishing hosted tool success from agent-native authentication/usage; no Antigravity OAuth access or new persistent secrets (#355, PR #356).
@@ -17,9 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added fail-closed menu-origin Context7 registration/key-state checks under the write lock, including protections against racing registration edits and newly created private keys. Explicit `--anonymous` remains intentionally destructive to the owned key; direct CLI contracts are unchanged.
 - Improved read-only Context7 diagnostics to surface failure exit codes, unified next-launch approval summaries, guarded Antigravity preset changes behind confirmation, and kept historical numeric menu aliases for compatibility. Full EN/ES interaction audits and runtime regression fixtures cover the changes; no persistent layout or image-channel change.
 
-### Automated upstream refreshes
-
-<!-- remote-dev-upstream-refreshes -->
+### Bundled upstream version changes included in v0.3.0
 
 - 2026-11-21 — Codex CLI 0.169.0 → 0.171.0; GitHub CLI 2.104.0 → 2.105.0; mise 2026.11.9 → 2026.11.11; npm 12.2.2 → 12.2.3; Playwright MCP 0.0.85 → 0.0.86; Ruff 0.17.5 → 0.17.6.
 
@@ -35,13 +61,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - 2026-11-09 — mise 2026.11.4 → 2026.11.5; yq 4.54.2 → 4.54.3; Context7 CLI (transient) 0.10.0 → 0.11.0.
 
-### Renovate image refreshes
+### Ubuntu base image changes included in v0.3.0
 
-<!-- remote-dev-renovate-runtime-refreshes:start -->
 - Ubuntu LTS base 26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c → 26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96.
 - Ubuntu LTS base 26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 → 26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db.
-<!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db -->
-<!-- remote-dev-renovate-runtime-refreshes:end -->
 
 ## [0.2.1] - 2026-11-09
 

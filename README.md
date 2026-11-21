@@ -1,11 +1,20 @@
-# Remote Dev Containers — v0.2.1 release source
+# Remote Dev Containers — v0.3.0 release source (publication pending)
 
-**v0.2.1** follows the [published v0.2.0 stable release](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.2.0) and adds Codex-only official OpenAI documentation MCP integration. New empty Codex state receives the optional read-only MCP configuration; existing MCP settings and Context7 remain unchanged. A live Codex search/read was verified, while exhaustive new-install/blocked-network acceptance remains separate. The source number **does not publish** an image by itself; the reviewed `v0.2.1` tag must pass its independent build, smoke, security and digest-promotion workflow. See [release notes](CHANGELOG.md) and [release checklist](docs/releases.md).
+**v0.3.0** builds on the [published v0.2.0 stable release](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.2.0). The source includes the official OpenAI Docs MCP for Codex, optional hosted Context7 in Codex and experimental Antigravity, and pinned Playwright MCP with a matching Chromium Headless Shell. Real MCP calls passed on TrueNAS Edge (#95, #320, #355). **This source cut does not publish an image** or move `stable/latest`: exact-head CI, the independent stable publisher and operator acceptance still apply (#346). See [release notes](CHANGELOG.md) and [release checklist](docs/releases.md).
 
 Community-maintained, browser-accessible coding-agent environment for Docker, NAS and homelab systems.
 
 > [!WARNING]
-> **v0.2.x AMD64 single-user/private-network scope.** `edge` remains experimental; only an explicitly tagged, verified stable publication may move `stable` and `latest`. Never expose Remote Dev web ports directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+> **v0.3.0 AMD64 single-user/private-network scope.** `edge` remains experimental; only an explicitly tagged, verified stable publication may move `stable` and `latest`. Never expose Remote Dev web ports directly to the Internet. This project is not affiliated with or endorsed by OpenAI, Google or Anthropic.
+
+**Third-party services:** Context7 is optional and hosted by Upstash. Consult its
+[service terms](https://upstash.com/trust/context7addendum.pdf) and
+[privacy policy](https://context7.com/docs/security/data-privacy) before
+enabling it; documentation queries should not contain private code, secrets or
+personal data. Antigravity is an optional official CLI installed on request,
+with an [experimental terminal-integration policy](docs/antigravity-remote-terminal-policy.md)
+and **no implied Google approval**. Playwright/Chromium are bundled open-source
+components with separately preserved notices and licenses.
 
 ## Goal
 
@@ -277,7 +286,7 @@ make preflight
 ./scripts/build-local.sh
 ```
 
-The local source version is `0.2.1`; edge publications retain their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of the local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
+The local source version is `0.3.0`; edge publications retain their dated `edge-YYYY.MM.DD-<short-sha>` identity instead of the local default. Then set `REMOTE_DEV_CODEX_APPROVAL_MODE=autonomous` or `guarded`, use `REMOTE_DEV_IMAGE=remote-dev:local`, and start with Docker Compose.
 
 ## Public edge testing
 
