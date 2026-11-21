@@ -198,6 +198,71 @@ def test_shared_candidate_runtime_checks(helper: str) -> None:
         raise AssertionError("shared runtime false PASS with omitted " + label)
 
 
+def validate_edge_chromium_spdx(workflow: str) -> None:
+    supplement = named_workflow_step(
+        workflow, "Record exact Chromium identity and notices in edge SPDX images")
+    semantic = named_workflow_step(
+        workflow, "Validate exact edge SPDX documents with independent parser")
+    for label, block in (("Chromium", supplement), ("independent SPDX", semantic)):
+        require("        if:" not in block and "        continue-on-error:" not in block,
+                label + " gate must not be skipped")
+    marker = "\n        run: |\n"
+    require(supplement.count(marker) == 1 and semantic.count(marker) == 1,
+            "Chromium and independent validation require unique run blocks")
+    def active(block: str) -> tuple[str, ...]:
+        return tuple(x.strip() for x in block.split(marker, 1)[1].splitlines()
+                     if x.strip() and not x.lstrip().startswith("#"))
+    require(active(supplement) == (
+        "set -euo pipefail",
+        'python3 scripts/chromium-sbom-evidence.py \\',
+        '--image "$BASE_MANIFEST_REF" \\',
+        "--spdx sbom-publish-base.spdx.json \\",
+        "--evidence chromium-evidence-publish-base.json",
+        'python3 scripts/chromium-sbom-evidence.py \\',
+        '--image "$REMOTE_DEV_MANIFEST_REF" \\',
+        "--spdx sbom-publish-remote-dev.spdx.json \\",
+        "--evidence chromium-evidence-publish-remote-dev.json",
+    ), "Edge Chromium evidence must execute on both exact images")
+    require(active(semantic) == (
+        "set -euo pipefail",
+        'python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
+        '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
+    ), "Edge must run an independent SPDX 2.3 validator on both images")
+    for ref in ("base_manifest", "runtime_manifest"):
+        require("MANIFEST_REF: ${{ steps." + ref + ".outputs.ref }}" in supplement,
+                "edge browser SPDX misbound to " + ref)
+    for file in ("chromium-evidence-publish-base.json",
+                 "chromium-evidence-publish-remote-dev.json"):
+        require(file in named_workflow_step(workflow, "Upload exact publication evidence"),
+                "Edge publication evidence must retain " + file)
+
+
+def test_edge_chromium_spdx(workflow: str) -> None:
+    validate_edge_chromium_spdx(workflow)
+    modifications = (
+        ("skip Chromium", workflow.replace(
+            '      - name: Record exact Chromium identity and notices in edge SPDX images\n',
+            '      - name: Record exact Chromium identity and notices in edge SPDX images\n        if: false\n', 1)),
+        ("comment Chromium", workflow.replace(
+            '          python3 scripts/chromium-sbom-evidence.py \\',
+            '          # python3 scripts/chromium-sbom-evidence.py \\', 1)),
+        ("skip independent parser", workflow.replace(
+            '      - name: Validate exact edge SPDX documents with independent parser\n',
+            '      - name: Validate exact edge SPDX documents with independent parser\n        if: false\n', 1)),
+        ("comment independent parser", workflow.replace(
+            '          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json',
+            '          # "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json', 1)),
+    )
+    for label, candidate in modifications:
+        try:
+            validate_edge_chromium_spdx(candidate)
+        except AssertionError:
+            continue
+        raise AssertionError("false PASS in Edge SPDX: " + label)
+
+
 def validate_python_315_publisher_wiring(workflow: str) -> None:
     """Require the reviewed Python 3.15 pin in the owning metadata and build fields."""
     metadata = named_workflow_step(workflow, "Resolve image metadata")
@@ -335,6 +400,7 @@ def main() -> None:
     test_trivy_db_cache_reuse(workflow)
     test_exact_edge_trivy_gate(workflow)
     test_shared_candidate_runtime_checks(helper)
+    test_edge_chromium_spdx(workflow)
 
     base_build = workflow.index("Build untagged edge base candidate")
     base_resolve = workflow.index("Resolve exact edge base AMD64 manifest")
@@ -343,6 +409,8 @@ def main() -> None:
     helper_step = workflow.index("Smoke-test the exact publication candidates")
     base_sbom = workflow.index("Generate exact edge base SPDX SBOM")
     runtime_sbom = workflow.index("Generate exact edge Remote Dev SPDX SBOM")
+    chromium = workflow.index("Record exact Chromium identity and notices in edge SPDX images")
+    independent_spdx = workflow.index("Validate exact edge SPDX documents with independent parser")
     base_scan = workflow.index("Scan exact edge base candidate for critical vulnerabilities")
     runtime_scan = workflow.index("Scan exact edge Remote Dev candidate for critical vulnerabilities")
     gate = workflow.index("Enforce no fixable critical vulnerabilities")
@@ -355,6 +423,8 @@ def main() -> None:
         < helper_step
         < base_sbom
         < runtime_sbom
+        < chromium
+        < independent_spdx
         < base_scan
         < runtime_scan
         < gate
