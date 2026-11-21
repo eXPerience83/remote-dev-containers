@@ -427,7 +427,7 @@ def probe(
             protocol=protocol, session=session, overall_deadline=deadline)
         if not _has_public_content(response, method=name):
             raise ProbeError(
-                "Context7 " + name + " returned no verified public documentation"
+                "Context7 " + name + " documentation UNVERIFIED (no positive evidence)"
             )
     return (
         "Context7 MCP protocol initialize: PASS",
