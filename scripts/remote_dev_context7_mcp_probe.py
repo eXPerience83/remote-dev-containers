@@ -211,6 +211,7 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                 frame = bytearray()
                 line = bytearray()
                 after_cr = False
+                first_line = True
                 received = 0
                 while received <= MAX_RESPONSE_BYTES:
                     with _hard_read_deadline(deadline - time.monotonic()):
@@ -226,6 +227,9 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
                             if char == 10:
                                 continue
                         if char in (10, 13):
+                            if first_line:
+                                line = line.removeprefix(b"\xef\xbb\xbf")
+                                first_line = False
                             is_blank = not line
                             frame.extend(line)
                             frame.extend(b"\n")
@@ -267,7 +271,7 @@ def _exchange(opener, *, method: str, request_id: int | None, params: dict | Non
 
 def _tool_text(result: dict) -> str:
     """Only treat text content as evidence when the MCP tool did not fail."""
-    if result.get("isError") not in (None, False):
+    if result.get("isError", False) is not False:
         return ""
     content = result.get("content")
     if not isinstance(content, list):
@@ -289,78 +293,60 @@ def _has_public_content(result: dict, *, method: str,
     # 'No documentation found' / quota / unauthorized status line.
     lines = text.splitlines()
     substantive = []
-    failed = False
-    failure_status = ""
-    in_fence = False
+    missing = False
+    fence = ""
     for raw in lines:
         line = raw.strip()
-        if line.startswith("```"):
-            in_fence = not in_fence
-            substantive.append(raw)
+        marker = re.match(r"^(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if (marker and marker[1].startswith(fence) and not marker[2].strip()):
+                fence = ""
+            else:
+                substantive.append(raw)
+            continue
+        if marker:
+            fence = marker[1]
             continue
         if not line:
             continue
-        if not in_fence and re.match(r"^#{1,6}\s+", line):
-            # Markdown status headings are service failures, not documentation.
-            # An example comment such as "# request failed after ..." is not
-            # an unambiguous status heading; preserve legitimate examples.
-            heading = re.sub(r"^#{1,6}\s+", "", line).strip().rstrip("#").strip()
-            if re.match(
-                r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
-                r"(?:no (?:matching\s+)?(?:libraries|docs|documentation|results|"
-                r"code snippets?|context)(?:\s+(?:were\s+)?found)?"
-                r"|rate\s*limit(?:\s+exceeded|ed)|quota exceeded"
-                r"|too many requests|unauthorized|authentication required"
-                r"|upgrade your plan|service unavailable"
-                r"|request failed(?=$|[.!:\-]))",
-                heading,
-            ):
-                failed = True
-                failure_status = heading
-                break
-        if in_fence or line.startswith(("#", ">", "-", "*")):
-            # Code examples and quoted documentation are not service status.
-            substantive.append(raw)
-            continue
-        if re.match(r"(?i)^(?:query|question|search(?:\s+query)?)\s*:", line):
-            continue
+        # Strip presentation only for classification. Explicit errors outrank
+        # missing evidence, regardless of the order of the tool's text blocks.
+        status = re.sub(r"^#{1,6}\s+", "", line).rstrip("#").strip()
+        status = re.sub(r"^[-*+]\s+", "", status)
+        status = status.replace("**", "").replace("__", "")
+        status = re.sub(r"^(?:error|warning|status)\s*[:\-]\s*", "",
+                        status, flags=re.I)
         if re.match(
-            r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
-            r"(?:no (?:matching\s+)?(?:libraries|docs|documentation|results|"
-            r"code snippets?|context)(?:\s+(?:were\s+)?found)?"
-            r"|rate\s*limit(?:\s+exceeded|ed)?|quota exceeded"
-            r"|too many requests|unauthorized|authentication required"
-            r"|upgrade your plan|request failed|service unavailable"
-            r"|(?:could not|cannot|unable to|failed to)\s+"
-            r"(?:retrieve|fetch|find|load|resolve|query|get)\b)",
-            line,
+            r"(?i)^(?:rate[ -]?limit(?:\s+exceeded|ed)|quota exceeded|"
+            r"too many requests|unauthorized(?: access)?|authentication (?:required|failed)|"
+            r"(?:invalid|missing) api[ -]key|"
+            r"upgrade your plan|request failed|service unavailable)"
+            r"(?=$|[.!:;,-]|\s+(?:for|while|when|please|try)\b|\s*\()", status,
         ):
-            failed = True
-            failure_status = line
-            break
+            if raise_on_failure:
+                raise ProbeError("Context7 " + method + " tool reported an explicit service failure")
+            return False
+        if re.match(
+            r"(?i)^(?:no (?:matching\s+)?(?:libraries|docs|documentation|results|"
+            r"code snippets?|context)\b|(?:could not|cannot|unable to|failed to)\s+"
+            r"(?:retrieve|fetch|find|load|resolve|query|get)\b)", status,
+        ):
+            missing = True
+            continue
+        if (status.endswith("?") or re.match(
+                r"(?i)^(?:query|question|search(?:\s+query)?|source)\s*:", status)):
+            continue
         substantive.append(raw)
-    if failed:
-        # A missing document cannot establish a service outage; keep it
-        # UNVERIFIED. Only explicit quota/auth/network failures are FAILED.
-        explicit_service_error = re.match(
-            r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
-            r"(?:rate\s*limit(?:\s+exceeded|ed)?|quota exceeded|"
-            r"too many requests|unauthorized|authentication required|"
-            r"upgrade your plan|request failed|service unavailable)",
-            failure_status,
-        ) is not None
-        if raise_on_failure and explicit_service_error:
-            raise ProbeError("Context7 " + method + " tool reported an explicit service failure")
-        return False
-    if not substantive:
+    if missing or not substantive:
         return False
     text = "\n".join(substantive)
     if method == "resolve-library-id":
         return (
             "Available Libraries:" in text
             and re.search(
-                r"(?<![\w/.-])" + re.escape(EXPECTED_LIBRARY_ID) +
-                r"(?![\w/.-])", text,
+                r"(?im)^[ \t]*(?:[-*][ \t]+)?(?:(?:context7-compatible )?library id:[ \t]*)?"
+                r"[`*]*" + re.escape(EXPECTED_LIBRARY_ID) + r"[`*]*[ \t]*$",
+                text.replace("**", ""),
             ) is not None
         )
     if method == "query-docs":
@@ -377,8 +363,8 @@ def _has_public_content(result: dict, *, method: str,
                 r"options|request|session)\s*\(", text,
             ) is not None
             or re.search(
-                r"(?i)https?://(?:www\.)?(?:requests\.readthedocs\.io|"
-                r"github\.com/psf/requests)\b", text,
+                r"(?i)\b(?:set|specify|pass|use|provide)\s+(?:the\s+|a\s+)?"
+                r"[`]?timeout[`]?\s+(?:parameter|argument|keyword)\b", text,
             ) is not None
             or re.search(
                 r"(?is)\b(?:python\s+)?requests\b[^.!?\n]{0,120}"
@@ -485,8 +471,17 @@ def probe(
             client, method="tools/call", request_id=request_id,
             params={"name": name, "arguments": arguments}, api_key=api_key,
             protocol=protocol, session=session, overall_deadline=deadline)
-        if response.get("isError") not in (None, False):
+        if type(response.get("isError", False)) is not bool:
+            raise ProbeError("Context7 " + name + " tool returned an invalid isError flag")
+        if response.get("isError", False):
             raise ProbeError("Context7 " + name + " tool returned an explicit error")
+        content = response.get("content")
+        if not isinstance(content, list) or any(
+            not isinstance(item, dict) or not isinstance(item.get("type"), str)
+            or (item["type"] == "text" and not isinstance(item.get("text"), str))
+            for item in content
+        ):
+            raise ProbeError("Context7 " + name + " tool returned invalid content")
         if not _has_public_content(
                 response, method=name, raise_on_failure=True):
             raise UnverifiedDocumentation(

@@ -142,7 +142,7 @@ class FakeOpener:
                 return FakeResponse({
                     "jsonrpc": "2.0", "id": body["id"],
                     "result": {"content": [{"type": "text",
-                                           "text": "Available Libraries:\n- Library ID: /other/project"}]}
+                                           "text": "Available Libraries:\n- Library ID: /other/project\nSee also /psf/requests"}]}
                 })
             if kind == "irrelevant-docs":
                 return FakeResponse({
@@ -180,6 +180,9 @@ class FakeOpener:
                 return FakeResponse({
                     "jsonrpc": "2.0", "id": body["id"],
                     "result": {"tools": [], "nextCursor": SECRET}})
+            if kind == "bad-content":
+                result["content"].append({"type": "text", "text": 42})
+                return FakeResponse({"jsonrpc": "2.0", "id": body["id"], "result": result})
             if kind == "tool-error":
                 return FakeResponse({"jsonrpc": "2.0", "id": body["id"],
                                      "result": {"isError": True, "content": [
@@ -301,6 +304,11 @@ class ProbeTests(TestCase):
                     probe.probe(api_key=SECRET, opener=opener)
                 self.assertNotIn(SECRET, str(exc.exception))
 
+    def test_invalid_tool_content_is_a_protocol_failure(self):
+        with self.assertRaisesRegex(probe.ProbeError, "invalid content") as caught:
+            probe.probe(opener=FakeOpener(("tools/call", "bad-content")))
+        self.assertIs(type(caught.exception), probe.ProbeError)
+
     def test_sse_literal_unicode_separator_and_crlf_framing(self):
         # U+2028 is a Unicode line separator, but not an SSE delimiter.
         result = {"content": [{"type": "text", "text": "public A\u2028B"}]}
@@ -352,7 +360,7 @@ class ProbeTests(TestCase):
             ).encode("utf-8")
             self.assertIn("\u2028".encode("utf-8"), payload)
             return FragmentedResponse(
-                b"event: message\r\ndata: " + payload + b"\r\n\r\n",
+                b"\xef\xbb\xbfdata: " + payload + b"\r\n\r\n",
                 content_type="text/event-stream", session=opener.session,
             )
 
@@ -450,6 +458,54 @@ class ProbeTests(TestCase):
             probe.probe(opener=opener)
         self.assertNotIsInstance(error.exception, probe.UnverifiedDocumentation)
         self.assertNotIn("Rate limit exceeded", str(error.exception))
+
+    def test_query_classification_through_both_tool_calls(self):
+        example = "requests.get(url, timeout=5)"
+        cases = (
+            ("## **Quota exceeded**", False, probe.ProbeError),
+            ("## **Authentication required**", False, probe.ProbeError),
+            ("Error: Invalid API key.", False, probe.ProbeError),
+            ("## Could not retrieve documentation", False, probe.UnverifiedDocumentation),
+            ("## No documentation found", False, probe.UnverifiedDocumentation),
+            ("Rate limiting in Requests", False, None),
+            ("No documentation found.\n## **Quota exceeded**", False, probe.ProbeError),
+            ("~~~text\n# Authentication required\n~~~", False, None),
+            ("````text\n```\n# Quota exceeded\n````", False, None),
+            ("Invalid isError type", 0, probe.ProbeError),
+            ("Invalid isError type", None, probe.ProbeError),
+        )
+        replies = [(heading + "\n" + example, flag, expected)
+                   for heading, flag, expected in cases]
+        replies.extend((
+            ("### Python Requests\nPass the `timeout` parameter to bound the wait.", False, None),
+            ("### How do I set a timeout in Requests?", False,
+             probe.UnverifiedDocumentation),
+            ("### Requests timeout\nSource: https://requests.readthedocs.io/",
+             False, probe.UnverifiedDocumentation),
+        ))
+        for message, flag, expected in replies:
+            with self.subTest(message=message, flag=flag):
+                opener = FakeOpener()
+                normal = opener.open
+
+                def query_reply(request, *, timeout):
+                    response = normal(request, timeout=timeout)
+                    rpc = json.loads(request.data)
+                    if rpc.get("params", {}).get("name") == "query-docs":
+                        result = {"isError": flag, "content": [{"type": "text", "text": message}]}
+                        return FakeResponse({"jsonrpc": "2.0", "id": rpc["id"], "result": result})
+                    return response
+
+                opener.open = query_reply
+                if expected is None:
+                    self.assertEqual(len(probe.probe(opener=opener)), 3)
+                else:
+                    with self.assertRaises(expected) as caught:
+                        probe.probe(opener=opener)
+                    self.assertIs(type(caught.exception), expected)
+                self.assertEqual([call["params"]["name"] for call, _ in opener.calls
+                                  if call["method"] == "tools/call"],
+                                 ["resolve-library-id", "query-docs"])
 
     def test_astra_documentation_counterexamples_and_unverified_results(self):
         # Reproduced on the previous HEAD: a failed documentation retrieval
