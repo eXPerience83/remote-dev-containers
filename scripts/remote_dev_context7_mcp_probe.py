@@ -302,17 +302,17 @@ def _has_public_content(result: dict, *, method: str) -> bool:
             # Code examples and quoted documentation are not service status.
             substantive.append(raw)
             continue
-        if re.match(r"(?i)^(?:query|question|search(?:\\s+query)?)\\s*:", line):
+        if re.match(r"(?i)^(?:query|question|search(?:\s+query)?)\s*:", line):
             continue
         if re.match(
-            r"(?i)^(?:(?:error|warning|status)\\s*[:\\-]\\s*)?"
-            r"(?:no (?:matching\\s+)?(?:libraries|docs|documentation|results|"
-            r"code snippets?|context)(?:\\s+(?:were\\s+)?found)?"
-            r"|rate\\s*limit(?:\\s+exceeded|ed)?|quota exceeded"
+            r"(?i)^(?:(?:error|warning|status)\s*[:\-]\s*)?"
+            r"(?:no (?:matching\s+)?(?:libraries|docs|documentation|results|"
+            r"code snippets?|context)(?:\s+(?:were\s+)?found)?"
+            r"|rate\s*limit(?:\s+exceeded|ed)?|quota exceeded"
             r"|too many requests|unauthorized|authentication required"
             r"|upgrade your plan|request failed|service unavailable"
-            r"|(?:could not|cannot|unable to|failed to)\\s+"
-            r"(?:retrieve|fetch|find|load|resolve|query|get)\\b)",
+            r"|(?:could not|cannot|unable to|failed to)\s+"
+            r"(?:retrieve|fetch|find|load|resolve|query|get)\b)",
             line,
         ):
             failed = True
@@ -320,7 +320,7 @@ def _has_public_content(result: dict, *, method: str) -> bool:
         substantive.append(raw)
     if failed or not substantive:
         return False
-    text = "\\n".join(substantive)
+    text = "\n".join(substantive)
     if method == "resolve-library-id":
         return (
             "Available Libraries:" in text
