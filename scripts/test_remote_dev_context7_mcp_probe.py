@@ -403,7 +403,7 @@ class ProbeTests(TestCase):
         # about Requests timeout was a false negative.
         failed = (
             "Could not retrieve Requests timeout documentation.\n"
-            "\`\`\`text\n503 Service Unavailable\n\`\`\`"
+            "```text\n503 Service Unavailable\n```"
         )
         valid = (
             "For Python Requests, set a timeout to bound how long the "
