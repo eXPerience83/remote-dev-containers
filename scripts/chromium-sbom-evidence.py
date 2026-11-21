@@ -14,6 +14,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
+import re
+from urllib.parse import urlsplit, parse_qs
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "config/playwright-browser-archives.json"
@@ -75,18 +77,27 @@ def inspect_image(image: str) -> dict:
          "-I", "-c", INSPECT_IMAGE],
         capture_output=True, text=True, timeout=90, check=True,
     )
-    return json.loads(inspected.stdout)
+    evidence = json.loads(inspected.stdout)
+    if image in ("remote-dev-base:local", "remote-dev:local"):
+        # Trivy's local OCI PURL is keyed to Docker ImageID (the config
+        # digest), rather than the arbitrary local tag.
+        config = subprocess.run(
+            ["docker", "image", "inspect", image, "--format", "{{.Id}}"],
+            capture_output=True, text=True, timeout=30, check=True,
+        )
+        evidence["image_id"] = config.stdout.strip()
+    return evidence
 
 
-def validate_sbom_image_binding(sbom: dict, expected_image: str) -> None:
-    """Bind Trivy's SPDX document and primary container to the exact scanned image."""
+def validate_sbom_image_binding(
+    sbom: dict, expected_image: str, local_image_id: str | None = None
+) -> None:
+    """Bind name, primary package, namespace AND OCI PURL to one image."""
     local_build = expected_image in ("remote-dev-base:local", "remote-dev:local")
-    remote_manifest = (expected_image.startswith("ghcr.io/experience83/remote-dev") and
-                       "@sha256:" in expected_image and
-                       len(expected_image.split("@sha256:")[-1]) == 64 and
-                       all(c in "0123456789abcdef"
-                           for c in expected_image.split("@sha256:")[-1]))
-    demand(local_build or remote_manifest,
+    image_ref = re.fullmatch(
+        r"ghcr\.io/experience83/(remote-dev(?:-base)?)@sha256:([0-9a-f]{64})",
+        expected_image)
+    demand(local_build or image_ref is not None,
            "expected local Build or immutable release manifest reference missing")
     demand(sbom.get("name") == expected_image,
            "SPDX document describes a different scanned image")
@@ -98,15 +109,42 @@ def validate_sbom_image_binding(sbom: dict, expected_image: str) -> None:
                    if p.get("name") == expected_image and
                    str(p.get("SPDXID", "")).startswith("SPDXRef-ContainerImage-")]
     demand(len(root_images) == 1, "SPDX primary container image differs from candidate")
+    root = root_images[0]
     demand(any(r.get("spdxElementId") == sbom.get("SPDXID") and
-               r.get("relatedSpdxElement") == root_images[0]["SPDXID"] and
+               r.get("relatedSpdxElement") == root["SPDXID"] and
                r.get("relationshipType") == "DESCRIBES"
                for r in sbom.get("relationships", [])),
            "SPDX primary container is not described by the document")
 
+    if local_build:
+        demand(isinstance(local_image_id, str) and
+               re.fullmatch(r"sha256:[0-9a-f]{64}", local_image_id) is not None,
+               "local image config digest missing or malformed")
+        base_name = "codex-" + expected_image.split(":")[0]
+        expected_digest = local_image_id
+        expected_repository = "index.docker.io/library/" + base_name
+    else:
+        base_name = image_ref.group(1)
+        expected_digest = "sha256:" + image_ref.group(2)
+        expected_repository = "ghcr.io/experience83/" + base_name
+
+    refs = [r for r in root.get("externalRefs", [])
+            if r.get("referenceCategory") == "PACKAGE-MANAGER" and
+               r.get("referenceType") == "purl"]
+    demand(len(refs) == 1, "SPDX primary image must have exactly one OCI PURL")
+    locator = refs[0].get("referenceLocator")
+    demand(isinstance(locator, str), "SPDX OCI PURL is malformed")
+    uri = urlsplit(locator)
+    query = parse_qs(uri.query, strict_parsing=True)
+    demand(uri.scheme == "pkg" and uri.netloc == "" and
+           uri.path == f"oci/{base_name}@{expected_digest}" and
+           query == {"arch": ["amd64"],
+                     "repository_url": [expected_repository]},
+           "SPDX OCI PURL repository or digest differs from candidate image")
+
 
 def add_package(sbom: dict, evidence: dict, pinned: dict, expected_image: str) -> dict:
-    validate_sbom_image_binding(sbom, expected_image)
+    validate_sbom_image_binding(sbom, expected_image, evidence.get("image_id"))
     demand(sbom.get("spdxVersion") == "SPDX-2.3", "unexpected SPDX version")
     demand(isinstance(sbom.get("packages"), list) and
            isinstance(sbom.get("relationships"), list),
