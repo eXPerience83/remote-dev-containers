@@ -26,6 +26,15 @@ def step(source: str, name: str) -> str:
     return source[start:] if end == -1 else source[start:end]
 
 
+def runnable_lines(block: str, label: str) -> tuple[str, ...]:
+    """Extract actual shell lines, excluding comments and sibling steps."""
+    marker = "\n        run: |\n"
+    check(block.count(marker) == 1, "missing/ambiguous executable run: " + label)
+    lines = block.split(marker, 1)[1].splitlines()
+    return tuple(line.strip() for line in lines if line.strip() and
+                 not line.lstrip().startswith("#"))
+
+
 def validate(source: str, helper: str) -> None:
     stages = [
         "Build untagged stable base candidate",
@@ -50,16 +59,22 @@ def validate(source: str, helper: str) -> None:
         check(not re.search(r"(?m)^        (if|continue-on-error):", block),
               "mandatory stable security step conditionally skipped: " + name)
     gate = step(source, "Enforce no fixable critical vulnerabilities")
-    check("run: |" in gate and
-          'bash scripts/enforce-trivy-gate.sh \\' in gate and
-          '"--expect-image=$BASE_MANIFEST_REF"' in gate and
-          '"--expect-image=$REMOTE_DEV_MANIFEST_REF"' in gate and
-          '"--expect-ubuntu=$UBUNTU_VERSION"' in gate and
-          'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}' in gate and
-          'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}' in gate and
-          '"exact stable base publication candidate:trivy-publish-base.json"' in gate and
-          '"exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"' in gate,
-          "fixable-critical gate must execute against both exact stable candidate reports")
+    check(
+        runnable_lines(gate, "critical gate") == (
+            "set -euo pipefail",
+            'bash scripts/enforce-trivy-gate.sh \\',
+            '"--expect-image=$BASE_MANIFEST_REF" \\',
+            '"--expect-ubuntu=$UBUNTU_VERSION" \\',
+            '"exact stable base publication candidate:trivy-publish-base.json" \\',
+            '"--expect-image=$REMOTE_DEV_MANIFEST_REF" \\',
+            '"--expect-ubuntu=$UBUNTU_VERSION" \\',
+            '"exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"',
+        ) and
+        'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}' in gate and
+        'REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}' in gate and
+        'UBUNTU_VERSION: ${{ steps.versions.outputs.ubuntu_version }}' in gate,
+        "critical gate must execute both exact candidate-bound reports",
+    )
     check('echo "python_315_version=$PYTHON_315_VERSION"' in step(source, "Load versions"),
           "stable Python 3.15 metadata omitted")
     check("PYTHON_315_VERSION=" + "${{ steps.versions.outputs.python_315_version }}" in
@@ -67,10 +82,19 @@ def validate(source: str, helper: str) -> None:
     check("BASE_IMAGE=" + "${{ steps.base_manifest.outputs.ref }}" in
           step(source, stages[2]), "runtime is not built from exact AMD64 manifest")
     smoke = step(source, stages[4])
-    for token in ("bash scripts/validate-edge-publication-candidate.sh",
-                  '"$BASE_MANIFEST_REF"', '"$REMOTE_DEV_MANIFEST_REF"',
-                  '"$GITHUB_SHA"', '"$PROJECT_VERSION"'):
-        check(token in smoke, "missing exact-candidate smoke binding: " + token)
+    check(
+        runnable_lines(smoke, "exact candidate smoke") == (
+            "set -euo pipefail",
+            'bash scripts/validate-edge-publication-candidate.sh \\',
+            '"ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \\',
+            '"$BASE_MANIFEST_REF" \\',
+            '"ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" \\',
+            '"$REMOTE_DEV_MANIFEST_REF" \\',
+            '"$GITHUB_SHA" \\',
+            '"$PROJECT_VERSION"',
+        ),
+        "exact-candidate smoke must really execute with all six expected arguments",
+    )
     for name, ref in zip((stages[5], stages[6], stages[8], stages[9]),
                          ("base_manifest", "runtime_manifest",
                           "base_manifest", "runtime_manifest")):
@@ -104,12 +128,20 @@ def validate(source: str, helper: str) -> None:
     check('"$runtime_ref" "$expected_version" "$expected_revision"' in helper,
           "runtime smoke must compare embedded identity to independent expected tag and SHA")
     guard = step(source, "Guard stable promotion against overwrite or downgrade")
-    check("run: |" in guard and "python3 scripts/guard-stable-promotion.py" in guard and
-          "--journal stable-promotion-preflight.json" in guard and
-          "id: promotion_guard" in guard and
-          'BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}' in guard and
-          'REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}' in guard,
-          "stable registry downgrade/overwrite guard omitted or misbound")
+    check(
+        runnable_lines(guard, "stable tag protection guard") == (
+            "set -euo pipefail",
+            'python3 scripts/guard-stable-promotion.py \\',
+            '--tag "$GITHUB_REF_NAME" \\',
+            '--base "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_MANIFEST_INDEX}" \\',
+            '--runtime "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_MANIFEST_INDEX}" \\',
+            "--journal stable-promotion-preflight.json",
+        ) and
+        "id: promotion_guard" in guard and
+        'BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}' in guard and
+        'REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}' in guard,
+        "stable registry downgrade/overwrite guard must execute on exact indexes",
+    )
     promotion = step(source, stages[-1])
     check("if: steps.promotion_guard.outputs.mode == 'fresh'" in promotion,
           "idempotent rerun must not write stable registry tags")
@@ -205,6 +237,18 @@ def main() -> None:
         ("empty critical gate", wf.replace(
             'bash scripts/enforce-trivy-gate.sh \\',
             'true # disabled critical gate', 1), helper),
+        ("commented-out gate", wf.replace(
+            '          bash scripts/enforce-trivy-gate.sh \\',
+            '          # bash scripts/enforce-trivy-gate.sh \\', 1), helper),
+        ("commented-out smoke", wf.replace(
+            '          bash scripts/validate-edge-publication-candidate.sh \\',
+            '          # bash scripts/validate-edge-publication-candidate.sh \\', 1), helper),
+        ("commented-out registry guard", wf.replace(
+            '          python3 scripts/guard-stable-promotion.py \\',
+            '          # python3 scripts/guard-stable-promotion.py \\', 1), helper),
+        ("premature gate exit", wf.replace(
+            '          bash scripts/enforce-trivy-gate.sh \\',
+            '          exit 0\n          bash scripts/enforce-trivy-gate.sh \\', 1), helper),
         ("wrong base binding", wf.replace("BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}",
                                           "BASE_IMAGE=${{ steps.base.outputs.digest }}", 1), helper),
         ("wrong SPDX", wf.replace("image-ref: ${{ steps.runtime_manifest.outputs.ref }}",
