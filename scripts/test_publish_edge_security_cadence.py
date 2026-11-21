@@ -172,9 +172,11 @@ def validate_shared_candidate_runtime_checks(helper: str) -> None:
     """Both publication channels must execute password and isolation probes."""
     active = tuple(line.strip() for line in helper.splitlines()
                    if line.strip() and not line.lstrip().startswith("#"))
-    require(any('"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
-                in line for line in active),
-            "mandatory exact-candidate identity arguments missing")
+    smoke_prefix = 'docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \\'
+    smoke_args = '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'
+    require(active.count(smoke_prefix) == 1 and active.count(smoke_args) == 1 and
+            active.index(smoke_args) == active.index(smoke_prefix) + 1,
+            "exact candidate Codex smoke cannot be omitted or non-blocking")
     for required in (
         'bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"',
         'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"',
@@ -186,13 +188,24 @@ def validate_shared_candidate_runtime_checks(helper: str) -> None:
 
 def test_shared_candidate_runtime_checks(helper: str) -> None:
     validate_shared_candidate_runtime_checks(helper)
+    prefix = 'docker run --rm --entrypoint /usr/local/bin/codex-smoke-test \\'
+    # Changing the executable side of the multi-line smoke while retaining
+    # its argument string must be rejected too.
+    altered = helper.replace(prefix, ": " + prefix, 1)
+    try:
+        validate_shared_candidate_runtime_checks(altered)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("shared runtime false PASS with no-op Codex smoke")
+
     for label, original in (
         ("internal channel", '"$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"'),
         ("password", 'bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"'),
         ("cross-service isolation", 'bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"'),
     ):
         require(helper.count(original) == 1, "ambiguous shared-helper fixture: " + label)
-        variants = ("# " + original,) if label == "internal channel" else (
+        variants = ("# " + original, original + " || true") if label == "internal channel" else (
             "# " + original, original + " || true", ": " + original)
         for variant in variants:
             altered = helper.replace(original, variant, 1)
