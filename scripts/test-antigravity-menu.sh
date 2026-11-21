@@ -161,7 +161,8 @@ case "${1:-}" in
     ;;
   reinstall)
     [[ "$#" == 1 || ( "$#" == 2 && "$2" == --yes ) ||
-       ( "$#" == 3 && "$2" == --yes && "$3" == --expect-absent ) ]] || exit 2
+       ( "$#" == 3 && "$2" == --yes && "$3" == --expect-absent ) ||
+       ( "$#" == 3 && "$2" == --expect-repairable && "$3" == --yes ) ]] || exit 2
     echo "$*" >>"$REMOTE_DEV_MENU_CONTEXT7_CALLS"
     ;;
   test|remove)
@@ -583,7 +584,7 @@ printf '6\n1\n4\nREINSTALL\n\n0\n0\n0\n' | env \
   REMOTE_DEV_MENU_HARDENING_CALLS="$hardening_calls" \
   REMOTE_DEV_MENU_CONTEXT7_CALLS="$context7_calls" \
   timeout --foreground 30s "$fixture_menu" >"$output" 2>&1
-[[ "$(cat "$context7_calls")" == $'plan\nreinstall --yes' ]]
+[[ "$(cat "$context7_calls")" == $'plan\nreinstall --expect-repairable --yes' ]]
 [[ "$(wc -l <"$hardening_calls")" == 1 ]]
 
 rm -f "$hardening_calls" "$context7_calls"
