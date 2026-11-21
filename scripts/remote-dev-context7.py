@@ -1190,6 +1190,8 @@ def command_test(paths: Paths, args: argparse.Namespace) -> int:
     try:
         for line in probe.probe(api_key=key, deadline=deadline):
             print(line)
+    except probe.UnverifiedDocumentation as exc:
+        raise Context7Error(f"Context7 MCP tool verification UNVERIFIED: {exc}") from None
     except probe.ProbeError as exc:
         raise Context7Error(f"Context7 MCP tool verification FAILED: {exc}") from None
     print("Context7 request mode: Codex API key" if key else "Context7 request mode: anonymous (no stored API key)")
