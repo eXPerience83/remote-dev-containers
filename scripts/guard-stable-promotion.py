@@ -38,7 +38,7 @@ def read_tag(image: str, tag: str) -> str | None:
         # never proof that the requested version tag does not exist.
         auth_or_transport = (
             "authorize", "authorization", "authenticat", "anonymous token",
-            "token endpoint", "token service", "fetch token", "unauthorized",
+            "token", "unauthorized",
             "forbidden", "permission", "denied", "credential", "401", "403",
             "connection", "network", "dns", "timeout", "tls", "rate limit",
         )
