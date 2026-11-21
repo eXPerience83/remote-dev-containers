@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 DIGEST_REF = re.compile(r"^ghcr\.io/experience83/remote-dev(?:-base)?@sha256:[0-9a-f]{64}$")
 SEVERITIES = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
@@ -44,7 +44,8 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                 "exact candidate is missing from RepoDigests")
     results = report.get("Results")
     require(isinstance(results, list) and bool(results), "missing scan coverage: Results")
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
+    binary_targets: set[str] = set()
     fixable = 0
     unfixed = 0
     for result in results:
@@ -55,9 +56,20 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                 "scan result missing target")
         require(isinstance(result.get("Type"), str) and bool(result["Type"].strip()),
                 "scan result missing package type")
+        kind = result["Type"]
         if klass == "os-pkgs":
-            require(result["Type"] == "ubuntu", "OS scan does not cover Ubuntu packages")
-        seen.add(klass)
+            require(kind == "ubuntu", "OS scan does not cover Ubuntu packages")
+        # A class/target label alone is not evidence of successful package
+        # discovery. Raw, truncated Trivy results without Packages must fail.
+        packages = result.get("Packages")
+        require(isinstance(packages, list) and bool(packages),
+                "empty/missing package inventory for " + result["Target"])
+        require(all(isinstance(p, dict) and isinstance(p.get("Name"), str)
+                    and bool(p["Name"].strip()) for p in packages),
+                "malformed package inventory in " + result["Target"])
+        seen.add((klass, kind))
+        if klass == "lang-pkgs" and kind in ("gobinary", "rustbinary"):
+            binary_targets.add(PurePosixPath(result["Target"]).name)
         vulnerabilities = result.get("Vulnerabilities", [])
         require(isinstance(vulnerabilities, list), "malformed vulnerability array")
         for vuln in vulnerabilities:
@@ -69,6 +81,11 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
             require(vuln["Severity"] in SEVERITIES, "unrecognized vulnerability severity")
             fixed = vuln.get("FixedVersion", "")
             require(fixed is None or isinstance(fixed, str), "invalid FixedVersion")
+            status = vuln.get("Status")
+            require(status is None or isinstance(status, str), "invalid Status")
+            require(status != "fixed" or
+                    (isinstance(fixed, str) and bool(fixed.strip())),
+                    "contradictory Trivy finding: fixed status without FixedVersion")
             if vuln["Severity"] == "CRITICAL":
                 if isinstance(fixed, str) and fixed.strip():
                     fixable += 1
@@ -77,8 +94,23 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                          vuln["InstalledVersion"] + " -> " + fixed, result["Target"])))
                 else:
                     unfixed += 1
-    require({"os-pkgs", "lang-pkgs"} <= seen,
-            "missing Trivy OS or language package scan coverage")
+    # These installed tool families and binaries are present in both
+    # supported AMD64 image roles; do not pin an arbitrary number of results
+    # or the versions encoded in their paths.
+    required = {
+        ("os-pkgs", "ubuntu"),
+        ("lang-pkgs", "node-pkg"),
+        ("lang-pkgs", "python-pkg"),
+        ("lang-pkgs", "gobinary"),
+        ("lang-pkgs", "rustbinary"),
+    }
+    require(required <= seen,
+            "incomplete Trivy scan coverage; missing types: " +
+            repr(sorted(required - seen)))
+    required_binaries = {"actionlint", "shfmt", "uv", "uvx", "yq", "pebble", "gh"}
+    require(required_binaries <= binary_targets,
+            "incomplete Trivy tool coverage; missing binaries: " +
+            repr(sorted(required_binaries - binary_targets)))
     return fixable, unfixed
 
 
