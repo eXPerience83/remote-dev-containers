@@ -89,8 +89,8 @@ def validate(source: str, helper: str) -> None:
     promotion = step(source, stages[-1])
     check('for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do' in promotion,
           "stable runtime alias registry verification missing")
-    check(promotion.index('promoted_base="$(jq -r') <
-          promotion.index('--metadata-file runtime-promotion.json'),
+    check(0 <= promotion.find('promoted_base="$(jq -r') <
+          promotion.find('--metadata-file runtime-promotion.json'),
           "base must be checked before moving runtime stable tags")
     check('for tag in "$GITHUB_REF_NAME" stable-amd64; do' in promotion and
           'tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:${tag}"' in promotion and
