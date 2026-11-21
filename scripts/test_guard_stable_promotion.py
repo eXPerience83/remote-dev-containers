@@ -86,6 +86,34 @@ class GuardTests(unittest.TestCase):
             [], 1, "", "manifest unknown")):
             self.assertIsNone(guard.read_tag("remote-dev", "v0.3.0"))
 
+        # CodeRabbit's reported false-PASS: a token endpoint can return 404
+        # while the tag itself still exists. It must never mean "fresh".
+        ref = "ghcr.io/experience83/remote-dev:v0.3.0"
+        failures = (
+            "failed to authorize: failed to fetch anonymous token: "
+            "unexpected status: 404 Not Found",
+            "failed to authorize: failed to fetch anonymous token: "
+            "manifest unknown",
+            "authorization failed: requested " + ref + ": not found",
+            "unexpected status: 404 Not Found",
+            "failed to fetch token: 404 Not Found",
+            "connection refused: " + ref + ": not found",
+        )
+        for error in failures:
+            with self.subTest(error=error):
+                with patch.object(guard, "run", return_value=subprocess.CompletedProcess(
+                    [], 1, "", error)):
+                    with self.assertRaisesRegex(ValueError, "cannot inspect"):
+                        guard.read_tag("remote-dev", "v0.3.0")
+
+        # Explicit missing manifests and the exact requested tag are absent.
+        for missing in ("manifest unknown", "manifest not found",
+                        "ERROR: " + ref + ": not found"):
+            with self.subTest(missing=missing):
+                with patch.object(guard, "run", return_value=subprocess.CompletedProcess(
+                    [], 1, "", missing)):
+                    self.assertIsNone(guard.read_tag("remote-dev", "v0.3.0"))
+
     def test_failed_old_image_lookup_cannot_downgrade(self):
         with patch.object(guard, "read_tag", side_effect=lambda image, tag:
                           aliases(OLD_BASE, OLD_RUNTIME)[(image, tag)]), \
