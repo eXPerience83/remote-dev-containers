@@ -279,18 +279,19 @@ def _has_public_content(result: dict, *, method: str) -> bool:
     text = _tool_text(result)
     if not text:
         return False
-    # Context7 sometimes reports an empty result or a quota/authorization
-    # error as plain text without isError=true. Reject an explicit LEADING
-    # status, but not e.g. "request failed" inside a valid error-handling
-    # documentation snippet further down the response.
+    # A non-error JSON-RPC reply can still contain a tool-level message
+    # such as "Could not retrieve documentation."  Recognize a leading
+    # failure status BEFORE evaluating topical markers or examples.
     leading_line = next((line.strip() for line in text.splitlines()
                          if line.strip()), "")
     if re.match(
-        r"(?i)^(?:[>#*-]+\s*)?(?:(?:error|warning|status)\s*[:\-]\s*)?"
+        r"(?i)^(?:[>#*-]+\\s*)?(?:(?:error|warning|status)\\s*[:\\-]\\s*)?"
         r"(?:no (?:matching )?(?:libraries|docs|documentation|results|"
         r"code snippets?|context)|rate.limit(?:ed)?|quota exceeded|"
         r"too many requests|unauthorized|authentication required|"
-        r"upgrade your plan|request failed|service unavailable)\b",
+        r"upgrade your plan|request failed|service unavailable|"
+        r"(?:could not|cannot|unable to|failed to)\\s+"
+        r"(?:retrieve|fetch|find|load|resolve|query|get)\\b)",
         leading_line,
     ):
         return False
@@ -298,18 +299,36 @@ def _has_public_content(result: dict, *, method: str) -> bool:
         return (
             "Available Libraries:" in text
             and re.search(
-                r"(?<![\w/.-])" + re.escape(EXPECTED_LIBRARY_ID) +
-                r"(?![\w/.-])", text,
+                r"(?<![\\w/.-])" + re.escape(EXPECTED_LIBRARY_ID) +
+                r"(?![\\w/.-])", text,
             ) is not None
         )
     if method == "query-docs":
-        low = text.casefold()
+        # Generic Markdown code fences prove nothing: even an error message
+        # can quote a snippet. Accept relevant Python Requests prose or a
+        # credible Requests code/documentation marker together with timeout.
+        if not re.search(r"(?i)\\brequests\\b", text) or not re.search(
+            r"(?i)\\btimeouts?\\b", text
+        ):
+            return False
         return (
-            "requests" in low and "timeout" in low
-            and re.search(
-                r"(?i)(?:```|\brequests\.(?:get|post|request|session)\s*\(|"
-                r"https?://(?:www\.)?(?:requests\.readthedocs\.io|"
-                r"github\.com/psf/requests))", text,
+            re.search(
+                r"(?i)\\brequests\\.(?:get|post|put|patch|delete|head|"
+                r"options|request|session)\\s*\\(", text,
+            ) is not None
+            or re.search(
+                r"(?i)https?://(?:www\\.)?(?:requests\\.readthedocs\\.io|"
+                r"github\\.com/psf/requests)\\b", text,
+            ) is not None
+            or re.search(
+                r"(?is)\\b(?:python\\s+)?requests\\b[^.!?\\n]{0,120}"
+                r"\\b(?:set|specify|pass|configure|use|provide|accepts?)\\b"
+                r"[^.!?\\n]{0,90}\\btimeout\\b", text,
+            ) is not None
+            or re.search(
+                r"(?is)\\b(?:set|specify|pass|configure|use)\\b"
+                r"[^.!?\\n]{0,90}\\btimeout\\b"
+                r"[^.!?\\n]{0,100}\\brequests\\b", text,
             ) is not None
         )
     return False
