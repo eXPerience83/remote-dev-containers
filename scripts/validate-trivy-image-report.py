@@ -12,7 +12,17 @@ import re
 from pathlib import Path, PurePosixPath
 
 DIGEST_REF = re.compile(r"^ghcr\.io/experience83/remote-dev(?:-base)?@sha256:[0-9a-f]{64}$")
-SEVERITIES = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+# These tool binaries are included in both supported AMD64 image roles.
+# Validate analyzer, installation location and root package identity together.
+EXPECTED_TOOLS = {
+    "actionlint": ("gobinary", "opt/remote-dev/mise/installs/actionlint/", "github.com/rhysd/actionlint"),
+    "shfmt": ("gobinary", "opt/remote-dev/mise/installs/shfmt/", "mvdan.cc/sh/v3"),
+    "uv": ("rustbinary", "opt/remote-dev/mise/installs/uv/", "uv"),
+    "uvx": ("rustbinary", "opt/remote-dev/mise/installs/uv/", "uv"),
+    "yq": ("gobinary", "opt/remote-dev/mise/installs/yq/", "github.com/mikefarah/yq/v4"),
+    "pebble": ("gobinary", "usr/bin/pebble", "github.com/canonical/pebble"),
+    "gh": ("gobinary", "usr/local/bin/gh", "github.com/cli/cli/v2"),
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -45,7 +55,7 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
     results = report.get("Results")
     require(isinstance(results, list) and bool(results), "missing scan coverage: Results")
     seen: set[tuple[str, str]] = set()
-    binary_targets: set[str] = set()
+    verified_tools: set[str] = set()
     fixable = 0
     unfixed = 0
     for result in results:
@@ -59,17 +69,38 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
         kind = result["Type"]
         if klass == "os-pkgs":
             require(kind == "ubuntu", "OS scan does not cover Ubuntu packages")
+            expected_target = f"{name} (ubuntu {os_release})"
+            require(result["Target"] == expected_target,
+                    "Ubuntu scan target disagrees with candidate identity/release")
+        elif kind == "node-pkg":
+            require(result["Target"] == "Node.js", "unexpected Node.js scan target")
+        elif kind == "python-pkg":
+            require(result["Target"] == "Python", "unexpected Python scan target")
         # A class/target label alone is not evidence of successful package
         # discovery. Raw, truncated Trivy results without Packages must fail.
         packages = result.get("Packages")
         require(isinstance(packages, list) and bool(packages),
                 "empty/missing package inventory for " + result["Target"])
-        require(all(isinstance(p, dict) and isinstance(p.get("Name"), str)
-                    and bool(p["Name"].strip()) for p in packages),
-                "malformed package inventory in " + result["Target"])
+        require(all(isinstance(p, dict) and
+                    isinstance(p.get("Name"), str) and bool(p["Name"].strip()) and
+                    isinstance(p.get("Version"), str) and bool(p["Version"].strip())
+                    for p in packages),
+                "missing name or version in package inventory: " + result["Target"])
         seen.add((klass, kind))
         if klass == "lang-pkgs" and kind in ("gobinary", "rustbinary"):
-            binary_targets.add(PurePosixPath(result["Target"]).name)
+            target = result["Target"]
+            basename = PurePosixPath(target).name
+            if basename in EXPECTED_TOOLS:
+                expected_kind, prefix, root_name = EXPECTED_TOOLS[basename]
+                require(kind == expected_kind and
+                        (target == prefix if prefix.startswith("usr/") else
+                         target.startswith(prefix)),
+                        "unexpected tool analyzer or path: " + basename)
+                require(any(p.get("Name") == root_name and
+                            p.get("Relationship") == "root"
+                            for p in packages),
+                        "tool binary lacks expected root package: " + basename)
+                verified_tools.add(basename)
         vulnerabilities = result.get("Vulnerabilities", [])
         require(isinstance(vulnerabilities, list), "malformed vulnerability array")
         for vuln in vulnerabilities:
@@ -78,7 +109,10 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
                 value = vuln.get(field)
                 require(isinstance(value, str) and bool(value.strip()),
                         "vulnerability is missing " + field)
-            require(vuln["Severity"] in SEVERITIES, "unrecognized vulnerability severity")
+            # Workflows request only CRITICAL. A report with HIGH and no CRITICAL
+            # must not be mistaken for a clean critical-only scan.
+            require(vuln["Severity"] == "CRITICAL",
+                    "Trivy report is not limited to CRITICAL severity")
             fixed = vuln.get("FixedVersion", "")
             require(fixed is None or isinstance(fixed, str), "invalid FixedVersion")
             status = vuln.get("Status")
@@ -107,10 +141,9 @@ def validate(report: object, expected_image: str | None = None, ubuntu: str | No
     require(required <= seen,
             "incomplete Trivy scan coverage; missing types: " +
             repr(sorted(required - seen)))
-    required_binaries = {"actionlint", "shfmt", "uv", "uvx", "yq", "pebble", "gh"}
-    require(required_binaries <= binary_targets,
-            "incomplete Trivy tool coverage; missing binaries: " +
-            repr(sorted(required_binaries - binary_targets)))
+    require(set(EXPECTED_TOOLS) <= verified_tools,
+            "incomplete Trivy tool coverage; missing validated binaries: " +
+            repr(sorted(set(EXPECTED_TOOLS) - verified_tools)))
     return fixable, unfixed
 
 
