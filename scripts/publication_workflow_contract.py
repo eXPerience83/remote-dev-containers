@@ -53,7 +53,10 @@ def step_metadata(block: str, *, expected_if: str | None = None) -> dict[str, st
 
 
 
-def active_mapping_value(block: str, section: str, key: str) -> str:
+def active_mapping_value(
+    block: str, section: str, key: str, *,
+    expected_if: str | None = None
+) -> str:
     """Get one canonical *active* YAML scalar from a step's with/env mapping.
 
     Unlike searching a block for text, this rejects comments, duplicated keys,
@@ -61,8 +64,7 @@ def active_mapping_value(block: str, section: str, key: str) -> str:
     """
     if section not in ("with", "env"):
         raise AssertionError("unsupported publication mapping section")
-    metadata = step_metadata(block, expected_if=None if "        if:" not in block
-                             else None)
+    metadata = step_metadata(block, expected_if=expected_if)
     if section not in metadata:
         raise AssertionError("missing publication step mapping: " + section)
     anchor = "        " + section + ":"
