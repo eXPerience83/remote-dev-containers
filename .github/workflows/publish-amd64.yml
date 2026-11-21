@@ -226,6 +226,16 @@ jobs:
             --spdx sbom-publish-remote-dev.spdx.json \
             --evidence chromium-evidence-publish-remote-dev.json
 
+      # A structural self-check is not a substitute for SPDX 2.3 semantics.
+      # Enforce independent parsing of both final, Chromium-augmented documents.
+      - name: Validate exact stable SPDX documents with independent parser
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check spdx-tools==0.8.5
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json
+
       - name: Scan exact stable base candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
