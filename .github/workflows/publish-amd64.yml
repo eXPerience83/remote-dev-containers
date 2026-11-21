@@ -268,9 +268,18 @@ jobs:
           retention-days: 14
 
       - name: Enforce no fixable critical vulnerabilities
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+          UBUNTU_VERSION: ${{ steps.versions.outputs.ubuntu_version }}
         run: |
+          set -euo pipefail
           bash scripts/enforce-trivy-gate.sh \
+            "--expect-image=$BASE_MANIFEST_REF" \
+            "--expect-ubuntu=$UBUNTU_VERSION" \
             "exact stable base publication candidate:trivy-publish-base.json" \
+            "--expect-image=$REMOTE_DEV_MANIFEST_REF" \
+            "--expect-ubuntu=$UBUNTU_VERSION" \
             "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
 
       - name: Promote one scanned digest to canonical stable tags
