@@ -1305,6 +1305,72 @@ def assert_implicit_anonymous_keeps_newly_added_key(module, root: Path) -> None:
         )
 
 
+def assert_key_write_failure_preserves_recovery_state(module, root: Path) -> None:
+    """Document recoverability of a partial config-then-key transaction."""
+    home = root / "key-write-failure-recovery"
+    home.mkdir(mode=0o700)
+    config = home / "config.toml"
+    original = ('model = "recovery"\n'
+                '[mcp_servers.another]\ncommand = "user-owned"\n')
+    config.write_text(original, encoding="utf-8")
+    key_dir = home / ".remote-dev-context7"
+    key_dir.mkdir(mode=0o700)
+    key = key_dir / "api-key"
+    key.write_text(SYNTHETIC_KEY, encoding="utf-8")
+    key.chmod(0o600)
+    backup = home / "config.toml.remote-dev-context7.bak"
+    original_choose = module.choose_key
+    original_store = module.store_key
+
+    def choose_replacement(paths, args):
+        del paths, args
+        return "replace", "ctx7-replacement-synthetic", "safe"
+
+    def fail_store(paths, new_value):
+        del paths, new_value
+        raise module.Context7Error("synthetic key write failed")
+
+    with codex_environment(home):
+        module.choose_key = choose_replacement
+        module.store_key = fail_store
+        try:
+            args = module.build_parser().parse_args(
+                ["install", "--yes", "--expect-absent"]
+            )
+            try:
+                module.command_install(module.Paths(), args)
+            except module.Context7Error as exc:
+                if "synthetic key write failed" not in str(exc):
+                    raise
+            else:
+                raise AssertionError("synthetic key-write failure was ignored")
+        finally:
+            module.choose_key = original_choose
+            module.store_key = original_store
+
+    if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+        raise AssertionError("failed new key write destroyed the old private key")
+    assert_private_file(key)
+    if not backup.exists() or backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("failed key write lost exact config rollback preimage")
+    assert_private_file(backup)
+    with codex_environment(home):
+        after = module.parse_toml(config.read_text(encoding="utf-8"),
+                                  label="after partial failure")
+        before = module.parse_toml(original, label="before partial failure")
+        if module.without_context7(after) != module.without_context7(before):
+            raise AssertionError("partial failure changed unrelated MCP entry")
+    # Reconciliation is possible with the intact old key and managed entry.
+    require_success(
+        run_manager(home, "install", "--yes", "--expect-healthy"),
+        "reconciliation after an interrupted key write",
+    )
+    if key.read_text(encoding="utf-8") != SYNTHETIC_KEY:
+        raise AssertionError("retry lost the previous private key")
+    if backup.read_text(encoding="utf-8") != original:
+        raise AssertionError("retry overwrote recovery backup")
+
+
 def main() -> int:
     if not MANAGER.is_file():
         raise AssertionError(f"missing Context7 manager: {MANAGER}")
@@ -1327,6 +1393,7 @@ args = ["--safe"]
         assert_menu_safe_reinstall_rechecks_ownership(root)
         assert_menu_consent_preconditions_survive_races(load_manager_module(), root)
         assert_implicit_anonymous_keeps_newly_added_key(load_manager_module(), root)
+        assert_key_write_failure_preserves_recovery_state(load_manager_module(), root)
         assert_passive_diagnostic_categories(load_manager_module(), root)
         assert_specific_marker_diagnostics(load_manager_module(), root)
         assert_missing_begin_repair_fails_closed(load_manager_module(), root)
