@@ -397,6 +397,58 @@ class ProbeTests(TestCase):
         opener.open = with_error_example
         self.assertEqual(len(probe.probe(opener=opener)), 3)
 
+    def test_markdown_status_headings_do_not_pass_documentation_probe(self):
+        docs = (
+            "### Requests timeout\n"
+            "https://requests.readthedocs.io/en/latest/user/advanced/\n"
+            "requests.get(url, timeout=5)"
+        )
+        for heading in (
+            "# Rate limit exceeded",
+            "## Error: No documentation found",
+            "### Authentication required",
+            "## Service unavailable",
+            "#### Request failed.",
+        ):
+            with self.subTest(heading=heading):
+                self.assertFalse(probe._has_public_content(
+                    {"content": [{"type": "text", "text": heading + "\n" + docs}],
+                     "isError": False},
+                    method="query-docs",
+                ))
+        # The same phrases in documentation examples must remain acceptable.
+        examples = (
+            docs + "\n"
+            "# request failed after an unauthorized response\n"
+            "# rate limit example; see requests.get(url, timeout=5)\n"
+            "```text\n# Rate limit exceeded\n```"
+        )
+        self.assertTrue(probe._has_public_content(
+            {"content": [{"type": "text", "text": examples}], "isError": False},
+            method="query-docs",
+        ))
+        opener = FakeOpener()
+        regular_open = opener.open
+
+        def inject_failure_heading(request, *, timeout):
+            response = regular_open(request, timeout=timeout)
+            rpc = json.loads(request.data)
+            if (rpc["method"] == "tools/call"
+                    and rpc["params"]["name"] == "query-docs"):
+                return FakeResponse({
+                    "jsonrpc": "2.0", "id": rpc["id"],
+                    "result": {
+                        "isError": False,
+                        "content": [{"type": "text",
+                                     "text": "# Rate limit exceeded\n" + docs}],
+                    },
+                }, session=opener.session)
+            return response
+
+        opener.open = inject_failure_heading
+        with self.assertRaises(probe.UnverifiedDocumentation):
+            probe.probe(opener=opener)
+
     def test_astra_documentation_counterexamples_and_unverified_results(self):
         # Reproduced on the previous HEAD: a failed documentation retrieval
         # with an unrelated code fence was PASS, genuine explanatory prose
