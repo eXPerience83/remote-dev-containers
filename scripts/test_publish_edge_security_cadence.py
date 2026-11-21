@@ -150,8 +150,12 @@ def test_exact_edge_trivy_gate(workflow: str) -> None:
             '      - name: Enforce no fixable critical vulnerabilities\n',
             '      - name: Enforce no fixable critical vulnerabilities\n        if: false\n', 1)),
         ("wrong base manifest", workflow.replace(
-            'BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}',
-            'BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}', 1)),
+            '      - name: Enforce no fixable critical vulnerabilities\n'
+            '        env:\n'
+            '          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}',
+            '      - name: Enforce no fixable critical vulnerabilities\n'
+            '        env:\n'
+            '          BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}', 1)),
         ("ignore gate failure", workflow.replace(
             '      - name: Enforce no fixable critical vulnerabilities\n',
             '      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n', 1)),
