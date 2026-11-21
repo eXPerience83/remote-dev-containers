@@ -36,7 +36,7 @@ if [[ "$expected_version" =~ ^edge-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7}$ ]];
   expected_channel=edge
   [[ "${expected_version##*-}" == "${expected_revision:0:7}" ]] \
     || fail "edge version short SHA does not match expected source revision"
-elif [[ "$expected_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   expected_channel=stable
 else
   fail "expected well-formed Edge identity or stable release tag"
