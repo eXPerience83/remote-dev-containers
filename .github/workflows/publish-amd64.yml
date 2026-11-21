@@ -290,18 +290,7 @@ jobs:
             --tag "ghcr.io/${NAMESPACE}/remote-dev-base:stable-amd64" \
             "$base_ref"
 
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file runtime-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
-            "$runtime_ref"
-
           promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
-
           if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
             echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
             exit 1
@@ -319,6 +308,17 @@ jobs:
               exit 1
             fi
           done
+
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --metadata-file runtime-promotion.json \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
+            --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
+            "$runtime_ref"
+
+          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
 
           if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
             echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
