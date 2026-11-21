@@ -105,6 +105,7 @@ fi
             ("bash", "scripts/test-image-identity.sh"),
             ("python3", "scripts/test_edge_build_identity.py"),
             ("python3", "scripts/test_update_upstream_changelog.py"),
+            ("python3", "scripts/test_publication_workflow_contract.py"),
             ("python3", "scripts/test_publish_stable_security_cadence.py"),
             ("python3", "scripts/test_publication_execution_sentinels.py"),
             ("python3", "scripts/test_guard_stable_promotion.py"),
