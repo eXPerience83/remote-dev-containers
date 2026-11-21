@@ -258,7 +258,7 @@ Antes de crear el primer tag Git de versión estable (o uno posterior), verifica
 12. La evidencia del repositorio/release no contiene credenciales, rutas de infraestructura privada ni datos sensibles de cuenta/sesión.
 13. #31 no contiene ningún issue pendiente que contradiga la afirmación estable que realmente se va a realizar.
 
-**Después de crear el tag Git revisado, pero antes de escribir los alias GHCR estables o de versión** (controles automáticos bloqueantes del publicador):
+**Después de crear el tag Git revisado: controles del candidato stable, promoción y aceptación posterior** (en ese orden):
 
 1. Construir los candidatos independientes de base y runtime stable; vincular los digests del índice OCI y los manifiestos AMD64 exactos al SHA, versión y canal del código etiquetado; ejecutar smoke de arranque, autenticación y aislamiento sobre ese candidato.
 2. Validar avisos y ambos SPDX, incluida la evidencia suplementaria del paquete/archivos Chromium, y los dos informes Trivy vinculados al candidato con cobertura de paquetes Ubuntu y lenguajes. Rechazar hallazgos `CRITICAL` corregibles.
