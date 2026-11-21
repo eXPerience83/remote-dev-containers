@@ -86,7 +86,8 @@ class ChromiumSbomContract(unittest.TestCase):
                     rel["relatedSpdxElement"] for rel in result["relationships"]
                     if rel["spdxElementId"] == result["SPDXID"]
                     and rel["relationshipType"] == "DESCRIBES"
-                }, {mod.PACKAGE_ID, mod.EXEC_ID, mod.LICENSE_ID})
+                }, {"SPDXRef-ContainerImage-fixture", mod.PACKAGE_ID,
+                    mod.EXEC_ID, mod.LICENSE_ID})
                 self.assertIn("not an exhaustive package file inventory",
                               package["sourceInfo"])
                 self.assertIn("Trivy did not identify or vulnerability-scan Chromium",
