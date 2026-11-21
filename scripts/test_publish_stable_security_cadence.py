@@ -183,6 +183,15 @@ def test_real_trivy_report_gate() -> None:
                   (result.stdout + result.stderr)[-450:])
 
 
+def move_base_registry_check_after_runtime(workflow: str) -> str:
+    """Actually reorder the base tag read-back beyond the first runtime write."""
+    block = step(workflow, "Promote one scanned digest to canonical stable tags")
+    start = block.index("          # Check the registry aliases")
+    end = block.index("          docker buildx imagetools create", start)
+    moved = block[start:end]
+    return workflow.replace(block, block[:start] + block[end:] + moved)
+
+
 def main() -> None:
     wf = STABLE.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
@@ -204,25 +213,20 @@ def main() -> None:
         ("wrong Chromium digest", wf.replace(
             "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}",
             "Record exact Chromium identity and notices in stable SPDX images\n        env:\n          BASE_MANIFEST_REF: ${{ steps.base.outputs.digest }}", 1), helper),
-        ("base alias verification moved after runtime tags", wf.replace(
-            '          # Check the registry aliases, not only the local promotion metadata.\n' +
-            '          for tag in "$GITHUB_REF_NAME" stable-amd64; do',
-            '          # base verification deferred beyond runtime promotion\n' +
-            '          for tag in "$GITHUB_REF_NAME" stable-amd64; do', 1).replace(
-            '          docker buildx imagetools create \\\n            --prefer-index=false \\\n            --metadata-file runtime-promotion.json',
-            '          docker buildx imagetools create \\\n            --prefer-index=false \\\n            --metadata-file runtime-promotion.json', 1), helper),
+        ("base alias verification moved after runtime tags",
+         move_base_registry_check_after_runtime(wf), helper),
         ("skip smoke by condition", wf.replace(
-            "      - name: Smoke-test the exact stable publication candidates\\n",
-            "      - name: Smoke-test the exact stable publication candidates\\n        if: false\\n", 1), helper),
+            "      - name: Smoke-test the exact stable publication candidates\n",
+            "      - name: Smoke-test the exact stable publication candidates\n        if: false\n", 1), helper),
         ("skip gate by condition", wf.replace(
-            "      - name: Enforce no fixable critical vulnerabilities\\n",
-            "      - name: Enforce no fixable critical vulnerabilities\\n        if: false\\n", 1), helper),
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            "      - name: Enforce no fixable critical vulnerabilities\n        if: false\n", 1), helper),
         ("ignore gate error", wf.replace(
-            "      - name: Enforce no fixable critical vulnerabilities\\n",
-            "      - name: Enforce no fixable critical vulnerabilities\\n        continue-on-error: true\\n", 1), helper),
+            "      - name: Enforce no fixable critical vulnerabilities\n",
+            "      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n", 1), helper),
         ("missing guard", wf.replace(
-            "      - name: Guard stable promotion against overwrite or downgrade\\n",
-            "      - name: Skip stable promotion guard\\n", 1), helper),
+            "      - name: Guard stable promotion against overwrite or downgrade\n",
+            "      - name: Skip stable promotion guard\n", 1), helper),
         ("no stable base tag read-back", wf.replace(
             'for tag in "$GITHUB_REF_NAME" stable-amd64; do',
             'for tag in "disabled-base"; do', 1), helper),
