@@ -201,14 +201,46 @@ digests and aliases is a **read-only no-op**; a rebuilt candidate with new diges
 is intentionally rejected even if its source SHA is the same. The runner records
 `stable-promotion-preflight.json` and its Docker promotion metadata.
 
-**Important partial-promotion limitation:** Publishing aliases into two GHCR
-repositories is **not atomic**. A failed workflow can have moved base or some
-runtime tags. A red workflow is therefore **not proof that stable/latest stayed
-unchanged**. Inspect the recorded preflight and current GHCR digests, stop
-other publishing attempts, and obtain operator approval for a manual
-reconciliation using only the **previously known immutable OCI indexes**.
-Read back each corrected alias. Never resolve a partial failure by
-blindly rerunning a historical source tag or rebuilding an unaccepted image.
+**Important partial-promotion limitation:** Publishing into two GHCR repositories
+is **not atomic**. A failed workflow can leave any subset of the six target tags
+modified; a red workflow does **not** prove that `stable/latest` stayed unchanged.
+
+**Operator-only reconciliation after failure (no automatic retry):**
+
+1. Freeze all publishers, including historical workflow reruns and other
+   registry writers. Retain the preflight journal, both candidate **index**
+   digests, the last accepted stable **index** digests (if any), and the failed
+   workflow logs. Read the **six current tag-to-digest mappings**:
+   `remote-dev-base:vX.Y.Z`, `remote-dev-base:stable-amd64`,
+   `remote-dev:vX.Y.Z`, `remote-dev:stable`,
+   `remote-dev:stable-amd64` and `remote-dev:latest`.
+   Record explicitly which tags were **absent before** the attempt.
+2. Check which writes actually happened. For a previously published stable
+   release, operator-approved restoration of affected stable aliases must use
+   their **recorded prior immutable indexes**, not rebuilds or guessed tags.
+   Also reconcile the **two version tags**: if only base `vX.Y.Z` was created,
+   restoring `stable-amd64` alone is insufficient because the guard will
+   reject the unmatched version tag on retry. An alternate explicit decision
+   may authorize completing the release using only the exact previously
+   smoke-tested and scanned candidate indexes; never fill a missing runtime
+   version tag with an untested digest.
+3. If this was the **first** stable publication, no previous alias/index may
+   exist to restore. The intended rollback state is **absence**, not a guessed
+   image. Identify any newly created version and stable aliases and their
+   GHCR package versions. Deletion requires explicit operator approval and
+   verified package administration: GitHub's supported **Delete package
+   version** operation may delete *every tag attached to that digest*, not
+   just the selected alias. Inspect all affected tags and dependencies before
+   using it; if safe tag-specific removal is unavailable, stop with a recorded
+   blocked/partial state rather than deleting shared or previously valid tags.
+4. After an authorized recovery, reread **all six tags**, including those
+   expected to be absent, and confirm both version tags and all stable aliases
+   meet the guard's consistency requirements. Only then decide on a new
+   release attempt. Never rerun a historic source-tag workflow blindly.
+
+See GitHub's package-version [deletion and restoration guidance](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package)
+for the destructive operation's scope; this repository does not implement
+automatic GHCR rollback.
 
 **Administrator prerequisite for a new release:** Explicitly verify GitHub
 rules protecting creation, modification and deletion of `v*` tags, plus who
