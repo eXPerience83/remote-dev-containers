@@ -101,6 +101,10 @@ jobs:
             scripts/test_resolve_published_image_digest.py \
             scripts/test_periodic_image_rescan_workflow.py \
             scripts/test_publish_edge_security_cadence.py \
+            scripts/guard-stable-promotion.py \
+            scripts/test_guard_stable_promotion.py \
+            scripts/validate-trivy-image-report.py \
+            scripts/test_publish_stable_security_cadence.py \
             scripts/test_trivy_setup_reuse.py \
             web/ttyd-osc52/generate.py \
             web/ttyd-osc52/validate.py \
@@ -138,6 +142,7 @@ jobs:
           python3 scripts/test_antigravity_official_url.py
           python3 scripts/validate-release-channel-contract.py --root .
           python3 scripts/test_publish_stable_security_cadence.py
+          python3 scripts/test_guard_stable_promotion.py
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
           python3 scripts/validate-standalone-artifact-inspection.py
