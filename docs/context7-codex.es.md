@@ -27,7 +27,7 @@ remote-dev-context7 update
 remote-dev-context7 remove
 ```
 
-`status` es pasivo. `install`, `repair`, `update` y `remove` pueden modificar estado persistente privado de Codex y exigen confirmación explícita. `test` también pide confirmación porque realiza una comprobación real contra el endpoint `/ping` documentado por Context7.
+`status` es pasivo. `install`, `repair`, `update` y `remove` pueden modificar estado persistente privado de Codex y exigen confirmación explícita. `test` también pide confirmación porque comprueba `/ping` **y realiza dos llamadas públicas reales** a herramientas MCP (`resolve-library-id` y `query-docs`) sobre documentación de Requests. No modifica credenciales ni sesiones y no acredita la ejecución nativa desde Codex.
 
 Un `install` o `repair` interactivo pregunta cómo gestionar la autenticación:
 
@@ -45,7 +45,7 @@ El contrato no interactivo existente sigue disponible con `--yes`, `--anonymous`
 
 El menú general de Codex permite **6) MCP integrations... → 1) Context7...**. El submenú es común con Antigravity: **1 Estado/diagnóstico**, **2 Probar conexión**, **3 Gestionar autenticación**, **4 Instalar/reparar**, **5 Eliminar** y **0 Volver**.
 
-`status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba HTTP requiere confirmación y **no acredita que las herramientas MCP respondan ni la autenticación**. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
+`status --menu`, `plan` y el nuevo `menu-state` son operaciones pasivas. `menu-state` solo imprime `healthy`, `absent`, `repairable` o `blocked`, nunca secretos. La prueba activa requiere confirmación y comprueba el protocolo MCP y dos herramientas de documentación; **no acredita por sí misma que el agente Codex las utilice** ni que el OAuth nativo esté autenticado. Un resultado documental ambiguo queda `UNVERIFIED`, nunca como éxito demostrado. El indicador `Not logged in` de `codex mcp list` corresponde al OAuth nativo de Codex y no demuestra que la API key inyectada sea inválida.
 
 La gestión de autenticación sigue utilizando la clave privada y el flujo de dispositivo ya existente. Primero se instala o repara una configuración dañada. Al pulsar Instalar/reparar sobre una entrada sana, **no hay mutación ni confirmación**. Una configuración ausente usa `install`, una recuperable previsualiza `plan` y utiliza `reinstall`, conservando la clave. Las entradas ambiguas o personalizadas quedan bloqueadas. Eliminar borra solo registro y copia local de clave gestionados, no revoca la clave del proveedor ni elimina Playwright/OpenAI Developer Docs. Se conservan los comandos CLI anteriores, incluidos `repair` y `update`.
 
@@ -154,7 +154,7 @@ Límites de red:
 - `install`/`repair` manual o anónimo: solo estado local;
 - device login: consulta explícita de metadatos del npm público y descarga/verificación transitoria del paquete top-level exacto, seguida de la resolución npm necesaria para ejecutar el paquete verificado y de la autorización por dispositivo en Context7;
 - `update`/`remove`: solo estado local;
-- `test`: comprobación explícita de configuración + `https://mcp.context7.com/ping`;
+- `test`: configuración local + `https://mcp.context7.com/ping` + negociación MCP, listado y dos herramientas con documentación pública de Requests y `timeout`; los resultados textuales ambiguos son `UNVERIFIED`, no PASS; el gestor no imprime la documentación ni la clave y desactiva proxies del entorno en la comprobación.
 - sesión Codex con Context7 habilitado: Codex puede contactar el MCP alojado para inicialización y herramientas.
 
 ## Privacidad, términos y evidencia
