@@ -14,9 +14,9 @@ El orden permanente de madurez es:
 dev -> edge -> stable = latest
 ```
 
-Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable `v0.2.0` se publicó el 5/11/2026. El código `0.2.1` preparado **no** publica por sí mismo otra imagen: hasta que termine satisfactoriamente su workflow de tag, `stable` y `latest` seguirán apuntando al último digest estable publicado. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
+Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable `v0.2.0` se publicó el 5/11/2026. El código `0.2.1` preparado **no** publica por sí mismo otra imagen: hasta que el publicador por tag empiece a modificar alias, `stable` y `latest` deberían conservar el último digest estable; un fallo durante la promoción todavía puede dejar una actualización parcial del registro. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
 
-La versión local de código de este corte de mantenimiento es `0.2.1`. El número de código no acredita la publicación: edge conserva su identidad fechada y solo el workflow del tag estable `v0.2.1`, tras terminar correctamente, puede mover `stable` y `latest`. Los pines, los locks y el changelog pertenecen a sus procesos de revisión; las actualizaciones rutinarias no crean una nueva release estable automáticamente.
+La versión local de código de este corte de mantenimiento es `0.2.1`. El número de código no acredita la publicación: edge conserva su identidad fechada y solo una publicación autorizada por el tag estable `v0.2.1` debería avanzar `stable` y `latest`; un job fallido también podría haber escrito algunos tags, por lo que deben releerse los seis alias antes de aceptar o revertir. Los pines, los locks y el changelog pertenecen a sus procesos de revisión; las actualizaciones rutinarias no crean una nueva release estable automáticamente.
 
 ## Capas de identidad
 
