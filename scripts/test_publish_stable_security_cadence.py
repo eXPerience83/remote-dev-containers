@@ -122,8 +122,11 @@ def validate(source: str, helper: str) -> None:
         ),
         "exact-candidate smoke must really execute with all six expected arguments",
     )
+    trivy_action = "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25"
     for name, ref in ((stages[8], "base_manifest"), (stages[9], "runtime_manifest")):
         scan = step(source, name)
+        check(step_metadata(scan).get("uses", "").split(" #", 1)[0] == trivy_action,
+              "stable Trivy scan action is not pinned: " + name)
         for key, value in (
             ("scanners", "vuln"),
             ("vuln-type", "os,library"),
@@ -133,10 +136,17 @@ def validate(source: str, helper: str) -> None:
         ):
             check(active_mapping_value(scan, "with", key) == value,
                   "stable Trivy effective input changed: " + name + "/" + key)
-    for name, ref in zip((stages[5], stages[6]), ("base_manifest", "runtime_manifest")):
-        check(active_mapping_value(step(source, name), "with", "image-ref") ==
-              "${{ steps." + ref + ".outputs.ref }}",
-              "non-exact manifest scanned for SPDX: " + name)
+    for name, ref, output in (
+        (stages[5], "base_manifest", "sbom-publish-base.spdx.json"),
+        (stages[6], "runtime_manifest", "sbom-publish-remote-dev.spdx.json"),
+    ):
+        sbom = step(source, name)
+        check(step_metadata(sbom).get("uses", "").split(" #", 1)[0] == trivy_action,
+              "stable Trivy SPDX action is not pinned: " + name)
+        for key, value in (("image-ref", "${{ steps." + ref + ".outputs.ref }}"),
+                           ("format", "spdx-json"), ("output", output)):
+            check(active_mapping_value(sbom, "with", key) == value,
+                  "stable Trivy SPDX effective input changed: " + name + "/" + key)
     chromium = step(source, "Record exact Chromium identity and notices in stable SPDX images")
     check(runnable_lines(chromium, "Chromium SPDX") == (
         "set -euo pipefail",
@@ -184,6 +194,9 @@ def validate(source: str, helper: str) -> None:
         '"$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json',
     ), "both final stable SPDX files must pass an independent validator")
     upload = step(source, "Upload exact stable publication evidence")
+    check(step_metadata(upload).get("uses", "").split(" #", 1)[0] ==
+          "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "stable publication evidence uploader not pinned")
     check(set(active_upload_paths(upload)) == {
         "sbom-publish-base.spdx.json",
         "sbom-publish-remote-dev.spdx.json",
@@ -493,6 +506,15 @@ def main() -> None:
         ("ignore gate error", wf.replace(
             "      - name: Enforce no fixable critical vulnerabilities\n",
             "      - name: Enforce no fixable critical vulnerabilities\n        continue-on-error: true\n", 1), helper),
+        ("critical base action substituted", wf.replace(
+            step(wf, stages[0]),
+            step(wf, stages[0]).replace(
+                "uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+                "uses: attacker/rogue-action@abcdef", 1), 1), helper),
+        ("base SPDX format disabled", wf.replace(
+            step(wf, "Generate exact stable base SPDX SBOM"),
+            step(wf, "Generate exact stable base SPDX SBOM").replace(
+                "format: spdx-json", "format: json", 1), 1), helper),
         ("critical base scan downgraded to HIGH", wf.replace(
             step(wf, stages[0]),
             step(wf, stages[0]).replace('severity: CRITICAL', 'severity: HIGH', 1),
