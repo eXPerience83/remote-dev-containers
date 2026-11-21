@@ -104,6 +104,8 @@ jobs:
             scripts/guard-stable-promotion.py \
             scripts/test_guard_stable_promotion.py \
             scripts/validate-trivy-image-report.py \
+            scripts/publication_workflow_contract.py \
+            scripts/test_publication_workflow_contract.py \
             scripts/test_publish_stable_security_cadence.py \
             scripts/test_publication_execution_sentinels.py \
             scripts/test_trivy_setup_reuse.py \
