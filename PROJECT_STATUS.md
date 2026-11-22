@@ -1,6 +1,6 @@
 # Project status
 
-> **Release source state (2026-11-22):** `v0.3.0` source is prepared while `v0.2.0` remains the last confirmed published stable. The supported AMD64 one-user/private-network image includes Codex OpenAI Docs, optional hosted Context7 for both agents, and bundled pinned Playwright MCP with matching Chromium Headless Shell. #95, #320 and #355 have real Edge evidence; #361 is merged and protects independent stable publication. **This is not a v0.3.0 tag, stable/latest promotion or TrueNAS release approval.**
+> **Current release state (2026-11-22):** [Stable v0.3.0](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.3.0) is published and owner-accepted for AMD64/single-user/private-network use (source `ad852d43ea978515ffd0cdf2c876130146e5c8bb`; closed [#346](https://github.com/eXPerience83/remote-dev-containers/issues/346)). Acceptance was by functional equivalence to a tested TrueNAS Edge after documentation-only changes; **production has not been switched to the Stable digest** and a host restore/rollback was not exercised. Next *planned* releases: **v0.4.0 [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366)** (exchange/Chromium security) and **v0.5.0 [#367](https://github.com/eXPerience83/remote-dev-containers/issues/367)** (browser terminal/mobile UX). See [roadmap](docs/roadmap.md) and [releases](docs/releases.md). All dated sections below are historical snapshots, not the current release status.
 
 ## Locked foundations
 
