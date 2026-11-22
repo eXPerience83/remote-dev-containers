@@ -1,6 +1,15 @@
 # Roadmap
 
-The detailed release/support tracker is issue #31. This document summarizes delivery milestones without replacing issue-level acceptance criteria.
+**Current published stable:** [v0.3.0](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.3.0) (2026-11-22; exact release/support outcome in [#346](https://github.com/eXPerience83/remote-dev-containers/issues/346)). Next two *planned, not yet implemented* releases: **v0.4.0 [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366)**, then **v0.5.0 [#367](https://github.com/eXPerience83/remote-dev-containers/issues/367)**.
+
+This document is the high-level plan. Per-feature issues own design and acceptance; trackers #366 and #367 own release scope and exit gates. The older #31 contains historical release/support discussion; older checklists must not supersede the completed #346 outcome.
+
+## Published baseline — v0.3.0
+
+- **Published and accepted:** Git tag `v0.3.0` at source SHA `ad852d43ea978515ffd0cdf2c876130146e5c8bb`; the independent stable candidate passed its release gates. Scope: AMD64, single user and trusted LAN/private mesh.
+- **Shipped:** Codex and optional experimental Antigravity with private role state, Context7 for both roles, Codex OpenAI Docs MCP, pinned Playwright MCP/Chromium Headless Shell, audited menu confirmation parity and an updated bilingual README with TrueNAS screenshots.
+- **Acceptance boundary:** owner accepted Stable by functional equivalence to the already tested Edge because only documentation changed between that Edge and source tag. **No claim of deploying Stable's digest to production TrueNAS, executing a host rollback/restore, or proving the two OCI digests identical.** Refer to #346 for exact evidence.
+- **Release policy:** source edits or a green Edge CI run do **not** authorize publishing/moving `stable`/`latest`. Stable requires the independent exact-candidate publication, explicit review and operator authorization described in `docs/releases.md`.
 
 ## Completed foundations
 
@@ -10,7 +19,7 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - Apache-2.0 project licensing, third-party inventory/notices, SBOM generation and vulnerability scanning established.
 - Immutable pins/provenance checks and bounded update ownership established.
 - `dev -> edge -> stable = latest` release-channel contract implemented; `latest` is stable-only.
-- The first stable image `v0.2.0` was published after TrueNAS PR2 acceptance; `v0.2.1` is the next reviewed source patch for Codex OpenAI Docs MCP, while Chromium/Playwright #313 remains draft. Every stable update requires its own tagged build, scans and digest verification.
+- Stable `v0.2.0` was followed by published and operator-accepted `v0.3.0` on 2026-11-22; every stable update has an independent exact-tag candidate build, smoke, notices, SPDX, vulnerability gate and digest verification. See #346.
 
 ### Codex AMD64 and outer-container isolation
 
@@ -51,53 +60,62 @@ The detailed release/support tracker is issue #31. This document summarizes deli
 - The #53 human policy/terms disposition is recorded: Remote Dev may keep this official-CLI wrapper/container integration experimental, without claiming vendor approval or reusing Google/Antigravity OAuth in other agents/services.
 - Scheduled #83 review automation is shipped: read-only static discovery executes no vendor code, while executable inspection remains an explicit trusted action.
 
-### Context7 for Codex
+### MCP integrations, browser and documentation
 
-- Hosted Context7 MCP configuration is implemented for Codex.
-- Optional device-code onboarding uses a reviewed transient `ctx7` CLI path and removes the vendor package/login/cache state afterwards.
-- Hosted-service privacy/terms and credential boundaries are documented; Context7 remains outside the image SBOM/runtime bundle.
+- Hosted Context7 MCP is optional and role-private for Codex and experimental Antigravity (#95 closed); real tool calls and persistence across Edge container recreation were verified.
+- Optional device-code onboarding uses a reviewed transient `ctx7` CLI path and removes its vendor package/login/cache state afterwards. Hosted-service boundaries and terms are tracked in #53; Context7 is not redistributed in the image.
+- Codex includes official OpenAI Docs MCP; pinned Playwright MCP + matching Chromium Headless Shell was accepted with security repair #320 and real MCP checks #355. This does not imply arbitrary project-owned Playwright E2E runtimes (#179).
 
-## Current milestone — v0.2.1 maintenance release
+## Planned next — v0.4.0: shared file exchange + Chromium security
 
-The initial stable `v0.2.0` release shipped on 2026-11-05. This milestone is the maintenance patch `v0.2.1`, containing merged [#312](https://github.com/eXPerience83/remote-dev-containers/pull/312) OpenAI Docs MCP for Codex and reviewed dependency updates already on main. Live Codex search/fetch acceptance is recorded in #31; it does not imply exhaustive empty-state and offline TrueNAS acceptance. The draft Chromium/Playwright #313, the open updater #314 and the optional WeTTY prototype #301 are not part of this source cut. The next stable publisher must scan and promote its own verified digest.
+**Tracker: [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366).** Priority is a safe new feature without changing existing project layout or weakening container isolation.
 
-PR2 #281's six locked CLI additions and 53-command baseline were accepted on TrueNAS under closed #121, including role-scoped persistence/session recovery. Extra PR3/#180 tooling remains optional future work, not a first-stable blocker.
+### Sequenced, separately reviewable PRs
 
-1. **PR2 TrueNAS evidence accepted.** #121 is complete for the functional/runtime scope; no repeat app reset or full tool-test run is required merely for the source-version cut.
-2. **#31 — release decision.** Keep the tested AMD64/private-network support scope narrow and explicitly defer #93 fault-injection/rollback acceptance beyond the already successful scheduled edge rebuilds.
-3. **Exact v0.2.1 source CI.** Review the new v0.2.1 patch PR against current main, require Build AMD64/smoke, notices, SPDX and no-fixable-critical gate on its exact head, then merge only while fresh.
-4. **Stable publisher.** Create tag `v0.2.1` on the reviewed source-cut merge SHA only after all gates; the publisher builds/scans its own candidate and must prove `v0.2.1`, `stable`, `stable-amd64` and `latest` resolve to the same tested OCI digest.
+1. **[#360](https://github.com/eXPerience83/remote-dev-containers/issues/360) — browser CVE awareness:** detect and report Chromium Headless Shell risks even if the `@playwright/mcp` version is unchanged. Correlate official evidence with the actual pinned MCP/Core/browser revision; fail visibly on unknown network/source status; never mix unofficial browser ZIPs or silently auto-promote.
+2. **[#71](https://github.com/eXPerience83/remote-dev-containers/issues/71) — persistent `/exchange` folder:** introduce one shared path `${REMOTE_DEV_DATA_ROOT}/exchange`, mounted narrowly into enabled Codex and Antigravity services, optionally exported as SMB by TrueNAS itself. No agent SMB client/server, no project-folder shares, no parent root mount, no credentials in the share, and **no mount into the launcher**. Prefer an explicit backward-compatible opt-in; confirm exact Compose/bootstrap/preflight/ACL contract before coding so existing deployments do not fail for a missing bind source.
+3. **[#327](https://github.com/eXPerience83/remote-dev-containers/issues/327) — bounded CI/code housekeeping and docs:** eliminate only demonstrably redundant paths without removing protections; reconcile already-merged menu parity PR #358 with open tracker #357. Bilingual operator instructions, changed-path manifests and rollback notes must accurately match the delivered feature.
+4. **Edge + real TrueNAS acceptance:** record source/OCI digest; validate agent-to-agent handoff and read/write from authorized SMB client, filenames/ACLs, SMB disabled state, persistence after recreation, unaffected private workspaces/credentials and unchanged launcher/container security. Avoid unnecessary production resets and retain a known-working rollback reference.
+5. **v0.4.0 source cut and independent stable promotion:** changelog, #53 distribution review when triggered, exact-head CI, smoke, notices, SPDX, Trivy/browser evidence, operator approval and verified promoted digests. No auto-tag or `latest` move merely from merging a feature PR.
 
-A normal integrated deployment remains on `edge-amd64` until that explicit stable publication exists.
+**Explicitly deferred to v0.5.0:** web terminal/frontend/mobile controls #247/#97/#90/#91/#152/#87. A security fix may be expedited independently when risk warrants, without quietly expanding release scope.
 
-## Active integration — Context7 diagnostics and role-local MCP reinstall (#95 / PR #324)
+## Planned following — v0.5.0: browser terminal and mobile UX
 
-The next Context7 capability is **not** a repair of one TrueNAS image. The image will offer passive, actionable MCP diagnostics and explicit isolated Context7 registration reinstall **for both Codex and Antigravity**, protecting credentials and unrelated MCPs. Antigravity is anonymous-by-default and remains experimental. The [execution plan](context7-mcp-lifecycle-plan.md), [Spanish summary](context7-mcp-lifecycle-plan.es.md) and decision D016 define the milestones, tests and acceptance gates.
+**Tracker: [#367](https://github.com/eXPerience83/remote-dev-containers/issues/367).** Do not assume a new ttyd client is necessary until the alternative is measured.
 
-The project owner approved a new D017 integration-first sequence: finish exact-HEAD CI and CodeRabbit fixes, merge #324 to main, then rebase/refresh and separately merge the upstream-update PR, publish gated Edge, and run real Codex/Antigravity MCP tests plus rollback on the approved TrueNAS stack. **No dev candidate** is required. Offline CI is not real-tool acceptance; results and residual #53 privacy/legal review must remain visible and must not be misrepresented as passed. Stable/latest stay unchanged.
+### Design gate and delivery sequence
+
+1. **[#247](https://github.com/eXPerience83/remote-dev-containers/issues/247) — WeTTY research/prototype first.** Compare an exact stable WeTTY candidate with existing ttyd/tmux on auth, origin, maximum clients, role isolation, reconnection, `/copy` OSC 52, selection/paste, mobile UI, base path, licensing, image cost and TrueNAS lifecycle. Record an explicit go/no-go decision.
+2. **[#97](https://github.com/eXPerience83/remote-dev-containers/issues/97) — frontend foundation, conditional.** If WeTTY does not pass, build one reproducible, pinned, project-owned `ttyd --index` client with compatibility tests. If WeTTY *does* pass, use a focused migration implementation instead and explicitly disposition/supersede the ttyd-specific foundation; **never maintain two clients for the same job**.
+3. **[#90](https://github.com/eXPerience83/remote-dev-containers/issues/90) — mobile terminal keys:** Esc, Ctrl, Alt, Tab, arrows, Home/End, PgUp/PgDn, tested with Samsung Keyboard and Gboard, without breaking keyboard focus, modifier state, AltGr or terminal navigation.
+4. **[#91](https://github.com/eXPerience83/remote-dev-containers/issues/91) — reliable terminal copy:** explicit selection Copy, browser-permission fallback and honest confirmation; preserve `Ctrl+C` interrupt, Unicode input and native Codex `/copy`/OSC 52 on existing supported clients.
+5. **[#152](https://github.com/eXPerience83/remote-dev-containers/issues/152) — Android scrollback:** reproduce and identify owning layer (tmux/alternate screen/xterm/frontend/touch), repair retained-history reachability in Firefox Android and document Chrome Android limits where necessary.
+6. **[#87](https://github.com/eXPerience83/remote-dev-containers/issues/87) + release acceptance:** replace provisional workarounds with tested bilingual browser/keyboard/clipboard matrix; source/lock/license review #53, exact-head CI, desktop Firefox/Chromium + Android Firefox/Chrome smoke, Codex/Antigravity/shell, TrueNAS Edge evidence, independent stable publication and owner sign-off.
+
+**Constraint:** preserve terminal security, project/session persistence, private mounts and v0.4.0 exchange semantics; no public Internet exposure or unreviewed frontend dependencies.
 
 ## Ongoing maintenance
 
-- Grouped upstream component refreshes remain owned by `check-upstream.yml`, with bounded changelog provenance and human-reviewed PRs.
-- Ubuntu/base-image and CI pin updates remain Renovate-owned; Ubuntu runtime-image changes receive deterministic provenance while CI-only action changes are not presented as bundled runtime upgrades.
-- #53 remains the standing legal/license/vendor-policy review log with routine and out-of-cycle triggers.
-- Security/vulnerability refresh work remains governed by the dedicated maintenance issues and release gates; passing one earlier scan is never treated as permanent approval.
+- Grouped upstream component refreshes remain owned by `check-upstream.yml`, with bounded provenance and human-reviewed PRs.
+- Ubuntu/base-image and CI pin updates remain Renovate-owned; CI-only action changes are not claimed as bundled runtime upgrades.
+- #53 remains the standing third-party licensing, vendor terms and privacy review log; revisit for a material new frontend or service boundary.
+- Vulnerability scans and browser monitoring are complementary, not interchangeable. Green Trivy results do not prove a bundled Chromium ZIP is patched; #360 owns that gap.
+- #93 scheduled Edge rebuild hardening and broader failure-injection/rollback checks remain separately tracked; do not claim they were completed solely because v0.3.0 was published.
 
-## Optional / future capabilities
+## Deferred / separate roadmap
 
-These are not shipped by the current core contract unless their own issue says otherwise:
+These issues do not block the planned v0.4.0 or v0.5.0 scope unless a newly identified critical security/regression issue demands a separately documented decision:
 
-- #181 — stronger browser/remote-access security: private mesh/Tailscale, HTTPS, reviewed auth gateway, identity headers, passkeys/MFA, a future secure launcher entry point and any future password-strength/reuse policy.
-- #170 — deferred native TrueNAS Community App/ixVolumes research; current YAML remains supported.
-- #124 — optional role-scoped key-only inbound SSH/remote-client path.
-- #95 — Context7 for Antigravity: **active via PR #324**, gated by the Context7 lifecycle plan and #53 review; not yet shipped.
-- #71 — optional SMB access to selected project paths only.
-- #112 — ARM64.
-- #121 — PR1 and PR2 are integrated (53 baseline commands); live TrueNAS acceptance remains before closing the tracker. PR3 is a separate agent-demand survey.
-- #180 — persistent on-demand project toolchains beyond the immutable baseline.
-- #148 — concurrent sessions/worktrees.
-- #151 — isolated container build/test tooling without a host Docker socket.
-- #97/#90/#91/#152/#87 — frontend/mobile/browser-experience work.
-- Claude Code — future dedicated implementation only after fresh licensing, installation, authentication and isolation review.
+- #181 — private-mesh/HTTPS/auth-gateway improvements and stronger access identity; the supported baseline remains trusted private network.
+- #170 — native TrueNAS Community App / ixVolumes research; current Custom App YAML remains canonical.
+- #124 — role-scoped inbound SSH / remote clients.
+- #112 — ARM64 support, distinct from presently supported AMD64.
+- #179 — optional project-owned browser E2E toolchains (distinct from bundled Playwright MCP).
+- #180 and #242 — project-scoped language toolchains and developer-environment contract.
+- #148 — concurrent Codex sessions/worktrees.
+- #151 — isolated agent container build/test without exposing the host Docker socket.
+- #246 — code-server as a longer-term research option.
+- Claude Code — only after a new provider/licensing/auth/isolation review.
 
-Optional sandbox-enabled variants or a VM distribution should be considered only if a reproducible non-privileged design or a demonstrated supported requirement justifies the added complexity.
+Do not imply that a planned feature ships until its PR, real-world acceptance and stable publication gates are complete.
