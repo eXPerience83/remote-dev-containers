@@ -66,7 +66,7 @@ El launcher **no es** una pasarela de autenticación: cada terminal de agente pr
 | Canal | Uso |
 | --- | --- |
 | `edge` / `edge-amd64` | Imagen experimental para validación; cambia con frecuencia. |
-| `stable` / `latest` | Canal estable previsto, actualizado solo mediante publicación autorizada y probada por separado. |
+| `stable` / `latest` | Etiquetas estables previstas: la política del proyecto es actualizarlas solo mediante publicaciones autorizadas y verificadas de forma independiente; aún no se han confirmado los controles frente a publicadores históricos. |
 | `vMAJOR.MINOR.PATCH` | Versión estable etiquetada tras las pruebas y aceptación del publicador del tag exacto. |
 
 La **versión del código**, la identidad de la imagen Edge, el **digest del índice OCI** y el digest de su manifiesto AMD64 son identificadores distintos. Subir la versión del código no publica automáticamente Stable. Consulta las [versiones realmente publicadas](https://github.com/eXPerience83/remote-dev-containers/releases) y el [procedimiento de publicación](docs/releases.es.md). No des por bloqueados los publicadores históricos hasta verificar las reglas de tags y las reejecuciones de workflows.

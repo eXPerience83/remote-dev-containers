@@ -66,7 +66,7 @@ The launcher **is not** an authentication gateway: Codex and Antigravity protect
 | Channel | Purpose |
 | --- | --- |
 | `edge` / `edge-amd64` | Experimental image for validation; may change frequently. |
-| `stable` / `latest` | The same intended stable channel, updated only through an authorized, separately tested release. |
+| `stable` / `latest` | Intended stable aliases: project policy is to update them only through authorized, independently tested releases; controls against historical publishers are not yet verified. |
 | `vMAJOR.MINOR.PATCH` | Versioned stable release after the exact-tag publisher and acceptance gates complete. |
 
 A **source version**, an Edge build label, the **OCI index digest**, and its AMD64 child digest are different identifiers. A new source version does not automatically publish Stable. [See current published releases](https://github.com/eXPerience83/remote-dev-containers/releases) and the [release procedure](docs/releases.md) for actual status. Do not assume old tag-based publishers are prevented from modifying aliases until repository tag and workflow re-run controls are verified.
