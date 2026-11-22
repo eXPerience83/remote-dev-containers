@@ -27,7 +27,7 @@ jobs:
       - name: Validate stable release tag
         run: |
           set -euo pipefail
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "ERROR: stable publication requires an exact vMAJOR.MINOR.PATCH tag; got $GITHUB_REF_NAME" >&2
             exit 1
           fi
@@ -54,6 +54,12 @@ jobs:
       - name: Validate repository configuration
         run: |
           bash scripts/validate-publication-source.sh stable
+
+      - name: Prepare isolated SPDX validator before registry login
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
@@ -87,6 +93,7 @@ jobs:
           echo "mise_amd64_sha256=$MISE_AMD64_SHA256" >> "$GITHUB_OUTPUT"
           echo "mise_arm64_sha256=$MISE_ARM64_SHA256" >> "$GITHUB_OUTPUT"
           echo "python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT"
+          echo "python_315_version=$PYTHON_315_VERSION" >> "$GITHUB_OUTPUT"
           echo "node_version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
           echo "npm_version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "uv_version=$UV_VERSION" >> "$GITHUB_OUTPUT"
@@ -113,6 +120,7 @@ jobs:
             MISE_AMD64_SHA256=${{ steps.versions.outputs.mise_amd64_sha256 }}
             MISE_ARM64_SHA256=${{ steps.versions.outputs.mise_arm64_sha256 }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
+            PYTHON_315_VERSION=${{ steps.versions.outputs.python_315_version }}
             NODE_VERSION=${{ steps.versions.outputs.node_version }}
             NPM_VERSION=${{ steps.versions.outputs.npm_version }}
             UV_VERSION=${{ steps.versions.outputs.uv_version }}
@@ -124,16 +132,17 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Scan exact stable base candidate for critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
-          format: json
-          output: trivy-publish-base.json
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
-          exit-code: "0"
+      - name: Resolve exact stable base AMD64 manifest
+        id: base_manifest
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 
       - name: Build untagged stable Remote Dev candidate
         id: runtime
@@ -144,7 +153,7 @@ jobs:
           platforms: linux/amd64
           outputs: type=image,name=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev,push-by-digest=true,name-canonical=true,push=true
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev-base@${{ steps.base.outputs.digest }}
+            BASE_IMAGE=${{ steps.base_manifest.outputs.ref }}
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
             CODEX_AMD64_SHA256=${{ steps.versions.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.versions.outputs.codex_arm64_sha256 }}
@@ -159,80 +168,165 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Resolve exact stable Remote Dev AMD64 manifest
+        id: runtime_manifest
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="$(bash scripts/resolve-oci-platform-manifest.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the exact stable publication candidates
+        env:
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+          PROJECT_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bash scripts/validate-edge-publication-candidate.sh \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "$BASE_MANIFEST_REF" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" \
+            "$REMOTE_DEV_MANIFEST_REF" \
+            "$GITHUB_SHA" \
+            "$PROJECT_VERSION"
+
+      - name: Generate exact stable base SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
+          format: spdx-json
+          output: sbom-publish-base.spdx.json
+
+      - name: Generate exact stable Remote Dev SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
+          format: spdx-json
+          output: sbom-publish-remote-dev.spdx.json
+          skip-setup-trivy: true
+          cache: false
+
+      # Trivy omits Chromium Headless Shell when provisioned from a raw ZIP.
+      # Supplement SPDX with image-derived archive/binary/license evidence.
+      # This is provenance only, not a Chromium CVE scan.
+      - name: Record exact Chromium identity and notices in stable SPDX images
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+        run: |
+          set -euo pipefail
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$BASE_MANIFEST_REF" \
+            --spdx sbom-publish-base.spdx.json \
+            --evidence chromium-evidence-publish-base.json
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$REMOTE_DEV_MANIFEST_REF" \
+            --spdx sbom-publish-remote-dev.spdx.json \
+            --evidence chromium-evidence-publish-remote-dev.json
+
+      # A structural self-check is not a substitute for SPDX 2.3 semantics.
+      # Enforce independent parsing of both final, Chromium-augmented documents.
+      - name: Validate exact stable SPDX documents with independent parser
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json
+
+      - name: Scan exact stable base candidate for critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.base_manifest.outputs.ref }}
+          format: json
+          output: trivy-publish-base.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "0"
+          skip-setup-trivy: true
+          cache: false
+
       - name: Scan exact stable Remote Dev candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ steps.registry.outputs.namespace }}/remote-dev@${{ steps.runtime.outputs.digest }}
+          image-ref: ${{ steps.runtime_manifest.outputs.ref }}
           format: json
           output: trivy-publish-remote-dev.json
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
           exit-code: "0"
+          skip-setup-trivy: true
+          cache: false
 
-      - name: Upload publication vulnerability reports
+      - name: Upload exact stable publication evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: trivy-publication-reports
+          name: stable-publication-reports
           path: |
+            sbom-publish-base.spdx.json
+            sbom-publish-remote-dev.spdx.json
+            chromium-evidence-publish-base.json
+            chromium-evidence-publish-remote-dev.json
             trivy-publish-base.json
             trivy-publish-remote-dev.json
           if-no-files-found: warn
           retention-days: 14
 
       - name: Enforce no fixable critical vulnerabilities
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+          UBUNTU_VERSION: ${{ steps.versions.outputs.ubuntu_version }}
         run: |
-          bash scripts/enforce-trivy-gate.sh \
-            "exact stable base publication candidate:trivy-publish-base.json" \
-            "exact stable Remote Dev publication candidate:trivy-publish-remote-dev.json"
+          set -euo pipefail
+          python3 scripts/validate-trivy-image-report.py trivy-publish-base.json \
+            --expect-image "$BASE_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
+            --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
+
+      - name: Guard stable promotion against overwrite or downgrade
+        id: promotion_guard
+        env:
+          BASE_MANIFEST_INDEX: ${{ steps.base.outputs.digest }}
+          REMOTE_DEV_MANIFEST_INDEX: ${{ steps.runtime.outputs.digest }}
+          NAMESPACE: ${{ steps.registry.outputs.namespace }}
+        run: |
+          set -euo pipefail
+          python3 scripts/guard-stable-promotion.py \
+            --tag "$GITHUB_REF_NAME" \
+            --base "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_MANIFEST_INDEX}" \
+            --runtime "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_MANIFEST_INDEX}" \
+            --journal stable-promotion-preflight.json
 
       - name: Promote one scanned digest to canonical stable tags
+        if: steps.promotion_guard.outputs.mode == 'fresh'
         env:
           NAMESPACE: ${{ steps.registry.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
         run: |
           set -euo pipefail
-          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
-          runtime_ref="ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}"
+          bash scripts/promote-publication-indexes.sh stable \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_REF_NAME"
 
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file base-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:stable-amd64" \
-            "$base_ref"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file runtime-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:${GITHUB_REF_NAME}" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:stable-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:latest" \
-            "$runtime_ref"
-
-          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
-
-          if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: promoted base digest $promoted_base differs from scanned digest $BASE_DIGEST" >&2
-            exit 1
-          fi
-          if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
-            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from scanned digest $REMOTE_DEV_DIGEST" >&2
-            exit 1
-          fi
-
-          for tag in "$GITHUB_REF_NAME" stable stable-amd64 latest; do
-            tag_ref="ghcr.io/${NAMESPACE}/remote-dev:${tag}"
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-              exit 1
-            fi
-          done
+      - name: Upload stable promotion preflight and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: stable-promotion-journal
+          path: |
+            stable-promotion-preflight.json
+            base-promotion.json
+            runtime-promotion.json
+          if-no-files-found: ignore
+          retention-days: 14

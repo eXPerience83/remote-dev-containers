@@ -89,9 +89,9 @@ def validate(text):
     assert 'name: image-comparison-reports' in blocks[UPLOAD]
     for path in ('sbom-base.spdx.json', 'sbom-remote-dev.spdx.json', 'trivy-base.json', 'trivy-remote-dev.json'):
         assert path in blocks['Upload security and SBOM reports']
-    assert 'scripts/enforce-trivy-gate.sh' in blocks[MANDATORY[-1]]
-    assert '"base image:trivy-base.json"' in blocks[MANDATORY[-1]]
-    assert '"Remote Dev image:trivy-remote-dev.json"' in blocks[MANDATORY[-1]]
+    assert 'scripts/validate-trivy-image-report.py' in blocks[MANDATORY[-1]]
+    assert 'validate-trivy-image-report.py trivy-base.json' in blocks[MANDATORY[-1]]
+    assert 'validate-trivy-image-report.py trivy-remote-dev.json' in blocks[MANDATORY[-1]]
     # No reference image consumer or measurement may escape the guarded blocks.
     for name, body in blocks.items():
         if ':pr2-before' in body or 'measure-tooling-image-delta.sh' in body:

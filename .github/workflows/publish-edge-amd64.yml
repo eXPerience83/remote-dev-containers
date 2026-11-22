@@ -52,6 +52,12 @@ jobs:
         run: |
           bash scripts/validate-publication-source.sh edge
 
+      - name: Prepare isolated SPDX validator before registry login
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/remote-dev-spdx-validator"
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r scripts/spdx-validator-requirements.lock.txt
+
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
@@ -207,6 +213,29 @@ jobs:
           skip-setup-trivy: true
           cache: false
 
+      # Match Build and Stable: Trivy does not discover Chromium provisioned
+      # from the verified Playwright archive. Record image-specific evidence.
+      - name: Record exact Chromium identity and notices in edge SPDX images
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+        run: |
+          set -euo pipefail
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$BASE_MANIFEST_REF" \
+            --spdx sbom-publish-base.spdx.json \
+            --evidence chromium-evidence-publish-base.json
+          python3 scripts/chromium-sbom-evidence.py \
+            --image "$REMOTE_DEV_MANIFEST_REF" \
+            --spdx sbom-publish-remote-dev.spdx.json \
+            --evidence chromium-evidence-publish-remote-dev.json
+
+      - name: Validate exact edge SPDX documents with independent parser
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-base.spdx.json
+          "$RUNNER_TEMP/remote-dev-spdx-validator/bin/pyspdxtools" -i sbom-publish-remote-dev.spdx.json
+
       - name: Scan exact edge base candidate for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -241,16 +270,24 @@ jobs:
           path: |
             sbom-publish-base.spdx.json
             sbom-publish-remote-dev.spdx.json
+            chromium-evidence-publish-base.json
+            chromium-evidence-publish-remote-dev.json
             trivy-publish-base.json
             trivy-publish-remote-dev.json
           if-no-files-found: warn
           retention-days: 14
 
       - name: Enforce no fixable critical vulnerabilities
+        env:
+          BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
+          REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
+          UBUNTU_VERSION: ${{ steps.metadata.outputs.ubuntu_version }}
         run: |
-          bash scripts/enforce-trivy-gate.sh \
-            "exact edge base publication candidate:trivy-publish-base.json" \
-            "exact edge Remote Dev publication candidate:trivy-publish-remote-dev.json"
+          set -euo pipefail
+          python3 scripts/validate-trivy-image-report.py trivy-publish-base.json \
+            --expect-image "$BASE_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
+          python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
+            --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
 
       - name: Promote one scanned and smoke-tested digest to canonical edge tags
         env:
@@ -259,54 +296,6 @@ jobs:
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
         run: |
           set -euo pipefail
-          base_ref="ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}"
-          runtime_ref="ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file base-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:edge-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev-base:sha-${GITHUB_SHA}" \
-            "$base_ref"
-
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --metadata-file runtime-promotion.json \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:edge" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:edge-amd64" \
-            --tag "ghcr.io/${NAMESPACE}/remote-dev:sha-${GITHUB_SHA}" \
-            "$runtime_ref"
-
-          promoted_base="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' base-promotion.json)"
-          promoted_runtime="$(jq -r '.["containerimage.descriptor"].digest // .["containerimage.digest"] // empty' runtime-promotion.json)"
-
-          if [[ "$promoted_base" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: promoted base digest $promoted_base differs from validated digest $BASE_DIGEST" >&2
-            exit 1
-          fi
-          if [[ "$promoted_runtime" != "$REMOTE_DEV_DIGEST" ]]; then
-            echo "ERROR: promoted Remote Dev digest $promoted_runtime differs from validated digest $REMOTE_DEV_DIGEST" >&2
-            exit 1
-          fi
-
-          base_tag_ref="ghcr.io/${NAMESPACE}/remote-dev-base:edge-amd64"
-          actual_base_digest="$(
-            docker buildx imagetools inspect "$base_tag_ref" \
-              --format '{{json .Manifest.Digest}}' | tr -d '"'
-          )"
-          if [[ "$actual_base_digest" != "$BASE_DIGEST" ]]; then
-            echo "ERROR: $base_tag_ref resolved to $actual_base_digest instead of $BASE_DIGEST" >&2
-            exit 1
-          fi
-
-          for tag in edge edge-amd64 "sha-${GITHUB_SHA}"; do
-            tag_ref="ghcr.io/${NAMESPACE}/remote-dev:${tag}"
-            actual_digest="$(
-              docker buildx imagetools inspect "$tag_ref" \
-                --format '{{json .Manifest.Digest}}' | tr -d '"'
-            )"
-            if [[ "$actual_digest" != "$REMOTE_DEV_DIGEST" ]]; then
-              echo "ERROR: $tag_ref resolved to $actual_digest instead of $REMOTE_DEV_DIGEST" >&2
-              exit 1
-            fi
-          done
+          bash scripts/promote-publication-indexes.sh edge \
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_SHA"

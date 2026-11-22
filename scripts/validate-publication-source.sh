@@ -27,6 +27,7 @@ REMOTE_DEV_IMAGE_NAMES_LIB=./scripts/lib/remote-dev-image-names.sh \
 bash scripts/test-image-identity.sh
 python3 scripts/test_edge_build_identity.py
 python3 scripts/test_update_upstream_changelog.py
+python3 scripts/test_guard_stable_promotion.py
 bash scripts/validate-version-pins.sh
 bash scripts/test-source-revision.sh
 jq -e . renovate.json >/dev/null

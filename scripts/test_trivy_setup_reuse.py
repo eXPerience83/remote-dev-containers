@@ -77,7 +77,7 @@ def validate(workflow: str) -> None:
     gate = "      - name: Enforce no fixable critical vulnerabilities\n"
     require(workflow.count(gate) == 1, "missing or duplicate critical vulnerability gate")
     require(positions[-1] < workflow.index(gate), "security gate must follow all scans")
-    require("bash scripts/enforce-trivy-gate.sh" in steps["Enforce no fixable critical vulnerabilities"],
+    require("python3 scripts/validate-trivy-image-report.py" in steps["Enforce no fixable critical vulnerabilities"],
             "fixable critical vulnerability gate removed")
     require("sbom-base.spdx.json" in steps["Upload security and SBOM reports"]
             and "trivy-remote-dev.json" in steps["Upload security and SBOM reports"],

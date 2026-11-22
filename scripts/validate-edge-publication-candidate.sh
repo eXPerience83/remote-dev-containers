@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# != 6 )); then
-  echo "Usage: $0 <base-index@digest> <base-amd64@digest> <runtime-index@digest> <runtime-amd64@digest> <source-sha> <edge-version>" >&2
+  echo "Usage: $0 <base-index@digest> <base-amd64@digest> <runtime-index@digest> <runtime-amd64@digest> <source-sha> <edge-version|vMAJOR.MINOR.PATCH>" >&2
   exit 2
 fi
 
@@ -30,10 +30,17 @@ for ref in "$runtime_index_ref" "$runtime_ref"; do
 done
 [[ "$expected_revision" =~ ^[0-9a-f]{40}$ ]] \
   || fail "expected source revision must be a full lowercase Git SHA"
-[[ "$expected_version" =~ ^edge-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7}$ ]] \
-  || fail "expected edge version is malformed"
-[[ "${expected_version##*-}" == "${expected_revision:0:7}" ]] \
-  || fail "edge version short SHA does not match expected source revision"
+# Historical filename retained for existing Edge fixtures; this verifier also
+# checks candidates built for the stable release channel.
+if [[ "$expected_version" =~ ^edge-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7}$ ]]; then
+  expected_channel=edge
+  [[ "${expected_version##*-}" == "${expected_revision:0:7}" ]] \
+    || fail "edge version short SHA does not match expected source revision"
+elif [[ "$expected_version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  expected_channel=stable
+else
+  fail "expected well-formed Edge identity or stable release tag"
+fi
 
 resolved_base_ref="$(bash "$resolver" "$base_index_ref" linux amd64)" \
   || fail "could not resolve base linux/amd64 manifest from publication index"
@@ -78,7 +85,7 @@ for ref in "$base_ref" "$runtime_ref"; do
     || fail "$ref platform is '$platform', expected 'linux/amd64'"
   assert_label "$ref" org.opencontainers.image.revision "$expected_revision"
   assert_label "$ref" org.opencontainers.image.version "$expected_version"
-  assert_label "$ref" io.github.experience83.remote-dev.channel edge
+  assert_label "$ref" io.github.experience83.remote-dev.channel "$expected_channel"
 done
 
 candidate_startup_metadata() {
@@ -225,26 +232,7 @@ strict_launcher_preflight \
 docker run --rm --entrypoint remote-dev-notices "$base_ref" --check
 docker run --rm --entrypoint remote-dev-notices "$runtime_ref" --check
 
-# Exercise the exact runtime manifest rather than rebuilding a second image.
-docker run --rm --entrypoint /usr/local/bin/codex-smoke-test "$runtime_ref"
-docker run --rm \
-  --network none \
-  --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-remote-dev-context7-runtime-isolation.py:/tmp/test-remote-dev-context7-runtime-isolation.py:ro" \
-  -e REMOTE_DEV_CONTEXT7_DEVICE_LOGIN_HELPER=/usr/local/bin/remote-dev-context7-device-login \
-  "$runtime_ref" /tmp/test-remote-dev-context7-runtime-isolation.py
-
-timeout --foreground 60s docker run --rm \
-  --user 0:0 \
-  --network none \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
-  --entrypoint /opt/remote-dev/mise/shims/python \
-  -v "$root/scripts/test-codex-runtime-noexec-staging.py:/tmp/test-codex-runtime-noexec-staging.py:ro" \
-  -e REMOTE_DEV_CODEX_RUNTIME_MANAGER=/usr/local/bin/remote-dev-codex-runtime \
-  "$runtime_ref" /tmp/test-codex-runtime-noexec-staging.py
-
-bash "$root/scripts/runtime-smoke-test.sh" "$runtime_ref"
-bash "$root/scripts/test-web-password-runtime.sh" "$runtime_ref"
-bash "$root/scripts/test-cross-service-isolation.sh" "$runtime_ref"
+bash "$root/scripts/run-runtime-publication-probes.sh" \
+  "$runtime_ref" "$expected_version" "$expected_revision" "$expected_channel"
 
 echo "Exact edge publication candidate validation: OK"
