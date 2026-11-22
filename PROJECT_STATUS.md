@@ -1,6 +1,6 @@
 # Project status
 
-> **Release state (2026-11-09):** `v0.2.0` is published stable. This `v0.2.1` source patch includes the official Codex-only OpenAI Docs MCP already merged in #312 and subsequent reviewed maintenance; the new stable image is not published until the independent tagged workflow succeeds. The supported core remains AMD64, one user and a private network. Browser automation #313 is excluded.
+> **Release source state (2026-11-22):** `v0.3.0` source is prepared while `v0.2.0` remains the last confirmed published stable. The supported AMD64 one-user/private-network image includes Codex OpenAI Docs, optional hosted Context7 for both agents, and bundled pinned Playwright MCP with matching Chromium Headless Shell. #95, #320 and #355 have real Edge evidence; #361 is merged and protects independent stable publication. **This is not a v0.3.0 tag, stable/latest promotion or TrueNAS release approval.**
 
 ## Locked foundations
 
@@ -91,7 +91,7 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 ## Release and update state
 
-The `v0.2.0` stable image was published after its accepted beta phase. The current source patch `0.2.1` is independent of the already-published stable channel; experimental edge keeps dated identities and only a successful exact-tag `v0.2.1` publisher can advance `stable`/`latest`.
+The `v0.2.0` stable image was published after its accepted beta phase. The `0.3.0` source cut is independent of the already-published stable channel; experimental Edge retains dated identities and only the authorized, successful exact-tag `v0.3.0` publisher may advance `stable`/`latest`. The stable OCI index need not share Edge's digest and must contain the same AMD64 runtime manifest tested by the stable publisher.
 
 Current channel semantics are:
 
@@ -113,7 +113,7 @@ Exact mutable component versions remain authoritative in `versions.env` and runt
 
 ## Historical first-stable checklist (completed for v0.2.0)
 
-The first-stable release checklist was reconciled and published for `v0.2.0`. The historical acceptance bullets below describe that first release; for `v0.2.1`, require a fresh exact-head CI and independent tagged build, scan, digest promotion and verification, without repeating unrelated TrueNAS reconstruction.
+The first-stable release checklist was reconciled and published for `v0.2.0`. The historical acceptance bullets below describe that first release; for `v0.3.0`, require fresh exact-head CI, new Edge acceptance, and independent tagged stable build, smoke, notices, SPDX, scan, OCI-index digest verification and post-publication operator confirmation. Do not claim host restoration/backup tests were performed under the #95 waiver.
 
 - [done] TrueNAS PR2/#121 functional tools, both role sessions, private mounts and persistence accepted without repeating unnecessary deployment resets;
 - reconcile #31, explicitly deferring #93's unproven fault-injection scenarios while preserving its successful scheduled rebuild evidence;
