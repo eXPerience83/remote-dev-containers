@@ -130,6 +130,19 @@ def test_real_trivy_report_gate() -> None:
                   "Trivy gate misclassified " + label + ": " +
                   (result.stdout + result.stderr)[-450:])
 
+        path = Path(directory) / "clean.json"
+        path.write_text(json.dumps(clean), encoding="utf-8")
+        for image, ubuntu, diagnostic in (
+            ("", "26.04", "invalid expected manifest ref"),
+            (base, "", "missing expected Ubuntu release"),
+        ):
+            result = subprocess.run([
+                sys.executable, str(GATE.with_name("validate-trivy-image-report.py")),
+                str(path), "--expect-image", image, "--expect-ubuntu", ubuntu,
+            ], capture_output=True, text=True, timeout=15)
+            check(result.returncode != 0 and diagnostic in result.stdout,
+                  "Trivy CLI failed to reject an empty option: " + diagnostic + "\n" +
+                  result.stdout + result.stderr)
 
     with tempfile.TemporaryDirectory(prefix="remote-dev-trivy-local-") as directory:
         path = Path(directory)

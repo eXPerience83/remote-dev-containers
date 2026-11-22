@@ -55,7 +55,8 @@ def validate(report: object, expected_image: str | None = None,
             "missing Ubuntu OS metadata")
     os_release = os_meta.get("Name")
     require(isinstance(os_release, str) and bool(os_release.strip()), "missing Ubuntu release")
-    if ubuntu:
+    if ubuntu is not None:
+        require(bool(ubuntu), "missing expected Ubuntu release")
         require(os_release == ubuntu or os_release.startswith(ubuntu + "."),
                 "wrong Ubuntu release; expected " + ubuntu)
     if expected_image in LOCAL_IMAGES:
@@ -65,7 +66,7 @@ def validate(report: object, expected_image: str | None = None,
                 "Trivy report does not match the expected local image and ID")
     else:
         require(local_id is None, "--expect-local-id requires a known local image")
-        if expected_image:
+        if expected_image is not None:
             require(bool(DIGEST_REF.fullmatch(expected_image)), "invalid expected manifest ref")
             require(name == expected_image, "Trivy scanned a different image: " + name)
             digests = meta.get("RepoDigests")
