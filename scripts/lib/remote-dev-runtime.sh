@@ -482,12 +482,23 @@ remote_dev_create_project() {
 remote_dev_assert_no_project_mounts() {
   local project="$1"
   local mountinfo="${2:-/proc/self/mountinfo}"
-  local record="" target=""
+  local record="" target="" mountinfo_content=""
   local -a columns=()
   local count=0
 
   if [[ ! -f "$mountinfo" || ! -r "$mountinfo" ]]; then
     remote_dev_runtime_error "mount information is unavailable; project deletion blocked"
+    return 2
+  fi
+
+  # Bash while/read exit status cannot establish whether procfs failed halfway.
+  # Read the entire table before validating or deleting anything.
+  mountinfo_content="$(LC_ALL=C /bin/cat -- "$mountinfo" 2>/dev/null)" || {
+    remote_dev_runtime_error "unable to read complete mount information; project deletion blocked"
+    return 2
+  }
+  if [[ -z "$mountinfo_content" ]]; then
+    remote_dev_runtime_error "empty mount information; project deletion blocked"
     return 2
   fi
 
@@ -503,17 +514,18 @@ remote_dev_assert_no_project_mounts() {
       return 2
     fi
 
-    # Linux mountinfo escapes path whitespace and literal backslashes as
-    # octal sequences; Bash printf -v decodes without stripping newlines.
-    printf -v target "%b" "${columns[4]}"
+    # Decode only the four kernel-defined escapes, consuming exactly 3 octal
+    # digits. printf %b could swallow following digits (e.g. \0407).
+    target="${columns[4]}"
+    target="${target//\\040/ }"
+    target="${target//\\011/$'\t'}"
+    target="${target//\\012/$'\n'}"
+    target="${target//\\134/\\}"
     if [[ "$target" == "$project" || "$target" == "$project/"* ]]; then
       remote_dev_runtime_error "project contains mountpoint; deletion blocked: $target"
       return 2
     fi
-  done < "$mountinfo" || {
-    remote_dev_runtime_error "unable to inspect mount information; project deletion blocked"
-    return 2
-  }
+  done <<< "$mountinfo_content"
 
   if (( count == 0 )); then
     remote_dev_runtime_error "empty mount information; project deletion blocked"
