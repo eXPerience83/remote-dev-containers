@@ -476,10 +476,9 @@ remote_dev_create_project() {
 }
 
 
-# Inspect the service's own mount namespace before any recursive project
-# deletion. --one-file-system alone does not block same-device bind mounts.
-# Optional mountinfo path is for read-only synthetic tests; Delete always uses
-# the kernel /proc/self/mountinfo and never accepts a caller override.
+# Inspect the service's mount namespace before any recursive deletion.
+# --one-file-system is insufficient for same-device bind mounts.
+# Optional mountinfo path is for synthetic tests only; Delete always reads /proc.
 remote_dev_assert_no_project_mounts() {
   local project="$1"
   local mountinfo="${2:-/proc/self/mountinfo}"
@@ -498,17 +497,30 @@ remote_dev_assert_no_project_mounts() {
       remote_dev_runtime_error "malformed mount information; project deletion blocked"
       return 2
     fi
-    read -r -a columns <<<"$record"
+    IFS=" " read -r -a columns <<<"$record"
     if (( ${#columns[@]} < 10 )) || [[ "${columns[4]}" != /* ]]; then
       remote_dev_runtime_error "malformed mount information; project deletion blocked"
       return 2
     fi
 
-    # mountinfo escapes whitespace and literal backslashes; decode only
-    # kernel-defined octal escapes, in this order, without path resolution.
-    target="${columns[4]}"
-    target="${target//\\040/ }"
-    target="${target//\\011/
+    # Linux mountinfo escapes path whitespace and literal backslashes as
+    # octal sequences; Bash printf -v decodes without stripping newlines.
+    printf -v target "%b" "${columns[4]}"
+    if [[ "$target" == "$project" || "$target" == "$project/"* ]]; then
+      remote_dev_runtime_error "project contains mountpoint; deletion blocked: $target"
+      return 2
+    fi
+  done < "$mountinfo" || {
+    remote_dev_runtime_error "unable to inspect mount information; project deletion blocked"
+    return 2
+  }
+
+  if (( count == 0 )); then
+    remote_dev_runtime_error "empty mount information; project deletion blocked"
+    return 2
+  fi
+}
+remote_dev_delete_project() {
   local workspace="$1"
   local name="$2"
   local confirmation="$3"
@@ -537,274 +549,10 @@ remote_dev_assert_no_project_mounts() {
     remote_dev_runtime_error "project path changed during mount inspection: $name"
     return 2
   fi
-  # Defense in depth for different-device mounts. Same-device bind mounts
-  # require the mountinfo guard above; concurrent host mount changes remain
-  # outside the atomicity guarantees of this shell operation.
+  # A separate-device mount change can be caught by rm; same-device bind
+  # mounts require mountinfo inspection. Host-side concurrent remounting is
+  # still outside the atomicity guarantees of this shell operation.
   if ! rm -rf --one-file-system -- "$project"; then
-    remote_dev_runtime_error "failed to delete project: $name"
-    return 1
-  fi
-
-  if [[ -e "$project" || -L "$project" ]]; then
-    remote_dev_runtime_error "project deletion did not remove the expected path: $name"
-    return 1
-  fi
-}
-
-remote_dev_antigravity_experimental_enabled() {
-  [[ "${REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY:-0}" == 1 ]]
-}
-
-remote_dev_resolve_role() {
-  local role="${REMOTE_DEV_ROLE:-codex}"
-
-  case "$role" in
-    launcher|codex|shell)
-      printf '%s\n' "$role"
-      ;;
-    antigravity)
-      if ! remote_dev_antigravity_experimental_enabled; then
-        remote_dev_runtime_error "REMOTE_DEV_ROLE=antigravity is experimental and blocked pending TrueNAS validation; set REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 only for the controlled validation deployment"
-        return 2
-      fi
-      printf '%s\n' "$role"
-      ;;
-    claude)
-      remote_dev_runtime_error "REMOTE_DEV_ROLE=$role is reserved but not implemented"
-      return 2
-      ;;
-    *)
-      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; experimental gated: antigravity; reserved: claude)"
-      return 2
-      ;;
-  esac
-}
-
-remote_dev_resolve_start_mode() {
-  local role="$1"
-  local raw_mode=""
-
-  if [[ -n "${REMOTE_DEV_START_MODE:-}" ]]; then
-    case "$REMOTE_DEV_START_MODE" in
-      menu|agent|shell)
-        raw_mode="$REMOTE_DEV_START_MODE"
-        ;;
-      *)
-        remote_dev_runtime_error "unsupported REMOTE_DEV_START_MODE=$REMOTE_DEV_START_MODE (menu|agent|shell)"
-        return 2
-        ;;
-    esac
-  else
-    case "${START_MODE:-menu}" in
-      menu) raw_mode=menu ;;
-      codex)
-        [[ "$role" == codex ]] || {
-          remote_dev_runtime_error "START_MODE=codex requires REMOTE_DEV_ROLE=codex"
-          return 2
-        }
-        raw_mode=agent
-        ;;
-      antigravity)
-        [[ "$role" == antigravity ]] || {
-          remote_dev_runtime_error "START_MODE=antigravity requires REMOTE_DEV_ROLE=antigravity"
-          return 2
-        }
-        raw_mode=agent
-        ;;
-      shell) raw_mode=shell ;;
-      *)
-        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|antigravity|shell)"
-        return 2
-        ;;
-    esac
-  fi
-
-  if [[ "$role" == launcher && "$raw_mode" != menu ]]; then
-    remote_dev_runtime_error "REMOTE_DEV_ROLE=launcher supports only REMOTE_DEV_START_MODE=menu"
-    return 2
-  fi
-  if [[ "$role" == shell && "$raw_mode" == agent ]]; then
-    remote_dev_runtime_error "REMOTE_DEV_START_MODE=agent is not available for REMOTE_DEV_ROLE=shell"
-    return 2
-  fi
-
-  printf '%s\n' "$raw_mode"
-}
-
-remote_dev_default_tmux_session() {
-  local role="$1"
-
-  case "$role" in
-    codex) printf 'codex\n' ;;
-    antigravity) printf 'antigravity\n' ;;
-    shell) printf 'remote-dev-shell\n' ;;
-    launcher)
-      remote_dev_runtime_error "the launcher role does not use tmux"
-      return 2
-      ;;
-    *)
-      remote_dev_runtime_error "cannot derive tmux session for unsupported role: $role"
-      return 2
-      ;;
-  esac
-}
-\t'}"
-    target="${target//\\012/
-  local workspace="$1"
-  local name="$2"
-  local confirmation="$3"
-  local project=""
-
-  workspace="$(remote_dev_assert_project_collection "$workspace")" || return $?
-  remote_dev_validate_project_name "$name" >/dev/null || return $?
-
-  if [[ "$confirmation" != "$name" ]]; then
-    remote_dev_runtime_error "project deletion confirmation did not match the exact project name"
-    return 2
-  fi
-
-  project="$(remote_dev_project_path "$workspace" "$name")" || return $?
-  if ! rm -rf -- "$project"; then
-    remote_dev_runtime_error "failed to delete project: $name"
-    return 1
-  fi
-
-  if [[ -e "$project" || -L "$project" ]]; then
-    remote_dev_runtime_error "project deletion did not remove the expected path: $name"
-    return 1
-  fi
-}
-
-remote_dev_antigravity_experimental_enabled() {
-  [[ "${REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY:-0}" == 1 ]]
-}
-
-remote_dev_resolve_role() {
-  local role="${REMOTE_DEV_ROLE:-codex}"
-
-  case "$role" in
-    launcher|codex|shell)
-      printf '%s\n' "$role"
-      ;;
-    antigravity)
-      if ! remote_dev_antigravity_experimental_enabled; then
-        remote_dev_runtime_error "REMOTE_DEV_ROLE=antigravity is experimental and blocked pending TrueNAS validation; set REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY=1 only for the controlled validation deployment"
-        return 2
-      fi
-      printf '%s\n' "$role"
-      ;;
-    claude)
-      remote_dev_runtime_error "REMOTE_DEV_ROLE=$role is reserved but not implemented"
-      return 2
-      ;;
-    *)
-      remote_dev_runtime_error "unsupported REMOTE_DEV_ROLE=$role (implemented: launcher|codex|shell; experimental gated: antigravity; reserved: claude)"
-      return 2
-      ;;
-  esac
-}
-
-remote_dev_resolve_start_mode() {
-  local role="$1"
-  local raw_mode=""
-
-  if [[ -n "${REMOTE_DEV_START_MODE:-}" ]]; then
-    case "$REMOTE_DEV_START_MODE" in
-      menu|agent|shell)
-        raw_mode="$REMOTE_DEV_START_MODE"
-        ;;
-      *)
-        remote_dev_runtime_error "unsupported REMOTE_DEV_START_MODE=$REMOTE_DEV_START_MODE (menu|agent|shell)"
-        return 2
-        ;;
-    esac
-  else
-    case "${START_MODE:-menu}" in
-      menu) raw_mode=menu ;;
-      codex)
-        [[ "$role" == codex ]] || {
-          remote_dev_runtime_error "START_MODE=codex requires REMOTE_DEV_ROLE=codex"
-          return 2
-        }
-        raw_mode=agent
-        ;;
-      antigravity)
-        [[ "$role" == antigravity ]] || {
-          remote_dev_runtime_error "START_MODE=antigravity requires REMOTE_DEV_ROLE=antigravity"
-          return 2
-        }
-        raw_mode=agent
-        ;;
-      shell) raw_mode=shell ;;
-      *)
-        remote_dev_runtime_error "unsupported START_MODE=${START_MODE:-unset} (menu|codex|antigravity|shell)"
-        return 2
-        ;;
-    esac
-  fi
-
-  if [[ "$role" == launcher && "$raw_mode" != menu ]]; then
-    remote_dev_runtime_error "REMOTE_DEV_ROLE=launcher supports only REMOTE_DEV_START_MODE=menu"
-    return 2
-  fi
-  if [[ "$role" == shell && "$raw_mode" == agent ]]; then
-    remote_dev_runtime_error "REMOTE_DEV_START_MODE=agent is not available for REMOTE_DEV_ROLE=shell"
-    return 2
-  fi
-
-  printf '%s\n' "$raw_mode"
-}
-
-remote_dev_default_tmux_session() {
-  local role="$1"
-
-  case "$role" in
-    codex) printf 'codex\n' ;;
-    antigravity) printf 'antigravity\n' ;;
-    shell) printf 'remote-dev-shell\n' ;;
-    launcher)
-      remote_dev_runtime_error "the launcher role does not use tmux"
-      return 2
-      ;;
-    *)
-      remote_dev_runtime_error "cannot derive tmux session for unsupported role: $role"
-      return 2
-      ;;
-  esac
-}
-\n'}"
-    target="${target//\\134/\\}"
-    if [[ "$target" == "$project" || "$target" == "$project/"* ]]; then
-      remote_dev_runtime_error "project contains mountpoint; deletion blocked: $target"
-      return 2
-    fi
-  done < "$mountinfo" || {
-    remote_dev_runtime_error "unable to inspect mount information; project deletion blocked"
-    return 2
-  }
-
-  if (( count == 0 )); then
-    remote_dev_runtime_error "empty mount information; project deletion blocked"
-    return 2
-  fi
-}
-
-remote_dev_delete_project() {
-  local workspace="$1"
-  local name="$2"
-  local confirmation="$3"
-  local project=""
-
-  workspace="$(remote_dev_assert_project_collection "$workspace")" || return $?
-  remote_dev_validate_project_name "$name" >/dev/null || return $?
-
-  if [[ "$confirmation" != "$name" ]]; then
-    remote_dev_runtime_error "project deletion confirmation did not match the exact project name"
-    return 2
-  fi
-
-  project="$(remote_dev_project_path "$workspace" "$name")" || return $?
-  if ! rm -rf -- "$project"; then
     remote_dev_runtime_error "failed to delete project: $name"
     return 1
   fi
