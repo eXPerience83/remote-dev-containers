@@ -49,6 +49,8 @@ Doctor reports the collection as `CRITICAL`/`BLOCKED` without printing remotes, 
 
 ## Safe project deletion and nested mounts (#371)
 
+**Release scope:** this protection applies only to images containing #371. Previously published `stable`/`latest` images do not gain it from this documentation or PR; it becomes available there only after an explicitly authorized release. Until then, do not assume Delete rejects nested mounts. Codex and experimental Antigravity use the same project-management runtime helper.
+
 The **Delete project** menu action requires an exact project-name confirmation, then refuses to delete if the selected project directory itself or any nested path is a mountpoint in the running role's mount namespace. This covers separate filesystems, child ZFS datasets visible to the container, and **bind mounts even when they share the same device**. If mount information is missing, unreadable or malformed, deletion fails closed. A symlinked project root is rejected; a symlink *inside* a normal project is removed as a link without following its target.
 
 The guard reads `/proc/self/mountinfo` before removing anything, checks the selected directory's identity, and combines that with GNU `rm --one-file-system`. **Do not use `rm --one-file-system` as the sole protection against bind mounts.** A privileged host changing mounts concurrently after preflight is not atomic with shell deletion; coordinate host mount changes and backups before removing valuable projects. This is not a substitute for filesystem isolation or snapshots.
