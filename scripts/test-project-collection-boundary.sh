@@ -151,9 +151,11 @@ if command -v unshare >/dev/null 2>&1 && command -v mount >/dev/null 2>&1 \
     mkdir -p "$d/source" "$d/workspace/project/nested"
     printf "preserve\n" >"$d/source/canary"
     mount --bind "$d/source" "$d/workspace/project/nested"
-    status=0
-    remote_dev_delete_project "$d/workspace" project project >/dev/null 2>&1 || status=$?
-    [[ "$status" == 2 && -f "$d/source/canary" ]]
+    for delete_role in codex antigravity; do
+      status=0
+      REMOTE_DEV_ROLE="$delete_role" remote_dev_delete_project "$d/workspace" project project >/dev/null 2>&1 || status=$?
+      [[ "$status" == 2 && -f "$d/source/canary" && -d "$d/workspace/project" ]] || exit 1
+    done
   ' _ "$runtime_lib" || fail "live nested bind-mount Delete regression"
 else
   printf "SKIP: live bind mount requires unprivileged private mount namespace\n"
