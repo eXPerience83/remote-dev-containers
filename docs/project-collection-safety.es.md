@@ -47,6 +47,12 @@ Si `/workspace` contiene `.git`, se reconoce como repositorio Git bare o falla d
 
 Doctor muestra la colección como `CRITICAL`/`BLOCKED` sin imprimir remotos, contenido del repositorio, credenciales u otros datos privados.
 
+## Borrado seguro de proyectos y montajes anidados (#371)
+
+La opción **Delete project** exige confirmar el nombre exacto del proyecto y después rechaza el borrado si el directorio seleccionado o alguno de sus descendientes es un punto de montaje en el espacio de nombres del contenedor de ese rol. Cubre sistemas de archivos diferentes, datasets ZFS hijos visibles en el contenedor y **montajes bind aunque compartan el mismo dispositivo**. Si la información de montajes falta, es ilegible o tiene formato inválido, la operación se bloquea. Se rechaza un proyecto cuya raíz sea un enlace simbólico; un enlace simbólico *dentro* de un proyecto normal se elimina como enlace, sin seguir su destino.
+
+La protección consulta `/proc/self/mountinfo` antes de borrar archivos, comprueba la identidad del directorio y añade `rm --one-file-system` como defensa adicional. **`rm --one-file-system` no basta por sí solo para proteger los bind mounts.** Un cambio privilegiado de montajes en el host tras la comprobación no es atómico con el borrado en shell; coordina cualquier cambio de montajes y conserva copias de seguridad antes de eliminar proyectos importantes. Esta comprobación no sustituye el aislamiento del filesystem ni las snapshots.
+
 ## Limpieza manual
 
 Remote Dev no automatiza deliberadamente la limpieza. Para una contaminación conocida y desechable/experimental, como el incidente confirmado de Antigravity, el operador puede eliminar manualmente la entrada exacta `/workspace/.git` después de comprobar que se trata de los metadatos no deseados de la raíz de colección. Como parte de esa limpieza no debe borrarse ninguna otra entrada de la colección.
