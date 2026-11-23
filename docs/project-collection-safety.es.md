@@ -49,6 +49,8 @@ Doctor muestra la colección como `CRITICAL`/`BLOCKED` sin imprimir remotos, con
 
 ## Borrado seguro de proyectos y montajes anidados (#371)
 
+**Alcance por versión:** esta protección solo se aplica a las imágenes que incorporen #371. Las imágenes `stable`/`latest` publicadas anteriormente no la adquieren por esta documentación o PR; solo llegará a ellas tras una publicación expresamente autorizada. Hasta entonces, no supongas que Delete rechaza montajes anidados. Codex y Antigravity experimental utilizan el mismo helper común de proyectos.
+
 La opción **Delete project** exige confirmar el nombre exacto del proyecto y después rechaza el borrado si el directorio seleccionado o alguno de sus descendientes es un punto de montaje en el espacio de nombres del contenedor de ese rol. Cubre sistemas de archivos diferentes, datasets ZFS hijos visibles en el contenedor y **montajes bind aunque compartan el mismo dispositivo**. Si la información de montajes falta, es ilegible o tiene formato inválido, la operación se bloquea. Se rechaza un proyecto cuya raíz sea un enlace simbólico; un enlace simbólico *dentro* de un proyecto normal se elimina como enlace, sin seguir su destino.
 
 La protección consulta `/proc/self/mountinfo` antes de borrar archivos, comprueba la identidad del directorio y añade `rm --one-file-system` como defensa adicional. **`rm --one-file-system` no basta por sí solo para proteger los bind mounts.** Un cambio privilegiado de montajes en el host tras la comprobación no es atómico con el borrado en shell; coordina cualquier cambio de montajes y conserva copias de seguridad antes de eliminar proyectos importantes. Esta comprobación no sustituye el aislamiento del filesystem ni las snapshots.
