@@ -102,7 +102,8 @@ if command -v unshare >/dev/null 2>&1 && command -v mount >/dev/null 2>&1 \
     && unshare -Urnm bash -c '
        set -euo pipefail
        d="$(mktemp -d)"
-       trap '\''umount "$d/dst" >/dev/null 2>&1 || :; rm -rf -- "$d"'\'' EXIT
+       cleanup() { umount "$d/dst" >/dev/null 2>&1 || :; rm -rf -- "$d"; }
+       trap cleanup EXIT
        mkdir -p "$d/src" "$d/dst"
        mount --bind "$d/src" "$d/dst"
      ' >/dev/null 2>&1; then
@@ -123,6 +124,7 @@ else
   printf "SKIP: live bind mount requires unprivileged private mount namespace\n"
 fi
 echo "Project Delete mount-safety regressions: OK"
+
 # Clean collection + empty project: Remote Dev owns the Git discovery ceiling,
 # so an empty child cannot accidentally inherit repository state from a parent.
 workspace="$root/clean/workspace"
