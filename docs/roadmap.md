@@ -66,9 +66,20 @@ This document is the high-level plan. Per-feature issues own design and acceptan
 - Optional device-code onboarding uses a reviewed transient `ctx7` CLI path and removes its vendor package/login/cache state afterwards. Hosted-service boundaries and terms are tracked in #53; Context7 is not redistributed in the image.
 - Codex includes official OpenAI Docs MCP; pinned Playwright MCP + matching Chromium Headless Shell was accepted with security repair #320 and real MCP checks #355. This does not imply arbitrary project-owned Playwright E2E runtimes (#179).
 
+## Pre-v0.4.0 gate — integral audit of v0.3.0 (mandatory)
+
+**Audit: [#369](https://github.com/eXPerience83/remote-dev-containers/issues/369)**, verified baseline `main@be53c1bc1c747171134699a42d644246676ef44f` after the #370 maintenance metadata merge. The post-merge [Build AMD64](https://github.com/eXPerience83/remote-dev-containers/actions/runs/45267312044) and [Publish Edge](https://github.com/eXPerience83/remote-dev-containers/actions/runs/45267311885) passed; neither green workflow proves the findings below are fixed. The audit covers the existing v0.3.0 code **before** implementing the planned v0.4.0 features.
+
+1. **[#371](https://github.com/eXPerience83/remote-dev-containers/issues/371) — P1 project deletion/data-loss protection (blocking):** prevent recursive project Delete from traversing nested mounts, including bind mounts on the same filesystem. The behavior was reproduced with synthetic data in an isolated mount namespace; production TrueNAS was not modified. Deliver a focused fix with pre-deletion guards, disposable-fixture regression tests, review and exact-HEAD CI **before new feature code**. `rm --one-file-system` alone is insufficient for same-device binds.
+2. **[#372](https://github.com/eXPerience83/remote-dev-containers/issues/372) — P2 TrueNAS structural-parent ACL audit:** reproduce the diagnostic blind spot with fixtures, decide the correct owner/mode/effective-ACL checks for root/structural parents without treating intentional workspace `0755` as private-state leakage, then implement a read-only, testable repair **before exchange (#71) ACL/SMB implementation**. Never rewrite a populated dataset's permissions automatically.
+3. **[#114](https://github.com/eXPerience83/remote-dev-containers/issues/114) — Codex runtime trust boundary:** decide whether manifest executable bits must match in both directions, add focused tests and explicitly document or repair same-owner TOCTOU limits. Do not claim an unverified cross-role or host compromise.
+4. **[#369](https://github.com/eXPerience83/remote-dev-containers/issues/369) — audit closure:** record the evidence for each finding and a final **APTO / APTO CON RIESGOS CONOCIDOS / BLOQUEADO** verdict before starting #360 or #71. Reconcile [#357](https://github.com/eXPerience83/remote-dev-containers/issues/357) (menu parity #358 merged) as part of bounded housekeeping [#327](https://github.com/eXPerience83/remote-dev-containers/issues/327) unless evidence identifies a blocking regression.
+
+This is an **audit/repair gate**, not a change in published stable version, a blanket rewrite or an expansion of the feature promises of v0.4.0. Compatibility UX [#157](https://github.com/eXPerience83/remote-dev-containers/issues/157) remains a distinct future improvement. Once cleared, keep the existing v0.4.0 order (#360, #71, #327, TrueNAS Edge acceptance, independent stable publication) and the planned v0.5.0 scope unchanged.
+
 ## Planned next — v0.4.0: shared file exchange + Chromium security
 
-**Tracker: [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366).** Priority is a safe new feature without changing existing project layout or weakening container isolation.
+**Tracker: [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366).** Start only after the #369 audit gate above clears. Priority is a safe new feature without changing existing project layout or weakening container isolation.
 
 ### Sequenced, separately reviewable PRs
 
