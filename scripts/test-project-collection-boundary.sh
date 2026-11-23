@@ -88,6 +88,41 @@ assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_m
 assert_fails_with 2 "mount information is unavailable" \
   remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$root/nonexistent-mountinfo"
 
+# Bash printf %b must NOT collapse mountinfo \0407 into a control byte.
+# This also covers workspace paths with a space immediately before a digit.
+octal_project="$root/space 7/workspace/alpha"
+mkdir -p "$octal_project"
+octal_target="$root/space\0407/workspace/alpha/nested"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$octal_target" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$octal_project" "$mountinfo"
+
+# /proc/self/mem is stat-visible/readable but cat fails with EIO. The guard
+# must reject an unsuccessful full read instead of trusting partial data.
+if [[ -f /proc/self/mem && -r /proc/self/mem ]]; then
+  assert_fails_with 2 "unable to read complete mount information" \
+    remote_dev_assert_no_project_mounts "$octal_project" /proc/self/mem
+fi
+
+# Both role shells use the *same sourced production runtime library*.
+# Real Delete is exercised in isolated fixtures under each role identity.
+for delete_role in codex antigravity; do
+  role_workspace="$root/role-delete-$delete_role/workspace"
+  mkdir -p "$role_workspace/project" "$role_workspace/sibling"
+  printf "keep\n" >"$role_workspace/sibling/canary"
+  printf "remove\n" >"$role_workspace/project/file"
+  assert_fails_with 2 "confirmation did not match" \
+    env REMOTE_DEV_ROLE="$delete_role" bash -c \
+    'source "$1"; remote_dev_delete_project "$2" project wrong' \
+    _ "$runtime_lib" "$role_workspace"
+  [[ -f "$role_workspace/project/file" ]] || fail "$delete_role wrong confirmation removed data"
+  env REMOTE_DEV_ROLE="$delete_role" bash -c \
+    'source "$1"; remote_dev_delete_project "$2" project project' \
+    _ "$runtime_lib" "$role_workspace"
+  [[ ! -e "$role_workspace/project" ]] || fail "$delete_role ordinary Delete left project"
+  [[ -f "$role_workspace/sibling/canary" ]] || fail "$delete_role deleted a sibling"
+done
+
 # A failed rm must remain an error rather than being reported as a delete.
 (
   rm() { return 17; }
