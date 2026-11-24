@@ -1089,6 +1089,7 @@ def verify_package_files(
     if not isinstance(files, list) or not files or len(files) > MAX_MEMBERS:
         fail("Codex runtime manifest has invalid file records")
     expected_paths: set[str] = set()
+    checked_directories: set[Path] = {package}
     for item in files:
         if not isinstance(item, dict) or set(item) != {
             "path",
@@ -1117,8 +1118,19 @@ def verify_package_files(
         ):
             fail("Codex runtime manifest has malformed file identity")
         expected_paths.add(rel_value)
+        # Validate intermediate directories before opening files. Checking
+        # only the final component would follow an intermediate symlink or
+        # trust a directory writable by an identity outside the runtime owner.
+        parent = package
+        for component in rel.parts[:-1]:
+            parent /= component
+            if parent not in checked_directories:
+                real_dir(parent)
+                checked_directories.add(parent)
         path = package.joinpath(*rel.parts)
         info = real_file(path, executable=executable)
+        if bool(info.st_mode & stat.S_IXUSR) != executable:
+            fail(f"Codex runtime file executable identity changed: {rel_value}")
         if info.st_size != size:
             fail(f"Codex runtime file changed: {rel_value}")
         if full_hash and file_sha(path) != sha:
@@ -1129,7 +1141,11 @@ def verify_package_files(
         for path in package.rglob("*"):
             if path.is_symlink():
                 fail("Codex runtime package file set changed")
-            if path.is_file():
+            if path.is_dir():
+                if path not in checked_directories:
+                    real_dir(path)
+                    checked_directories.add(path)
+            elif path.is_file():
                 actual_paths.add(path.relative_to(package).as_posix())
     except OSError as exc:
         fail(f"cannot inspect Codex runtime package file set: {exc}")
@@ -1151,7 +1167,9 @@ def active_runtime(*, full_hash: bool = False) -> tuple[str, Path] | None:
         fail(f"Codex runtime current pointer cannot be read: {exc}")
     if not CURRENT_RE.fullmatch(name):
         fail("Codex runtime current pointer is malformed")
-    release = ROOT / "releases" / name
+    releases = ROOT / "releases"
+    real_dir(releases)
+    release = releases / name
     real_dir(release)
     manifest_path = release / "remote-dev-runtime.json"
     manifest_info = real_file(manifest_path)
