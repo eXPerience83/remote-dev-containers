@@ -324,10 +324,11 @@ class CodexRuntimeTests(unittest.TestCase):
                     stdout, stderr = io.StringIO(), io.StringIO()
                     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                         self.assertEqual(self.m.main(["resolve"]), 0)
-                        self.assertEqual(self.m.main(["verify"]), 1)
                     self.assertEqual(stdout.getvalue().strip(), str(self.m.BUNDLED))
                     self.assertIn("bundled fallback", stderr.getvalue())
-                    self.assertIn("full integrity: FAILED", stderr.getvalue())
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(self.m.main(["verify"]), 1)
+                self.assertIn("full integrity: FAILED", stderr.getvalue())
                 self.assertEqual(path.stat().st_mode & 0o777, mode)
 
     def test_writable_runtime_ancestors_are_rejected(self):
