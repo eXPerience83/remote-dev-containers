@@ -32,6 +32,182 @@ assert_fails_with() {
 root="$(mktemp -d)"
 trap 'rm -rf -- "$root"' EXIT
 
+# #371 — project Delete must not cross mountpoints, including same-device binds.
+# All direct project deletion tests use a disposable mktemp collection.
+delete_workspace="$root/delete-mount/workspace"
+mkdir -p "$delete_workspace/alpha" "$delete_workspace/beta"
+printf "sibling canary\n" >"$delete_workspace/beta/canary"
+printf "remove me\n" >"$delete_workspace/alpha/remove-me"
+assert_fails_with 2 "confirmation did not match" remote_dev_delete_project "$delete_workspace" alpha wrong
+[[ -f "$delete_workspace/alpha/remove-me" ]] || fail "wrong confirmation modified project"
+remote_dev_delete_project "$delete_workspace" alpha alpha
+[[ ! -e "$delete_workspace/alpha" ]] || fail "ordinary project Delete did not remove project"
+[[ -f "$delete_workspace/beta/canary" ]] || fail "ordinary project Delete damaged sibling"
+
+# Nested symlinks are removed as links, not followed to an outside target.
+mkdir -p "$delete_workspace/alpha"
+ln -s -- "$delete_workspace/beta" "$delete_workspace/alpha/linked-sibling"
+remote_dev_delete_project "$delete_workspace" alpha alpha
+[[ -f "$delete_workspace/beta/canary" ]] || fail "nested symlink target was deleted"
+ln -s -- "$delete_workspace/beta" "$delete_workspace/alpha"
+assert_fails_with 2 "must not be a symlink" remote_dev_delete_project "$delete_workspace" alpha alpha
+[[ -f "$delete_workspace/beta/canary" ]] || fail "project-root symlink damaged its target"
+rm -- "$delete_workspace/alpha"
+
+# The parser accepts only readable, well-formed, nonempty kernel mountinfo.
+# Synthetic mountpoint coverage is always run, even without mount privileges.
+mountinfo="$root/synthetic-mountinfo"
+mkdir -p "$delete_workspace/alpha"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n" >"$mountinfo"
+remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$delete_workspace/alpha/nested" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:99 / %s rw - tmpfs tmpfs rw\n" \
+  "$delete_workspace/alpha/nested" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$delete_workspace/alpha" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$delete_workspace/alpha-sibling" >"$mountinfo"
+remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+
+# Escape decoding matters when an ancestor contains spaces.
+spaced_project="$root/space dir/workspace/alpha"
+mkdir -p "$spaced_project"
+escaped_target="$root/space\\040dir/workspace/alpha/nested"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$escaped_target" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$spaced_project" "$mountinfo"
+
+: >"$mountinfo"
+assert_fails_with 2 "empty mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf "broken record\n" >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+assert_fails_with 2 "mount information is unavailable" \
+  remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$root/nonexistent-mountinfo"
+
+# Independent audit #374: reject structurally invalid fields even when
+# optional columns make the total field count look sufficient.
+for bad_record in \
+  'x 0 0:1 / / rw - tmpfs none rw' \
+  '1 x 0:1 / / rw - tmpfs none rw' \
+  '1 0 bad-device / / rw - tmpfs none rw' \
+  '1 0 0:1 relative / rw - tmpfs none rw' \
+  '1 0 0:1 / relative rw - tmpfs none rw' \
+  '1 0 0:1 / / rw shared:1 - tmpfs none' \
+  '1 0 0:1 / / rw - tmpfs none rw extra'; do
+  printf '%s\n' "$bad_record" >"$mountinfo"
+  assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+done
+# Preserve EOF evidence; even a syntactically complete final record needs
+# the kernel newline. A truncated record after valid rows must also fail.
+printf '%s' '1 0 0:1 / / rw - tmpfs none rw' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '%s\n%s' '1 0 0:1 / / rw - tmpfs none rw' \
+  '2 1 0:1 / /unrelated rw shared:1 - tmpfs none' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+# The kernel ABI allows additional optional fields; do not reject future tags.
+printf '%s\n' '1 0 0:1 / / rw shared:1 future-tag:42 - tmpfs none rw' >"$mountinfo"
+remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+
+# Namespace handles may be mounted as nsfs roots such as net:[inode].
+# They are valid even without a leading slash, but their mountpoints are
+# still subject to the same project guard.
+printf '%s\n' '1 0 0:1 / / rw - tmpfs none rw' \
+  '2 1 0:4 net:[4026533140] /run/docker/netns/example rw shared:188 - nsfs nsfs rw' >"$mountinfo"
+remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '2 1 0:4 net:[4026533140] %s rw - nsfs nsfs rw\n' \
+  "$delete_workspace/alpha/netns" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '%s\n' '2 1 0:4 relative /run/netns/example rw - nsfs nsfs rw' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '%s\n' '2 1 0:4 net:[4026533140] /unrelated rw - tmpfs none rw' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+
+# Bash printf %b must NOT collapse mountinfo \0407 into a control byte.
+# This also covers workspace paths with a space immediately before a digit.
+octal_project="$root/space 7/workspace/alpha"
+mkdir -p "$octal_project"
+octal_target="$root/space\0407/workspace/alpha/nested"
+printf "1 0 0:42 / / rw - tmpfs tmpfs rw\n2 1 0:42 / %s rw - tmpfs tmpfs rw\n" \
+  "$octal_target" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$octal_project" "$mountinfo"
+
+# /proc/self/mem is stat-visible/readable but cat fails with EIO. The guard
+# must reject an unsuccessful full read instead of trusting partial data.
+if [[ -f /proc/self/mem && -r /proc/self/mem ]]; then
+  assert_fails_with 2 "unable to read complete mount information" \
+    remote_dev_assert_no_project_mounts "$octal_project" /proc/self/mem
+fi
+
+# Both role shells use the *same sourced production runtime library*.
+# Real Delete is exercised in isolated fixtures under each role identity.
+for delete_role in codex antigravity; do
+  role_workspace="$root/role-delete-$delete_role/workspace"
+  mkdir -p "$role_workspace/project" "$role_workspace/sibling"
+  printf "keep\n" >"$role_workspace/sibling/canary"
+  printf "remove\n" >"$role_workspace/project/file"
+  assert_fails_with 2 "confirmation did not match" \
+    env REMOTE_DEV_ROLE="$delete_role" bash -c \
+    'source "$1"; remote_dev_delete_project "$2" project wrong' \
+    _ "$runtime_lib" "$role_workspace"
+  [[ -f "$role_workspace/project/file" ]] || fail "$delete_role wrong confirmation removed data"
+  env REMOTE_DEV_ROLE="$delete_role" bash -c \
+    'source "$1"; remote_dev_delete_project "$2" project project' \
+    _ "$runtime_lib" "$role_workspace"
+  [[ ! -e "$role_workspace/project" ]] || fail "$delete_role ordinary Delete left project"
+  [[ -f "$role_workspace/sibling/canary" ]] || fail "$delete_role deleted a sibling"
+done
+
+# A failed rm must remain an error rather than being reported as a delete.
+(
+  rm() { return 17; }
+  assert_fails_with 1 "failed to delete project" remote_dev_delete_project "$delete_workspace" alpha alpha
+)
+[[ -d "$delete_workspace/alpha" ]] || fail "failed rm unexpectedly removed project"
+
+# Optional live bind-mount regression in a disposable, *private* mount namespace.
+# If the CI runner lacks user namespaces, the deterministic parser fixtures
+# above still enforce same-device, different-device, and root mount rejection.
+if command -v unshare >/dev/null 2>&1 && command -v mount >/dev/null 2>&1 \
+    && unshare -Urnm bash -c '
+       set -euo pipefail
+       d="$(mktemp -d)"
+       cleanup() { umount "$d/dst" >/dev/null 2>&1 || :; rm -rf -- "$d"; }
+       trap cleanup EXIT
+       mkdir -p "$d/src" "$d/dst"
+       mount --bind "$d/src" "$d/dst"
+     ' >/dev/null 2>&1; then
+  unshare -Urnm bash -c '
+    set -euo pipefail
+    source "$1"
+    d="$(mktemp -d)"
+    cleanup() { umount "$d/workspace/project/nested" >/dev/null 2>&1 || :; rm -rf -- "$d"; }
+    trap cleanup EXIT
+    mkdir -p "$d/source" "$d/workspace/project/nested"
+    printf "preserve\n" >"$d/source/canary"
+    mount --bind "$d/source" "$d/workspace/project/nested"
+    printf "project-canary\n" >"$d/workspace/project/keep"
+    [[ "$(stat -c %d -- "$d/workspace/project")" == "$(stat -c %d -- "$d/workspace/project/nested")" ]] || exit 1
+    for delete_role in codex antigravity; do
+      status=0
+      output="$(REMOTE_DEV_ROLE="$delete_role" remote_dev_delete_project "$d/workspace" project project 2>&1)" || status=$?
+      [[ "$status" == 2 && "$output" == *"contains mountpoint"* ]] || exit 1
+      [[ -f "$d/source/canary" && -f "$d/workspace/project/keep" ]] || exit 1
+      [[ "$(<"$d/source/canary")" == preserve && "$(<"$d/workspace/project/keep")" == project-canary ]] || exit 1
+      printf "PASS: live same-device bind Delete (%s): status 2, source and project canaries intact\n" "$delete_role"
+    done
+  ' _ "$runtime_lib" || fail "live nested bind-mount Delete regression"
+else
+  if [[ "${REMOTE_DEV_TEST_REQUIRE_LIVE_MOUNTS:-0}" == 1 ]]; then
+    fail "live bind mount required but private mount namespace unavailable"
+  fi
+  printf "SKIP: live bind mount requires unprivileged private mount namespace\n"
+fi
+echo "Project Delete deterministic mount-safety regressions: OK"
+
 # Clean collection + empty project: Remote Dev owns the Git discovery ceiling,
 # so an empty child cannot accidentally inherit repository state from a parent.
 workspace="$root/clean/workspace"

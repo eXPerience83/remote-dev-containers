@@ -475,6 +475,87 @@ remote_dev_create_project() {
   printf '%s\n' "$project"
 }
 
+
+# Inspect the service's mount namespace before any recursive deletion.
+# --one-file-system is insufficient for same-device bind mounts.
+# Optional mountinfo path is for synthetic tests only; Delete always reads /proc.
+remote_dev_assert_no_project_mounts() {
+  local project="$1"
+  local mountinfo="${2:-/proc/self/mountinfo}"
+  local record="" target="" mountinfo_content="" left="" right=""
+  local -a columns=() trailing=()
+  local count=0
+
+  if [[ ! -f "$mountinfo" || ! -r "$mountinfo" ]]; then
+    remote_dev_runtime_error "mount information is unavailable; project deletion blocked"
+    return 2
+  fi
+
+  # Check the complete read. Preserve the final newline with a sentinel:
+  # command substitution otherwise strips it and hides a truncated last record.
+  mountinfo_content="$(LC_ALL=C /bin/cat -- "$mountinfo" 2>/dev/null && printf '.')" || {
+    remote_dev_runtime_error "unable to read complete mount information; project deletion blocked"
+    return 2
+  }
+  if [[ "$mountinfo_content" == . ]]; then
+    remote_dev_runtime_error "empty mount information; project deletion blocked"
+    return 2
+  fi
+  if [[ "$mountinfo_content" != *$'\n.' ]]; then
+    remote_dev_runtime_error "malformed mount information; project deletion blocked (missing final newline)"
+    return 2
+  fi
+  mountinfo_content="${mountinfo_content%$'\n.'}"
+
+  while IFS= read -r record; do
+    ((count+=1))
+    if [[ "$record" != *' - '* ]]; then
+      remote_dev_runtime_error "malformed mount information; project deletion blocked (separator at record $count)"
+      return 2
+    fi
+    # The six fixed prefix fields precede zero or more optional fields. The
+    # separator must be followed by exactly three fields; unknown optional
+    # fields are allowed by the kernel mountinfo ABI.
+    left="${record%% - *}"
+    right="${record#* - }"
+    IFS=" " read -r -a columns <<<"$left"
+    IFS=" " read -r -a trailing <<<"$right"
+    if (( ${#columns[@]} < 6 || ${#trailing[@]} != 3 )) \
+        || [[ ! "${columns[0]}" =~ ^[0-9]+$ \
+           || ! "${columns[1]}" =~ ^[0-9]+$ \
+           || ! "${columns[2]}" =~ ^[0-9]+:[0-9]+$ \
+           || "${columns[4]}" != /* ]]; then
+      remote_dev_runtime_error "malformed mount information; project deletion blocked (fields at record $count)"
+      return 2
+    fi
+    # nsfs exposes namespace handles as net:[inode], mnt:[inode], etc.
+    # These are valid mount roots, not absolute paths. The fifth field is
+    # still an absolute mountpoint and is checked for every filesystem.
+    if [[ "${columns[3]}" != /* ]] \
+        && ! [[ "${trailing[0]}" == nsfs && "${columns[3]}" =~ ^[a-zA-Z0-9_]+:\[[0-9]+\]$ ]]; then
+      remote_dev_runtime_error "malformed mount information; project deletion blocked (root at record $count)"
+      return 2
+    fi
+
+    # Decode only the four kernel-defined escapes, consuming exactly 3 octal
+    # digits. printf %b could swallow following digits (e.g. \0407).
+    target="${columns[4]}"
+    target="${target//\\040/ }"
+    target="${target//\\011/$'\t'}"
+    target="${target//\\012/$'\n'}"
+    target="${target//\\134/\\}"
+    if [[ "$target" == "$project" || "$target" == "$project/"* ]]; then
+      remote_dev_runtime_error "project contains mountpoint; deletion blocked: $target"
+      return 2
+    fi
+  done <<< "$mountinfo_content"
+
+  if (( count == 0 )); then
+    remote_dev_runtime_error "empty mount information; project deletion blocked"
+    return 2
+  fi
+}
+
 remote_dev_delete_project() {
   local workspace="$1"
   local name="$2"
@@ -490,7 +571,24 @@ remote_dev_delete_project() {
   fi
 
   project="$(remote_dev_project_path "$workspace" "$name")" || return $?
-  if ! rm -rf -- "$project"; then
+  local before_identity="" after_identity=""
+  before_identity="$(stat -c '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed before deletion: $name"
+    return 2
+  }
+  remote_dev_assert_no_project_mounts "$project" || return $?
+  after_identity="$(stat -c '%d:%i' -- "$project" 2>/dev/null)" || {
+    remote_dev_runtime_error "project path changed during mount inspection: $name"
+    return 2
+  }
+  if [[ "$before_identity" != "$after_identity" || ! -d "$project" || -L "$project" ]]; then
+    remote_dev_runtime_error "project path changed during mount inspection: $name"
+    return 2
+  fi
+  # A separate-device mount change can be caught by rm; same-device bind
+  # mounts require mountinfo inspection. Host-side concurrent remounting is
+  # still outside the atomicity guarantees of this shell operation.
+  if ! rm -rf --one-file-system -- "$project"; then
     remote_dev_runtime_error "failed to delete project: $name"
     return 1
   fi
