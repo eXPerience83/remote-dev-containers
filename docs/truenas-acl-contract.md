@@ -28,7 +28,7 @@ TrueNAS documentation describes the Generic preset's ACL mode as not applicable 
 
 Remote Dev's canonical layout still uses ordinary directories below that root unless an administrator deliberately creates a required descendant as a child dataset for snapshots, quotas or replication.
 
-Structural and workspace roots use their documented `0755` initial modes. Every canonical private state leaf is root-owned (UID `0`), uses `0700`, and, on the reference TrueNAS layout, its effective ACL must be a **trivial POSIX1E ACL** containing only:
+Structural parents and workspace roots use documented `0755` **initial** modes. The host audit also accepts more restrictive group/other permissions (such as `0750`), provided UID is `0`, the owner retains `rwx`, **group/other have no write access**, and the effective ACL is verifiably trivial POSIX1E. A public workspace root at `0755` is intentional, not a credential leak. This structural policy is separate from the strict `0700` private-leaf policy. Every canonical private state leaf is root-owned (UID `0`), uses `0700`, and, on the reference TrueNAS layout, its effective ACL must be a **trivial POSIX1E ACL** containing only:
 
 - owner/root: `rwx`;
 - group: no access;
@@ -58,12 +58,16 @@ sudo python3 scripts/truenas-acl-audit.py \
 The audit is read-only. It checks:
 
 - that the configured root is an exact ZFS dataset mountpoint;
+- that the dataset root, structural parents and enabled roles' workspace roots are owned by root (UID `0`), retain owner `rwx` and have no group/other write permission;
+- that these structural directories have a verifiable trivial POSIX1E effective ACL with no named/default entries; a non-trivial, unreadable or malformed ACL is **ATTENTION REQUIRED**, not a silent OK;
 - root `acltype` and `aclmode`;
 - root ownership (UID `0`) of every canonical private leaf;
 - canonical private-leaf mode `0700`;
 - `filesystem.getacl` type `POSIX1E`;
 - `trivial=true`;
 - only owner/group/other entries with the expected effective permissions.
+
+Structural paths are derived from the same `scripts/lib/data_layout.py` contract consumed by bootstrap and preflight; the audit does not traverse user project contents. This does not define SMB or `/exchange` ACL rules (#71). The host audit is **read-only**: it never invokes `chmod`, `chown` or ACL repair.
 
 A successful reference deployment ends with:
 
