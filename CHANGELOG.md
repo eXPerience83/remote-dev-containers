@@ -16,6 +16,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- remote-dev-renovate-ubuntu: datasource=docker depName=ubuntu versioning=ubuntu UBUNTU_VERSION=26.04 UBUNTU_DIGEST=sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db -->
 <!-- remote-dev-renovate-runtime-refreshes:end -->
 
+## [0.3.1] - 2026-11-24
+
+### Maintenance and security — AMD64, single user, private network
+
+This patch source cut incorporates the corrections from the integral v0.3.0 audit (#369) without introducing the planned v0.4.0 features. No Compose layout migration, expanded host mounts, changed bundled dependency pins or new vendor runtime distribution is introduced. Antigravity remains optional and experimental.
+
+### Fixed
+
+- Prevent project deletion in both Codex and Antigravity from descending into nested mounts, including same-device bind mounts. The shared deletion guard fails closed when mount information cannot be validated; GNU rm's filesystem restriction is supplementary, not the sole protection (#371, #374). A privileged concurrent remount is outside the atomicity guarantees.
+- Extend the read-only TrueNAS ACL audit to the dataset root, structural parents and enabled workspace roots; check ownership, mode and effective ACL, distinguish intentional 0755 directories from private 0700 state, and report inconclusive/non-trivial ACLs instead of false OK (#372, #375).
+- Enforce the Codex optional runtime manifest's owner-executable identity in both directions and validate intermediate directories within the configured runtime subtree before opening package files; preserve offline checks, bundled fallback and existing permission compatibility. Document the same-owner trust boundary and finite retention of previous generations (#114, #376).
+
+### Maintenance
+
+- Refresh reviewed Antigravity candidate discovery metadata only (#370); this does not install the candidate or change the admitted vendor runtime.
+
+### Release boundary
+
+The integral audit concluded APTO CON RIESGOS CONOCIDOS. Real TrueNAS smoke and both-role Doctor integrity were recorded for Edge source `163889c223014c0fd3137d9f92acdda9d37af8ba`. Host ACL acceptance and final release evidence are tracked in #377. The source cut does not publish stable/latest; the exact tagged source must pass the independent stable candidate build, security and promotion gates before publication. The image's scanner does not establish the vulnerability status of the host kernel.
+
 ## [0.3.0] - 2026-11-22
 
 ### Release scope — AMD64, single user, private network
