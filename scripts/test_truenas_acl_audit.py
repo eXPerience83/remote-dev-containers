@@ -26,8 +26,15 @@ def completed(command: list[str], stdout: str = "", stderr: str = "", code: int 
     return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=stderr)
 
 
-def posix_acl(*, trivial: bool = True, uid: int = 0) -> dict[str, object]:
+def posix_acl(*, trivial: bool = True, uid: int = 0, mode: int = 0o700) -> dict[str, object]:
     """Return a synthetic private POSIX1E ACL payload."""
+    def permissions(shift: int) -> dict[str, bool]:
+        return {
+            "READ": bool(mode & (0o4 << shift)),
+            "WRITE": bool(mode & (0o2 << shift)),
+            "EXECUTE": bool(mode & (0o1 << shift)),
+        }
+
     return {
         "path": "/synthetic",
         "user": None,
@@ -38,21 +45,21 @@ def posix_acl(*, trivial: bool = True, uid: int = 0) -> dict[str, object]:
         "acl": [
             {
                 "tag": "USER_OBJ",
-                "perms": {"READ": True, "WRITE": True, "EXECUTE": True},
+                "perms": permissions(6),
                 "default": False,
                 "id": -1,
                 "who": None,
             },
             {
                 "tag": "GROUP_OBJ",
-                "perms": {"READ": False, "WRITE": False, "EXECUTE": False},
+                "perms": permissions(3),
                 "default": False,
                 "id": -1,
                 "who": None,
             },
             {
                 "tag": "OTHER",
-                "perms": {"READ": False, "WRITE": False, "EXECUTE": False},
+                "perms": permissions(0),
                 "default": False,
                 "id": -1,
                 "who": None,
@@ -85,9 +92,10 @@ class TrueNasAclAuditTests(unittest.TestCase):
         acltype: str = "posix",
         aclmode: str = "discard",
         acl_payload: dict[str, object] | None = None,
+        overrides: dict[str, dict[str, object]] | None = None,
     ):
         """Return a command runner that emulates ZFS and TrueNAS middleware."""
-        payload = posix_acl() if acl_payload is None else acl_payload
+        overrides = overrides or {}
 
         def run(command: list[str]):
             """Dispatch one synthetic read-only host command."""
@@ -96,6 +104,13 @@ class TrueNasAclAuditTests(unittest.TestCase):
             if command[:2] == ["zfs", "get"]:
                 return completed(command, f"acltype\t{acltype}\naclmode\t{aclmode}\n")
             if command[:3] == ["midclt", "call", "filesystem.getacl"]:
+                path = Path(command[3])
+                payload = overrides.get(str(path))
+                if payload is None:
+                    payload = (
+                        acl_payload if acl_payload is not None else
+                        posix_acl(mode=path.stat().st_mode & 0o777)
+                    )
                 return completed(command, json.dumps(payload))
             raise AssertionError(f"unexpected command: {command}")
 
@@ -220,6 +235,136 @@ class TrueNasAclAuditTests(unittest.TestCase):
             _info, findings = MODULE.audit(root, include_antigravity=False)
         messages = "\n".join(finding.message for finding in findings)
         self.assertIn("filesystem.getacl did not return an ACL entry list", messages)
+
+    def test_dataset_root_and_parent_world_writable_are_reported(self):
+        """A 0777 dataset or state parent must never yield the overall OK."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        os.chmod(root, 0o777)
+        os.chmod(root / "state", 0o777)
+        with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        problems = "\n".join(f.message for f in findings)
+        self.assertIn(f"{root}: mode is 0777, group/other write is unsafe", problems)
+        self.assertIn(f"{root / 'state'}: mode is 0777, group/other write is unsafe", problems)
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {root} ") for line in info))
+        self.assertEqual((root / "state").stat().st_mode & 0o777, 0o777)
+
+    def test_structural_owner_is_checked_by_middleware(self):
+        """Non-root-owned structural parents are not equivalent to 0755 safety."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "state/codex"
+        override = {str(path): posix_acl(uid=1001, mode=0o755)}
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides=override),
+        ):
+            _info, findings = MODULE.audit(root, include_antigravity=False)
+        self.assertTrue(any(
+            str(path) in finding.message and "owner uid is 1001" in finding.message
+            for finding in findings
+        ))
+
+    def test_named_writer_on_parent_cannot_pass_as_trivial(self):
+        """Expanded ACL writing identities must be fail-visible, not an OK."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "state/codex"
+        acl = posix_acl(mode=0o755, trivial=False)
+        acl["acl"].append({
+            "tag": "USER", "id": 1001, "who": None, "default": False,
+            "perms": {"READ": True, "WRITE": True, "EXECUTE": True},
+        })
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides={str(path): acl}),
+        ):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        messages = "\n".join(f.message for f in findings)
+        self.assertIn("non-trivial structural ACL", messages)
+        self.assertIn("unexpected structural ACL entry: 'USER'", messages)
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
+    def test_acl_grants_other_write_even_if_mode_looks_0755(self):
+        """Effective middleware ACL may be broader than displayed POSIX mode."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "workspaces"
+        unsafe_acl = posix_acl(mode=0o757)
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides={str(path): unsafe_acl}),
+        ):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        messages = "\n".join(f.message for f in findings)
+        self.assertIn("structural ACL entry OTHER grants WRITE outside owner", messages)
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
+    def test_malformed_parent_acl_is_fail_visible(self):
+        """Missing ACL entries must not be silently interpreted as safe."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "state"
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides={str(path): {}}),
+        ):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        self.assertTrue(any(
+            "filesystem.getacl did not return an ACL entry list" in finding.message
+            and str(path) in finding.message for finding in findings
+        ))
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
+    def test_parent_acl_read_error_is_not_an_ok(self):
+        """Middleware failures on a parent must be visible, not silently skipped."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "workspaces"
+        normal = self.fake_runner(root)
+
+        def error_runner(command):
+            if command[:3] == ["midclt", "call", "filesystem.getacl"] and command[3] == str(path):
+                return completed(command, stderr="injected middleware failure", code=1)
+            return normal(command)
+
+        with mock.patch.object(MODULE, "run_command", side_effect=error_runner):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        self.assertTrue(any(
+            finding.level == "ERROR" and
+            "cannot read TrueNAS ACL for " + str(path) in finding.message
+            for finding in findings
+        ))
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
+    def test_public_workspace_0755_and_restrictive_0750_are_safe(self):
+        """Do not flag deliberate workspace traversal as credential exposure."""
+        temp, root = self.make_root(include_antigravity=True)
+        self.addCleanup(temp.cleanup)
+        os.chmod(root / "state", 0o750)
+        with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
+            info, findings = MODULE.audit(root, include_antigravity=True)
+        self.assertEqual(findings, [])
+        self.assertTrue(any(str(root / "workspaces/codex") in line for line in info))
+        self.assertTrue(any(str(root / "workspaces/antigravity") in line for line in info))
+        self.assertTrue(any(str(root / "state/codex") in line for line in info))
+        self.assertTrue(any(str(root / "state/antigravity") in line for line in info))
+
+    def test_structural_paths_derived_only_for_enabled_roles(self):
+        """Do not inspect unrelated project trees or disabled service trees."""
+        temp, root = self.make_root(include_antigravity=True)
+        self.addCleanup(temp.cleanup)
+        disabled = root / "state/antigravity"
+        os.chmod(disabled, 0o777)
+        other = root / "workspaces/codex/user-project"
+        other.mkdir()
+        os.chmod(other, 0o777)
+        with mock.patch.object(MODULE, "run_command", side_effect=self.fake_runner(root)):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        self.assertEqual(findings, [])
+        self.assertFalse(any(str(disabled) in line for line in info))
+        self.assertFalse(any(str(other) in line for line in info))
 
 
 if __name__ == "__main__":

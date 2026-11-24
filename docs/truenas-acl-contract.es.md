@@ -28,7 +28,7 @@ La documentación de TrueNAS describe el modo ACL del preset Generic como no apl
 
 El layout canónico de Remote Dev sigue usando directorios normales debajo de esa raíz, salvo que el administrador cree deliberadamente algún descendiente requerido como child dataset para snapshots, cuotas o replicación.
 
-Los padres estructurales y workspaces usan sus modos iniciales documentados `0755`. Cada hoja canónica de estado privado pertenece a root (UID `0`), usa `0700` y, en el layout TrueNAS de referencia, su ACL efectiva debe ser una **ACL POSIX1E trivial** que contenga únicamente:
+Los padres estructurales y las raíces de workspaces usan `0755` como modo **inicial** documentado. El auditor del host también admite permisos más restrictivos para grupo/otros (por ejemplo, `0750`), siempre que el propietario sea UID `0`, conserve `rwx`, **grupo/otros no tengan permiso de escritura** y la ACL efectiva sea POSIX1E trivial verificable. Una raíz de workspace pública en `0755` es intencionada y no significa que se expongan credenciales. Esta política estructural es independiente de la exigencia `0700` para hojas privadas. Cada hoja canónica de estado privado pertenece a root (UID `0`), usa `0700` y, en el layout TrueNAS de referencia, su ACL efectiva debe ser una **ACL POSIX1E trivial** que contenga únicamente:
 
 - propietario/root: `rwx`;
 - grupo: sin acceso;
@@ -58,12 +58,16 @@ sudo python3 scripts/truenas-acl-audit.py \
 El audit es de solo lectura. Comprueba:
 
 - que la raíz configurada sea exactamente el mountpoint de un dataset ZFS;
+- que la raíz, los padres estructurales y las raíces de workspaces de los roles habilitados pertenezcan a root (UID `0`), tengan `rwx` para el propietario y no permitan escritura al grupo u otros;
+- que la ACL efectiva de esos directorios sea POSIX1E trivial, sin entradas nominales/default adicionales; un resultado no trivial, ilegible o de formato inesperado es **ATTENTION REQUIRED**, no un `OK` implícito;
 - `acltype` y `aclmode` de la raíz;
 - propiedad root (UID `0`) de cada hoja privada canónica;
 - modo `0700` en las hojas privadas canónicas;
 - tipo `POSIX1E` devuelto por `filesystem.getacl`;
 - `trivial=true`;
 - únicamente entradas owner/group/other con los permisos efectivos esperados.
+
+El auditor deriva estos directorios de la misma lista `scripts/lib/data_layout.py` utilizada por bootstrap y preflight, y no inspecciona el contenido de los proyectos del usuario. No intenta establecer permisos de SMB ni valida `/exchange`, que sigue definido en #71. **Solo informa**, nunca ejecuta `chmod`, `chown` ni reescribe ACL.
 
 Una instalación de referencia correcta termina con:
 
