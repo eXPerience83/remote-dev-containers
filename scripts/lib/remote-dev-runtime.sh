@@ -501,7 +501,8 @@ remote_dev_assert_no_project_mounts() {
     remote_dev_runtime_error "empty mount information; project deletion blocked"
     return 2
   fi
-  if [[ "$mountinfo_content" != *
+  if [[ "$mountinfo_content" != *$'\n.' ]]; then
+    remote_dev_runtime_error "malformed mount information; project deletion blocked (missing final newline)"
     return 2
   fi
   mountinfo_content="${mountinfo_content%$'\n.'}"
