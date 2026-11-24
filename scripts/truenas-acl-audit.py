@@ -177,6 +177,77 @@ def validate_private_acl(payload: dict[str, object]) -> list[str]:
     return errors
 
 
+def structural_paths(root: Path, *, include_antigravity: bool) -> tuple[Path, ...]:
+    """Derive root, parents and public workspace roots from the shared layout."""
+    paths = {root}
+    for spec in directory_specs(include_antigravity=include_antigravity):
+        current = root
+        parts = Path(spec.suffix).parts
+        for part in parts[:-1]:
+            current /= part
+            paths.add(current)
+        # Workspace leaves use 0755 by design, unlike 0700 private leaves.
+        if spec.mode == 0o755:
+            paths.add(root / spec.suffix)
+    return tuple(sorted(paths, key=lambda path: (len(path.parts), str(path))))
+
+
+def validate_structural_acl(payload: dict[str, object]) -> list[str]:
+    """Require a verifiable, root-owned POSIX ACL with no outside write access.
+
+    Unlike private 0700 leaves, structural directories may give read/traverse
+    access to group and other (the documented 0755 layout). Any extended ACL
+    is inconclusive for this narrow reference contract and must not print OK.
+    """
+    errors: list[str] = []
+    if payload.get("uid") != 0:
+        errors.append(f"owner uid is {payload.get('uid')!r}, expected root (0)")
+    if payload.get("acltype") != "POSIX1E":
+        errors.append(
+            f"effective ACL type is {payload.get('acltype')!r}, expected 'POSIX1E'"
+        )
+    if payload.get("trivial") is not True:
+        errors.append("non-trivial structural ACL: effective access not verified")
+
+    entries = payload.get("acl")
+    if not isinstance(entries, list):
+        errors.append("filesystem.getacl did not return an ACL entry list")
+        return errors
+    required = {"USER_OBJ", "GROUP_OBJ", "OTHER"}
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            errors.append("effective ACL contains a malformed entry")
+            continue
+        tag = entry.get("tag")
+        if not isinstance(tag, str) or tag not in required:
+            errors.append(f"unexpected structural ACL entry: {tag!r}")
+            continue
+        if tag in seen:
+            errors.append(f"duplicate structural ACL entry: {tag}")
+            continue
+        seen.add(tag)
+        if entry.get("default") is not False:
+            errors.append(f"structural ACL entry {tag} is inherited/default")
+        perms = entry.get("perms")
+        if not isinstance(perms, dict) or any(
+            type(perms.get(permission)) is not bool
+            for permission in ("READ", "WRITE", "EXECUTE")
+        ):
+            errors.append(f"structural ACL entry {tag} has malformed permissions")
+            continue
+        if tag == "USER_OBJ":
+            if not all(perms[name] for name in ("READ", "WRITE", "EXECUTE")):
+                errors.append("structural ACL owner lacks full rwx access")
+        elif perms["WRITE"]:
+            errors.append(f"structural ACL entry {tag} grants WRITE outside owner")
+
+    missing = required - seen
+    if missing:
+        errors.append(f"structural ACL is missing entries: {', '.join(sorted(missing))}")
+    return errors
+
+
 def audit(root: Path, *, include_antigravity: bool) -> tuple[list[str], list[Finding]]:
     """Return informational lines and every security/tooling finding."""
     root = canonical_path(root)
@@ -218,6 +289,29 @@ def audit(root: Path, *, include_antigravity: bool) -> tuple[list[str], list[Fin
                 "the Generic/POSIX reference is aclmode=discard",
             )
         )
+
+    for path in structural_paths(root, include_antigravity=include_antigravity):
+        mode = stat.S_IMODE(path.stat().st_mode)
+        path_errors: list[str] = []
+        if (mode & 0o700) != 0o700:
+            path_errors.append(f"mode is {mode:04o}, owner needs rwx")
+        if mode & 0o022:
+            path_errors.append(f"mode is {mode:04o}, group/other write is unsafe")
+        acl_payload, acl_error = read_effective_acl(path)
+        if acl_error:
+            findings.append(Finding("ERROR", acl_error))
+            continue
+        assert acl_payload is not None
+        path_errors.extend(validate_structural_acl(acl_payload))
+        if path_errors:
+            findings.extend(
+                Finding("WARNING", f"{path}: {message}") for message in path_errors
+            )
+        else:
+            info.append(
+                f"Structural directory OK: {path} "
+                "(root-owned, group/other not writable, POSIX1E trivial)"
+            )
 
     private_specs = tuple(
         spec
