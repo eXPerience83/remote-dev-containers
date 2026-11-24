@@ -482,8 +482,8 @@ remote_dev_create_project() {
 remote_dev_assert_no_project_mounts() {
   local project="$1"
   local mountinfo="${2:-/proc/self/mountinfo}"
-  local record="" target="" mountinfo_content=""
-  local -a columns=()
+  local record="" target="" mountinfo_content="" left="" right=""
+  local -a columns=() trailing=()
   local count=0
 
   if [[ ! -f "$mountinfo" || ! -r "$mountinfo" ]]; then
@@ -491,16 +491,21 @@ remote_dev_assert_no_project_mounts() {
     return 2
   fi
 
-  # Bash while/read exit status cannot establish whether procfs failed halfway.
-  # Read the entire table before validating or deleting anything.
-  mountinfo_content="$(LC_ALL=C /bin/cat -- "$mountinfo" 2>/dev/null)" || {
+  # Check the complete read. Preserve the final newline with a sentinel:
+  # command substitution otherwise strips it and hides a truncated last record.
+  mountinfo_content="$(LC_ALL=C /bin/cat -- "$mountinfo" 2>/dev/null && printf '.')" || {
     remote_dev_runtime_error "unable to read complete mount information; project deletion blocked"
     return 2
   }
-  if [[ -z "$mountinfo_content" ]]; then
+  if [[ "$mountinfo_content" == . ]]; then
     remote_dev_runtime_error "empty mount information; project deletion blocked"
     return 2
   fi
+  if [[ "$mountinfo_content" != *$'\n.' ]]; then
+    remote_dev_runtime_error "malformed mount information; project deletion blocked"
+    return 2
+  fi
+  mountinfo_content="${mountinfo_content%$'\n.'}"
 
   while IFS= read -r record; do
     ((count+=1))
@@ -508,8 +513,18 @@ remote_dev_assert_no_project_mounts() {
       remote_dev_runtime_error "malformed mount information; project deletion blocked"
       return 2
     fi
-    IFS=" " read -r -a columns <<<"$record"
-    if (( ${#columns[@]} < 10 )) || [[ "${columns[4]}" != /* ]]; then
+    # The six fixed prefix fields precede zero or more optional fields. The
+    # separator must be followed by exactly three fields; unknown optional
+    # fields are allowed by the kernel mountinfo ABI.
+    left="${record%% - *}"
+    right="${record#* - }"
+    IFS=" " read -r -a columns <<<"$left"
+    IFS=" " read -r -a trailing <<<"$right"
+    if (( ${#columns[@]} < 6 || ${#trailing[@]} != 3 )) \
+        || [[ ! "${columns[0]}" =~ ^[0-9]+$ \
+           || ! "${columns[1]}" =~ ^[0-9]+$ \
+           || ! "${columns[2]}" =~ ^[0-9]+:[0-9]+$ \
+           || "${columns[3]}" != /* || "${columns[4]}" != /* ]]; then
       remote_dev_runtime_error "malformed mount information; project deletion blocked"
       return 2
     fi
@@ -532,6 +547,7 @@ remote_dev_assert_no_project_mounts() {
     return 2
   fi
 }
+
 remote_dev_delete_project() {
   local workspace="$1"
   local name="$2"
