@@ -286,6 +286,37 @@ class TrueNasAclAuditTests(unittest.TestCase):
         self.assertIn("unexpected structural ACL entry: 'USER'", messages)
         self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
 
+    def test_acl_grants_other_write_even_if_mode_looks_0755(self):
+        """Effective middleware ACL may be broader than displayed POSIX mode."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "workspaces"
+        unsafe_acl = posix_acl(mode=0o757)
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides={str(path): unsafe_acl}),
+        ):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        messages = "\n".join(f.message for f in findings)
+        self.assertIn("structural ACL entry OTHER grants WRITE outside owner", messages)
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
+    def test_malformed_parent_acl_is_fail_visible(self):
+        """Missing ACL entries must not be silently interpreted as safe."""
+        temp, root = self.make_root()
+        self.addCleanup(temp.cleanup)
+        path = root / "state"
+        with mock.patch.object(
+            MODULE, "run_command",
+            side_effect=self.fake_runner(root, overrides={str(path): {}}),
+        ):
+            info, findings = MODULE.audit(root, include_antigravity=False)
+        self.assertTrue(any(
+            "filesystem.getacl did not return an ACL entry list" in finding.message
+            and str(path) in finding.message for finding in findings
+        ))
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {path} ") for line in info))
+
     def test_parent_acl_read_error_is_not_an_ok(self):
         """Middleware failures on a parent must be visible, not silently skipped."""
         temp, root = self.make_root()
