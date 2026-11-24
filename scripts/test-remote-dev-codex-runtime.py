@@ -304,6 +304,69 @@ class CodexRuntimeTests(unittest.TestCase):
                 with mock.patch.object(self.m, "file_sha", side_effect=AssertionError):
                     self.assertEqual(self.runtime_state()["kind"], expected)
 
+    def test_executable_permission_drift_is_rejected_without_hashing(self):
+        for relative, mode in (
+            ("codex-package.json", 0o700),
+            ("bin/codex", 0o600),
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as text:
+                _asset, _release, package = self.publish_fixture(Path(text))
+                path = package / relative
+                original = path.read_bytes()
+                path.chmod(mode)
+                self.assertEqual(path.read_bytes(), original)
+                with mock.patch.object(
+                    self.m, "bundled_version", return_value="0.147.0"
+                ), mock.patch.object(
+                    self.m, "file_sha", side_effect=AssertionError("package hashed")
+                ):
+                    self.assertEqual(self.m.state()["kind"], "damaged")
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                        self.assertEqual(self.m.main(["resolve"]), 0)
+                    self.assertEqual(stdout.getvalue().strip(), str(self.m.BUNDLED))
+                    self.assertIn("bundled fallback", stderr.getvalue())
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(self.m.main(["verify"]), 1)
+                self.assertIn("full integrity: FAILED", stderr.getvalue())
+                self.assertEqual(path.stat().st_mode & 0o777, mode)
+
+    def test_writable_runtime_ancestors_are_rejected(self):
+        for relative in ("releases", "bin", "codex-path", "empty"):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as text:
+                _asset, _release, package = self.publish_fixture(Path(text))
+                path = self.m.ROOT / "releases" if relative == "releases" else package / relative
+                if relative == "empty":
+                    path.mkdir(mode=0o700)
+                path.chmod(0o777)
+                with mock.patch.object(self.m, "file_sha", side_effect=AssertionError):
+                    current = self.runtime_state()
+                self.assertEqual(current["kind"], "damaged")
+                self.assertIn("group/world writable", current["warning"])
+                self.assertEqual(path.stat().st_mode & 0o777, 0o777)
+
+    def test_symlinked_releases_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as text:
+            root = Path(text)
+            self.publish_fixture(root)
+            releases = self.m.ROOT / "releases"
+            renamed = root / "redirected-releases"
+            releases.rename(renamed)
+            releases.symlink_to(renamed, target_is_directory=True)
+            with mock.patch.object(self.m, "file_sha", side_effect=AssertionError):
+                self.assertEqual(self.runtime_state()["kind"], "damaged")
+            self.assertTrue(releases.is_symlink())
+
+    @unittest.skipUnless(os.geteuid() == 0, "root is required to change ownership")
+    def test_intermediate_directory_owner_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as text:
+            _asset, _release, package = self.publish_fixture(Path(text))
+            os.chown(package / "bin", self.m.NOBODY, self.m.NOBODY)
+            with mock.patch.object(self.m, "file_sha", side_effect=AssertionError):
+                current = self.runtime_state()
+            self.assertEqual(current["kind"], "damaged")
+            self.assertIn("unexpected owner", current["warning"])
+
     @unittest.skipUnless(os.geteuid() == 0, "root is required to change ownership")
     def test_owner_change_is_rejected_by_current_contract(self):
         with tempfile.TemporaryDirectory() as text:
