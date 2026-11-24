@@ -91,7 +91,7 @@ Remote Dev is a single-user/homelab appliance, not a multi-tenant enterprise bou
 
 ## Release and update state
 
-The `v0.2.0` stable image was published after its accepted beta phase. The `0.3.0` source cut is independent of the already-published stable channel; experimental Edge retains dated identities and only the authorized, successful exact-tag `v0.3.0` publisher may advance `stable`/`latest`. The stable OCI index need not share Edge's digest and must contain the same AMD64 runtime manifest tested by the stable publisher.
+The `v0.2.0` stable image was published after its accepted beta phase, followed by `v0.3.0`. The next prepared source cut (`0.3.1`, tracked in #377) does not itself move the published stable channel. Experimental Edge retains dated identities; only the authorized, successful guarded publisher for the reviewed exact SemVer tag matching `BASE_VERSION` may advance `stable`/`latest`, after the release gates in `docs/releases.md` are satisfied. The stable OCI index need not share Edge's digest and must contain the same AMD64 runtime manifest tested by the stable publisher.
 
 Current channel semantics are:
 
