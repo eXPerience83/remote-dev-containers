@@ -247,7 +247,7 @@ class TrueNasAclAuditTests(unittest.TestCase):
         problems = "\n".join(f.message for f in findings)
         self.assertIn(f"{root}: mode is 0777, group/other write is unsafe", problems)
         self.assertIn(f"{root / 'state'}: mode is 0777, group/other write is unsafe", problems)
-        self.assertFalse(any(line.startswith("Structural directory OK: " + str(root)) for line in info))
+        self.assertFalse(any(line.startswith(f"Structural directory OK: {root} ") for line in info))
         self.assertEqual((root / "state").stat().st_mode & 0o777, 0o777)
 
     def test_structural_owner_is_checked_by_middleware(self):
