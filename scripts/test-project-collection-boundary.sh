@@ -112,6 +112,20 @@ assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_m
 printf '%s\n' '1 0 0:1 / / rw shared:1 future-tag:42 - tmpfs none rw' >"$mountinfo"
 remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
 
+# Namespace handles may be mounted as nsfs roots such as net:[inode].
+# They are valid even without a leading slash, but their mountpoints are
+# still subject to the same project guard.
+printf '%s\n' '1 0 0:1 / / rw - tmpfs none rw' \
+  '2 1 0:4 net:[4026533140] /run/docker/netns/example rw shared:188 - nsfs nsfs rw' >"$mountinfo"
+remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '2 1 0:4 net:[4026533140] %s rw - nsfs nsfs rw\n' \
+  "$delete_workspace/alpha/netns" >"$mountinfo"
+assert_fails_with 2 "contains mountpoint" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '%s\n' '2 1 0:4 relative /run/netns/example rw - nsfs nsfs rw' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+printf '%s\n' '2 1 0:4 net:[4026533140] /unrelated rw - tmpfs none rw' >"$mountinfo"
+assert_fails_with 2 "malformed mount information" remote_dev_assert_no_project_mounts "$delete_workspace/alpha" "$mountinfo"
+
 # Bash printf %b must NOT collapse mountinfo \0407 into a control byte.
 # This also covers workspace paths with a space immediately before a digit.
 octal_project="$root/space 7/workspace/alpha"
