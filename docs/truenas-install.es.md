@@ -2,7 +2,7 @@
 
 > **Entorno de referencia:** TrueNAS Community Edition 27 (validación real de Exchange pendiente en 27.0.0-RC.1); se conserva el contrato de Custom Apps de SCALE 25.10 como referencia de compatibilidad, sin afirmar pruebas de Exchange en ella. Conserva un digest conocido para recuperación.
 
-Esta guía documenta el canal **edge experimental** y la recuperación mediante digest exacto. Las etiquetas estables solo son válidas después de la publicación satisfactoria de `v0.2.0`, no por cambiar el número de versión de código. El stack canónico está en [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
+Esta guía documenta el canal **edge experimental** y la recuperación mediante digest exacto. La versión estable publicada actualmente es v0.3.1. El stack canónico está en [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
 
 ## 1. Dataset inicial y seguridad
 

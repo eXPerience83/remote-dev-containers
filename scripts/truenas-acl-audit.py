@@ -375,11 +375,15 @@ def main(argv: list[str] | None = None) -> int:
         try:
             mount = validate_exchange(args.root)
             if mount.fs_type != "zfs":
-                raise ValueError("TrueNAS exchange must be ZFS")
+                print("Exchange audit: BLOCKED (TrueNAS exchange must be ZFS)", file=sys.stderr)
+                return 1
             print(f"Exchange mount: OK ({mount.identity})")
             props, error = read_dataset_acl_properties(mount.source)
-            if error or props.get("acltype") != "nfsv4" or props.get("aclmode") != "restricted":
-                raise ValueError(error or "exchange reference requires NFSv4/Restricted")
+            if error:
+                raise ValueError(error)
+            if props.get("acltype") != "nfsv4" or props.get("aclmode") != "restricted":
+                print("Exchange ACL: BLOCKED (expected NFSv4/Restricted)", file=sys.stderr)
+                return 1
             acl, error = read_effective_acl(canonical_path(args.root) / "exchange")
             if error or not isinstance(acl, dict) or acl.get("acltype") != "NFS4" or not isinstance(acl.get("acl"), list):
                 raise ValueError(error or "exchange effective NFSv4 ACL unavailable")

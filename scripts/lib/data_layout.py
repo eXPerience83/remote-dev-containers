@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -179,6 +180,18 @@ def validate_exchange(root: Path):
         raise ValueError("; ".join(errors))
     mount = check_host(root, read_mounts())
     verify_visible_device(root / "exchange", mount)
+    if mount.fs_type == "zfs":
+        parent = mount.source.rsplit("/", 1)[0]
+        try:
+            listing = subprocess.run(
+                ["zfs", "list", "-H", "-o", "name,mounted,mountpoint", parent, mount.source],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+        except subprocess.SubprocessError as exc:
+            raise ValueError("cannot inspect active ZFS dataset mountpoints") from exc
+        expected = {f"{parent}\tyes\t{root}", f"{mount.source}\tyes\t{root / 'exchange'}"}
+        if set(listing.stdout.rstrip("\n").split("\n")) != expected:
+            raise ValueError("ZFS mounted properties do not match the canonical parent and child")
     return mount
 
 

@@ -182,6 +182,7 @@ jobs:
 
       - name: Smoke-test the exact stable publication candidates
         env:
+          REMOTE_DEV_TEST_EXCHANGE: "1"
           NAMESPACE: ${{ steps.registry.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
           BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}

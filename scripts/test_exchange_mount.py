@@ -3,7 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from lib import data_layout
 from lib.exchange_mount import check_host, check_runtime, main, parse_mountinfo
@@ -68,6 +68,23 @@ class ExchangeTests(unittest.TestCase):
             ):
                 with self.subTest(rows=rows), self.assertRaises(ValueError):
                     check_host(root, mounts(*rows))
+
+    def test_zfs_properties_match_visible_parent_and_child(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "exchange").mkdir()
+            table = mounts(ROOT, PARENT.replace("/data", tmp),
+                           EXCHANGE.replace("/data/exchange", tmp + "/exchange"))
+            listing = f"pool/root\tyes\t{tmp}\npool/root/exchange\tyes\t{tmp}/exchange\n"
+            with patch("lib.exchange_mount.read_mounts", return_value=table), \
+                 patch("lib.exchange_mount.verify_visible_device"), \
+                 patch("lib.data_layout.subprocess.run") as run:
+                for invalid in (listing.replace("yes", "no"), listing.replace(tmp, "/elsewhere")):
+                    run.return_value = Mock(stdout=invalid)
+                    with self.assertRaisesRegex(ValueError, "mounted properties"):
+                        data_layout.validate_exchange(root)
+                run.return_value = Mock(stdout=listing)
+                self.assertEqual(data_layout.validate_exchange(root).identity, IDENTITY)
 
     def test_ordinary_directory_not_created_and_symlink_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -72,6 +72,23 @@ def posix_acl(*, trivial: bool = True, uid: int = 0, mode: int = 0o700) -> dict[
 class TrueNasAclAuditTests(unittest.TestCase):
     """Exercise the host audit without requiring a TrueNAS CI runner."""
 
+    def test_exchange_acl_outcomes(self):
+        mount = mock.Mock(fs_type="zfs", identity="zfs:pool/data/exchange")
+        with mock.patch.object(MODULE, "audit", return_value=([], [])), \
+             mock.patch("lib.data_layout.validate_exchange", return_value=mount), \
+             mock.patch.object(MODULE, "read_dataset_acl_properties") as properties, \
+             mock.patch.object(MODULE, "read_effective_acl") as acl:
+            args = ["--root", "/data", "--include-exchange"]
+            properties.return_value = ({}, "ZFS query failed")
+            self.assertEqual(MODULE.main(args), 2)
+            properties.return_value = ({"acltype": "posix", "aclmode": "discard"}, None)
+            self.assertEqual(MODULE.main(args), 1)
+            properties.return_value = ({"acltype": "nfsv4", "aclmode": "restricted"}, None)
+            acl.return_value = (None, "middleware query failed")
+            self.assertEqual(MODULE.main(args), 2)
+            acl.return_value = ({"acltype": "NFS4", "acl": []}, None)
+            self.assertEqual(MODULE.main(args), 3)
+
     def make_root(
         self, *, include_antigravity: bool = False
     ) -> tuple[tempfile.TemporaryDirectory[str], Path]:

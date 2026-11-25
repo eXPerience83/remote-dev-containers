@@ -181,6 +181,7 @@ jobs:
 
       - name: Smoke-test the exact publication candidates
         env:
+          REMOTE_DEV_TEST_EXCHANGE: "1"
           NAMESPACE: ${{ steps.metadata.outputs.namespace }}
           BASE_DIGEST: ${{ steps.base.outputs.digest }}
           BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}

@@ -2,7 +2,7 @@
 
 > **Reference environment:** TrueNAS Community Edition 27 (real Exchange validation pending on 27.0.0-RC.1); SCALE 25.10 Custom Apps remain a compatibility reference, not a claim of tested Exchange support. Keep a known-good immutable digest for recovery.
 
-This guide documents the **experimental edge** deployment and the exact-digest rollback contract. Stable tags become valid only after an explicit successful `v0.2.0` publication, not when the source version is changed. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for optional deeper validation.
+This guide documents the **experimental edge** deployment and the exact-digest rollback contract. The current published stable release is v0.3.1. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for optional deeper validation.
 
 ## 1. Root dataset and safety
 
