@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -10,9 +11,17 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/prune-mise-locks.py"
+
+
+def fixture_environment():
+    """Never inherit Git location/config overrides in disposable repositories."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    return env
 
 
 class PruningTests(unittest.TestCase):
@@ -43,12 +52,15 @@ class PruningTests(unittest.TestCase):
         )
 
     def git(self, *args):
-        subprocess.run(["git", "-C", str(self.root), *args], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.root), *args], check=True, env=fixture_environment()
+        )
 
-    def invoke(self, *args, ok=True):
+    def invoke(self, *args, ok=True, env=None):
         result = subprocess.run(
             [sys.executable, str(HELPER), "--root", str(self.root), *args],
             text=True, capture_output=True, check=False,
+            env=fixture_environment() if env is None else env,
         )
         self.assertEqual(result.returncode == 0, ok, result.stdout + result.stderr)
         return result.stdout
@@ -97,6 +109,57 @@ class PruningTests(unittest.TestCase):
             handle.write("\n# local changes\n")
         self.invoke("--write", ok=False)
         self.assertTrue(path.is_file())
+
+    def test_staged_change_hidden_by_restored_worktree(self):
+        path = self.stale / "uv.lock"
+        original = path.read_bytes()
+        path.write_bytes(original + b"\n# staged replacement\n")
+        self.git("add", "--", str(path))
+        path.write_bytes(original)
+        self.invoke("--write", ok=False)
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_index_flags_cannot_hide_modified_bytes(self):
+        path = self.stale / "uv.lock"
+        original = path.read_bytes()
+        for flag in ("--assume-unchanged", "--skip-worktree"):
+            with self.subTest(flag=flag):
+                self.git("update-index", flag, "--", str(path))
+                path.write_bytes(original + b"\n# hidden working-tree changes\n")
+                self.invoke("--write", ok=False)
+                self.assertNotEqual(path.read_bytes(), original)
+                self.git("update-index", "--no-assume-unchanged", "--no-skip-worktree", "--", str(path))
+                path.write_bytes(original)
+
+    def test_git_location_overrides_cannot_redirect_pruning(self):
+        with tempfile.TemporaryDirectory() as other:
+            foreign = Path(other) / "foreign"
+            subprocess.run(
+                ["git", "clone", "-q", "--", str(self.root), str(foreign)],
+                check=True, env=fixture_environment(),
+            )
+            self.git("rm", "--cached", "-r", "--", str(self.stale))
+            self.git(
+                "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                "commit", "-qm", "untrack stale pair",
+            )
+            overrides = {
+                "GIT_DIR": str(foreign / ".git"),
+                "GIT_WORK_TREE": str(self.root),
+                "GIT_INDEX_FILE": str(foreign / ".git/index"),
+            }
+            before = (foreign / ".git/index").read_bytes()
+            # Fixture commands must ignore inherited location variables too.
+            with patch.dict(os.environ, overrides):
+                self.git("add", "-f", "--", "versions.env")
+            self.assertEqual((foreign / ".git/index").read_bytes(), before)
+            env = fixture_environment()
+            env.update(overrides)
+            self.assertIn("Obsolete tracked mise graphs: 0", self.invoke("--write", env=env))
+            self.assertTrue(self.stale.is_dir())
+            self.assertEqual((foreign / ".git/index").read_bytes(), before)
+            self.assert_active()
 
     def test_invalid_active_lock_prevents_any_deletion(self):
         with (self.active[0] / "uv.lock").open("a") as handle:

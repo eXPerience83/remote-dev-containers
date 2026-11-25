@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import stat
 import subprocess
@@ -22,7 +23,10 @@ VALIDATOR = Path(__file__).resolve().with_name("validate-mise-lock.py")
 
 def git(root: Path, *args: str) -> bytes:
     """Run git in the specified checkout; propagate all unexpected failures."""
-    return subprocess.check_output(["git", "-C", str(root), *args])
+    # Git location/configuration overrides can redirect -C to another index.
+    # These local, read-only commands do not require any Git-specific environment.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    return subprocess.check_output(["git", "-C", str(root), *args], env=env)
 
 
 def validate(root: Path) -> None:
@@ -100,7 +104,14 @@ def prune(root: Path, *, write: bool) -> int:
         ):
             raise ValueError(f"unexpected generated graph identity: {relative}")
         # Do not remove locally edited or staged replacement data.
-        git(root, "diff", "--quiet", "HEAD", "--", relative.as_posix())
+        git(root, "diff", "--cached", "--quiet", "HEAD", "--", relative.as_posix())
+        git(root, "diff", "--quiet", "--", relative.as_posix())
+        # Index flags (assume-unchanged/skip-worktree) can hide modified bytes
+        # from git diff. Compare the exact bounded files to their HEAD blobs.
+        for filename in sorted(FILES):
+            path = relative / filename
+            if (root / path).read_bytes() != git(root, "cat-file", "blob", f"HEAD:{path.as_posix()}"):
+                raise ValueError(f"working-tree bytes differ from HEAD: {path}")
         plan.append(relative)
 
     for relative in plan:
