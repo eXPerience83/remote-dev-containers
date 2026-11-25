@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import re
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -62,6 +63,8 @@ class CommonBaselineTests(unittest.TestCase):
         paths = self.root / 'antigravity-paths.sh'
         paths.write_text((ROOT / 'scripts/lib/antigravity-paths.sh').read_text().replace('/root', str(self.root)))
         replacements = {
+            '/usr/local/lib/remote-dev/python': sys.executable,
+            '/usr/local/lib/remote-dev/exchange_mount.py': str(ROOT / 'scripts/lib/exchange_mount.py'),
             '/usr/local/lib/remote-dev/common-tool-baseline.sh': str(library),
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/lib/remote-dev/antigravity-paths.sh': str(paths),

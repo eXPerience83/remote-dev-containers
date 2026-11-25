@@ -1,15 +1,16 @@
 # Exchange persistente opcional (#71)
 
-Exchange está desactivado por defecto. Las instalaciones existentes y los datos privados no requieren cambios. El primer contrato soportado exige un sistema de archivos local dedicado, no una carpeta ordinaria. TrueNAS: hijo ZFS directo del dataset raíz de datos. Docker Compose Linux: filesystem completo ext4/XFS/Btrfs dedicado (no binds de subárboles ni subvolúmenes). La aceptación real de TrueNAS 27 y Windows SMB sigue pendiente; SCALE 25.10 es solo referencia de compatibilidad.
+Exchange está desactivado por defecto. Las instalaciones existentes y los datos privados no requieren cambios. El primer contrato soportado exige un sistema de archivos local dedicado, no una carpeta ordinaria. TrueNAS: hijo ZFS directo del dataset raíz de datos. Docker Compose Linux: filesystem completo ext4/XFS dedicado (no binds de subárboles ni subvolúmenes). La aceptación real de TrueNAS 27 y Windows SMB sigue pendiente; SCALE 25.10 es solo referencia de compatibilidad.
 
 ## Activar en TrueNAS
 
 1. Anota el digest inmutable desplegado y conserva de forma segura tu YAML privado de Custom App. Ejecuta la auditoría ACL privada de la misma revisión; no migres ACL privadas existentes implícitamente.
 2. En Datasets crea un hijo llamado exchange bajo la raíz Remote Dev existente con preset SMB (NFSv4, Restricted, insensible a mayúsculas para Windows). No crees una carpeta ordinaria en el mountpoint ni compartas el padre. No cambies ACL de raíz/workspaces/state. Usa cuotas/snapshots independientes y considera desactivar exec, setuid y devices en este hijo; verifica compatibilidad.
 3. En la ACL del hijo, conserva el control del administrador autorizado y concede a un grupo SMB dedicado MODIFY heredable en archivos/directorios. Elimina concesiones amplias no deseadas solo en el hijo nuevo; sin invitado ni escritura universal. Comprueba traverse de padres para cuentas autorizadas sin cambiar permisos privados. Los agentes se ejecutan como root limitado; prueba su identidad efectiva y acceso recíproco a archivos creados con modos restrictivos. No uses root para iniciar sesión SMB. Un preset o modo POSIX no demuestra acceso ACL efectivo.
-4. Usa los scripts de la revisión exacta de la imagen, según [instalación](truenas-install.es.md). Ejecuta el preflight existente con --include-exchange. Copia el valor REMOTE_DEV_EXCHANGE_FS informado en la entrada opcional de entorno YAML de cada agente habilitado. El audit opcional devuelve deliberadamente 2 con revisión manual requerida aun cuando montaje/tipo sean correctos; revisa metadatos ACL y prueba autorización por separado.
+4. Usa los scripts de la revisión exacta de la imagen, según [instalación](truenas-install.es.md). Ejecuta el preflight existente con --include-exchange. Copia el valor REMOTE_DEV_EXCHANGE_FS informado en la entrada opcional de entorno YAML de cada agente habilitado. El audit opcional devuelve deliberadamente 3 con revisión manual requerida aun cuando montaje/tipo sean correctos; revisa metadatos ACL y prueba autorización por separado.
 
 ~~~bash
+curl -fsSL --retry 2 "https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/$REV/scripts/lib/exchange_mount.py" -o "$SETUP/scripts/lib/exchange_mount.py" || exit 1
 sudo python3 -B "$SETUP/scripts/preflight-data-layout.py" --root "$ROOT" --include-antigravity --include-exchange
 sudo python3 -B "$SETUP/scripts/truenas-acl-audit.py" --root "$ROOT" --include-antigravity --include-exchange
 ~~~

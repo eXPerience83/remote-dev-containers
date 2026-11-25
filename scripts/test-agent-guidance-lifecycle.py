@@ -67,6 +67,8 @@ esac
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/bin/codex': str(self.bin / 'vendor'),
             '/usr/local/bin/remote-dev-codex-runtime': str(self.bin / 'codex-runtime'),
+            '/usr/local/bin/remote-dev-browser-config': str(self.bin / 'absent-browser-config'),
+            '/usr/local/bin/remote-dev-context7-antigravity': str(self.bin / 'context7'),
             '/usr/local/bin/remote-dev-context7': str(self.bin / 'context7'),
             '/usr/local/bin/validate-codex-project-boundary': str(self.bin / 'validator'),
             '/usr/local/bin/remote-dev-antigravity-policy': str(self.bin / 'policy'),

@@ -45,7 +45,6 @@ for path in \
   scripts/preflight-data-layout.py \
   scripts/truenas-acl-audit.py \
   scripts/lib/data_layout.py \
-  scripts/lib/exchange_mount.py \
   compose/truenas.yml; do
   curl -fsSL --retry 2 \
     "https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/$REV/$path" \

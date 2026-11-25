@@ -44,7 +44,7 @@ def compose_environment() -> dict[str, str]:
 
 
 def compose_config(path: Path, *, antigravity: bool = True,
-                   overrides: dict[str, str] | None = None) -> dict[str, object]:
+                   launcher_auth: bool = False, overrides: dict[str, str] | None = None) -> dict[str, object]:
     with tempfile.NamedTemporaryFile() as empty_env:
         completed = subprocess.run(
             [
@@ -55,6 +55,7 @@ def compose_config(path: Path, *, antigravity: bool = True,
                 empty_env.name,
                 "-f",
                 str(path),
+                *(["-f", str(ROOT / "compose/launcher-auth.yml")] if launcher_auth else []),
                 "config",
                 "--format",
                 "json",
@@ -166,12 +167,12 @@ def validate_exchange_variant(path: Path, *, truenas: bool) -> None:
                 enabled.truncate()
                 enabled.write(base)
                 enabled.flush()
-                baseline = compose_config(Path(enabled.name), antigravity=both, overrides=env)["services"]
+                baseline = compose_config(Path(enabled.name), antigravity=both, launcher_auth=alternate, overrides=env)["services"]
                 enabled.seek(0)
                 enabled.truncate()
                 enabled.write(base.replace(marker, ""))
                 enabled.flush()
-                active = compose_config(Path(enabled.name), antigravity=both, overrides=env)["services"]
+                active = compose_config(Path(enabled.name), antigravity=both, launcher_auth=alternate, overrides=env)["services"]
                 require(set(active) == set(baseline), "exchange altered enabled roles")
                 for role, service in active.items():
                     if role == "launcher":

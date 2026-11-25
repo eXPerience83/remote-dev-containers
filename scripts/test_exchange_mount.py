@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lib import data_layout
-from lib.exchange_mount import check_host, check_runtime, parse_mountinfo
+from lib.exchange_mount import check_host, check_runtime, main, parse_mountinfo
 
 ROOT = "1 0 0:1 / / rw - overlay overlay rw"
 PARENT = "2 1 0:2 / /data rw - zfs pool/root rw"
@@ -20,6 +20,15 @@ def mounts(*lines):
 
 
 class ExchangeTests(unittest.TestCase):
+    def test_absent_target_skips_mount_table_only_when_disabled(self):
+        with patch.dict("os.environ", REMOTE_DEV_EXCHANGE_FS=""), \
+             patch("os.lstat", side_effect=FileNotFoundError), \
+             patch("lib.exchange_mount.read_mounts", side_effect=AssertionError):
+            self.assertEqual(main(), 0)
+        with patch.dict("os.environ", REMOTE_DEV_EXCHANGE_FS=IDENTITY), \
+             patch("lib.exchange_mount.read_mounts", return_value=mounts(ROOT)):
+            self.assertEqual(main(), 1)
+
     def test_runtime_off_and_on(self):
         self.assertFalse(check_runtime(mounts(ROOT), ""))
         self.assertTrue(check_runtime(mounts(ROOT, RUNTIME), IDENTITY))
@@ -51,6 +60,7 @@ class ExchangeTests(unittest.TestCase):
             self.assertEqual(check_host(root, mounts(ROOT, parent, exchange)).identity, IDENTITY)
             for rows in (
                 (ROOT, parent),
+                (ROOT, parent, exchange, exchange.replace(tmp + "/exchange", "/unrelated/alias")),
                 (ROOT, parent, exchange.replace("pool/root/exchange", "pool/other")),
                 (ROOT, parent, exchange.replace("0:3", "0:2")),
                 (ROOT, parent, exchange, exchange.replace(tmp + "/exchange", tmp + "/state/alias")),

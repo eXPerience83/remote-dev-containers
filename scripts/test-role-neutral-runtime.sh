@@ -142,6 +142,11 @@ import shlex
 import sys
 source, destination, runtime, launcher = sys.argv[1:]
 text = Path(source).read_text()
+exchange = Path(source).resolve().parent / "lib/exchange_mount.py"
+if exchange.is_file():
+    text = text.replace("/usr/local/lib/remote-dev/python", shlex.quote(sys.executable))
+    text = text.replace("/usr/local/lib/remote-dev/exchange_mount.py", shlex.quote(str(exchange)))
+
 text = text.replace('runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh',
                     'runtime_lib=' + shlex.quote(str(Path(runtime).resolve())))
 text = text.replace('exec /usr/local/bin/remote-dev-launcher', 'exec ' + shlex.quote(launcher))

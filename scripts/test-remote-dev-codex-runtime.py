@@ -1048,6 +1048,9 @@ class CodexRuntimeTests(unittest.TestCase):
                 path.chmod(0o755)
             doctor = root / "remote-dev-doctor.sh"
             source = DOCTOR.read_text(encoding="utf-8")
+            source = source.replace("/usr/local/lib/remote-dev/python", sys.executable)
+            source = source.replace("/usr/local/lib/remote-dev/exchange_mount.py",
+                                    str(DOCTOR.parent / "lib/exchange_mount.py"))
             source = source.replace(
                 "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh",
                 f"runtime_lib={runtime_lib}",

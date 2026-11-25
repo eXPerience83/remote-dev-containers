@@ -171,13 +171,15 @@ def validate_layout(root: Path, *, include_antigravity: bool) -> list[str]:
 
 def validate_exchange(root: Path):
     """Validate an explicitly provisioned exchange; never add it to private specs."""
-    from lib.exchange_mount import check_host, read_mounts
+    from lib.exchange_mount import check_host, read_mounts, verify_visible_device
 
     root = canonical_path(root)
     errors: list[str] = []
     if validate_no_symlink_components(root, (root / "exchange",), errors):
         raise ValueError("; ".join(errors))
-    return check_host(root, read_mounts())
+    mount = check_host(root, read_mounts())
+    verify_visible_device(root / "exchange", mount)
+    return mount
 
 
 def initialize_layout(root: Path, *, include_antigravity: bool) -> list[Path]:

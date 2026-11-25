@@ -10,7 +10,7 @@ from pathlib import Path
 
 EXCHANGE_TARGET = "/exchange"
 EXCHANGE_ENV = "REMOTE_DEV_EXCHANGE_FS"
-SUPPORTED_TYPES = frozenset(("zfs", "ext4", "xfs", "btrfs"))
+SUPPORTED_TYPES = frozenset(("zfs", "ext4", "xfs"))
 _ESCAPES = {"040": " ", "011": "\t", "012": "\n", "134": "\\"}
 
 
@@ -65,7 +65,7 @@ def parse_mountinfo(text: str) -> list[Mount]:
 
 
 def read_mounts() -> list[Mount]:
-    return parse_mountinfo(Path("/proc/self/mountinfo").read_text(encoding="utf-8", errors="surrogateescape"))
+    return parse_mountinfo(Path("/proc/self/mountinfo").read_bytes().decode("utf-8", "surrogateescape"))
 
 
 def below(path: str, parent: str) -> bool:
@@ -113,6 +113,12 @@ def require_exchange(mounts: list[Mount], target: str, expected: str | None = No
     return mount
 
 
+def verify_visible_device(target: Path, mount: Mount) -> None:
+    device = target.stat(follow_symlinks=False).st_dev
+    if f"{os.major(device)}:{os.minor(device)}" != mount.device:
+        raise ValueError("visible exchange device differs from mount table")
+
+
 def check_host(root: Path, mounts: list[Mount]) -> Mount:
     """Called after canonical layout/ancestry validation; never create anything."""
     target = root / "exchange"
@@ -120,29 +126,22 @@ def check_host(root: Path, mounts: list[Mount]) -> Mount:
         raise ValueError("exchange must already exist as a real directory")
     mount = require_exchange(mounts, str(target))
     parent = containing_mount(mounts, str(root))
-    if mount.device == parent.device:
-        raise ValueError("exchange aliases the data-root filesystem")
+    if any(m.device == mount.device and m.target != str(target) for m in mounts):
+        raise ValueError("exchange filesystem has another visible mount")
     if parent.fs_type == "zfs" or mount.fs_type == "zfs":
         if (parent.target != str(root) or parent.root != "/" or parent.fs_type != "zfs"
                 or mount.fs_type != "zfs" or mount.source != parent.source + "/exchange"):
             raise ValueError("TrueNAS exchange must be the direct ZFS child of the data-root dataset")
-    # Check all private ancestors and submounts, including same-device binds.
-    for private in (root / "state", root / "workspaces"):
-        if containing_mount(mounts, str(private)).device == mount.device:
-            raise ValueError("exchange aliases a private filesystem")
-        if any((m.target == str(private) or below(m.target, str(private)))
-               and m.device == mount.device for m in mounts):
-            raise ValueError("exchange filesystem also appears under private storage")
     return mount
 
 
-def check_runtime(mounts: list[Mount], expected: str) -> bool:
-    """Return False only for the deliberately disabled configuration."""
+def check_runtime(mounts: list[Mount], expected: str) -> Mount | None:
+    """Return None only for the deliberately disabled configuration."""
     mount = exact_mount(mounts, EXCHANGE_TARGET)
     if not expected and mount is None:
         if any(below(m.target, EXCHANGE_TARGET) for m in mounts):
             raise ValueError("exchange has undeclared nested mounts")
-        return False
+        return None
     if not expected:
         raise ValueError("exchange mount is present without REMOTE_DEV_EXCHANGE_FS")
     mount = require_exchange(mounts, EXCHANGE_TARGET, expected)
@@ -150,19 +149,29 @@ def check_runtime(mounts: list[Mount], expected: str) -> bool:
         raise ValueError("exchange mount propagation must be private")
     if any(m.device == mount.device and m.target != EXCHANGE_TARGET for m in mounts):
         raise ValueError("exchange filesystem aliases another container mount")
-    return True
+    return mount
 
 
 def main() -> int:
     """Immutable image invocation: no input file paths or content inspection."""
     try:
-        enabled = check_runtime(read_mounts(), os.environ.get(EXCHANGE_ENV, ""))
-        if enabled and (Path(EXCHANGE_TARGET).is_symlink() or not Path(EXCHANGE_TARGET).is_dir()):
+        expected = os.environ.get(EXCHANGE_ENV, "")
+        if not expected:
+            try:
+                os.lstat(EXCHANGE_TARGET)
+            except FileNotFoundError:
+                # A visible mount at or below /exchange requires this entry.
+                print("Exchange: OFF")
+                return 0
+        mount = check_runtime(read_mounts(), expected)
+        if mount and (Path(EXCHANGE_TARGET).is_symlink() or not Path(EXCHANGE_TARGET).is_dir()):
             raise ValueError("exchange mount is not a real directory")
+        if mount:
+            verify_visible_device(Path(EXCHANGE_TARGET), mount)
     except (OSError, ValueError) as exc:
         print(f"Exchange: BLOCKED ({exc})", file=sys.stderr)
         return 1
-    print("Exchange: ENABLED (verified mount; shared untrusted data)" if enabled else "Exchange: OFF")
+    print("Exchange: ENABLED (verified mount; shared untrusted data)" if mount else "Exchange: OFF")
     return 0
 
 

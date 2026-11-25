@@ -51,6 +51,11 @@ require_command sha256sum
 require_command timeout
 require_command tar
 require_command python3
+if [[ "${REMOTE_DEV_TEST_EXCHANGE:-0}" == 1 ]]; then
+  for command in truncate mkfs.ext4 mount umount mountpoint findmnt sudo; do
+    require_command "$command"
+  done
+fi
 
 case "$image" in
   ''|*$'\n'*|*$'\r'*) fail "image reference is invalid" ;;
@@ -2005,28 +2010,6 @@ wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 
 ci_phase_checkpoint "antigravity-recreation"
-antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
-antigravity_scratch_measurement="$(measure_canary \
-  "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
-docker_exec "$codex_name" rm -rf -- /workspace/.remote-dev-tmp >/dev/null 2>&1 \
-  || fail "failed to remove Codex development scratch through the owned fixture"
-remove_owned_container "$codex_name" "$codex_id" \
-  || fail "failed to remove the owned Codex fixture for scratch recreation"
-start_codex
-wait_for_health_command "$codex_name"
-assert_development_scratch_environment "$codex_name" Codex
-assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
-assert_equal "Antigravity scratch during Codex recreation" "$antigravity_scratch_measurement" \
-  "$(measure_canary \
-    "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
-
-assert_mise_trust_state "$codex_name" observe untrusted
-assert_mise_trust_state "$antigravity_name" observe untrusted
-for name in "$codex_name" "$antigravity_name"; do
-  docker_exec "$name" rm -rf -- /workspace/mise-trust-fixture \
-    || fail "failed to clean up synthetic mise project"
-done
-
 # CI only: a real dedicated ext4 filesystem, not a simulated ZFS/SMB test.
 # Keep every preceding OFF assertion; use the same owned role fixtures.
 if [[ "${REMOTE_DEV_TEST_EXCHANGE:-0}" == 1 ]]; then
@@ -2083,8 +2066,36 @@ if [[ "${REMOTE_DEV_TEST_EXCHANGE:-0}" == 1 ]]; then
     || fail "agent did not reject underlying directory"
   docker logs "$codex_name" 2>&1 | grep -F 'Exchange: BLOCKED' >/dev/null \
     || fail "agent did not explain rejected exchange mount"
+  remove_owned_container "$codex_name" "$codex_id" || fail "failed to remove rejected fixture"
+  exchange_args=()
+  start_codex
+  start_antigravity
+  wait_for_health_command "$codex_name"
+  wait_for_health_command "$antigravity_name"
   echo "Exchange integration: PASS (dedicated ext4; not TrueNAS/SMB)"
 fi
+
+antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
+antigravity_scratch_measurement="$(measure_canary \
+  "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
+docker_exec "$codex_name" rm -rf -- /workspace/.remote-dev-tmp >/dev/null 2>&1 \
+  || fail "failed to remove Codex development scratch through the owned fixture"
+remove_owned_container "$codex_name" "$codex_id" \
+  || fail "failed to remove the owned Codex fixture for scratch recreation"
+start_codex
+wait_for_health_command "$codex_name"
+assert_development_scratch_environment "$codex_name" Codex
+assert_agent_ttyd_security "$codex_name" Codex codex 7681 "$codex_password" "$antigravity_password"
+assert_equal "Antigravity scratch during Codex recreation" "$antigravity_scratch_measurement" \
+  "$(measure_canary \
+    "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"
+
+assert_mise_trust_state "$codex_name" observe untrusted
+assert_mise_trust_state "$antigravity_name" observe untrusted
+for name in "$codex_name" "$antigravity_name"; do
+  docker_exec "$name" rm -rf -- /workspace/mise-trust-fixture \
+    || fail "failed to clean up synthetic mise project"
+done
 
 ci_phase_checkpoint "scratch-recreation-and-final-canaries"
 echo "Hardened cross-service isolation and offline toolchain canaries: OK"

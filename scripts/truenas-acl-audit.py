@@ -376,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
             mount = validate_exchange(args.root)
             if mount.fs_type != "zfs":
                 raise ValueError("TrueNAS exchange must be ZFS")
+            print(f"Exchange mount: OK ({mount.identity})")
             props, error = read_dataset_acl_properties(mount.source)
             if error or props.get("acltype") != "nfsv4" or props.get("aclmode") != "restricted":
                 raise ValueError(error or "exchange reference requires NFSv4/Restricted")
@@ -389,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Exchange audit: BLOCKED ({exc})", file=sys.stderr)
             return 2
         # Do not claim effective authorization merely from the ACL type.
-        return 2
+        return 3
     return 0
 
 
