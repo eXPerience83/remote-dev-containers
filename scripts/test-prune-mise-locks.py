@@ -150,9 +150,16 @@ class PruningTests(unittest.TestCase):
                 "GIT_INDEX_FILE": str(foreign / ".git/index"),
             }
             before = (foreign / ".git/index").read_bytes()
-            # Fixture commands must ignore inherited location variables too.
+            # A real staged change must reach this fixture, never the foreign index.
+            sentinel = self.root / "fixture-only.txt"
+            sentinel.write_text("fixture only\n")
             with patch.dict(os.environ, overrides):
-                self.git("add", "-f", "--", "versions.env")
+                self.git("add", "-f", "--", sentinel.name)
+            staged = subprocess.check_output(
+                ["git", "-C", str(self.root), "ls-files", "--", sentinel.name],
+                env=fixture_environment(),
+            )
+            self.assertEqual(staged.decode().strip(), sentinel.name)
             self.assertEqual((foreign / ".git/index").read_bytes(), before)
             env = fixture_environment()
             env.update(overrides)
