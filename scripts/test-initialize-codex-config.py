@@ -183,16 +183,20 @@ class Initialization(unittest.TestCase):
         startup = bin_dir / 'startup'
         source = (ROOT / 'scripts/start-remote-dev-web.sh').read_text()
         source = source.replace('/usr/local/lib/remote-dev/remote-dev-runtime.sh', str(library))
+        source = source.replace('/usr/local/lib/remote-dev/python', sys.executable)
+        source = source.replace('/usr/local/lib/remote-dev/exchange_mount.py',
+                                str(ROOT / 'scripts/lib/exchange_mount.py'))
         source = source.replace('/usr/local/bin/secure-persistent-state', str(bin_dir / 'secure'))
         source = source.replace('/usr/local/bin/remote-dev-agent-guidance', str(helper) + " " + str(audit_log))
         source = source.replace('/root/.ssh', str(bin_dir / 'ssh'))
         startup.write_text(source)
         env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'],
                    GH_CONFIG_DIR=str(bin_dir / 'gh-state'), GIT_CONFIG_GLOBAL=str(bin_dir / 'git-state/config'),
-                   ALLOW_INSECURE_WEB='1')
+                   ALLOW_INSECURE_WEB='1', REMOTE_DEV_EXCHANGE_FS='')
         self.assertEqual(list(self.home.iterdir()), [])
         result = subprocess.run(['bash', str(startup)], env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Exchange: OFF', result.stdout)
         self.assertFalse(audit_log.exists(), "child initializer attempted network/external execution")
         self.assertEqual((self.home / 'config.toml').read_bytes(), g.INITIAL_CONFIG)
 
