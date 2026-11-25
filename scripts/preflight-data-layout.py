@@ -29,6 +29,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Also require the optional isolated Antigravity service layout",
     )
+    parser.add_argument("--include-exchange", action="store_true",
+                        help="Require a pre-existing, dedicated mounted exchange filesystem")
     return parser.parse_args(argv)
 
 
@@ -47,6 +49,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    if args.include_exchange:
+        from lib.data_layout import validate_exchange
+        try:
+            exchange = validate_exchange(root)
+        except (OSError, ValueError) as exc:
+            print(f"Exchange preflight: BLOCKED ({exc})", file=sys.stderr)
+            return 1
+        print(f"Exchange preflight: OK; REMOTE_DEV_EXCHANGE_FS={exchange.identity}")
 
     roles = "Codex + Antigravity" if args.include_antigravity else "Codex"
     print(f"Remote Dev data-layout preflight: OK ({root}; {roles})")

@@ -12,6 +12,7 @@ INTERPRETER = '/usr/local/lib/remote-dev/python'
 # All Python programs installed in the final image are administrative. Host-only
 # validators, publisher scripts and project/test tools are deliberately excluded.
 MODULES = {
+    'exchange_mount.py': '/usr/local/lib/remote-dev/exchange_mount.py',
     'remote_dev_context7_mcp_probe.py': '/usr/local/lib/remote-dev/remote_dev_context7_mcp_probe.py',
 }
 
@@ -64,6 +65,9 @@ class Contract(unittest.TestCase):
             self.assertIn(INTERPRETER, text, name)
             self.assertNotIn('/opt/remote-dev/mise/shims/python', text, name)
             self.assertNotIn('python3 -', text, name)
+        for source in ('start-remote-dev-web.sh', 'remote-dev-doctor.sh'):
+            self.assertIn(INTERPRETER + ' -I /usr/local/lib/remote-dev/exchange_mount.py',
+                          (ROOT / 'scripts' / source).read_text())
         doctor = (ROOT / 'scripts/remote-dev-doctor.sh').read_text()
         self.assertIn('python --version', doctor)  # Project diagnostic remains project-aware.
 

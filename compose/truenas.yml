@@ -72,6 +72,7 @@ services:
       TZ: Europe/Madrid
       REMOTE_DEV_ROLE: codex
       WORKSPACE: /workspace
+      # EXCHANGE-OPT-IN REMOTE_DEV_EXCHANGE_FS: "zfs:Pool1/remote-dev/exchange" # use preflight identity
       # Optional validated child name for START_MODE=codex/agent; leave empty in menu mode.
       REMOTE_DEV_PROJECT: ''
       CODEX_HOME: /root/.codex
@@ -116,6 +117,13 @@ services:
     # create_host_path is only defense-in-depth because not every Compose
     # release enforces it reliably.
     volumes:
+      # EXCHANGE-OPT-IN - type: bind
+      # EXCHANGE-OPT-IN   source: /mnt/Pool1/remote-dev/exchange
+      # EXCHANGE-OPT-IN   target: /exchange
+      # EXCHANGE-OPT-IN   read_only: false
+      # EXCHANGE-OPT-IN   bind:
+      # EXCHANGE-OPT-IN     create_host_path: false
+      # EXCHANGE-OPT-IN     propagation: rprivate
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/codex
         target: /workspace
@@ -183,6 +191,7 @@ services:
       REMOTE_DEV_ROLE: antigravity
       REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
       WORKSPACE: /workspace
+      # EXCHANGE-OPT-IN REMOTE_DEV_EXCHANGE_FS: "zfs:Pool1/remote-dev/exchange" # use preflight identity
       # Optional validated child name for START_MODE=agent; leave empty in menu mode.
       REMOTE_DEV_PROJECT: ''
       GH_CONFIG_DIR: /root/.config/gh
@@ -218,6 +227,13 @@ services:
       - "192.168.1.10:7682:7682"
 
     volumes:
+      # EXCHANGE-OPT-IN - type: bind
+      # EXCHANGE-OPT-IN   source: /mnt/Pool1/remote-dev/exchange
+      # EXCHANGE-OPT-IN   target: /exchange
+      # EXCHANGE-OPT-IN   read_only: false
+      # EXCHANGE-OPT-IN   bind:
+      # EXCHANGE-OPT-IN     create_host_path: false
+      # EXCHANGE-OPT-IN     propagation: rprivate
       - type: bind
         source: /mnt/Pool1/remote-dev/workspaces/antigravity
         target: /workspace

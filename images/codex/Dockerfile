@@ -111,6 +111,7 @@ COPY scripts/remote-dev-doctor.sh /usr/local/bin/remote-dev-doctor
 COPY scripts/codex-doctor.sh /usr/local/bin/codex-doctor
 COPY scripts/remote-dev-healthcheck.sh /usr/local/bin/remote-dev-healthcheck
 COPY scripts/remote-dev-version.sh /usr/local/bin/remote-dev-version
+COPY --chown=0:0 --chmod=0444 scripts/lib/exchange_mount.py /usr/local/lib/remote-dev/exchange_mount.py
 COPY scripts/lib/remote-dev-runtime.sh /usr/local/lib/remote-dev/remote-dev-runtime.sh
 COPY scripts/lib/antigravity-paths.sh /usr/local/lib/remote-dev/antigravity-paths.sh
 COPY scripts/lib/antigravity-runtime /usr/local/lib/remote-dev/antigravity-runtime

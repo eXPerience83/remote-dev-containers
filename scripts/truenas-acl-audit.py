@@ -41,6 +41,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Also audit the optional isolated Antigravity private-state leaves",
     )
+    parser.add_argument("--include-exchange", action="store_true",
+                        help="Report the optional exchange mount and effective ACL separately")
     return parser.parse_args(argv)
 
 
@@ -368,6 +370,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("Remote Dev TrueNAS ACL audit: OK (Generic/POSIX private-state contract)")
+    if args.include_exchange:
+        from lib.data_layout import validate_exchange
+        try:
+            mount = validate_exchange(args.root)
+            if mount.fs_type != "zfs":
+                raise ValueError("TrueNAS exchange must be ZFS")
+            props, error = read_dataset_acl_properties(mount.source)
+            if error or props.get("acltype") != "nfsv4" or props.get("aclmode") != "restricted":
+                raise ValueError(error or "exchange reference requires NFSv4/Restricted")
+            acl, error = read_effective_acl(canonical_path(args.root) / "exchange")
+            if error or not isinstance(acl, dict) or acl.get("acltype") != "NFS4" or not isinstance(acl.get("acl"), list):
+                raise ValueError(error or "exchange effective NFSv4 ACL unavailable")
+            print("Exchange mount/ACL type: OK (NFSv4/Restricted)")
+            print(json.dumps(acl, ensure_ascii=True, sort_keys=True))
+            print("Exchange ACL access: MANUAL REVIEW REQUIRED (authorized identities, inheritance and SMB/agent tests)")
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            print(f"Exchange audit: BLOCKED ({exc})", file=sys.stderr)
+            return 2
+        # Do not claim effective authorization merely from the ACL type.
+        return 2
     return 0
 
 
