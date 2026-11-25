@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.compare_images == true && '0' || '1' }}
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.compare_images == true && '0' || github.event_name == 'pull_request' && '2' || '1' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -188,6 +188,34 @@ jobs:
 
       - name: Build and smoke test
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
+
+      # Only relevant PRs need this networked canary. Use the already-built
+      # image's exact verified mise/uv; never mutate the Actions checkout.
+      - name: Verify real same-pin PyPI graph refresh
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if git diff --quiet HEAD^1 HEAD -- scripts/regenerate-mise-lock.sh scripts/test-regenerate-mise-lock.sh .github/workflows/check-upstream.yml .github/workflows/build-amd64.yml; then
+            echo "No lock updater changes; skip networked refresh canary."
+            exit 0
+          fi
+          docker run --rm --user 0 --entrypoint /bin/bash \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/review,readonly" \
+            remote-dev-base:local -ec '
+              set -euo pipefail
+              cd /
+              uv_bin="$(/usr/local/bin/mise which uv)"
+              scratch="$(mktemp -d)"
+              trap '\''rm -rf -- "$scratch"'\'' EXIT
+              cp -R /review/scripts /review/.mise /review/third_party "$scratch/"
+              cp /review/versions.env /review/mise.toml /review/mise.lock "$scratch/"
+              CI=true MISE_BIN=/usr/local/bin/mise UV_BIN="$uv_bin" \
+                bash "$scratch/scripts/regenerate-mise-lock.sh" --refresh-pypi
+              cmp /review/versions.env "$scratch/versions.env"
+              cmp /review/mise.toml "$scratch/mise.toml"
+              python3 "$scratch/scripts/validate-mise-lock.py" --root "$scratch"
+              echo "Real same-pin PyPI graph refresh: OK"
+            '
 
       - name: Lint publication workflows
         run: |
