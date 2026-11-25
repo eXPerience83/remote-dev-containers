@@ -37,16 +37,25 @@ def unescape(value: str) -> str:
 def parse_mountinfo(text: str) -> list[Mount]:
     """Parse Linux mountinfo, not /proc/mounts or st_dev alone."""
     mounts = []
-    for line in text.splitlines():
+    # Kernel fields use ASCII space separators and escape literal ASCII
+    # whitespace. Unicode whitespace in filenames must not split a record.
+    for line in text.removesuffix("\n").split("\n"):
         left, sep, right = line.partition(" - ")
-        fields, tail = left.split(), right.split()
+        fields, tail = left.split(" "), right.split(" ")
         if (not sep or len(fields) < 6 or len(tail) != 3
+                or not all(fields) or not all(tail)
                 or not fields[0].isdigit() or not fields[1].isdigit()
                 or not re.fullmatch(r"\d+:\d+", fields[2])):
             raise ValueError("malformed mountinfo")
         root, target = unescape(fields[3]), unescape(fields[4])
-        if not root.startswith("/") or not target.startswith("/"):
-            raise ValueError("invalid mountinfo path")
+        # Pseudo-filesystems such as nsfs legitimately expose an opaque root
+        # (net:[inode]) rather than an absolute path. Only the mount TARGET
+        # must be absolute here. require_exchange still requires root == "/"
+        # and a supported dedicated filesystem type for the actual exchange.
+        if not target.startswith("/"):
+            raise ValueError("invalid mountinfo target")
+        if tail[0] in SUPPORTED_TYPES and not root.startswith("/"):
+            raise ValueError("invalid local filesystem mount root")
         mounts.append(Mount(fields[2], root, target, frozenset(fields[5].split(",")),
                             tuple(fields[6:]), tail[0], unescape(tail[1]),
                             frozenset(tail[2].split(","))))

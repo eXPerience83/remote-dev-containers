@@ -71,10 +71,26 @@ class ExchangeTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     data_layout.validate_exchange(root)
 
+    def test_unrelated_namespace_mount_does_not_block_startup(self):
+        namespace = "4 1 0:4 net:[4026531840] /run/docker/netns/test rw - nsfs nsfs rw"
+        self.assertFalse(check_runtime(mounts(ROOT, namespace), ""))
+        self.assertTrue(check_runtime(mounts(ROOT, namespace, RUNTIME), IDENTITY))
+        with self.assertRaises(ValueError):
+            check_runtime(mounts(ROOT, namespace.replace("/run/docker/netns/test", "/exchange")),
+                          "nsfs:nsfs")
+        with self.assertRaises(ValueError):
+            check_runtime(mounts(ROOT, RUNTIME.replace(" / /exchange", " net:[42] /exchange")),
+                          IDENTITY)
+
+    def test_unicode_whitespace_is_part_of_filename(self):
+        m = mounts(ROOT, "2 1 8:1 / /data\u00a0root rw - ext4 /dev/loop1 rw")
+        self.assertEqual(m[1].target, "/data\u00a0root")
+
     def test_mountinfo_space_escaping_and_invalid(self):
         m = mounts(ROOT, r"2 1 8:1 / /data\040root rw - ext4 /dev/loop1 rw")
         self.assertEqual(m[1].target, "/data root")
-        for text in ("", "garbage", "1 0 unknown / / rw - zfs pool/root rw"):
+        for text in ("", "garbage", "1 0 unknown / / rw - zfs pool/root rw",
+                     "2 1 0:4 / relative rw - nsfs nsfs rw"):
             with self.assertRaises(ValueError):
                 parse_mountinfo(text)
 

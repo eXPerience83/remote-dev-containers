@@ -152,6 +152,8 @@ def validate_exchange_variant(path: Path, *, truenas: bool) -> None:
     source = path.read_text(encoding="utf-8")
     marker = "# EXCHANGE-OPT-IN "
     require(source.count(marker) == 16, f"{path}: incomplete opt-in block")
+    require(source.count(marker + "    create_host_path: false") == 2,
+            f"{path}: exchange must explicitly disable host-path creation")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", dir=path.parent) as enabled:
         for both in ((True,) if truenas else (False, True)):
             for alternate in (False, True):
@@ -182,8 +184,8 @@ def validate_exchange_variant(path: Path, *, truenas: bool) -> None:
                     require(exchange.get("source") == expected, "wrong exchange source")
                     require(exchange.get("type") == "bind" and exchange.get("read_only") is not True,
                             "exchange must be writable bind")
-                    require(exchange.get("bind", {}).get("create_host_path") is False,
-                            "exchange auto-creation not disabled")
+                    require(exchange.get("bind", {}).get("create_host_path") is not True,
+                            "exchange auto-creation explicitly enabled")
                     require(exchange.get("bind", {}).get("propagation") == "rprivate",
                             "exchange propagation not private")
                     require(service["environment"].pop("REMOTE_DEV_EXCHANGE_FS", None)
