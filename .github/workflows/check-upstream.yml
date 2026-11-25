@@ -615,7 +615,7 @@ jobs:
           tar -xzf "$workdir/uv.tar.gz" -C "$workdir"
           export UV_BIN="$workdir/uv-x86_64-unknown-linux-gnu/uv"
           # Reuse the verified mise binary used for Python candidate admission.
-          MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh
+          MISE_BIN="$mise_bin" bash scripts/regenerate-mise-lock.sh --refresh-pypi
           # A new PyPI graph changes the wheel/license closure. Refresh its
           # hashed notices before the strict validate-version-pins check, which
           # verifies that this evidence exactly matches the new uv.lock graphs.

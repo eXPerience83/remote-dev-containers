@@ -9,6 +9,17 @@ MISE_BIN="${MISE_BIN:-mise}"
 MISE_HTTP_TIMEOUT_VALUE="${MISE_HTTP_TIMEOUT:-60s}"
 MISE_LOCK_TIMEOUT_VALUE="${MISE_LOCK_TIMEOUT:-10m}"
 
+# A same-version PyPI refresh can replace a sidecar at its existing path.
+# Only the updater's disposable, exclusive CI checkout may use this mode.
+refresh_pypi=false
+if (( $# != 0 )); then
+  if (( $# != 1 )) || [[ "$1" != "--refresh-pypi" || "${CI:-}" != "true" ]]; then
+    echo "Usage: $0 [--refresh-pypi (disposable CI checkout only)]" >&2
+    exit 2
+  fi
+  refresh_pypi=true
+fi
+
 if [[ ! "$MISE_HTTP_TIMEOUT_VALUE" =~ ^[1-9][0-9]*(ms|s|m|h)$ ]]; then
   echo "ERROR: MISE_HTTP_TIMEOUT must be a positive simple duration such as 60s: $MISE_HTTP_TIMEOUT_VALUE" >&2
   exit 1
@@ -148,11 +159,22 @@ fi
   run_isolated_mise env PATH="$python_dir/bin:$(dirname "$UV_BIN"):$PATH" \
     timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
     "$MISE_BIN" lock --platform linux-x64,linux-arm64
+  if [[ "$refresh_pypi" == true ]]; then
+    # The normal lock reuses existing PyPI graphs. Target only the three
+    # reviewed tools; exact top-level pins and both platform entries must
+    # still satisfy the full validator. Keep the explicit maturity cutoff.
+    run_isolated_mise env PATH="$python_dir/bin:$(dirname "$UV_BIN"):$PATH" \
+      timeout --signal=TERM --kill-after=30s "$MISE_LOCK_TIMEOUT_VALUE" \
+      "$MISE_BIN" lock --platform linux-x64,linux-arm64 --minimum-release-age 24h \
+      --bump pypi:pre-commit pypi:pytest pypi:ruff
+  fi
 )
 
 python3 "$ROOT/scripts/validate-mise-lock.py" --root "$workspace"
-# Content-addressed graph directories are published before the referencing lock.
-# Keep older directories: a failed replacement must leave the previous lock usable.
+# Publish generated graph directories before the referencing lock. Paths are
+# option-keyed, not content-addressed: --refresh-pypi may replace a graph in
+# place. On publication failure discard the disposable CI checkout; never
+# stage or push a partial update. Keep old unreferenced paths until pruning.
 cp -R "$workspace/.mise/." "$ROOT/.mise/"
 replacement="$(mktemp "$ROOT/.mise.lock.tmp.XXXXXX")"
 install -m 0644 "$workspace/mise.lock" "$replacement"

@@ -80,10 +80,19 @@ PYTHON_LOCK
   esac
 fi
 
-if [[ "$#" -ne 3 || "$1" != "lock" || "$2" != "--platform" || "$3" != "linux-x64,linux-arm64" ]]; then
-  echo "unexpected fake mise arguments: $*" >&2
-  exit 80
-fi
+case "$*" in
+  "lock --platform linux-x64,linux-arm64")
+    phase=normal
+    ;;
+  "lock --platform linux-x64,linux-arm64 --minimum-release-age 24h --bump pypi:pre-commit pypi:pytest pypi:ruff")
+    phase=refresh
+    [[ "$FAKE_MISE_MODE" == refresh-* ]] || exit 80
+    ;;
+  *)
+    echo "unexpected fake mise arguments: $*" >&2
+    exit 80
+    ;;
+esac
 
 [[ "$PWD" == */workspace ]] || { echo "lock did not run in isolated workspace: $PWD" >&2; exit 81; }
 [[ "$UV_PYTHON_DOWNLOADS" == never ]] || { echo "uv may download unreviewed Python" >&2; exit 90; }
@@ -103,8 +112,31 @@ for directory in MISE_CACHE_DIR MISE_CONFIG_DIR MISE_DATA_DIR MISE_SYSTEM_DIR MI
 done
 
 printf '%s\n' "$(dirname "$MISE_CACHE_DIR")" > "$FAKE_SCRATCH_RECORD"
+if [[ "$phase" == refresh ]]; then
+  printf '%s\n' 'refresh invoked' >> "$FAKE_SCRATCH_RECORD.bump"
+  # Simulate a dependency-only change at the SAME option-keyed path. The
+  # validator must accept the new digest, not a different top-level pin.
+  python3 - <<'PYTHON_REFRESH'
+import hashlib
+from pathlib import Path
+import tomllib
+
+path = Path("mise.lock")
+before = path.read_text()
+ref = tomllib.loads(before)["tools"]["pypi:pre-commit"][0]["uv"]
+graph = Path(ref["path"]) / "uv.lock"
+graph.write_bytes(graph.read_bytes() + b"\n# fixture transitive refresh\n")
+digest = "sha256:" + hashlib.sha256(graph.read_bytes()).hexdigest()
+path.write_text(before.replace(ref["digest"], digest, 1))
+PYTHON_REFRESH
+  case "$FAKE_MISE_MODE" in
+    refresh-success) exit 0 ;;
+    refresh-fail) exit 49 ;;
+    refresh-invalid) printf '%s\n' 'not valid toml = [' > mise.lock; exit 0 ;;
+  esac
+fi
 case "$FAKE_MISE_MODE" in
-  success|bootstrap-v3)
+  success|bootstrap-v3|refresh-*)
     printf '\n# fake regeneration marker\n' >> mise.lock
     ;;
   invalid)
@@ -180,11 +212,11 @@ run_helper_with_path() {
     MISE_ENV="unexpected-profile" \
     MISE_HTTP_TIMEOUT=7s \
     MISE_LOCK_TIMEOUT=5s \
-    bash "$fixture_root/scripts/regenerate-mise-lock.sh"
+    bash "$fixture_root/scripts/regenerate-mise-lock.sh" "${@:5}"
 }
 
 run_helper() {
-  run_helper_with_path "$1" "$2" "$3" "$PATH"
+  run_helper_with_path "$1" "$2" "$3" "$PATH" "${@:4}"
 }
 
 success_root="$scratch/success-repo"
@@ -310,5 +342,55 @@ cmp -s "$ROOT/mise.lock" "$bad_lock_root/mise.lock" \
   || { echo "ERROR: bad lock timeout changed the lock" >&2; exit 1; }
 assert_no_temp_lock "$bad_lock_root"
 echo "OK reject option-like lock timeout"
+
+# Only the updater opts into same-pin graph refresh. Failure in resolution or
+# validation must leave the repository lock and graph bytes intact.
+refresh_root="$scratch/refresh-repo"
+refresh_record="$scratch/refresh-record"
+copy_fixture "$refresh_root"
+CI=true run_helper "$refresh_root" refresh-success "$refresh_record" --refresh-pypi
+grep -Fxq 'refresh invoked' "$refresh_record.bump"
+python3 - "$ROOT" "$refresh_root" <<'PYTHON_ASSERT'
+import sys
+import tomllib
+from pathlib import Path
+
+old, new = map(Path, sys.argv[1:])
+old_lock = tomllib.loads((old / "mise.lock").read_text())
+new_lock = tomllib.loads((new / "mise.lock").read_text())
+old_ref = old_lock["tools"]["pypi:pre-commit"][0]["uv"]
+new_ref = new_lock["tools"]["pypi:pre-commit"][0]["uv"]
+assert old_ref["path"] == new_ref["path"]
+assert old_ref["digest"] != new_ref["digest"]
+assert b"# fixture transitive refresh" in (new / new_ref["path"] / "uv.lock").read_bytes()
+assert (old / "mise.toml").read_bytes() == (new / "mise.toml").read_bytes()
+PYTHON_ASSERT
+assert_no_temp_lock "$refresh_root"
+echo "OK same-pin PyPI refresh with same sidecar path"
+
+for mode in refresh-fail refresh-invalid; do
+  case_root="$scratch/$mode-repo"
+  case_record="$scratch/$mode-record"
+  copy_fixture "$case_root"
+  if CI=true run_helper "$case_root" "$mode" "$case_record" --refresh-pypi; then
+    echo "ERROR: $mode was treated as success" >&2
+    exit 1
+  fi
+  grep -Fxq 'refresh invoked' "$case_record.bump"
+  cmp -s "$ROOT/mise.lock" "$case_root/mise.lock"
+  diff -qr "$ROOT/.mise" "$case_root/.mise"
+  assert_no_temp_lock "$case_root"
+  echo "OK preserve original lock and graphs after $mode"
+done
+
+non_ci_root="$scratch/non-ci-refresh-repo"
+copy_fixture "$non_ci_root"
+if CI=false run_helper "$non_ci_root" refresh-success "$scratch/non-ci-record" --refresh-pypi; then
+  echo "ERROR: PyPI refresh accepted outside CI" >&2
+  exit 1
+fi
+cmp -s "$ROOT/mise.lock" "$non_ci_root/mise.lock"
+diff -qr "$ROOT/.mise" "$non_ci_root/.mise"
+echo "OK reject refresh outside CI"
 
 echo "All isolated mise lock regeneration tests passed."
