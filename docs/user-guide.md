@@ -235,6 +235,10 @@ Before recreating an existing deployment with the new binds, rerun `scripts/init
 
 Recreating the container with the same reviewed mounts should therefore preserve the project directories and agent state while starting a fresh process. If a project is deleted, Codex history can still contain old-path sessions because that history is not stored in the deleted checkout.
 
+### Optional file handoff
+
+If enabled, `/exchange` is a shared handoff folder accessible from both agents and optionally Windows through native TrueNAS SMB. It is not a project or credential store. See [Exchange](exchange.md) for setup and safe usage.
+
 ## 8. Antigravity: current documented boundary
 
 Antigravity remains experimental. The common behavior safe to rely on from the current Remote Dev implementation includes the project/conversation contract and the Remote Dev approval-mode contract:

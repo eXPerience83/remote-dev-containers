@@ -235,6 +235,10 @@ Antes de recrear un despliegue existente con los nuevos binds, vuelve a ejecutar
 
 Recrear el contenedor con los mismos mounts revisados debería conservar los directorios de proyecto y el estado del agente aunque arranque un proceso nuevo. Si se borra un proyecto, el historial de Codex puede seguir conteniendo sesiones de la ruta antigua porque ese historial no estaba almacenado en el checkout eliminado.
 
+### Intercambio opcional de archivos
+
+Si se habilita, `/exchange` es una carpeta compartida de entrega y recogida, accesible desde ambos agentes y, opcionalmente, Windows mediante SMB nativo de TrueNAS. No es un proyecto ni un lugar para credenciales. Consulta [Exchange](exchange.es.md) para configuración y uso seguro.
+
 ## 8. Antigravity: límite documental actual
 
 Antigravity continúa siendo experimental. El comportamiento común que es seguro documentar con la implementación actual de Remote Dev incluye el contrato de proyecto/conversación y el contrato de modos de aprobación de Remote Dev:

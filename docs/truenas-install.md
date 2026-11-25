@@ -1,6 +1,6 @@
 # TrueNAS SCALE: installation, persistence, and upgrades
 
-> **v0.2.0 source cut:** the previous `0.2.0-beta.1` phase completed real TrueNAS tool, persistence and role acceptance (#121). Do not reset working datasets or repeat the full test cycle just for release metadata. Use a known-good immutable image digest for rollback; choose a stable tag only after its independent publisher has successfully verified the digest.
+> **Reference environment:** TrueNAS Community Edition 27 (real Exchange validation pending on 27.0.0-RC.1); SCALE 25.10 Custom Apps remain a compatibility reference, not a claim of tested Exchange support. Keep a known-good immutable digest for recovery.
 
 This guide documents the **experimental edge** deployment and the exact-digest rollback contract. Stable tags become valid only after an explicit successful `v0.2.0` publication, not when the source version is changed. The canonical stack definition is [compose/truenas.yml](../compose/truenas.yml). See the [advanced TrueNAS runbook](truenas-antigravity-validation.md) and [host ACL contract](truenas-acl-contract.md) for optional deeper validation.
 
@@ -45,6 +45,7 @@ for path in \
   scripts/preflight-data-layout.py \
   scripts/truenas-acl-audit.py \
   scripts/lib/data_layout.py \
+  scripts/lib/exchange_mount.py \
   compose/truenas.yml; do
   curl -fsSL --retry 2 \
     "https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/$REV/$path" \
@@ -155,3 +156,7 @@ Record only sanitized SHA/digest and outcomes or errors in [#121](https://github
 For upgrades, save old image digest and sanitized YAML, verify green edge workflows, pull the new edge, record the new **RepoDigest** and source `REV`, download its matched Compose template, regenerate the digest-pinned copy as in section 4 and recreate with identical bind mounts and previously documented host-specific settings. Verify effective SHA/digest and session persistence. For rollback, restore the old image digest **without deleting persistent state**; rolling back data needs a separate plan.
 
 Remove only the temporary SETUP helper directory when finished, never ROOT or credentials. Edge tags are mutable; **latest** is reserved for stable, not experimental edge.
+
+## Optional Exchange
+
+The normal installation needs no changes. To enable persistent handoff, follow [the Exchange guide](exchange.md) before modifying the YAML.

@@ -62,6 +62,7 @@ esac
                         REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY='1', REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER='0')
         replacements = {
             "/usr/local/lib/remote-dev/python": sys.executable,
+            "/usr/local/lib/remote-dev/exchange_mount.py": str(ROOT / "scripts/lib/exchange_mount.py"),
             '/usr/local/bin/remote-dev-agent-guidance': str(self.manager),
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/bin/codex': str(self.bin / 'vendor'),

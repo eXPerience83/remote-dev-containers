@@ -67,7 +67,7 @@ The audit is read-only. It checks:
 - `trivial=true`;
 - only owner/group/other entries with the expected effective permissions.
 
-Structural paths are derived from the same `scripts/lib/data_layout.py` contract consumed by bootstrap and preflight; the audit does not traverse user project contents. This does not define SMB or `/exchange` ACL rules (#71). The host audit is **read-only**: it never invokes `chmod`, `chown` or ACL repair.
+Structural paths are derived from the same `scripts/lib/data_layout.py` contract consumed by bootstrap and preflight; the audit does not traverse user project contents. With `--include-exchange`, the separate Exchange mount/ACL-type inspection reports effective ACL metadata for manual authorization review; it does not certify SMB identity access or relax private-state checks. See [Exchange](exchange.md). The host audit is **read-only**: it never invokes `chmod`, `chown` or ACL repair.
 
 A successful reference deployment ends with:
 

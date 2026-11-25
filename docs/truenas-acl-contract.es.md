@@ -67,7 +67,7 @@ El audit es de solo lectura. Comprueba:
 - `trivial=true`;
 - únicamente entradas owner/group/other con los permisos efectivos esperados.
 
-El auditor deriva estos directorios de la misma lista `scripts/lib/data_layout.py` utilizada por bootstrap y preflight, y no inspecciona el contenido de los proyectos del usuario. No intenta establecer permisos de SMB ni valida `/exchange`, que sigue definido en #71. **Solo informa**, nunca ejecuta `chmod`, `chown` ni reescribe ACL.
+El auditor deriva estos directorios de la misma lista `scripts/lib/data_layout.py` utilizada por bootstrap y preflight, y no inspecciona el contenido de los proyectos del usuario. Con `--include-exchange` inspecciona por separado el montaje y tipo ACL del hijo Exchange; informa la ACL efectiva para revisión manual, no certifica el acceso de identidades SMB. El resultado privado no se relaja. Consulta [Exchange](exchange.es.md). **Solo informa**, nunca ejecuta `chmod`, `chown` ni reescribe ACL.
 
 Una instalación de referencia correcta termina con:
 
