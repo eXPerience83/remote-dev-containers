@@ -630,6 +630,10 @@ jobs:
             --after versions.env \
             --date "$(date -u +%F)"
 
+          # All replacement locks and notices have passed validation. Prune only
+          # obsolete tracked generated graphs in this exclusive CI checkout.
+          python3 scripts/prune-mise-locks.py --write
+
           tracked_files=(
             CHANGELOG.md
             versions.env

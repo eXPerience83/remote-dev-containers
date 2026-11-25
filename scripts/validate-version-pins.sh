@@ -163,6 +163,7 @@ python3 "$ROOT/scripts/test-validate-mise-lock.py" --root "$ROOT"
 python3 "$ROOT/scripts/test_preflight_python_upstream.py"
 python3 "$ROOT/scripts/test_admit_mise_upstream.py"
 bash "$ROOT/scripts/test-regenerate-mise-lock.sh"
+python3 "$ROOT/scripts/test-prune-mise-locks.py"
 
 if [[ ! "$UBUNTU_VERSION" =~ ^[0-9]*[02468]\.04$ ]]; then
   echo "ERROR: UBUNTU_VERSION must be an explicit Ubuntu LTS release tag: $UBUNTU_VERSION" >&2
