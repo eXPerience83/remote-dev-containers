@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Synthetic mountinfo regression tests; no real filesystem or SMB claims."""
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from exchange_fixture import adapt_exchange_off, EXCHANGE_COMMAND
 from lib import data_layout
 from lib.exchange_mount import check_host, check_runtime, main, parse_mountinfo
 
@@ -28,6 +32,23 @@ class ExchangeTests(unittest.TestCase):
         with patch.dict("os.environ", REMOTE_DEV_EXCHANGE_FS=IDENTITY), \
              patch("lib.exchange_mount.read_mounts", return_value=mounts(ROOT)):
             self.assertEqual(main(), 1)
+
+    def test_host_fixture_isolates_inherited_identity_and_quotes_paths(self):
+        with tempfile.TemporaryDirectory(prefix="exchange fixture ") as tmp:
+            root = Path(tmp)
+            source = Path(__file__).resolve().parent / "lib/exchange_mount.py"
+            adapted = adapt_exchange_off(EXCHANGE_COMMAND, source, root)
+            env = dict(os.environ, REMOTE_DEV_EXCHANGE_FS="zfs:inherited")
+            result = subprocess.run(["bash", "-c", adapted], env=env,
+                                    capture_output=True, text=True, check=False, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Exchange: OFF", result.stdout)
+            checker, = root.glob("exchange-fixture-*/exchange_mount.py")
+            blocked = subprocess.run([sys.executable, "-I", str(checker)], env=env,
+                                     capture_output=True, text=True, check=False, timeout=10)
+            self.assertEqual(blocked.returncode, 1, blocked.stderr)
+            self.assertIn("Exchange: BLOCKED", blocked.stderr)
+            self.assertFalse((checker.parent / "absent-exchange").exists())
 
     def test_runtime_off_and_on(self):
         self.assertFalse(check_runtime(mounts(ROOT), ""))

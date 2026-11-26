@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import socket
+import shlex
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,8 @@ import shutil
 import subprocess
 import fcntl
 from unittest.mock import patch
+
+from exchange_fixture import adapt_exchange_off
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('guidance', ROOT / 'scripts/remote-dev-agent-guidance.py')
@@ -182,17 +185,16 @@ class Initialization(unittest.TestCase):
         for file in bin_dir.iterdir(): file.chmod(0o700)
         startup = bin_dir / 'startup'
         source = (ROOT / 'scripts/start-remote-dev-web.sh').read_text()
-        source = source.replace('/usr/local/lib/remote-dev/remote-dev-runtime.sh', str(library))
-        source = source.replace('/usr/local/lib/remote-dev/python', sys.executable)
-        source = source.replace('/usr/local/lib/remote-dev/exchange_mount.py',
-                                str(ROOT / 'scripts/lib/exchange_mount.py'))
-        source = source.replace('/usr/local/bin/secure-persistent-state', str(bin_dir / 'secure'))
-        source = source.replace('/usr/local/bin/remote-dev-agent-guidance', str(helper) + " " + str(audit_log))
-        source = source.replace('/root/.ssh', str(bin_dir / 'ssh'))
+        source = adapt_exchange_off(source, ROOT / 'scripts/lib/exchange_mount.py', bin_dir)
+        source = source.replace('/usr/local/lib/remote-dev/remote-dev-runtime.sh', shlex.quote(str(library)))
+        source = source.replace('/usr/local/bin/secure-persistent-state', shlex.quote(str(bin_dir / 'secure')))
+        source = source.replace('/usr/local/bin/remote-dev-agent-guidance',
+                                shlex.join([sys.executable, str(helper), str(audit_log)]))
+        source = source.replace('/root/.ssh', shlex.quote(str(bin_dir / 'ssh')))
         startup.write_text(source)
         env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'],
                    GH_CONFIG_DIR=str(bin_dir / 'gh-state'), GIT_CONFIG_GLOBAL=str(bin_dir / 'git-state/config'),
-                   ALLOW_INSECURE_WEB='1', REMOTE_DEV_EXCHANGE_FS='')
+                   ALLOW_INSECURE_WEB='1', REMOTE_DEV_EXCHANGE_FS='zfs:inherited')
         self.assertEqual(list(self.home.iterdir()), [])
         result = subprocess.run(['bash', str(startup)], env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)

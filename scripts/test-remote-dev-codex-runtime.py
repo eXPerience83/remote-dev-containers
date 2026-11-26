@@ -1050,8 +1050,9 @@ class CodexRuntimeTests(unittest.TestCase):
             source = DOCTOR.read_text(encoding="utf-8")
             exchange = DOCTOR.parent / "lib/exchange_mount.py"
             if exchange.is_file():
-                source = source.replace("/usr/local/lib/remote-dev/python", sys.executable)
-                source = source.replace("/usr/local/lib/remote-dev/exchange_mount.py", str(exchange))
+                from exchange_fixture import adapt_exchange_off
+
+                source = adapt_exchange_off(source, exchange, root)
             source = source.replace(
                 "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh",
                 f"runtime_lib={runtime_lib}",

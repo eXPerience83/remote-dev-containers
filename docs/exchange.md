@@ -4,18 +4,30 @@ Exchange is OFF by default. Existing deployments and private data need no change
 
 ## Enable on TrueNAS
 
-1. Record the currently deployed immutable image digest and preserve your private Custom App YAML securely. Run the same-revision private ACL audit; do not migrate existing private ACLs implicitly.
+1. Record the currently deployed immutable image digest and preserve your private Custom App YAML securely for rollback. Select an Exchange-capable target image: follow section 2 of the [installation guide](truenas-install.md) to pull and pin it by digest (`PINNED_IMAGE`), obtain its OCI source revision (`REV`) and download revision-matched scripts and Compose into a fresh `SETUP`. Set `ROOT` to the actual data-root dataset. The target scripts must both support `--include-exchange`, and its Compose template must contain `# EXCHANGE-OPT-IN `; v0.3.1 and older images cannot enable Exchange. Pulling/inspecting the target image does not require deploying it. For a new installation, initialize the private layout for the same enabled roles as described in the installation guide. Run the same-revision private ACL audit; do not migrate existing private ACLs implicitly.
 2. In Datasets, create a child named exchange below the existing Remote Dev root, using SMB preset (NFSv4, Restricted, case-insensitive for Windows). Do not create an ordinary directory at the mountpoint or share the parent. Do not change root/workspaces/state ACLs. Use a separate quota/snapshot policy and consider disabling exec, setuid and devices on this child; verify compatibility.
 3. In the child's ACL, keep an authorized administrator in control and grant an explicit dedicated SMB group inheritable MODIFY on files/directories. Remove unintended broad grants on this new child only; no guest/world-writable ACL. Ensure permitted accounts can traverse the parents without changing private-state permissions. Agent processes run as restricted root; test their effective host identity and reciprocal access to files created with restrictive modes. Do not use root as an SMB login. Do not assume a preset or POSIX mode proves effective ACL access.
-4. Use scripts from the exact deployed image revision, as in the [installation guide](truenas-install.md). Run the existing preflight with --include-exchange. Copy the reported REMOTE_DEV_EXCHANGE_FS value into the optional YAML environment entry for each enabled agent. The optional audit below deliberately exits 3 with manual review required even when mount/type are correct; review its ACL metadata and test authorization separately.
+4. Download the helper from the same `REV` into the existing `SETUP`: `curl -fsSL --retry 2 "https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/$REV/scripts/lib/exchange_mount.py" -o "$SETUP/scripts/lib/exchange_mount.py"`. Stop if the download fails; inspect the downloaded scripts before running them with administrator privileges. Select the roles once below (uncomment the second assignment only if Antigravity will be enabled). Run the block in the same Bash session as section 2 of the installation guide. Review the ACL metadata and inheritance before typing `YES`. The status 3 only means manual review is required, not that access is authorized; other statuses, including unexpected 0, block this procedure. Effective authorization must still be tested after deployment.
 
-~~~bash
-curl -fsSL --retry 2 "https://raw.githubusercontent.com/eXPerience83/remote-dev-containers/$REV/scripts/lib/exchange_mount.py" -o "$SETUP/scripts/lib/exchange_mount.py" || exit 1
-sudo python3 -B "$SETUP/scripts/preflight-data-layout.py" --root "$ROOT" --include-antigravity --include-exchange
-sudo python3 -B "$SETUP/scripts/truenas-acl-audit.py" --root "$ROOT" --include-antigravity --include-exchange
-~~~
+   ~~~bash
+   roles=()  # Codex-only / solo Codex
+   # roles=(--include-antigravity)  # Both agents / ambos agentes
+   exchange_ready=0
+   if sudo python3 -B "$SETUP/scripts/preflight-data-layout.py" --root "$ROOT" "${roles[@]}" --include-exchange; then
+     audit_status=0
+     sudo python3 -B "$SETUP/scripts/truenas-acl-audit.py" --root "$ROOT" "${roles[@]}" --include-exchange || audit_status=$?
+     if [[ "$audit_status" == 3 ]]; then
+       if read -r -p 'ACL metadata and inheritance reviewed? Type YES to proceed: ' answer && [[ "$answer" == YES ]]; then
+         exchange_ready=1
+       fi
+     else
+       printf 'Exchange audit did not reach manual review (status %s); stop.\n' "$audit_status" >&2
+     fi
+   fi
+   printf 'exchange_ready=%s\n' "$exchange_ready"
+   ~~~
 
-5. In the existing YAML, remove the literal comment marker "# EXCHANGE-OPT-IN " from the environment entry and the seven bind lines in each enabled agent. Replace the sample identity with the reported value and the example host path with your root's exchange child. Do not add anything to launcher. Save/recreate. Doctor must report Exchange: ENABLED. Inspect the actual bind source/destination, not just YAML. Retain the optional blocks in your private deployment notes: TrueNAS may discard comments on save.
+5. **Continue only if the previous block printed `exchange_ready=1`.** Otherwise stop and investigate; do not apply YAML. For a new installation use the digest-pinned copy of the target template; for an upgrade edit a private copy of the current YAML, preserving credentials, ports, roles and paths. From `$SETUP/compose/truenas.yml` at the target `REV`, copy any missing Exchange environment entry and seven-line bind block into each enabled agent's `environment` and `volumes`, respectively. If already present, edit in place. Remove only the `# EXCHANGE-OPT-IN ` marker from copied lines and retain indentation. Set `REMOTE_DEV_EXCHANGE_FS` to the preflight identity, and `source` to the real absolute exchange child path (the value of `$ROOT` followed by `/exchange`, not a shell expression). Keep `/exchange`, RW, `create_host_path: false` and `rprivate`; no duplicate entries or launcher mounts. Ensure every service uses the selected `PINNED_IMAGE`. Save/recreate once. Verify the deployed digest, inspect the actual bind source/destination, and require Doctor to report Exchange: ENABLED for enabled agents. Keep the original YAML/digest for rollback and retain optional blocks in private deployment notes: TrueNAS may discard comments on save.
 6. Optionally use Shares > Windows (SMB) Shares to export **only** the exchange dataset, e.g. remote-dev-exchange. Restrict share ACL and filesystem ACL to authorized SMB accounts on LAN/private mesh. Keep wide links/insecure wide links disabled and verify no symlink/reparse-point escape to private canaries. No SMB client/server in the image. With SMB disabled, local binds still work.
 
 Generic Docker Compose uses the same commented blocks in compose/docker-compose.yml; set REMOTE_DEV_DATA_ROOT as before, use the preflight identity for the dedicated local filesystem, activate Antigravity only if desired. No new Compose file or profiles.

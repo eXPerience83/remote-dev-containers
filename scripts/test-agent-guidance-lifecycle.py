@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Run the actual launch/Doctor scripts with synthetic vendor/state boundaries."""
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+
+from exchange_fixture import adapt_exchange_off
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,7 +65,6 @@ esac
                         REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY='1', REMOTE_DEV_ANTIGRAVITY_OAUTH_HELPER='0')
         replacements = {
             "/usr/local/lib/remote-dev/python": sys.executable,
-            "/usr/local/lib/remote-dev/exchange_mount.py": str(ROOT / "scripts/lib/exchange_mount.py"),
             '/usr/local/bin/remote-dev-agent-guidance': str(self.manager),
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/bin/codex': str(self.bin / 'vendor'),
@@ -81,7 +83,10 @@ esac
         replacements['/usr/local/lib/remote-dev/antigravity-paths.sh'] = str(paths)
         for name in ('run-codex', 'run-antigravity', 'remote-dev-doctor'):
             text = (ROOT / 'scripts' / (name + '.sh')).read_text()
-            for old, new in replacements.items(): text = text.replace(old, new)
+            if name == 'remote-dev-doctor':
+                text = adapt_exchange_off(text, ROOT / 'scripts/lib/exchange_mount.py', self.root)
+            for old, new in replacements.items():
+                text = text.replace(old, shlex.quote(new))
             (self.bin / name).write_text(text); (self.bin / name).chmod(0o755)
 
     def stub(self, name, body):

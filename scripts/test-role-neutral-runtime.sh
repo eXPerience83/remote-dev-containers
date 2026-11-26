@@ -144,8 +144,9 @@ source, destination, runtime, launcher = sys.argv[1:]
 text = Path(source).read_text()
 exchange = Path(source).resolve().parent / "lib/exchange_mount.py"
 if exchange.is_file():
-    text = text.replace("/usr/local/lib/remote-dev/python", shlex.quote(sys.executable))
-    text = text.replace("/usr/local/lib/remote-dev/exchange_mount.py", shlex.quote(str(exchange)))
+    sys.path.insert(0, str(exchange.parent.parent))
+    from exchange_fixture import adapt_exchange_off
+    text = adapt_exchange_off(text, exchange, Path(destination).parent)
 
 text = text.replace('runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh',
                     'runtime_lib=' + shlex.quote(str(Path(runtime).resolve())))
