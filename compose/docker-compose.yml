@@ -70,6 +70,7 @@ services:
       TZ: ${TZ:-Europe/Madrid}
       REMOTE_DEV_ROLE: codex
       WORKSPACE: /workspace
+      # EXCHANGE-OPT-IN REMOTE_DEV_EXCHANGE_FS: "zfs:Pool1/remote-dev/exchange" # use preflight identity
       REMOTE_DEV_PROJECT: ${REMOTE_DEV_PROJECT:-}
       CODEX_HOME: /root/.codex
       REMOTE_DEV_CODEX_RUNTIME_ROOT: /root/.local/share/remote-dev/codex-runtime
@@ -111,6 +112,13 @@ services:
     # Run scripts/preflight-data-layout.py before deployment. The explicit
     # create_host_path setting is defense-in-depth for Compose implementations.
     volumes:
+      # EXCHANGE-OPT-IN - type: bind
+      # EXCHANGE-OPT-IN   source: ${REMOTE_DEV_DATA_ROOT:-../data}/exchange
+      # EXCHANGE-OPT-IN   target: /exchange
+      # EXCHANGE-OPT-IN   read_only: false
+      # EXCHANGE-OPT-IN   bind:
+      # EXCHANGE-OPT-IN     create_host_path: false
+      # EXCHANGE-OPT-IN     propagation: rprivate
       - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/workspaces/codex
         target: /workspace
@@ -179,6 +187,7 @@ services:
       REMOTE_DEV_ROLE: antigravity
       REMOTE_DEV_ENABLE_EXPERIMENTAL_ANTIGRAVITY: "1"
       WORKSPACE: /workspace
+      # EXCHANGE-OPT-IN REMOTE_DEV_EXCHANGE_FS: "zfs:Pool1/remote-dev/exchange" # use preflight identity
       REMOTE_DEV_PROJECT: ${REMOTE_DEV_PROJECT:-}
       GH_CONFIG_DIR: /root/.config/gh
       GIT_CONFIG_GLOBAL: /root/.config/git/config
@@ -215,6 +224,13 @@ services:
       - "${ANTIGRAVITY_WEB_PUBLISH_IP:-127.0.0.1}:${ANTIGRAVITY_WEB_PUBLISH_PORT:-7682}:7682"
 
     volumes:
+      # EXCHANGE-OPT-IN - type: bind
+      # EXCHANGE-OPT-IN   source: ${REMOTE_DEV_DATA_ROOT:-../data}/exchange
+      # EXCHANGE-OPT-IN   target: /exchange
+      # EXCHANGE-OPT-IN   read_only: false
+      # EXCHANGE-OPT-IN   bind:
+      # EXCHANGE-OPT-IN     create_host_path: false
+      # EXCHANGE-OPT-IN     propagation: rprivate
       - type: bind
         source: ${REMOTE_DEV_DATA_ROOT:-../data}/workspaces/antigravity
         target: /workspace

@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current published stable:** [v0.3.0](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.3.0) (2026-11-22; exact release/support outcome in [#346](https://github.com/eXPerience83/remote-dev-containers/issues/346)). Next patch: **v0.3.1 [#377](https://github.com/eXPerience83/remote-dev-containers/issues/377)**, source preparation only. Next two *planned feature releases*: **v0.4.0 [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366)**, then **v0.5.0 [#367](https://github.com/eXPerience83/remote-dev-containers/issues/367)**.
+**Current published stable:** [v0.3.1](https://github.com/eXPerience83/remote-dev-containers/releases/tag/v0.3.1) (2026-11-24; maintenance tracker [#377](https://github.com/eXPerience83/remote-dev-containers/issues/377)). Next planned feature releases: **v0.4.0 [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366)**, then **v0.5.0 [#367](https://github.com/eXPerience83/remote-dev-containers/issues/367)**.
 
 This document is the high-level plan. Per-feature issues own design and acceptance; trackers #366 and #367 own release scope and exit gates. The older #31 contains historical release/support discussion; older checklists must not supersede the completed #346 outcome.
 
@@ -70,19 +70,19 @@ This document is the high-level plan. Per-feature issues own design and acceptan
 
 The [#369 audit](https://github.com/eXPerience83/remote-dev-containers/issues/369) is closed with **APTO CON RIESGOS CONOCIDOS** at `main@163889c223014c0fd3137d9f92acdda9d37af8ba`. The reviewed fixes are #371 (shared project deletion protection), #372 (read-only TrueNAS structural ACL audit) and #114 (Codex runtime permission identity and trust boundary). Exact source Build and Edge publication passed. The operator supplied real TrueNAS startup/resume evidence and full integrity diagnostics for both optional runtimes; host effective ACL verification and exact deployed digest evidence remain separate.
 
-**Next: [v0.3.1 maintenance release #377](https://github.com/eXPerience83/remote-dev-containers/issues/377).** Prepare and review the patch source cut, complete the recorded acceptance gates, then publish the independent stable candidate only after authorization. Keep v0.3.0 as the current published stable until promotion is verified. No v0.4.0 feature implementation until this patch release completes.
+**v0.3.1 published:** independent stable release published 2026-11-24. #377 remains for administrative/evidence reconciliation; no new feature blocker inferred from tracker state.
 
-Residual risks are recorded in #369 and #377. Reconcile #357 and historical documentation in #327; #157 remains separate compatibility UX. The v0.4.0 order (#360, #71, #327, TrueNAS Edge acceptance, independent stable publication) and v0.5.0 scope remain unchanged.
+Residual risks are recorded in #369 and #377. Reconcile #357 and historical documentation in #327; #157 remains separate compatibility UX. The v0.4.0 order is #71, #327, #380, TrueNAS Edge acceptance and independent stable publication. #360 is optional/manual; v0.5.0 scope remains unchanged.
 
-## Planned next — v0.4.0: shared file exchange + Chromium security
+## Planned next — v0.4.0: shared file exchange and maintenance
 
 **Tracker: [#366](https://github.com/eXPerience83/remote-dev-containers/issues/366).** Start only after #369 and the v0.3.1 maintenance release #377 complete. Priority is a safe new feature without changing existing project layout or weakening container isolation.
 
 ### Sequenced, separately reviewable PRs
 
-1. **[#360](https://github.com/eXPerience83/remote-dev-containers/issues/360) — browser CVE awareness:** detect and report Chromium Headless Shell risks even if the `@playwright/mcp` version is unchanged. Correlate official evidence with the actual pinned MCP/Core/browser revision; fail visibly on unknown network/source status; never mix unofficial browser ZIPs or silently auto-promote.
-2. **[#71](https://github.com/eXPerience83/remote-dev-containers/issues/71) — persistent `/exchange` folder:** introduce one shared path `${REMOTE_DEV_DATA_ROOT}/exchange`, mounted narrowly into enabled Codex and Antigravity services, optionally exported as SMB by TrueNAS itself. No agent SMB client/server, no project-folder shares, no parent root mount, no credentials in the share, and **no mount into the launcher**. Prefer an explicit backward-compatible opt-in; confirm exact Compose/bootstrap/preflight/ACL contract before coding so existing deployments do not fail for a missing bind source.
-3. **[#327](https://github.com/eXPerience83/remote-dev-containers/issues/327) — bounded CI/code housekeeping and docs:** eliminate only demonstrably redundant paths without removing protections; reconcile already-merged menu parity PR #358 with open tracker #357. Bilingual operator instructions, changed-path manifests and rollback notes must accurately match the delivered feature.
+1. **[#71](https://github.com/eXPerience83/remote-dev-containers/issues/71) — persistent `/exchange` folder:** introduce one shared path `${REMOTE_DEV_DATA_ROOT}/exchange`, mounted narrowly into enabled Codex and Antigravity services, optionally exported as SMB by TrueNAS itself. No agent SMB client/server, no project-folder shares, no parent root mount, no credentials in the share, and **no mount into the launcher**. Explicit opt-in with a dedicated mounted filesystem and matched runtime identity; real TrueNAS 27 (operator host 27.0.0-RC.1 at design time) and SMB acceptance remain mandatory.
+2. **[#327](https://github.com/eXPerience83/remote-dev-containers/issues/327) — bounded CI/code housekeeping and docs:** eliminate only demonstrably redundant paths without removing protections; reconcile already-merged menu parity PR #358 with open tracker #357. Bilingual operator instructions, changed-path manifests and rollback notes must accurately match the delivered feature.
+3. **[#380](https://github.com/eXPerience83/remote-dev-containers/issues/380) — owner-dispatched stable workflow:** retain exact-SHA, independent candidate and explicit promotion authorization gates.
 4. **Edge + real TrueNAS acceptance:** record source/OCI digest; validate agent-to-agent handoff and read/write from authorized SMB client, filenames/ACLs, SMB disabled state, persistence after recreation, unaffected private workspaces/credentials and unchanged launcher/container security. Avoid unnecessary production resets and retain a known-working rollback reference.
 5. **v0.4.0 source cut and independent stable promotion:** changelog, #53 distribution review when triggered, exact-head CI, smoke, notices, SPDX, Trivy/browser evidence, operator approval and verified promoted digests. No auto-tag or `latest` move merely from merging a feature PR.
 
@@ -108,7 +108,7 @@ Residual risks are recorded in #369 and #377. Reconcile #357 and historical docu
 - Grouped upstream component refreshes remain owned by `check-upstream.yml`, with bounded provenance and human-reviewed PRs.
 - Ubuntu/base-image and CI pin updates remain Renovate-owned; CI-only action changes are not claimed as bundled runtime upgrades.
 - #53 remains the standing third-party licensing, vendor terms and privacy review log; revisit for a material new frontend or service boundary.
-- Vulnerability scans and browser monitoring are complementary, not interchangeable. Green Trivy results do not prove a bundled Chromium ZIP is patched; #360 owns that gap.
+- Green Trivy results do not prove a bundled Chromium ZIP is patched. #360 is deferred as an optional enhancement: manually review official Chromium/Playwright advisories before stable releases, on Playwright updates or serious advisories; keep the official MCP/Core/browser pairing. Do not add a separate monitor or daily transitive updater (#384).
 - #93 scheduled Edge rebuild hardening and broader failure-injection/rollback checks remain separately tracked; do not claim they were completed solely because v0.3.0 was published.
 
 ## Deferred / separate roadmap

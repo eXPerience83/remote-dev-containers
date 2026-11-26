@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Optional persistent Exchange (#71): a dedicated filesystem at `/exchange` for enabled agents, with optional TrueNAS-managed SMB access. Off by default; private state remains isolated. Real TrueNAS 27/Windows acceptance is pending.
+
 ### Automated upstream refreshes
 
 <!-- remote-dev-upstream-refreshes -->

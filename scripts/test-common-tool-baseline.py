@@ -3,9 +3,13 @@
 import os
 from pathlib import Path
 import re
+import shlex
+import sys
 import subprocess
 import tempfile
 import unittest
+
+from exchange_fixture import adapt_exchange_off
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'config/common-tool-baseline.txt'
@@ -68,8 +72,10 @@ class CommonBaselineTests(unittest.TestCase):
             '/usr/local/bin/remote-dev-codex-runtime': str(self.root / 'missing-codex-runtime'),
             '/usr/local/bin/remote-dev-context7': str(self.root / 'missing-context7'),
         }
+        if name == 'remote-dev-doctor.sh':
+            text = adapt_exchange_off(text, ROOT / 'scripts/lib/exchange_mount.py', self.root)
         for old, new in replacements.items():
-            text = text.replace(old, new)
+            text = text.replace(old, shlex.quote(new))
         fixture = self.root / name
         fixture.write_text(text)
         # Exclude host vendor CLIs and mise shims; diagnostics may report missing

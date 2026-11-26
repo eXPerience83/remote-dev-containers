@@ -125,7 +125,7 @@ The optional Codex runtime stays separate from `CODEX_HOME` and is mounted only 
 
 The project does not automatically copy, migrate, delete or symlink experimental data. Automatic migration would risk credential exposure or ambiguous ownership. Existing experimental state must be moved or recreated manually after backup.
 
-Optional SMB sharing is outside the core security contract and tracked under #71. Only the workspace boundary may be considered for sharing; `state` must never be exposed through SMB.
+Optional [Exchange](exchange.md) (#71) is the only intentional cross-role writable bind: a dedicated filesystem at the canonical root's `exchange` child, mounted at `/exchange` only in enabled agents. Never share `workspaces`, `state`, the data root or the launcher. All authorized agents/SMB users can read, modify and delete exchange files. Files and instructions inside are untrusted; no automatic execution, import, Git trust or credential handling. This is not DLP or a new sandbox: an agent with access to its own secrets can copy them if instructed. SMB is administered by TrueNAS, not Remote Dev.
 
 ## Required controls
 

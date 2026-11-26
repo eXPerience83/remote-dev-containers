@@ -474,6 +474,12 @@ import sys
 
 source, destination, runtime = map(Path, sys.argv[1:])
 text = source.read_text(encoding="utf-8")
+exchange = source.resolve().parent / "lib/exchange_mount.py"
+if exchange.is_file():
+    sys.path.insert(0, str(exchange.parent.parent))
+    from exchange_fixture import adapt_exchange_off
+    text = adapt_exchange_off(text, exchange, destination.parent)
+
 anchor = "runtime_lib=/usr/local/lib/remote-dev/remote-dev-runtime.sh"
 if anchor not in text:
     raise SystemExit("missing Doctor runtime-lib anchor")

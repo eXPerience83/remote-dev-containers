@@ -46,6 +46,7 @@ agent-contract-tests:
 	python3 scripts/test-common-tool-baseline.py
 	python3 scripts/test-development-scratch.py
 	python3 scripts/test_truenas_acl_audit.py
+	python3 scripts/test_exchange_mount.py
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh REMOTE_DEV_TEST_SKIP_STATE_BOUNDARY=1 bash scripts/test-role-neutral-runtime.sh
 	REMOTE_DEV_RUNTIME_LIB=./scripts/lib/remote-dev-runtime.sh bash scripts/test-project-collection-boundary.sh
 	REMOTE_DEV_RUN_DIRECT_SESSION=./scripts/run-direct-session.sh bash scripts/test-run-direct-session-cwd.sh

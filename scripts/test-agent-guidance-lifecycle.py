@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Run the actual launch/Doctor scripts with synthetic vendor/state boundaries."""
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+
+from exchange_fixture import adapt_exchange_off
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +69,8 @@ esac
             '/usr/local/lib/remote-dev/remote-dev-runtime.sh': str(ROOT / 'scripts/lib/remote-dev-runtime.sh'),
             '/usr/local/bin/codex': str(self.bin / 'vendor'),
             '/usr/local/bin/remote-dev-codex-runtime': str(self.bin / 'codex-runtime'),
+            '/usr/local/bin/remote-dev-browser-config': str(self.bin / 'absent-browser-config'),
+            '/usr/local/bin/remote-dev-context7-antigravity': str(self.bin / 'context7'),
             '/usr/local/bin/remote-dev-context7': str(self.bin / 'context7'),
             '/usr/local/bin/validate-codex-project-boundary': str(self.bin / 'validator'),
             '/usr/local/bin/remote-dev-antigravity-policy': str(self.bin / 'policy'),
@@ -78,7 +83,10 @@ esac
         replacements['/usr/local/lib/remote-dev/antigravity-paths.sh'] = str(paths)
         for name in ('run-codex', 'run-antigravity', 'remote-dev-doctor'):
             text = (ROOT / 'scripts' / (name + '.sh')).read_text()
-            for old, new in replacements.items(): text = text.replace(old, new)
+            if name == 'remote-dev-doctor':
+                text = adapt_exchange_off(text, ROOT / 'scripts/lib/exchange_mount.py', self.root)
+            for old, new in replacements.items():
+                text = text.replace(old, shlex.quote(new))
             (self.bin / name).write_text(text); (self.bin / name).chmod(0o755)
 
     def stub(self, name, body):

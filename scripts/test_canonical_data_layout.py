@@ -43,24 +43,25 @@ def compose_environment() -> dict[str, str]:
     }
 
 
-def compose_config(path: Path) -> dict[str, object]:
+def compose_config(path: Path, *, antigravity: bool = True,
+                   launcher_auth: bool = False, overrides: dict[str, str] | None = None) -> dict[str, object]:
     with tempfile.NamedTemporaryFile() as empty_env:
         completed = subprocess.run(
             [
                 "docker",
                 "compose",
-                "--profile",
-                "antigravity",
+                *(["--profile", "antigravity"] if antigravity else []),
                 "--env-file",
                 empty_env.name,
                 "-f",
                 str(path),
+                *(["-f", str(ROOT / "compose/launcher-auth.yml")] if launcher_auth else []),
                 "config",
                 "--format",
                 "json",
             ],
             cwd=ROOT,
-            env=compose_environment(),
+            env={**compose_environment(), **(overrides or {})},
             text=True,
             capture_output=True,
             check=False,
@@ -147,6 +148,53 @@ def validate_compose(path: Path, *, truenas: bool) -> None:
             require(not target.startswith("/run/secrets"), f"{path}: credential-file mount remains")
 
 
+def validate_exchange_variant(path: Path, *, truenas: bool) -> None:
+    """Render opt-in exactly as documented; no other service setting may change."""
+    source = path.read_text(encoding="utf-8")
+    marker = "# EXCHANGE-OPT-IN "
+    require(source.count(marker) == 16, f"{path}: incomplete opt-in block")
+    require(source.count(marker + "    create_host_path: false") == 2,
+            f"{path}: exchange must explicitly disable host-path creation")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", dir=path.parent) as enabled:
+        for both in ((True,) if truenas else (False, True)):
+            for alternate in (False, True):
+                root = "/mnt/alternate root/remote-dev"
+                env = {"REMOTE_DEV_DATA_ROOT": root} if alternate and not truenas else {}
+                base = source
+                if alternate and truenas:
+                    base = base.replace(TRUENAS_ROOT, root)
+                enabled.seek(0)
+                enabled.truncate()
+                enabled.write(base)
+                enabled.flush()
+                baseline = compose_config(Path(enabled.name), antigravity=both, launcher_auth=alternate, overrides=env)["services"]
+                enabled.seek(0)
+                enabled.truncate()
+                enabled.write(base.replace(marker, ""))
+                enabled.flush()
+                active = compose_config(Path(enabled.name), antigravity=both, launcher_auth=alternate, overrides=env)["services"]
+                require(set(active) == set(baseline), "exchange altered enabled roles")
+                for role, service in active.items():
+                    if role == "launcher":
+                        require(service == baseline[role], "exchange changed launcher")
+                        continue
+                    mounts = volume_map(service)
+                    exchange = mounts.get("/exchange")
+                    require(isinstance(exchange, dict), f"{role}: exchange missing")
+                    expected = str(Path(mounts["/workspace"]["source"]).parent.parent / "exchange")
+                    require(exchange.get("source") == expected, "wrong exchange source")
+                    require(exchange.get("type") == "bind" and exchange.get("read_only") is not True,
+                            "exchange must be writable bind")
+                    require(exchange.get("bind", {}).get("create_host_path") is not True,
+                            "exchange auto-creation explicitly enabled")
+                    require(exchange.get("bind", {}).get("propagation") == "rprivate",
+                            "exchange propagation not private")
+                    require(service["environment"].pop("REMOTE_DEV_EXCHANGE_FS", None)
+                            == "zfs:Pool1/remote-dev/exchange", "exchange identity missing")
+                    service["volumes"].remove(exchange)
+                    require(service == baseline[role], f"{role}: exchange modified private service contract")
+
+
 def validate_shared_contract() -> None:
     """Require a unique, disjoint role layout and retain the Codex runtime path."""
     suffixes_by_role: dict[str, set[str]] = {}
@@ -211,8 +259,8 @@ def validate_sources() -> None:
     require("REMOTE_DEV_ENABLE_ANTIGRAVITY_SERVICE=0" in env_text, "Antigravity opt-in missing")
     require('profiles: ["antigravity"]' in generic_text, "generic Antigravity profile missing")
     bind_count = sum(len(specs) for specs in ROLE_SPECS.values())
-    require(generic_text.count("create_host_path: false") == bind_count, "generic bind protection count")
-    require(truenas_text.count("create_host_path: false") == bind_count, "TrueNAS bind protection count")
+    require(generic_text.count("\n          create_host_path: false") == bind_count, "generic bind protection count")
+    require(truenas_text.count("\n          create_host_path: false") == bind_count, "TrueNAS bind protection count")
     require("--include-antigravity" in preflight_text, "optional Antigravity preflight flag missing")
     require("--password-source" not in preflight_text, "retired password source option remains")
     require(truenas_text.count("WEB_PASSWORD: ''") == 2, "TrueNAS password placeholders must fail closed")
@@ -223,6 +271,8 @@ def main() -> int:
     validate_shared_contract()
     validate_compose(GENERIC_COMPOSE, truenas=False)
     validate_compose(TRUENAS_COMPOSE, truenas=True)
+    validate_exchange_variant(GENERIC_COMPOSE, truenas=False)
+    validate_exchange_variant(TRUENAS_COMPOSE, truenas=True)
     validate_repository_has_no_retired_contracts()
     print("Canonical Remote Dev data-root and isolated mount boundaries: OK")
     return 0

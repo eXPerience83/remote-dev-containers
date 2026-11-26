@@ -67,7 +67,7 @@ El audit es de solo lectura. Comprueba:
 - `trivial=true`;
 - únicamente entradas owner/group/other con los permisos efectivos esperados.
 
-El auditor deriva estos directorios de la misma lista `scripts/lib/data_layout.py` utilizada por bootstrap y preflight, y no inspecciona el contenido de los proyectos del usuario. No intenta establecer permisos de SMB ni valida `/exchange`, que sigue definido en #71. **Solo informa**, nunca ejecuta `chmod`, `chown` ni reescribe ACL.
+El auditor deriva estos directorios de la misma lista `scripts/lib/data_layout.py` utilizada por bootstrap y preflight, y no inspecciona el contenido de los proyectos del usuario. Con `--include-exchange` inspecciona por separado el montaje y tipo ACL del hijo Exchange; informa la ACL efectiva para revisión manual, no certifica el acceso de identidades SMB. El resultado privado no se relaja. Consulta [Exchange](exchange.es.md). **Solo informa**, nunca ejecuta `chmod`, `chown` ni reescribe ACL.
 
 Una instalación de referencia correcta termina con:
 
@@ -93,6 +93,10 @@ La separación preserva el modelo de aislamiento:
 No conviertas en sitio una raíz poblada y no ejecutes `chmod`, `chown` o reescritura ACL recursivos como migración implícita. Ni bootstrap ni el arranque de contenedores deben realizar silenciosamente una migración de ACL/ownership del dataset. Bootstrap conserva los paths existentes que pertenecen al operador; el hardening de permisos del estado privado que ya pertenece al runtime sigue siendo un contrato de ejecución separado y no debe confundirse con una migración de ACL del host.
 
 El modelo validado es **copia lateral + cutover verificado + rollback conservado**.
+
+**Límite de migración de Exchange (#71):** el procedimiento siguiente solo está validado para instalaciones sin dataset ni configuración de Exchange. Antes de copiar, inventaría los datasets hijos y el YAML guardado de Custom App, aunque Exchange esté desactivado. Si existe un dataset, mount, directorio `exchange` o configuración de Exchange, detén la App y desactiva su recurso SMB (si está configurado); no continúes con los pasos genéricos de copia, checksum, rename ni rollback/borrado descritos abajo. `rsync -a` puede descender a un hijo montado y copiar sus datos como directorio ordinario sin conservar sus propiedades ZFS, ACL ni snapshots. Desactivar el bind o desmontar el hijo por sí solo no constituye un plan de migración.
+
+Conserva el dataset Exchange original, sus datos, ACL NFSv4, propiedades, snapshots, configuración del recurso y protección de rollback independiente. Una migración separada y revisada por el operador debe restaurarlo como hijo ZFS directo montado de la raíz Generic/POSIX definitiva, sin exponer ni cambiar las ACL del estado privado. Antes de reiniciar los agentes con Exchange habilitado, ejecuta el preflight de la misma revisión de imagen con `--include-exchange` y la selección de roles aplicable, verifica la identidad y el origen del bind en el YAML y completa la revisión manual de ACL descrita en [activación de Exchange](exchange.es.md). Mantén SMB desactivado durante la migración. Tras el preflight y la revisión manual de ACL, arranca los agentes para pruebas controladas y habilita el recurso restringido únicamente para verificar de forma controlada la autorización efectiva y el acceso recíproco. No reanudes el uso normal hasta superar esas comprobaciones. No elimines el dataset original ni las copias hasta superar las comprobaciones independientes de migración y rollback. La migración de raíz con Exchange no se ha validado en TrueNAS 27; aquí no se prescriben comandos genéricos de migración ZFS.
 
 ### 1. Parar Remote Dev e inventariar el origen
 

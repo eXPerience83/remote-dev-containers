@@ -152,6 +152,7 @@ jobs:
       - name: Build and smoke test the exact candidate
         env:
           PLATFORM: linux/amd64
+          REMOTE_DEV_TEST_EXCHANGE: "1"
           PROJECT_VERSION: candidate-pr-${{ steps.candidate.outputs.pr_number }}
           PROJECT_CHANNEL: dev
           SOURCE_REVISION: ${{ steps.candidate.outputs.head_sha }}

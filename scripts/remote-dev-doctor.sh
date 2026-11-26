@@ -250,6 +250,9 @@ fi
 
 if [[ "$role" == codex || "$role" == antigravity ]]; then
   echo
+  if ! /usr/local/lib/remote-dev/python -I /usr/local/lib/remote-dev/exchange_mount.py; then
+    status=1
+  fi
   echo 'Development scratch (untrusted; expected session paths):'
   scratch_root="${WORKSPACE:-/workspace}/.remote-dev-tmp"
   printf 'TMPDIR       -> %s/tmp\n' "$scratch_root"

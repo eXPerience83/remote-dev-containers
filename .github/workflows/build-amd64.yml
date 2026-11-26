@@ -187,6 +187,8 @@ jobs:
         run: bash scripts/test-upstream-mise-bootstrap.sh
 
       - name: Build and smoke test
+        env:
+          REMOTE_DEV_TEST_EXCHANGE: "1"
         run: PLATFORM=linux/amd64 ./scripts/build-local.sh
 
       - name: Lint publication workflows

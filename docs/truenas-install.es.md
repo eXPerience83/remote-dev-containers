@@ -1,8 +1,8 @@
 # TrueNAS SCALE: instalación, persistencia y actualización
 
-> **Corte de código v0.2.0:** se completó la aceptación real de herramientas, persistencia y roles de la fase `0.2.0-beta.1` en TrueNAS (#121). No reinicies los datasets ni repitas todas las pruebas únicamente por los metadatos de versión. Conserva un digest inmutable conocido para recuperación y utiliza la etiqueta estable solo tras verificar su publicación independiente.
+> **Entorno de referencia:** TrueNAS Community Edition 27 (validación real de Exchange pendiente en 27.0.0-RC.1); se conserva el contrato de Custom Apps de SCALE 25.10 como referencia de compatibilidad, sin afirmar pruebas de Exchange en ella. Conserva un digest conocido para recuperación.
 
-Esta guía documenta el canal **edge experimental** y la recuperación mediante digest exacto. Las etiquetas estables solo son válidas después de la publicación satisfactoria de `v0.2.0`, no por cambiar el número de versión de código. El stack canónico está en [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
+Esta guía documenta el canal **edge experimental** y la recuperación mediante digest exacto. La versión estable publicada actualmente es v0.3.1. El stack canónico está en [compose/truenas.yml](../compose/truenas.yml). Para pruebas más completas, consulta el [runbook TrueNAS](truenas-antigravity-validation.md) y el [contrato ACL](truenas-acl-contract.es.md).
 
 ## 1. Dataset inicial y seguridad
 
@@ -155,3 +155,7 @@ Registra SHA, digest, resultados y errores saneados en [#121](https://github.com
 Para actualizar, anota el digest anterior, comprueba los workflows edge verdes, haz pull del nuevo edge, registra su **RepoDigest** y `REV`, descarga su YAML de Compose correspondiente, vuelve a generar la copia fijada por digest como en la sección 4 y recrea los contenedores conservando sus bind mounts y ajustes específicos del host. Verifica después el SHA/digest efectivo y las sesiones. Para revertir, restaura el digest anterior **sin borrar los datos persistentes**; revertir datos requiere otro plan.
 
 Puedes borrar solo la carpeta temporal SETUP cuando ya no necesites los scripts. Nunca borres ROOT ni credenciales para reinstalar. El tag edge es mutable; **latest** está reservado para stable y no debe usarse aquí.
+
+## Exchange opcional
+
+La instalación normal no requiere ningún cambio. Para habilitar el intercambio persistente, sigue [la guía Exchange](exchange.es.md) antes de modificar el YAML.

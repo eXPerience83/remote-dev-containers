@@ -51,6 +51,11 @@ require_command sha256sum
 require_command timeout
 require_command tar
 require_command python3
+if [[ "${REMOTE_DEV_TEST_EXCHANGE:-0}" == 1 ]]; then
+  for command in truncate mkfs.ext4 mount umount mountpoint findmnt sudo; do
+    require_command "$command"
+  done
+fi
 
 case "$image" in
   ''|*$'\n'*|*$'\r'*) fail "image reference is invalid" ;;
@@ -76,6 +81,9 @@ codex_id=""
 antigravity_id=""
 cleanup_helper_id=""
 runtime_prepare_id=""
+exchange_args=()
+exchange_fixture_started=0
+exchange_source=""
 readonly cleanup_helper_timeout_seconds=30
 readonly docker_exec_timeout_seconds=30
 readonly docker_exec_kill_after_seconds=5
@@ -314,6 +322,15 @@ cleanup() {
   remove_owned_container "$codex_name" "$codex_id" || cleanup_status=1
   remove_owned_container "$antigravity_name" "$antigravity_id" || cleanup_status=1
   remove_owned_network || cleanup_status=1
+  if (( exchange_fixture_started )); then
+    if mountpoint -q -- "$test_root/exchange"; then
+      if [[ -z "$exchange_source" || "$(findmnt -n -M "$test_root/exchange" -o SOURCE)" != "$exchange_source" ]] \
+         || ! sudo -n umount -- "$test_root/exchange"; then
+        echo "ERROR: exchange mount ownership/unmount not verified; retaining synthetic root" >&2
+        exit 1
+      fi
+    fi
+  fi
   cleanup_test_root || cleanup_status=1
   if (( cleanup_status )); then
     echo "ERROR: cross-service isolation cleanup left owned resources behind" >&2
@@ -1425,12 +1442,22 @@ ANTIGRAVITY_FIXTURE_BATCH
 }
 
 assert_distinct_agent_sources() {
-  local codex_sources antigravity_sources source
+  local codex_sources antigravity_sources source name
   codex_sources="$(docker inspect --format '{{json .Mounts}}' "$codex_name" | jq -r '.[] | select(.Type == "bind") | .Source')"
   antigravity_sources="$(docker inspect --format '{{json .Mounts}}' "$antigravity_name" | jq -r '.[] | select(.Type == "bind") | .Source')"
   while IFS= read -r source; do
     [[ -z "$source" ]] && continue
     if grep -Fxq -- "$source" <<<"$antigravity_sources"; then
+      if (( ${#exchange_args[@]} )) && [[ "$source" == "$test_root/exchange" ]]; then
+        for name in "$codex_name" "$antigravity_name"; do
+          docker inspect --format '{{json .Mounts}}' "$name" | jq -e --arg source "$source" '
+            [.[] | select(.Source == $source)] |
+            length == 1 and .[0].Type == "bind" and .[0].Destination == "/exchange"
+            and .[0].RW == true and .[0].Propagation == "rprivate"
+          ' >/dev/null || fail "exchange is not the exact allowed shared mount"
+        done
+        continue
+      fi
       fail "Codex and Antigravity fixtures share a writable/private mount source"
     fi
   done <<<"$codex_sources"
@@ -1745,6 +1772,7 @@ start_codex() {
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7681 \
+    "${exchange_args[@]}" \
     --mount "type=bind,src=$test_root/codex/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/codex/agent,dst=/root/.codex" \
     --mount "type=bind,src=$test_root/codex/runtime,dst=/root/.local/share/remote-dev/codex-runtime" \
@@ -1790,6 +1818,7 @@ start_antigravity() {
     --env WEB_MAX_CLIENTS=1 \
     --env WEB_CHECK_ORIGIN=1 \
     --env WEB_PORT=7682 \
+    "${exchange_args[@]}" \
     --mount "type=bind,src=$test_root/antigravity/workspace,dst=/workspace" \
     --mount "type=bind,src=$test_root/antigravity/bin,dst=/root/.local/bin" \
     --mount "type=bind,src=$test_root/antigravity/runtime,dst=/root/.local/share/remote-dev/antigravity" \
@@ -1981,6 +2010,71 @@ wait_for_health_command "$launcher_name"
 wait_for_health_command "$codex_name"
 
 ci_phase_checkpoint "antigravity-recreation"
+# CI only: a real dedicated ext4 filesystem, not a simulated ZFS/SMB test.
+# Keep every preceding OFF assertion; use the same owned role fixtures.
+if [[ "${REMOTE_DEV_TEST_EXCHANGE:-0}" == 1 ]]; then
+  validate_test_root || fail "unsafe synthetic exchange root"
+  mkdir -- "$test_root/exchange"
+  truncate -s 32M "$test_root/exchange.img"
+  mkfs.ext4 -q -F "$test_root/exchange.img"
+  exchange_fixture_started=1
+  sudo -n mount -o loop,nosuid,nodev,noexec -- "$test_root/exchange.img" "$test_root/exchange"
+  exchange_source="$(findmnt -n -M "$test_root/exchange" -o SOURCE)"
+  [[ "$exchange_source" == /dev/loop* ]] || fail "unexpected synthetic exchange filesystem source"
+  exchange_args=(--env "REMOTE_DEV_EXCHANGE_FS=ext4:$exchange_source"
+    --mount "type=bind,src=$test_root/exchange,dst=/exchange,bind-propagation=rprivate")
+  remove_owned_container "$codex_name" "$codex_id" || fail "failed to remove Codex before exchange"
+  remove_owned_container "$antigravity_name" "$antigravity_id" || fail "failed to remove Antigravity before exchange"
+  start_codex
+  start_antigravity
+  wait_for_health_command "$codex_name"
+  wait_for_health_command "$antigravity_name"
+  assert_distinct_agent_sources
+  for name in "$codex_name" "$antigravity_name"; do
+    docker_exec "$name" /usr/local/lib/remote-dev/python -I /usr/local/lib/remote-dev/exchange_mount.py \
+      | grep -F 'Exchange: ENABLED' >/dev/null
+  done
+  assert_path_absent "$launcher_name" "exchange" /exchange
+  assert_no_broad_mounts_or_environment "$codex_name" codex
+  assert_no_broad_mounts_or_environment "$antigravity_name" antigravity
+  for index in "${!codex_targets[@]}"; do
+    assert_path_absent "$antigravity_name" "Codex private canary" "${codex_targets[$index]}/${codex_markers[$index]}"
+  done
+  for index in "${!antigravity_targets[@]}"; do
+    assert_path_absent "$codex_name" "Antigravity private canary" "${antigravity_targets[$index]}/${antigravity_markers[$index]}"
+  done
+  docker_exec "$codex_name" sh -ec 'printf codex > "/exchange/entrega ñ.txt"'
+  docker_exec "$antigravity_name" sh -ec 'test "$(cat "/exchange/entrega ñ.txt")" = codex; printf agy >> "/exchange/entrega ñ.txt"; mv "/exchange/entrega ñ.txt" "/exchange/resultado ñ.txt"'
+  docker_exec "$codex_name" sh -ec 'test "$(cat "/exchange/resultado ñ.txt")" = codexagy'
+  remove_owned_container "$codex_name" "$codex_id" || fail "failed to recreate Codex with exchange"
+  start_codex
+  wait_for_health_command "$codex_name"
+  docker_exec "$codex_name" sh -ec 'test "$(cat "/exchange/resultado ñ.txt")" = codexagy; rm "/exchange/resultado ñ.txt"'
+  assert_path_absent "$antigravity_name" "deleted exchange canary" "/exchange/resultado ñ.txt"
+  verify_canaries codex_invariants "$codex_name"
+  verify_canaries antigravity_invariants "$antigravity_name"
+  # A stale directory underneath a missing filesystem must never start an agent.
+  remove_owned_container "$codex_name" "$codex_id" || fail "failed to remove exchange Codex"
+  remove_owned_container "$antigravity_name" "$antigravity_id" || fail "failed to remove exchange Antigravity"
+  sudo -n umount -- "$test_root/exchange"
+  start_codex
+  for _ in $(seq 1 10); do
+    container_running "$codex_name" || break
+    sleep 1
+  done
+  [[ "$(docker inspect --format '{{.State.ExitCode}}' "$codex_name")" == 1 ]] \
+    || fail "agent did not reject underlying directory"
+  docker logs "$codex_name" 2>&1 | grep -F 'Exchange: BLOCKED' >/dev/null \
+    || fail "agent did not explain rejected exchange mount"
+  remove_owned_container "$codex_name" "$codex_id" || fail "failed to remove rejected fixture"
+  exchange_args=()
+  start_codex
+  start_antigravity
+  wait_for_health_command "$codex_name"
+  wait_for_health_command "$antigravity_name"
+  echo "Exchange integration: PASS (dedicated ext4; not TrueNAS/SMB)"
+fi
+
 antigravity_scratch_marker="/workspace/.remote-dev-tmp/.antigravity-scratch-$run_id"
 antigravity_scratch_measurement="$(measure_canary \
   "$antigravity_name" "Antigravity development scratch marker" "$antigravity_scratch_marker")"

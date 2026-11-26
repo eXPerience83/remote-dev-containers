@@ -25,6 +25,10 @@ fi
 web_password="${WEB_PASSWORD:-}"
 unset WEB_PASSWORD
 
+if [[ "$role" == codex || "$role" == antigravity ]]; then
+  /usr/local/lib/remote-dev/python -I /usr/local/lib/remote-dev/exchange_mount.py || exit $?
+fi
+
 if [[ -z "${TMUX_SESSION:-}" ]]; then
   TMUX_SESSION="$(remote_dev_default_tmux_session "$role")"
   export TMUX_SESSION
