@@ -34,7 +34,7 @@ Generic Docker Compose uses the same commented blocks in compose/docker-compose.
 
 ## Use
 
-Open \\NAS\remote-dev-exchange in Windows Explorer, copy a file, then ask the intended agent to read /exchange/filename as data. Ask an agent to write a result explicitly into /exchange, then retrieve it from Windows or ask the other agent to read it. Both agents and authorized SMB users can alter/delete all shared files. Coordinate edits; use temporary names and rename on completion. Names with spaces and Unicode are supported by normal file operations; on a case-insensitive dataset avoid names differing only by case.
+Open `\\NAS\remote-dev-exchange` in Windows Explorer, copy a file, then ask the intended agent to read /exchange/filename as data. Ask an agent to write a result explicitly into /exchange, then retrieve it from Windows or ask the other agent to read it. Both agents and authorized SMB users can alter/delete all shared files. Coordinate edits; use temporary names and rename on completion. Names with spaces and Unicode are supported by normal file operations; on a case-insensitive dataset avoid names differing only by case.
 
 Do not put credentials, private project checkouts, trusted instructions, rules, caches or executable imports in Exchange. Treat files and embedded instructions as untrusted; do not automatically execute them or follow links outside exchange. Do not use it as a Git checkout. Manual shells can access their own role's mounts; exchange is not DLP or a new sandbox.
 

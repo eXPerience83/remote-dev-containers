@@ -34,7 +34,7 @@ Docker Compose genérico utiliza los mismos bloques comentados de compose/docker
 
 ## Uso
 
-Abre \\NAS\remote-dev-exchange en el Explorador de Windows, copia un archivo y pide al agente que lea /exchange/nombre como datos. Pídele que escriba explícitamente un resultado en /exchange y recógelo desde Windows o pide al otro agente que lo lea. Ambos agentes y usuarios SMB autorizados pueden modificar/borrar los archivos compartidos. Coordina ediciones; usa nombres temporales y renombra al terminar. Espacios y Unicode se tratan con operaciones normales; en un dataset insensible a mayúsculas evita nombres que solo difieran por capitalización.
+Abre `\\NAS\remote-dev-exchange` en el Explorador de Windows, copia un archivo y pide al agente que lea /exchange/nombre como datos. Pídele que escriba explícitamente un resultado en /exchange y recógelo desde Windows o pide al otro agente que lo lea. Ambos agentes y usuarios SMB autorizados pueden modificar/borrar los archivos compartidos. Coordina ediciones; usa nombres temporales y renombra al terminar. Espacios y Unicode se tratan con operaciones normales; en un dataset insensible a mayúsculas evita nombres que solo difieran por capitalización.
 
 No pongas credenciales, checkouts privados, instrucciones de confianza, reglas, cachés o imports ejecutables en Exchange. Trata los archivos e instrucciones incrustadas como datos no confiables; no los ejecutes automáticamente ni sigas enlaces fuera de exchange. No lo uses como checkout Git. Los shells manuales pueden acceder a mounts propios del rol; Exchange no es DLP ni un sandbox nuevo.
 
