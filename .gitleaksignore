@@ -1,0 +1,22 @@
+# Historical audit only; reviewed in #386 / PR #390.
+# Gitleaks v8.30.1: 26 reported matches, 10 unique exact fingerprints.
+# The mandatory PR scanner uses an empty ignore policy.
+# No path-wide, rule-wide or global fingerprint exclusions.
+
+# Four local synthetic Basic Auth test matches.
+f874774cf4b4513228bca7605351e5f927afe278:.github/workflows/build-amd64.yml:curl-auth-user:122
+f874774cf4b4513228bca7605351e5f927afe278:.github/workflows/build-amd64.yml:curl-auth-user:138
+65247045e04184139833a34c491a3bb566fa43b0:scripts/test-remote-dev-launcher.sh:curl-auth-user:75
+c25ad6cd4fddab46ffcf64078ddd858dae09b4e9:scripts/test-remote-dev-launcher.sh:curl-auth-user:65
+
+# Multiline curl rule spans a comment and a Docker numeric UID:GID argument.
+b22d5e2e57db7db69e64d6716c7428496f58d6e2:scripts/test-cross-service-isolation.sh:curl-auth-user:673
+
+# Twenty matches at four historical minified ttyd bundle locations.
+7839576f1a07b1220c1b54c207cabaf55e27de73:web/ttyd-client/dist/index.html:generic-api-key:1
+9b8715aed4f68ff514ee137be72baf08d1e412df:web/ttyd-client/dist/index.html:generic-api-key:1
+81d06fc4cbe82a7b0e3ec9242e5d4d482ba35c61:web/ttyd-osc52/dist/index.html:generic-api-key:104
+eccd708f98318c862d90eb418dc818195280d302:web/ttyd-osc52/dist/index.html:generic-api-key:104
+
+# Historical vendored Yarn bundle code, not an authentication configuration.
+9b8715aed4f68ff514ee137be72baf08d1e412df:web/ttyd-client/tooling/yarn-3.6.3.cjs:generic-api-key:127
