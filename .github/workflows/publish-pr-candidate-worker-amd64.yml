@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+# Candidate code and image inspection must never access shared Actions caches.
+cache-mode: none
+
 # `dev` is a single mutable pre-merge channel. Serialize the trusted worker so
 # two explicitly authorized candidate publications cannot race its promotion.
 concurrency:
@@ -29,7 +32,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    cache-mode: write-only
+    cache-mode: none
     permissions:
       contents: read
       issues: read
@@ -40,7 +43,7 @@ jobs:
       short_sha: ${{ steps.candidate.outputs.short_sha }}
       base_sha: ${{ steps.candidate.outputs.base_sha }}
       authorization_comment_id: ${{ steps.candidate.outputs.comment_id }}
-      cache_key: ${{ steps.candidate.outputs.cache_key }}
+      artifact_id: ${{ steps.transfer.outputs.artifact-id }}
       archive_sha256: ${{ steps.archive.outputs.sha256 }}
 
     steps:
@@ -117,13 +120,11 @@ jobs:
           fi
 
           short_sha="${head_sha:0:12}"
-          cache_key="candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}-pr-${INPUT_PR_NUMBER}-${head_sha}"
           echo "pr_number=$INPUT_PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           echo "comment_id=$INPUT_COMMENT_ID" >> "$GITHUB_OUTPUT"
-          echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the exact pull-request head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -163,7 +164,7 @@ jobs:
         run: |
           set -euo pipefail
           archive_dir="${RUNNER_TEMP}/candidate-transfer"
-          archive="${archive_dir}/candidate-images.tar.gz"
+          archive="${archive_dir}/candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
           rm -rf "$archive_dir"
           mkdir -p "$archive_dir"
           docker save remote-dev-base:local remote-dev:local | gzip -1 > "$archive"
@@ -176,17 +177,21 @@ jobs:
           fi
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Save verified candidate transfer cache
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Upload exact candidate transfer artifact
+        id: transfer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: ${{ runner.temp }}/candidate-transfer/candidate-images.tar.gz
-          key: ${{ steps.candidate.outputs.cache_key }}
+          path: ${{ runner.temp }}/candidate-transfer/candidate-images-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}.tar.gz
+          archive: false
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
 
   verify:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    cache-mode: read
+    cache-mode: none
     permissions:
       actions: read
       contents: read
@@ -194,12 +199,36 @@ jobs:
       archive_sha256: ${{ steps.archive.outputs.sha256 }}
 
     steps:
-      - name: Restore exact candidate transfer cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Validate exact same-attempt transfer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          AUTHORIZED_PR: ${{ inputs.pr_number }}
+          AUTHORIZED_HEAD: ${{ inputs.head_sha }}
+          AUTHORIZED_COMMENT: ${{ inputs.authorization_comment_id }}
+          BUILD_PR: ${{ needs.build.outputs.pr_number }}
+          BUILD_HEAD: ${{ needs.build.outputs.head_sha }}
+          BUILD_COMMENT: ${{ needs.build.outputs.authorization_comment_id }}
+          BUILD_SHORT: ${{ needs.build.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          expected_name="candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}")"
+          jq -e --arg name "$expected_name" --arg run "$GITHUB_RUN_ID" --arg id "$ARTIFACT_ID" \
+            '(.id | tostring) == $id and .name == $name and (.workflow_run.id | tostring) == $run and .expired == false' \
+            <<<"$metadata" >/dev/null
+          [[ "$AUTHORIZED_PR" =~ ^[0-9]+$ && "$AUTHORIZED_COMMENT" =~ ^[0-9]+$ && "$AUTHORIZED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUILD_PR" == "$AUTHORIZED_PR" && "$BUILD_HEAD" == "$AUTHORIZED_HEAD" && "$BUILD_COMMENT" == "$AUTHORIZED_COMMENT" && "$BUILD_SHORT" == "${AUTHORIZED_HEAD:0:12}" ]]
+          mkdir -m 700 "${RUNNER_TEMP}/candidate-transfer"
+
+      - name: Download exact candidate transfer artifact by ID
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: ${{ runner.temp }}/candidate-transfer/candidate-images.tar.gz
-          key: ${{ needs.build.outputs.cache_key }}
-          fail-on-cache-miss: true
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/candidate-transfer
+          skip-decompress: true
+          digest-mismatch: error
 
       - name: Hash and load the candidate images
         id: archive
@@ -207,7 +236,7 @@ jobs:
           EXPECTED_SHA256: ${{ needs.build.outputs.archive_sha256 }}
         run: |
           set -euo pipefail
-          archive="${RUNNER_TEMP}/candidate-transfer/candidate-images.tar.gz"
+          archive="${RUNNER_TEMP}/candidate-transfer/candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
           test -f "$archive"
           test ! -L "$archive"
           sha256="$(sha256sum "$archive" | awk '{print $1}')"
@@ -216,7 +245,7 @@ jobs:
             exit 1
           fi
           if [[ "$sha256" != "$EXPECTED_SHA256" ]]; then
-            echo "ERROR: candidate transfer cache changed after build validation" >&2
+            echo "ERROR: candidate transfer artifact changed after build validation" >&2
             exit 1
           fi
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
@@ -237,13 +266,15 @@ jobs:
       - name: Checkout the trusted base revision for the vulnerability gate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.build.outputs.base_sha }}
+          # Use the immutable trusted worker revision, never a build-job output.
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Scan base image for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev-base:local
+          cache: false
           format: json
           output: trivy-candidate-base.json
           scanners: vuln
@@ -255,6 +286,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: remote-dev:local
+          cache: false
           format: json
           output: trivy-candidate-remote-dev.json
           scanners: vuln
@@ -285,7 +317,7 @@ jobs:
     needs: [build, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    cache-mode: read
+    cache-mode: none
     permissions:
       actions: read
       issues: read
@@ -293,24 +325,48 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Restore exact verified candidate transfer cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Validate exact same-attempt transfer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          AUTHORIZED_PR: ${{ inputs.pr_number }}
+          AUTHORIZED_HEAD: ${{ inputs.head_sha }}
+          AUTHORIZED_COMMENT: ${{ inputs.authorization_comment_id }}
+          BUILD_PR: ${{ needs.build.outputs.pr_number }}
+          BUILD_HEAD: ${{ needs.build.outputs.head_sha }}
+          BUILD_COMMENT: ${{ needs.build.outputs.authorization_comment_id }}
+          BUILD_SHORT: ${{ needs.build.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          expected_name="candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}")"
+          jq -e --arg name "$expected_name" --arg run "$GITHUB_RUN_ID" --arg id "$ARTIFACT_ID" \
+            '(.id | tostring) == $id and .name == $name and (.workflow_run.id | tostring) == $run and .expired == false' \
+            <<<"$metadata" >/dev/null
+          [[ "$AUTHORIZED_PR" =~ ^[0-9]+$ && "$AUTHORIZED_COMMENT" =~ ^[0-9]+$ && "$AUTHORIZED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUILD_PR" == "$AUTHORIZED_PR" && "$BUILD_HEAD" == "$AUTHORIZED_HEAD" && "$BUILD_COMMENT" == "$AUTHORIZED_COMMENT" && "$BUILD_SHORT" == "${AUTHORIZED_HEAD:0:12}" ]]
+          mkdir -m 700 "${RUNNER_TEMP}/candidate-transfer"
+
+      - name: Download exact candidate transfer artifact by ID
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: ${{ runner.temp }}/candidate-transfer/candidate-images.tar.gz
-          key: ${{ needs.build.outputs.cache_key }}
-          fail-on-cache-miss: true
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/candidate-transfer
+          skip-decompress: true
+          digest-mismatch: error
 
       - name: Match the verified archive and load the images
         env:
           EXPECTED_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
         run: |
           set -euo pipefail
-          archive="${RUNNER_TEMP}/candidate-transfer/candidate-images.tar.gz"
+          archive="${RUNNER_TEMP}/candidate-transfer/candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
           test -f "$archive"
           test ! -L "$archive"
           actual_sha256="$(sha256sum "$archive" | awk '{print $1}')"
           if [[ "$actual_sha256" != "$EXPECTED_SHA256" ]]; then
-            echo "ERROR: candidate transfer cache changed after verification" >&2
+            echo "ERROR: candidate transfer artifact changed after verification" >&2
             echo "Expected: $EXPECTED_SHA256" >&2
             echo "Actual:   $actual_sha256" >&2
             exit 1
@@ -494,7 +550,7 @@ jobs:
           set -euo pipefail
           immutable_ref="${IMAGE_REF%:*}@${IMAGE_DIGEST}"
           body="$(cat <<EOF
-          Published an isolated AMD64 candidate after smoke tests, independent transfer-cache verification and the fixable-critical vulnerability gate passed.
+          Published an isolated AMD64 candidate after smoke tests, independent transfer-artifact verification and the fixable-critical vulnerability gate passed.
 
           - Candidate tag: \`${IMAGE_REF}\`
           - Dev channel: \`${DEV_REF}\`
@@ -517,18 +573,16 @@ jobs:
       actions: write
 
     steps:
-      - name: Delete transfer cache after build handoff
+      - name: Delete exact same-attempt transfer artifact after build handoff
         env:
           GH_TOKEN: ${{ github.token }}
-          CACHE_KEY: ${{ needs.build.outputs.cache_key }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
         run: |
           set -euo pipefail
-          response="$(
-            gh api --method DELETE \
-              "repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_KEY}&ref=refs/heads/main"
-          )"
-          deleted_count="$(jq -r '.total_count // 0' <<<"$response")"
-          if [[ "$deleted_count" != "1" ]]; then
-            echo "ERROR: expected exactly one transfer cache for $CACHE_KEY; deleted: $deleted_count" >&2
-            exit 1
-          fi
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          expected_name="candidate-images-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}")"
+          jq -e --arg name "$expected_name" --arg run "$GITHUB_RUN_ID" --arg id "$ARTIFACT_ID" \
+            '(.id | tostring) == $id and .name == $name and (.workflow_run.id | tostring) == $run and .expired == false' \
+            <<<"$metadata" >/dev/null
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}"

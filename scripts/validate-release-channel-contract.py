@@ -123,7 +123,7 @@ def validate_candidate(root: Path) -> None:
     require(
         build,
         (
-            "cache-mode: write-only",
+            "cache-mode: none",
             "contents: read",
             "issues: read",
             "pull-requests: read",
@@ -140,19 +140,32 @@ def validate_candidate(root: Path) -> None:
             "persist-credentials: false",
             'archive_dir="${RUNNER_TEMP}/candidate-transfer"',
             'test ! -L "$archive"',
-            "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+            "archive: false",
+            "if-no-files-found: error",
+            "overwrite: false",
+            "retention-days: 1",
+            "artifact_id: ${{ steps.transfer.outputs.artifact-id }}",
         ),
         "candidate build",
     )
-    reject(build, ("packages: write", "actions/upload-artifact@", "restore-keys:"), "candidate build")
+    reject(build, ("packages: write", "actions/cache/", "actions: write", "restore-keys:"), "candidate build")
 
     verify = active(bounded(worker, "  verify:\n", "\n  publish:\n", "candidate verify"))
     require(
         verify,
         (
-            "cache-mode: read",
-            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-            "fail-on-cache-miss: true",
+            "cache-mode: none",
+            "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+            "artifact-ids: ${{ needs.build.outputs.artifact_id }}",
+            "skip-decompress: true",
+            "digest-mismatch: error",
+            "Validate exact same-attempt transfer artifact",
+            '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]',
+            '(.workflow_run.id | tostring) == $run',
+            '.name == $name',
+            '.expired == false',
+            '$BUILD_HEAD" == "$AUTHORIZED_HEAD"',
             "EXPECTED_SHA256: ${{ needs.build.outputs.archive_sha256 }}",
             'if [[ "$sha256" != "$EXPECTED_SHA256" ]]',
             "- name: Verify embedded candidate identity",
@@ -165,7 +178,10 @@ def validate_candidate(root: Path) -> None:
         ),
         "candidate verify",
     )
-    reject(verify, ("packages: write", "restore-keys:"), "candidate verify")
+    reject(verify, ("packages: write", "actions/cache/", "restore-keys:"), "candidate verify")
+    require(verify, ("ref: ${{ github.sha }}", "cache: false"), "trusted verifier")
+    if verify.count("cache: false") != 2:
+        raise AssertionError("both candidate Trivy scans must disable shared cache")
 
     publish = active(
         bounded(worker, "  publish:\n", "\n  cleanup:\n", "candidate publication")
@@ -173,12 +189,20 @@ def validate_candidate(root: Path) -> None:
     require(
         publish,
         (
-            "cache-mode: read",
+            "cache-mode: none",
             "actions: read",
             "issues: read",
             "packages: write",
             "pull-requests: write",
-            "fail-on-cache-miss: true",
+            "artifact-ids: ${{ needs.build.outputs.artifact_id }}",
+            "skip-decompress: true",
+            "digest-mismatch: error",
+            "Validate exact same-attempt transfer artifact",
+            '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]',
+            '(.workflow_run.id | tostring) == $run',
+            '.name == $name',
+            '.expired == false',
+            '$BUILD_HEAD" == "$AUTHORIZED_HEAD"',
             "- name: Revalidate authorization before registry publication",
             'if [[ "$current_state" != open || "$current_base" != main || "$current_head_repo" != "$GITHUB_REPOSITORY" || "$current_head_sha" != "$AUTHORIZED_SHA" ]]',
             "- name: Publish or reuse immutable candidate tag",
@@ -206,6 +230,7 @@ def validate_candidate(root: Path) -> None:
         (
             "actions/checkout@",
             "restore-keys:",
+            "actions/cache/",
             '--tag "${image}:edge',
             '--tag "${image}:stable',
             '--tag "${image}:latest"',
@@ -221,8 +246,10 @@ def validate_candidate(root: Path) -> None:
             "if: always() && needs.build.result == 'success'",
             "cache-mode: none",
             "actions: write",
-            "actions/caches?key=${CACHE_KEY}&ref=refs/heads/main",
-            'if [[ "$deleted_count" != "1" ]]',
+            "actions/artifacts/${ARTIFACT_ID}",
+            '(.workflow_run.id | tostring) == $run',
+            '.name == $name',
+            'gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}"',
         ),
         "candidate cleanup",
     )
