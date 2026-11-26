@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-08-29",
-  "refreshed_on": "2026-11-24",
+  "refreshed_on": "2026-11-26",
   "policy": {
     "source_of_truth": "versions.env",
     "maintenance": "Version changes require a reviewed inventory and notice update in the same pull request.",
@@ -42,14 +42,14 @@
       "name": "GitHub CLI",
       "image_scope": "both",
       "version_key": "GH_VERSION",
-      "version": "2.105.0",
+      "version": "2.106.0",
       "source": "https://github.com/cli/cli",
       "license": "MIT",
       "notices": [
         {
           "path": "components/github-cli/LICENSE",
           "source": "repository",
-          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.105.0/LICENSE"
+          "reviewed_from": "https://raw.githubusercontent.com/cli/cli/v2.106.0/LICENSE"
         }
       ]
     },
