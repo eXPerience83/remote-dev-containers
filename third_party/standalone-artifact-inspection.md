@@ -4,7 +4,7 @@ This is a bounded inspection of the exact AMD64 and ARM64 release assets pinned 
 
 | Component | Version | Packaging | Legal files inside asset | Repository notices |
 |---|---:|---|---|---|
-| github-cli | `2.105.0` | tar.gz | LICENSE | LICENSE |
+| github-cli | `2.106.0` | tar.gz | LICENSE | LICENSE |
 | codex-cli | `rust-v0.172.0` | tar.gz | None | LICENSE, NOTICE |
 | codex-code-mode-host | `rust-v0.172.0` | tar.gz | None | LICENSE, NOTICE |
 | ttyd | `1.7.7` | raw-binary | None | LICENSE |
