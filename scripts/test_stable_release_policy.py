@@ -85,5 +85,70 @@ class DispatchTests(unittest.TestCase):
                     policy.validate_dispatch(env, PINS, SHA, SHA)
 
 
+
+class WorkflowTests(unittest.TestCase):
+    def fixtures(self):
+        return [
+            {
+                "workflow_id": workflow, "path": path, "event": sorted(events)[0],
+                "head_sha": SHA, "head_branch": "main", "id": index + 1,
+                "run_attempt": 1, "status": "completed", "conclusion": "success",
+            }
+            for index, (workflow, (path, events, _)) in enumerate(
+                policy.REQUIRED_WORKFLOWS.items()
+            )
+        ]
+
+    def test_exact_main_across_pages(self):
+        runs = self.fixtures()
+        actual = policy.validate_runs([
+            {"workflow_runs": runs[:1]}, {"workflow_runs": runs[1:]}
+        ], SHA)
+        self.assertEqual(set(actual), set(policy.REQUIRED_WORKFLOWS))
+
+    def test_missing_or_wrong_identity_is_rejected(self):
+        for key, value in (
+            ("head_sha", OTHER), ("head_branch", "topic"),
+            ("workflow_id", 999), ("path", ".github/workflows/forged.yml"),
+            ("event", "pull_request"),
+        ):
+            with self.subTest(key=key):
+                runs = self.fixtures()
+                runs[0][key] = value
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.validate_runs([{"workflow_runs": runs}], SHA)
+
+    def test_latest_failure_blocks_older_success(self):
+        for status, conclusion in (
+            ("in_progress", None), ("completed", "failure"),
+            ("completed", "skipped"), ("completed", "cancelled"),
+        ):
+            with self.subTest(status=status, conclusion=conclusion):
+                runs = self.fixtures()
+                runs.append(dict(runs[0], id=999, status=status, conclusion=conclusion))
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.validate_runs([{"workflow_runs": runs}], SHA)
+
+    def test_irrelevant_newer_runs_do_not_replace_required_evidence(self):
+        runs = self.fixtures()
+        runs.extend([dict(runs[0], id=999, head_branch="topic", conclusion="failure"),
+                     dict(runs[0], id=1000, head_sha=OTHER, conclusion="failure")])
+        result = policy.validate_runs([{"workflow_runs": runs}], SHA)
+        self.assertEqual(result[runs[0]["workflow_id"]]["id"], 1)
+
+    def test_every_required_job_must_succeed_once(self):
+        for workflow, (_, _, expected) in policy.REQUIRED_WORKFLOWS.items():
+            jobs = [{"name": name, "status": "completed", "conclusion": "success"}
+                    for name in sorted(expected)]
+            policy.validate_jobs([{"jobs": jobs}], workflow)
+            for changed in (
+                jobs[1:], jobs + [jobs[0]],
+                [dict(jobs[0], conclusion="skipped")] + jobs[1:],
+                [dict(jobs[0], status="in_progress")] + jobs[1:],
+            ):
+                with self.subTest(workflow=workflow, changed=changed):
+                    with self.assertRaises(policy.ReleasePolicyError):
+                        policy.validate_jobs([{"jobs": changed}], workflow)
+
 if __name__ == "__main__":
     unittest.main()
