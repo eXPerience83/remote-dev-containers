@@ -4,6 +4,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
     "stable_release_policy", Path(__file__).with_name("stable-release-policy.py")
@@ -149,6 +150,70 @@ class WorkflowTests(unittest.TestCase):
                 with self.subTest(workflow=workflow, changed=changed):
                     with self.assertRaises(policy.ReleasePolicyError):
                         policy.validate_jobs([{"jobs": changed}], workflow)
+
+
+class EdgeAcceptanceTests(unittest.TestCase):
+    def setUp(self):
+        self.edge_run = {"id": 123, "run_attempt": 2}
+        self.base = "sha256:" + "1" * 64
+        self.runtime = "sha256:" + "2" * 64
+        self.receipt = {
+            "source_sha": SHA, "run_id": "123", "run_attempt": "2",
+            "base_digest": self.base, "runtime_digest": self.runtime,
+        }
+
+    def test_exact_receipt(self):
+        self.assertEqual(
+            policy.validate_edge_receipt(self.receipt, SHA, self.edge_run, self.runtime),
+            (self.base, self.runtime),
+        )
+
+    def test_other_source_attempt_or_digest_rejected(self):
+        for key, value in (
+            ("source_sha", OTHER), ("run_id", "124"), ("run_attempt", "1"),
+            ("base_digest", "sha256:bad"), ("runtime_digest", self.base),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.validate_edge_receipt(
+                        dict(self.receipt, **{key: value}), SHA, self.edge_run, self.runtime
+                    )
+        for invalid in ("", "edge-amd64", self.base, self.runtime.upper()):
+            with self.subTest(accepted=invalid):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.validate_edge_receipt(self.receipt, SHA, self.edge_run, invalid)
+
+    def test_missing_or_extra_receipt_fields(self):
+        for receipt in ({}, [], dict(self.receipt, extra=True)):
+            with self.subTest(receipt=receipt):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.validate_edge_receipt(receipt, SHA, self.edge_run, self.runtime)
+
+    def test_missing_expired_ambiguous_or_oversized_artifact(self):
+        artifact = {"name": "edge-promotion-receipt-2", "expired": False, "size_in_bytes": 500}
+        for artifacts in (
+            [], [dict(artifact, name="edge-promotion-receipt-1")],
+            [dict(artifact, expired=True)], [artifact, artifact],
+            [dict(artifact, size_in_bytes=16385)],
+        ):
+            with self.subTest(artifacts=artifacts):
+                with patch.object(policy, "api", return_value=[{"artifacts": artifacts}]), \
+                     patch.object(policy.subprocess, "run") as download:
+                    with self.assertRaises(policy.ReleasePolicyError):
+                        policy.read_edge_receipt(self.edge_run)
+                    download.assert_not_called()
+
+    def test_registry_aliases_must_match_both_indexes(self):
+        for values in ((self.base, self.runtime), (self.runtime, self.runtime),
+                       (self.base, self.base)):
+            with self.subTest(values=values):
+                with patch.object(policy, "read_edge_receipt", return_value=self.receipt), \
+                     patch.object(policy, "read_registry_digest", side_effect=values):
+                    if values == (self.base, self.runtime):
+                        policy.verify_accepted_edge(SHA, self.edge_run, self.runtime)
+                    else:
+                        with self.assertRaises(policy.ReleasePolicyError):
+                            policy.verify_accepted_edge(SHA, self.edge_run, self.runtime)
 
 if __name__ == "__main__":
     unittest.main()
