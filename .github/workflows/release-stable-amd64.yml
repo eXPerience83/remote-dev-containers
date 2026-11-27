@@ -62,9 +62,9 @@ jobs:
         run: |
           bash scripts/validate-publication-source.sh stable
 
-      # Temporary fail-closed boundary until tag authorization and Release
-      # finalization are implemented and reviewed in this same draft.
       - name: Permit validation-only while finalization is incomplete
+        # Temporary fail-closed boundary until tag authorization and Release
+        # finalization are implemented and reviewed in this same draft.
         run: |
           set -euo pipefail
           [[ "$DRY_RUN" == true ]] || {
