@@ -40,6 +40,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      publication_authorized: ${{ steps.publication_boundary.outputs.authorized }}
     steps:
       - name: Require trusted manual dispatch
         run: |
@@ -63,6 +65,7 @@ jobs:
           bash scripts/validate-publication-source.sh stable
 
       - name: Permit validation-only while finalization is incomplete
+        id: publication_boundary
         # Temporary fail-closed boundary until tag authorization and Release
         # finalization are implemented and reviewed in this same draft.
         run: |
@@ -71,10 +74,11 @@ jobs:
             echo "ERROR: Stable publication finalization is not enabled" >&2
             exit 1
           }
+          echo "authorized=false" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: validate
-    if: ${{ false }}
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:

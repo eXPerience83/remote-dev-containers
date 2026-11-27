@@ -508,10 +508,11 @@ def validate_other_channels(root: Path) -> None:
     preflight = active(bounded(stable, "  validate:\n", "  publish:\n", "stable preflight"))
     require(preflight, ('contents: read', 'actions: read', 'python3 scripts/stable-release-policy.py',
                         'bash scripts/validate-publication-source.sh stable',
-                        '[[ "$DRY_RUN" == true ]]'), "stable preflight")
-    reject(preflight, ("packages: write", "contents: write", "actions: write"), "stable preflight")
+                        '[[ "$DRY_RUN" == true ]]', 'echo "authorized=false" >> "$GITHUB_OUTPUT"',
+                        'publication_authorized: ${{ steps.publication_boundary.outputs.authorized }}'), "stable preflight")
+    reject(preflight, ("packages: write", "contents: write", "actions: write", "authorized=true"), "stable preflight")
     publisher = active(bounded(stable, "  publish:\n", None, "stable publisher"))
-    require(publisher, ("needs: validate", 'if: ${{ false }}',
+    require(publisher, ("needs: validate", "if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'",
                         "python3 scripts/stable-release-policy.py",
                         'packages: write', '--tag "$RELEASE_TAG"',
                         'scripts/promote-publication-indexes.sh stable'), "stable publisher")
