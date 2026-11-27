@@ -8,10 +8,13 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 REPOSITORY = "experience83/remote-dev-containers"
 OWNER_ID = "16572400"
 SHA = r"[0-9a-f]{40}"
+DIGEST = r"sha256:[0-9a-f]{64}"
+EDGE_WORKFLOW = 318911668
 VERSION = r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
 
 
@@ -96,13 +99,79 @@ def api(endpoint, *, paginate=False):
     return json.loads(subprocess.check_output(command, text=True, timeout=60))
 
 
-def verify_required_workflows(selected):
+def validate_edge_receipt(receipt, selected, edge_run, accepted_digest):
+    """Bind the owner's acceptance to the successful exact Edge run attempt."""
+    if not re.fullmatch(DIGEST, accepted_digest):
+        raise ReleasePolicyError("Expected the owner-accepted immutable Edge runtime index digest")
+    expected = {
+        "source_sha": selected,
+        "run_id": str(edge_run["id"]),
+        "run_attempt": str(edge_run["run_attempt"]),
+        "runtime_digest": accepted_digest,
+    }
+    if not isinstance(receipt, dict) or set(receipt) != {*expected, "base_digest"}:
+        raise ReleasePolicyError("Malformed Edge promotion receipt")
+    if any(receipt[key] != value for key, value in expected.items()):
+        raise ReleasePolicyError("Edge promotion receipt differs from accepted source, run or digest")
+    if not isinstance(receipt["base_digest"], str) or not re.fullmatch(DIGEST, receipt["base_digest"]):
+        raise ReleasePolicyError("Malformed Edge base index digest")
+    return receipt["base_digest"], receipt["runtime_digest"]
+
+
+def read_edge_receipt(edge_run):
+    name = f"edge-promotion-receipt-{edge_run['run_attempt']}"
+    pages = api(f"actions/runs/{edge_run['id']}/artifacts?per_page=100", paginate=True)
+    matches = [artifact for page in pages for artifact in page["artifacts"]
+               if artifact["name"] == name]
+    if len(matches) != 1 or matches[0].get("expired") is not False:
+        raise ReleasePolicyError("Exact Edge promotion receipt missing, ambiguous or expired")
+    size = matches[0].get("size_in_bytes")
+    if type(size) is not int or not 0 < size <= 16384:
+        raise ReleasePolicyError("Unexpected Edge promotion receipt artifact size")
+    with tempfile.TemporaryDirectory() as directory:
+        subprocess.run(
+            ["gh", "run", "download", str(edge_run["id"]), "--repo", REPOSITORY,
+             "--name", name, "--dir", directory],
+            check=True, timeout=60,
+        )
+        file = Path(directory) / "edge-promotion-receipt.json"
+        if list(Path(directory).iterdir()) != [file] or file.is_symlink() or not file.is_file():
+            raise ReleasePolicyError("Unexpected Edge promotion receipt files")
+        if file.stat().st_size > 4096:
+            raise ReleasePolicyError("Edge promotion receipt too large")
+        return json.loads(file.read_text(encoding="utf-8"))
+
+
+def read_registry_digest(image, selected):
+    ref = f"ghcr.io/experience83/{image}:sha-{selected}"
+    raw = subprocess.check_output(
+        ["docker", "buildx", "imagetools", "inspect", ref,
+         "--format", "{{json .Manifest.Digest}}"],
+        text=True, timeout=90,
+    )
+    digest = json.loads(raw)
+    if not isinstance(digest, str) or not re.fullmatch(DIGEST, digest):
+        raise ReleasePolicyError("Malformed source-addressed Edge index digest")
+    return digest
+
+
+def verify_accepted_edge(selected, edge_run, accepted_digest):
+    if not re.fullmatch(DIGEST, accepted_digest):
+        raise ReleasePolicyError("Expected the owner-accepted immutable Edge runtime index digest")
+    base, runtime = validate_edge_receipt(read_edge_receipt(edge_run), selected, edge_run, accepted_digest)
+    if (read_registry_digest("remote-dev-base", selected) != base
+            or read_registry_digest("remote-dev", selected) != runtime):
+        raise ReleasePolicyError("Source-addressed Edge aliases differ from accepted promotion receipt")
+
+
+def verify_required_workflows(selected, accepted_digest):
     pages = api(f"actions/runs?head_sha={selected}&per_page=100", paginate=True)
     runs = validate_runs(pages, selected)
     for workflow, run in runs.items():
         jobs = api(f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100", paginate=True)
         validate_jobs(jobs, workflow)
-    # Detect a changed latest run or rerun while inspecting jobs.
+    verify_accepted_edge(selected, runs[EDGE_WORKFLOW], accepted_digest)
+    # Detect a changed latest run or rerun while inspecting jobs and Edge receipt.
     fresh = validate_runs(api(f"actions/runs?head_sha={selected}&per_page=100", paginate=True), selected)
     if any((run["id"], run["run_attempt"]) != (fresh[workflow]["id"], fresh[workflow]["run_attempt"])
            for workflow, run in runs.items()):
@@ -121,10 +190,10 @@ def main():
         os.environ, Path("versions.env").read_text(encoding="utf-8"),
         response["object"]["sha"], checkout_sha
     )
-    verify_required_workflows(selected)
+    verify_required_workflows(selected, os.environ.get("ACCEPTED_EDGE_DIGEST", ""))
     if api("git/ref/heads/main") != response:
         raise ReleasePolicyError("main changed during workflow validation")
-    print(f"Stable dispatch identity and required workflows verified: {tag} at {selected}")
+    print(f"Stable dispatch identity, required workflows and accepted Edge verified: {tag} at {selected}")
     # This identity check is necessary but not sufficient to authorize publication.
 
 
