@@ -486,7 +486,9 @@ def validate_candidate(root: Path) -> None:
 
 def validate_other_channels(root: Path) -> None:
     edge = read(root, ".github/workflows/publish-edge-amd64.yml")
-    stable = read(root, ".github/workflows/publish-amd64.yml")
+    stable = read(root, ".github/workflows/release-stable-amd64.yml")
+    if (root / ".github/workflows/publish-amd64.yml").exists():
+        raise ContractError("legacy stable publisher must not remain in current source")
 
     edge_trigger = active(bounded(edge, "on:\n", "\npermissions:", "edge trigger"))
     require(edge_trigger, ("push:\n    branches:\n      - main",), "edge trigger")
@@ -500,38 +502,20 @@ def validate_other_channels(root: Path) -> None:
     )
     require(edge_guard, ('if [[ "$GITHUB_REF" != "refs/heads/main" ]]',), "edge main guard")
     stable_trigger = active(bounded(stable, "on:\n", "\npermissions:", "stable trigger"))
-    require(stable_trigger, ('tags:\n      - "v*"',), "stable trigger")
-    stable_tag_validation = active(
-        bounded(
-            stable,
-            "      - name: Validate stable release tag\n",
-            "      - name: Require the tagged commit from main history\n",
-            "stable tag validation",
-        )
-    )
-    require(
-        stable_tag_validation,
-        (
-            'if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$ ]]',
-            'source_version="$(sed -nE',
-            'if [[ "$GITHUB_REF_NAME" != "v${source_version}" ]]; then',
-        ),
-        "stable tag validation",
-    )
-    reject(stable_tag_validation, ("source versions.env", "eval "), "stable tag validation")
-    stable_main_guard = active(
-        bounded(
-            stable,
-            "      - name: Require the tagged commit from main history\n",
-            "      - name: Validate repository configuration\n",
-            "stable main guard",
-        )
-    )
-    require(
-        stable_main_guard,
-        ('if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then',),
-        "stable main guard",
-    )
+    require(stable_trigger, ("workflow_dispatch:", "release_tag:", "release_sha:",
+                             "accepted_edge_digest:", "dry_run:", "default: true"), "stable trigger")
+    reject(stable_trigger, ("push:", "release:", "pull_request:", "schedule:"), "stable trigger")
+    preflight = active(bounded(stable, "  validate:\n", "  publish:\n", "stable preflight"))
+    require(preflight, ('contents: read', 'actions: read', 'python3 scripts/stable-release-policy.py',
+                        'bash scripts/validate-publication-source.sh stable',
+                        '[[ "$DRY_RUN" == true ]]'), "stable preflight")
+    reject(preflight, ("packages: write", "contents: write", "actions: write"), "stable preflight")
+    publisher = active(bounded(stable, "  publish:\n", None, "stable publisher"))
+    require(publisher, ("needs: validate", 'if: ${{ false }}',
+                        "python3 scripts/stable-release-policy.py",
+                        'packages: write', '--tag "$RELEASE_TAG"',
+                        'scripts/promote-publication-indexes.sh stable'), "stable publisher")
+    reject(publisher, ("github.ref_name", "GITHUB_REF_NAME"), "stable publisher")
 
 
 def validate_docs(root: Path) -> None:
