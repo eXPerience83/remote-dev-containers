@@ -139,7 +139,7 @@ jobs:
           python3 scripts/test_inspect_antigravity_cli.py
           python3 scripts/test_antigravity_inspector_loader.py
           python3 scripts/test_antigravity_official_url.py
-          python3 scripts/validate-release-channel-contract.py --root .
+          python3 -O scripts/validate-release-channel-contract.py --root . --exercise-candidate-guards
           python3 scripts/test_guard_stable_promotion.py
           python3 scripts/test_trivy_image_report.py
           python3 scripts/test_runtime_publication_probes.py

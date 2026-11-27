@@ -56,11 +56,30 @@ def reject(block: str, forbidden: tuple[str, ...], label: str) -> None:
             raise ContractError(f"{label}: forbidden token {token!r}")
 
 
+def require_transfer_order(block: str, load_step: str, label: str) -> None:
+    markers = (
+        "      - name: Validate exact same-attempt transfer artifact\n",
+        "      - name: Download exact candidate transfer artifact by ID\n",
+        "      - name: " + load_step + "\n",
+    )
+    for marker in markers:
+        if block.count(marker) != 1:
+            raise ContractError(f"{label}: expected exactly one step {marker.strip()!r}")
+    positions = [block.index(marker) for marker in markers]
+    if positions != sorted(positions):
+        raise ContractError(f"{label}: expected metadata guard, download, then hash/load")
+    download = block[positions[1]:positions[2]]
+    action = "uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"
+    if download.count(action) != 1 or block.count("uses: actions/download-artifact@") != 1:
+        raise ContractError(f"{label}: expected the pinned download action after the guard")
+
+
 def _candidate_step_scripts(worker: str, name: str) -> list[str]:
     scripts = []
     for step in worker.split(f"      - name: {name}\n")[1:]:
         _, separator, body = step.partition("        run: |\n")
-        assert separator, name
+        if not separator:
+            raise ContractError(f"candidate fixture: missing run body for {name!r}")
         lines = []
         for line in body.splitlines():
             if line and not line.startswith("          "):
@@ -83,8 +102,10 @@ def _exercise_candidate_artifact_guards(worker: str, prefix: str) -> None:
     ):
         hash_steps.extend(_candidate_step_scripts(worker, name))
     expected_consumers = 2 if prefix == "candidate-images" else 1
-    assert len(guards) == len(hash_steps) == expected_consumers
-    assert len(cleanup) == 1
+    if len(guards) != expected_consumers or len(hash_steps) != expected_consumers:
+        raise ContractError("candidate fixture: unexpected guard/hash step count")
+    if len(cleanup) != 1:
+        raise ContractError("candidate fixture: expected one cleanup step")
 
     # Exercise the actual shell and jq, but never contact GitHub or Docker.
     stub = """
@@ -134,11 +155,24 @@ docker() {
         return subprocess.run(
             ["bash", "-c", stub + script],
             env=env,
+            cwd=env["RUNNER_TEMP"],
             capture_output=True,
             text=True,
             timeout=15,
             check=False,
         )
+
+    def expect(
+        label: str,
+        result: subprocess.CompletedProcess[str],
+        condition: bool,
+        message: str,
+    ) -> None:
+        if not condition:
+            raise ContractError(
+                f"candidate fixture {label}: {message}; exit={result.returncode}; "
+                f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+            )
 
     for label, metadata_override, env_override in cases:
         with tempfile.TemporaryDirectory() as temporary:
@@ -170,23 +204,38 @@ docker() {
                 if transfer.exists():
                     transfer.rmdir()
                 result = run(guard + 'printf "download\\n" >> "$TRACE"\n', env)
-                assert (result.returncode == 0) == (label == "valid"), (
-                    label,
-                    result.stderr,
+                expect(
+                    label, result, (result.returncode == 0) == (label == "valid"),
+                    "unexpected metadata guard exit",
                 )
-                assert trace.exists() == (label == "valid"), label
+                expect(
+                    label, result, trace.exists() == (label == "valid"),
+                    "unexpected download side effect",
+                )
 
             # Cleanup intentionally authenticates the artifact, not build outputs.
             # It must never delete another run's or attempt's artifact.
             trace.unlink(missing_ok=True)
             result = run(cleanup[0], env)
             cleanup_allowed = label == "valid" or label.startswith("wrong-")
-            assert (result.returncode == 0) == cleanup_allowed, (label, result.stderr)
-            assert deleted.exists() == cleanup_allowed, label
+            expect(
+                label, result, (result.returncode == 0) == cleanup_allowed,
+                "unexpected cleanup exit",
+            )
+            expect(label, result, deleted.exists() == cleanup_allowed, "unexpected deletion")
+            expect(
+                label, result,
+                trace.read_text() == "delete\n" if cleanup_allowed and trace.exists()
+                else not cleanup_allowed and not trace.exists(),
+                "unexpected cleanup trace",
+            )
             if cleanup_allowed:
-                assert trace.read_text() == "delete\n"
-                assert run(cleanup[0], env).returncode != 0
-                assert trace.read_text() == "delete\n"
+                repeated = run(cleanup[0], env)
+                expect(label, repeated, repeated.returncode != 0, "repeat cleanup succeeded")
+                expect(
+                    label, repeated, trace.exists() and trace.read_text() == "delete\n",
+                    "repeat cleanup changed the trace",
+                )
 
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -207,14 +256,20 @@ docker() {
         }
         for script in hash_steps:
             trace.unlink(missing_ok=True)
-            assert run(script, env).returncode == 0
-            assert trace.read_text() == "load\n"
+            valid = run(script, env)
+            expect("valid archive", valid, valid.returncode == 0, "load failed")
+            expect(
+                "valid archive", valid, trace.exists() and trace.read_text() == "load\n",
+                "expected one load",
+            )
             trace.unlink()
-            assert run(script, {**env, "EXPECTED_SHA256": "0" * 64}).returncode != 0
-            assert not trace.exists()
+            wrong_hash = run(script, {**env, "EXPECTED_SHA256": "0" * 64})
+            expect("wrong hash", wrong_hash, wrong_hash.returncode != 0, "load succeeded")
+            expect("wrong hash", wrong_hash, not trace.exists(), "unexpected load")
             archive.unlink()
-            assert run(script, env).returncode != 0
-            assert not trace.exists()
+            missing = run(script, env)
+            expect("missing archive", missing, missing.returncode != 0, "load succeeded")
+            expect("missing archive", missing, not trace.exists(), "unexpected load")
             archive.write_bytes(payload)
 
 
@@ -349,7 +404,8 @@ def validate_candidate(root: Path) -> None:
     reject(verify, ("packages: write", "actions/cache/", "restore-keys:"), "candidate verify")
     require(verify, ("ref: ${{ github.sha }}", "cache: false"), "trusted verifier")
     if verify.count("cache: false") != 2:
-        raise AssertionError("both candidate Trivy scans must disable shared cache")
+        raise ContractError("both candidate Trivy scans must disable shared cache")
+    require_transfer_order(verify, "Hash and load the candidate images", "candidate verify")
 
     publish = active(
         bounded(worker, "  publish:\n", "\n  cleanup:\n", "candidate publication")
@@ -406,6 +462,10 @@ def validate_candidate(root: Path) -> None:
         "candidate publication",
     )
 
+    require_transfer_order(
+        publish, "Match the verified archive and load the images", "candidate publication"
+    )
+
     cleanup = active(bounded(worker, "  cleanup:\n", None, "candidate cleanup"))
     require(
         cleanup,
@@ -422,7 +482,6 @@ def validate_candidate(root: Path) -> None:
         "candidate cleanup",
     )
 
-    _exercise_candidate_artifact_guards(worker, "candidate-images")
 
 
 def validate_other_channels(root: Path) -> None:
@@ -531,9 +590,20 @@ def validate(root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument(
+        "--exercise-candidate-guards",
+        action="store_true",
+        help="Execute Bash fixtures from this trusted checkout only (not a sandbox).",
+    )
     args = parser.parse_args()
+    root = args.root.resolve()
     try:
-        validate(args.root.resolve())
+        if args.exercise_candidate_guards and root != Path(__file__).resolve().parents[1]:
+            raise ContractError("Bash fixtures require the validator's own trusted checkout")
+        validate(root)
+        if args.exercise_candidate_guards:
+            worker = read(root, ".github/workflows/publish-pr-candidate-worker-amd64.yml")
+            _exercise_candidate_artifact_guards(worker, "candidate-images")
     except ContractError as exc:
         print(f"ERROR: {exc}")
         return 1
