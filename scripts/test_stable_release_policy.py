@@ -68,7 +68,7 @@ class DispatchTests(unittest.TestCase):
     def test_noncanonical_or_duplicate_pin(self):
         for pins in (
             "", "BASE_VERSION=0.4.1", "BASE_VERSION=0.4.0-beta.1",
-            "BASE_VERSION=0.4.0 # comment", "BASE_VERSION=\$(echo 0.4.0)",
+            "BASE_VERSION=0.4.0 # comment", "BASE_VERSION=$(echo 0.4.0)",
             PINS + "BASE_VERSION=0.4.0\n", PINS + "export BASE_VERSION=0.4.1\n",
             PINS + " BASE_VERSION=0.4.1\n",
         ):
