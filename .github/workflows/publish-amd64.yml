@@ -140,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           ref="$(bash scripts/resolve-oci-platform-manifest.sh \
-            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64)"
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64 --wait-for-push)"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 
@@ -176,7 +176,7 @@ jobs:
         run: |
           set -euo pipefail
           ref="$(bash scripts/resolve-oci-platform-manifest.sh \
-            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64)"
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64 --wait-for-push)"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 

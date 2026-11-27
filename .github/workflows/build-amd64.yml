@@ -143,6 +143,7 @@ jobs:
           python3 scripts/test_guard_stable_promotion.py
           python3 scripts/test_trivy_image_report.py
           python3 scripts/test_runtime_publication_probes.py
+          python3 scripts/test_new_oci_index_visibility.py
           python3 scripts/test_promote_publication_indexes.py
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
