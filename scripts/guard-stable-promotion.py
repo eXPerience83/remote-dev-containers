@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed preflight: immutable version tags and monotonic stable promotion.
 
-Executed after image build/smoke/scans, immediately before any GHCR tag write.
+The read-only preflight runs before Git tag creation; the candidate-bound guard
+runs after image build/smoke/scans, immediately before any GHCR tag write.
 Inspect all aliases without mutating them. This is NOT a registry transaction:
 partial-promotion failures require documented human reconciliation.
 """

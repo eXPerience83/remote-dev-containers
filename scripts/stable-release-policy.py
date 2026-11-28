@@ -204,6 +204,7 @@ def verify_required_workflows(selected, accepted_digest):
 
 
 LEGACY_WORKFLOW = 318438492
+TAG_RULESET = 27843897
 
 
 def require_retired_publisher():
@@ -216,6 +217,26 @@ def require_retired_publisher():
         pages = api(f"actions/workflows/{LEGACY_WORKFLOW}/runs?status={status}&per_page=100", paginate=True)
         if not pages or any(page["total_count"] != 0 or page["workflow_runs"] for page in pages):
             raise ReleasePolicyError("Legacy publisher has unfinished or unverified runs")
+
+
+def validate_tag_ruleset(ruleset):
+    """Check the known rule, not invisible bypass actors or package ACLs."""
+    if (ruleset.get("id") != TAG_RULESET or ruleset.get("target") != "tag"
+            or ruleset.get("enforcement") != "active"
+            or ruleset.get("source_type") != "Repository"
+            or ruleset.get("source", "").lower() != REPOSITORY
+            or ruleset.get("conditions", {}).get("ref_name") != {
+                "include": ["refs/tags/v*"], "exclude": []
+            }):
+        raise ReleasePolicyError("Expected active repository release-tag ruleset is missing or changed")
+    rules = {rule["type"] for rule in ruleset["rules"]}
+    if not {"update", "deletion", "non_fast_forward"}.issubset(rules):
+        raise ReleasePolicyError("Release-tag immutability protections are incomplete")
+    return "creation" in rules
+
+
+def tag_creation_restricted():
+    return validate_tag_ruleset(api(f"rulesets/{TAG_RULESET}"))
 
 
 def read_tag(tag, selected):
@@ -260,7 +281,11 @@ def require_fresh_release(tag, selected):
 def ensure_tag(tag, selected):
     require_retired_publisher()
     require_current_main(selected)
+    restricted = tag_creation_restricted()
     if not read_tag(tag, selected):
+        if restricted:
+            raise ReleasePolicyError("Tag creation is restricted; administrative transition is incomplete")
+        require_current_main(selected)
         write_api("git/refs", {"ref": f"refs/tags/{tag}", "sha": selected})
     if not read_tag(tag, selected):
         raise ReleasePolicyError("Release tag readback failed")
@@ -268,6 +293,7 @@ def ensure_tag(tag, selected):
 
 def require_tag(tag, selected):
     require_retired_publisher()
+    tag_creation_restricted()
     require_current_main(selected)
     if not read_tag(tag, selected):
         raise ReleasePolicyError("Exact release tag must exist before publishing")
@@ -334,6 +360,7 @@ def finalize_release(tag, selected, base, runtime, accepted_edge):
     if existing is None:
         require_tag(tag, selected)
         verify_stable_aliases(tag, base, runtime)
+        require_current_main(selected)
         created = write_api("releases", {**expected, "target_commitish": selected, "make_latest": "true"})
         verify_release_record(created, expected)
     else:
@@ -368,12 +395,15 @@ def main(argv=None):
         raise ReleasePolicyError("main changed during workflow validation")
     print(f"Stable dispatch identity, required workflows and accepted Edge verified: {tag} at {selected}")
     if args.mode == "validate":
+        restricted = tag_creation_restricted()
         require_fresh_release(tag, selected)
+        print("Tag creation restriction: " + ("active" if restricted else "not in reviewed ruleset"))
     elif args.mode == "prepare-tag":
         require_fresh_release(tag, selected)
         ensure_tag(tag, selected)
     elif args.mode == "require-tag":
-        require_fresh_release(tag, selected)
+        if find_release(tag) is not None:
+            raise ReleasePolicyError("Release already exists; no duplicate publication")
         require_tag(tag, selected)
     else:
         finalize_release(tag, selected, os.environ["STABLE_BASE_DIGEST"],

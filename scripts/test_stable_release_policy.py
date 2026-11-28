@@ -305,6 +305,29 @@ class FinalizationTests(unittest.TestCase):
             with patch.object(policy, "api", return_value=refs):
                 self.assertEqual(policy.read_tag(self.tag, SHA), expected)
 
+    def test_tag_ruleset_requires_immutability_and_reports_creation(self):
+        record = {"id": policy.TAG_RULESET, "target": "tag", "enforcement": "active",
+                  "source_type": "Repository", "source": ENV["GITHUB_REPOSITORY"],
+                  "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+                  "rules": [{"type": name} for name in ("creation", "deletion", "update", "non_fast_forward")]}
+        self.assertTrue(policy.validate_tag_ruleset(record))
+        self.assertFalse(policy.validate_tag_ruleset(dict(record, rules=record["rules"][1:])))
+        for changed in (dict(record, enforcement="disabled"), dict(record, target="branch"),
+                        dict(record, rules=record["rules"][:-1]),
+                        dict(record, conditions={"ref_name": {"include": ["refs/tags/v*"], "exclude": ["refs/tags/v0.4.0"]}})):
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.validate_tag_ruleset(changed)
+
+    def test_restricted_creation_never_attempts_write(self):
+        with patch.object(policy, "require_retired_publisher"), \
+             patch.object(policy, "require_current_main"), \
+             patch.object(policy, "tag_creation_restricted", return_value=True), \
+             patch.object(policy, "read_tag", return_value=False), \
+             patch.object(policy, "write_api") as write:
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.ensure_tag(self.tag, SHA)
+            write.assert_not_called()
+
     def test_tag_conflict_rejected(self):
         for refs in ([dict(self.ref, object={"type": "commit", "sha": OTHER})],
                      [dict(self.ref, object={"type": "tag", "sha": SHA})],
@@ -351,6 +374,7 @@ class FinalizationTests(unittest.TestCase):
         for existing, after in ((True, True), (False, True), (False, False)):
             with patch.object(policy, "require_retired_publisher"), \
                  patch.object(policy, "require_current_main"), \
+                 patch.object(policy, "tag_creation_restricted", return_value=False), \
                  patch.object(policy, "read_tag", side_effect=[existing, after]), \
                  patch.object(policy, "write_api") as write:
                 if not after:
@@ -378,6 +402,7 @@ class FinalizationTests(unittest.TestCase):
     def test_release_existing_or_created_must_match_and_be_latest(self):
         for existing in (None, self.record):
             with patch.object(policy, "require_tag"), \
+                 patch.object(policy, "require_current_main"), \
                  patch.object(policy, "verify_stable_aliases"), \
                  patch.object(policy, "find_release", side_effect=[existing, self.record]), \
                  patch.object(policy, "write_api", return_value=self.record) as write, \

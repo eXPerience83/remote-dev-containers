@@ -188,6 +188,10 @@ sustituirlo por el tag mutable `edge` actual.
 
 Dry run utiliza acceso de GitHub en solo lectura e inspección del registro;
 no construye ni publica imágenes, crea referencias o modifica releases.
+Comprueba el ruleset activo conocido, informa de su restricción de creación,
+verifica el ZIP de evidencia Edge por ID de artefacto, metadatos de ejecución
+y SHA-256, y rechaza releases existentes, alias de versión ya publicados,
+versiones anteriores o alias Stable incoherentes antes de escribir tags Git.
 Se exige un lanzamiento nuevo del propietario; se rechazan reejecuciones del
 workflow y SHA de main obsoletos.
 
@@ -208,9 +212,12 @@ y rutas históricas de workflows, disparadores, reejecuciones, jobs activos y
 escritores de ambos paquetes GHCR. El workflow histórico
 `.github/workflows/publish-amd64.yml` (ID 318438492) debe estar deshabilitado
 explícitamente y todas las rutas obsoletas de escritura y ejecuciones activas
-controladas. La comprobación de retirada del nuevo publicador es necesaria,
-pero no demuestra todo el inventario. Eliminar o renombrar un workflow en
-main por sí solo no basta.
+controladas. El nuevo publicador comprueba el estado deshabilitado y las
+ejecuciones no terminadas; es necesario, pero no demuestra todo el inventario.
+Verificar que la identidad del workflow sigue siendo consultable y está
+deshabilitada tras la migración; eliminarlo o renombrarlo en main por sí solo
+no basta. La comprobación del ruleset en ejecución no acredita las excepciones
+administrativas ni los permisos de paquetes GHCR.
 
 Mantener las restricciones actuales hasta revisar esa evidencia y autorizar
 explícitamente la transición administrativa. El modelo previsto con token

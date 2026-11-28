@@ -186,8 +186,12 @@ digest, stop; obtain fresh valid evidence and renewed acceptance when the
 digest changes. Do not substitute the current mutable `edge` tag.
 
 Dry run uses read-only GitHub access and registry inspection; it does not build
-or publish images, create refs or edit releases. A fresh owner dispatch is
-required; workflow reruns and stale main SHAs are rejected.
+or publish images, create refs or edit releases. It checks the known active
+release-tag ruleset, reports its creation restriction, verifies the Edge
+receipt ZIP by artifact ID, run metadata and SHA-256, and rejects an existing
+release, published version aliases, an older version or inconsistent Stable
+aliases before any Git tag write. A fresh owner dispatch is required; workflow
+reruns and stale main SHAs are rejected.
 
 The intended write sequence (currently disabled) is: read-only validation;
 exact lightweight Git tag creation/readback in a separate contents-write job;
@@ -204,8 +208,11 @@ record a reviewed inventory of historical workflow identities/paths, triggers,
 reruns, active jobs and both GHCR packages' writers in #380. The legacy
 `.github/workflows/publish-amd64.yml` (workflow ID 318438492) must be explicitly
 disabled and all obsolete write paths/in-flight runs controlled. The new
-publisher's retirement check is necessary, not proof of the whole inventory.
-Removing or renaming a workflow in current main alone is insufficient.
+publisher checks its disabled state and unfinished runs; this is necessary,
+not proof of the whole inventory. Verify that the workflow identity remains
+readable and disabled after migration; removing or renaming it in current main
+alone is insufficient. The runtime ruleset check cannot prove administrative
+bypass actors or GHCR package permissions.
 
 Keep the existing tag restrictions in force until that evidence is reviewed
 and an explicit administrative transition is authorized. The intended native
