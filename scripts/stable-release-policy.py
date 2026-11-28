@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only identity gate for the owner-dispatched Stable publisher (#380)."""
+"""Identity and finalization gates for the owner-dispatched Stable publisher (#380)."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -306,8 +307,13 @@ def finalize_release(tag, selected, base, runtime, accepted_edge):
     verify_stable_aliases(tag, base, runtime)
 
 
-def main():
-    # No mutation; GH_TOKEN needs read access only. Do not source versions.env.
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("validate", "prepare-tag", "require-tag", "finalize"), default="validate")
+    args = parser.parse_args(argv)
+    if args.mode != "validate" and os.environ.get("DRY_RUN") != "false":
+        raise ReleasePolicyError("Dry run cannot enter publication finalization")
+    # Do not source versions.env; default mode is read-only.
     checkout_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], text=True, timeout=15
     ).strip()
@@ -322,7 +328,17 @@ def main():
     if api("git/ref/heads/main") != response:
         raise ReleasePolicyError("main changed during workflow validation")
     print(f"Stable dispatch identity, required workflows and accepted Edge verified: {tag} at {selected}")
-    # This identity check is necessary but not sufficient to authorize publication.
+    if args.mode == "validate":
+        read_tag(tag, selected)
+    elif args.mode == "prepare-tag":
+        if find_release(tag) is not None:
+            raise ReleasePolicyError("Release already exists; no duplicate publication")
+        ensure_tag(tag, selected)
+    elif args.mode == "require-tag":
+        require_tag(tag, selected)
+    else:
+        finalize_release(tag, selected, os.environ["STABLE_BASE_DIGEST"],
+                         os.environ["STABLE_RUNTIME_DIGEST"], os.environ["ACCEPTED_EDGE_DIGEST"])
 
 
 if __name__ == "__main__":

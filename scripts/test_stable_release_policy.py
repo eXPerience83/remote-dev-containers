@@ -227,6 +227,26 @@ class FinalizationTests(unittest.TestCase):
         self.record = dict(policy.release_fields(
             self.tag, SHA, self.base, self.runtime, self.edge), id=123)
 
+    def test_dry_run_cannot_enter_write_jobs(self):
+        for mode in ("prepare-tag", "require-tag", "finalize"):
+            with patch.dict(policy.os.environ, {"DRY_RUN": "true"}, clear=True), \
+                 patch.object(policy, "write_api") as write, \
+                 patch.object(policy.subprocess, "check_output") as command:
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.main(["--mode", mode])
+                write.assert_not_called()
+                command.assert_not_called()
+
+    def test_retirement_or_stale_main_failure_prevents_tag_write(self):
+        for guard in ("require_retired_publisher", "require_current_main"):
+            with patch.object(policy, "require_retired_publisher"), \
+                 patch.object(policy, "require_current_main"), \
+                 patch.object(policy, guard, side_effect=policy.ReleasePolicyError("blocked")), \
+                 patch.object(policy, "write_api") as write:
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.ensure_tag(self.tag, SHA)
+                write.assert_not_called()
+
     def test_tag_readback_exact_not_prefix(self):
         for refs, expected in (([], False), ([self.ref], True),
                                ([dict(self.ref, ref=self.ref["ref"] + "-extra")], False)):

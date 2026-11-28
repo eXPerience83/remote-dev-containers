@@ -505,18 +505,29 @@ def validate_other_channels(root: Path) -> None:
     require(stable_trigger, ("workflow_dispatch:", "release_tag:", "release_sha:",
                              "accepted_edge_digest:", "dry_run:", "default: true"), "stable trigger")
     reject(stable_trigger, ("push:", "release:", "pull_request:", "schedule:"), "stable trigger")
-    preflight = active(bounded(stable, "  validate:\n", "  publish:\n", "stable preflight"))
+    preflight = active(bounded(stable, "  validate:\n", "  prepare-tag:\n", "stable preflight"))
     require(preflight, ('contents: read', 'actions: read', 'python3 scripts/stable-release-policy.py',
                         'bash scripts/validate-publication-source.sh stable',
                         '[[ "$DRY_RUN" == true ]]', 'echo "authorized=false" >> "$GITHUB_OUTPUT"',
                         'publication_authorized: ${{ steps.publication_boundary.outputs.authorized }}'), "stable preflight")
     reject(preflight, ("packages: write", "contents: write", "actions: write", "authorized=true"), "stable preflight")
-    publisher = active(bounded(stable, "  publish:\n", None, "stable publisher"))
-    require(publisher, ("needs: validate", "if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'",
+    gate = "if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'"
+    tag_job = active(bounded(stable, "  prepare-tag:\n", "  publish:\n", "stable tag job"))
+    require(tag_job, ("needs: validate", gate, "contents: write", "--mode prepare-tag"), "stable tag job")
+    reject(tag_job, ("packages: write", "actions: write"), "stable tag job")
+    publisher = active(bounded(stable, "  publish:\n", "  finalize:\n", "stable publisher"))
+    require(publisher, ("needs: [validate, prepare-tag]", "if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'",
                         "python3 scripts/stable-release-policy.py",
                         'packages: write', '--tag "$RELEASE_TAG"',
                         'scripts/promote-publication-indexes.sh stable'), "stable publisher")
-    reject(publisher, ("github.ref_name", "GITHUB_REF_NAME"), "stable publisher")
+    reject(publisher, ("github.ref_name", "GITHUB_REF_NAME", "contents: write"), "stable publisher")
+    if publisher.count("--mode require-tag") != 2:
+        raise ContractError("stable publisher must recheck tag before building and promotion")
+    finalize = active(bounded(stable, "  finalize:\n", None, "stable finalization"))
+    require(finalize, ("needs: [validate, publish]", gate, "contents: write", "--mode finalize",
+                       "needs.publish.outputs.base_digest", "needs.publish.outputs.runtime_digest"),
+            "stable finalization")
+    reject(finalize, ("packages: write", "actions: write"), "stable finalization")
 
 
 def validate_docs(root: Path) -> None:

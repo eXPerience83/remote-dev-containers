@@ -76,8 +76,28 @@ jobs:
           }
           echo "authorized=false" >> "$GITHUB_OUTPUT"
 
-  publish:
+  prepare-tag:
     needs: validate
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Create and read back exact release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py --mode prepare-tag
+
+  publish:
+    needs: [validate, prepare-tag]
     if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -85,6 +105,9 @@ jobs:
       contents: read
       actions: read
       packages: write
+    outputs:
+      base_digest: ${{ steps.base.outputs.digest }}
+      runtime_digest: ${{ steps.runtime.outputs.digest }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,7 +119,7 @@ jobs:
       - name: Recheck exact owner authorization before publication
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/stable-release-policy.py
+        run: python3 scripts/stable-release-policy.py --mode require-tag
 
       - name: Prepare isolated SPDX validator before registry login
         run: |
@@ -335,6 +358,11 @@ jobs:
           python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
             --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
 
+      - name: Recheck exact source and tag before stable promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py --mode require-tag
+
       - name: Guard stable promotion against overwrite or downgrade
         id: promotion_guard
         env:
@@ -372,3 +400,25 @@ jobs:
             runtime-promotion.json
           if-no-files-found: ignore
           retention-days: 14
+
+  finalize:
+    needs: [validate, publish]
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Verify all six aliases and publish exact GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE_BASE_DIGEST: ${{ needs.publish.outputs.base_digest }}
+          STABLE_RUNTIME_DIGEST: ${{ needs.publish.outputs.runtime_digest }}
+        run: python3 scripts/stable-release-policy.py --mode finalize
