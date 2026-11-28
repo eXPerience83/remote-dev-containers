@@ -2,6 +2,10 @@
 """Offline regression tests for Stable dispatch identity; no API or registry writes."""
 
 import importlib.util
+import hashlib
+import io
+import json
+import zipfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -154,7 +158,7 @@ class WorkflowTests(unittest.TestCase):
 
 class EdgeAcceptanceTests(unittest.TestCase):
     def setUp(self):
-        self.edge_run = {"id": 123, "run_attempt": 2}
+        self.edge_run = {"id": 123, "run_attempt": 2, "head_sha": SHA}
         self.base = "sha256:" + "1" * 64
         self.runtime = "sha256:" + "2" * 64
         self.receipt = {
@@ -198,10 +202,58 @@ class EdgeAcceptanceTests(unittest.TestCase):
         ):
             with self.subTest(artifacts=artifacts):
                 with patch.object(policy, "api", return_value=[{"artifacts": artifacts}]), \
-                     patch.object(policy.subprocess, "run") as download:
+                     patch.object(policy.subprocess, "check_output") as download:
                     with self.assertRaises(policy.ReleasePolicyError):
                         policy.read_edge_receipt(self.edge_run)
                     download.assert_not_called()
+
+    def receipt_archive(self, filename="edge-promotion-receipt.json", extra=False):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as bundle:
+            bundle.writestr(filename, json.dumps(self.receipt))
+            if extra:
+                bundle.writestr("other", "unexpected")
+        return stream.getvalue()
+
+    def test_artifact_id_run_and_digest_are_bound(self):
+        archive = self.receipt_archive()
+        artifact = {
+            "name": "edge-promotion-receipt-2", "expired": False, "id": 321,
+            "size_in_bytes": len(archive), "digest": "sha256:" + hashlib.sha256(archive).hexdigest(),
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main",
+                             "repository_id": 1309214441, "head_repository_id": 1309214441},
+        }
+        with patch.object(policy, "api", return_value=[{"artifacts": [artifact]}]), \
+             patch.object(policy.subprocess, "check_output", return_value=archive) as download:
+            self.assertEqual(policy.read_edge_receipt(self.edge_run), self.receipt)
+            download.assert_called_once_with(
+                ["gh", "api", "--method", "GET",
+                 "repos/experience83/remote-dev-containers/actions/artifacts/321/zip"], timeout=60)
+        for key, value in (("id", True), ("digest", ""), ("size_in_bytes", 0),
+                           ("workflow_run", dict(artifact["workflow_run"], head_sha=OTHER)),
+                           ("workflow_run", dict(artifact["workflow_run"], id=124)),
+                           ("workflow_run", dict(artifact["workflow_run"], head_repository_id=1))):
+            with self.subTest(key=key, value=value), \
+                 patch.object(policy, "api", return_value=[{"artifacts": [dict(artifact, **{key: value})]}]), \
+                 patch.object(policy.subprocess, "check_output") as download:
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.read_edge_receipt(self.edge_run)
+                download.assert_not_called()
+
+    def test_bad_archive_shape_or_digest_rejected(self):
+        archive = self.receipt_archive()
+        digest = "sha256:" + hashlib.sha256(archive).hexdigest()
+        for data, expected, size in (
+            (archive, "sha256:" + "a" * 64, len(archive)),
+            (archive, digest, len(archive) + 1),
+            (archive + b"extra", digest, len(archive) + 5),
+        ):
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.decode_edge_receipt(data, expected, size)
+        for data in (self.receipt_archive("../edge-promotion-receipt.json"),
+                     self.receipt_archive(extra=True), b"not zip"):
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.decode_edge_receipt(data, "sha256:" + hashlib.sha256(data).hexdigest(), len(data))
 
     def test_registry_aliases_must_match_both_indexes(self):
         for values in ((self.base, self.runtime), (self.runtime, self.runtime),
@@ -264,12 +316,36 @@ class FinalizationTests(unittest.TestCase):
     def test_legacy_requires_explicit_disable(self):
         record = {"id": policy.LEGACY_WORKFLOW, "path": ".github/workflows/publish-amd64.yml",
                   "state": "disabled_manually"}
-        with patch.object(policy, "api", return_value=record):
+        empty = [{"total_count": 0, "workflow_runs": []}]
+        with patch.object(policy, "api", side_effect=[record] + [empty] * 5):
             policy.require_retired_publisher()
+        for pending in ([{"total_count": 1, "workflow_runs": []}],
+                        [{"total_count": 0, "workflow_runs": [{"id": 4}]}], []):
+            with patch.object(policy, "api", side_effect=[record, pending]):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.require_retired_publisher()
         for state in ("active", "disabled_inactivity", "deleted"):
             with patch.object(policy, "api", return_value=dict(record, state=state)):
                 with self.assertRaises(policy.ReleasePolicyError):
                     policy.require_retired_publisher()
+
+    def test_fresh_release_preflight_blocks_duplicate_release_and_conflicting_tag(self):
+        with patch.object(policy, "find_release", return_value=self.record), \
+             patch.object(policy.subprocess, "run") as command:
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.require_fresh_release(self.tag, SHA)
+            command.assert_not_called()
+        with patch.object(policy, "find_release", return_value=None), \
+             patch.object(policy, "read_tag", side_effect=policy.ReleasePolicyError("conflict")), \
+             patch.object(policy.subprocess, "run") as command:
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.require_fresh_release(self.tag, SHA)
+            command.assert_not_called()
+        with patch.object(policy, "find_release", return_value=None), \
+             patch.object(policy, "read_tag", return_value=False), \
+             patch.object(policy.subprocess, "run") as command:
+            policy.require_fresh_release(self.tag, SHA)
+            self.assertEqual(command.call_args.args[0][-3:], ["--tag", self.tag, "--preflight-only"])
 
     def test_tag_creation_is_idempotent_and_requires_readback(self):
         for existing, after in ((True, True), (False, True), (False, False)):

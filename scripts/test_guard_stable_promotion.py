@@ -37,6 +37,30 @@ def check(state, version="v0.3.0", old_version="v0.2.0"):
 
 
 class GuardTests(unittest.TestCase):
+    def test_early_preflight_rejects_existing_versions_and_drift(self):
+        for state, expected in (
+            (aliases(OLD_BASE, OLD_RUNTIME), True),
+            (aliases(), True),
+            (aliases(OLD_BASE, OLD_RUNTIME, OLD_BASE, OLD_RUNTIME), False),
+            (aliases(None, None, OLD_BASE, None), False),
+            (aliases(None, OLD_RUNTIME), False),
+        ):
+            with self.subTest(state=state), \
+                 patch.object(guard, "read_tag", side_effect=lambda image, tag: state[(image, tag)]), \
+                 patch.object(guard, "image_release", return_value="v0.2.0"):
+                if expected:
+                    guard.preflight_only("v0.3.0")
+                else:
+                    with self.assertRaises(ValueError):
+                        guard.preflight_only("v0.3.0")
+
+    def test_missing_manifest_wrong_exit_or_stdout_is_not_absence(self):
+        for status, stdout in ((124, ""), (2, ""), (1, "partial")):
+            with patch.object(guard, "run", return_value=subprocess.CompletedProcess(
+                    [], status, stdout, "manifest unknown")):
+                with self.assertRaisesRegex(ValueError, "cannot inspect"):
+                    guard.read_tag("remote-dev", "v0.3.0")
+
     def test_fresh_first_publication(self):
         self.assertEqual(check(aliases())["mode"], "fresh")
 

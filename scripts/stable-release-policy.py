@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
-import tempfile
+import sys
+import zipfile
 
 REPOSITORY = "experience83/remote-dev-containers"
 OWNER_ID = "16572400"
@@ -119,6 +122,26 @@ def validate_edge_receipt(receipt, selected, edge_run, accepted_digest):
     return receipt["base_digest"], receipt["runtime_digest"]
 
 
+def decode_edge_receipt(archive, digest, size):
+    """Verify the immutable archive before parsing a single bounded data file."""
+    if len(archive) != size or "sha256:" + hashlib.sha256(archive).hexdigest() != digest:
+        raise ReleasePolicyError("Edge receipt archive size or digest mismatch")
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            files = bundle.infolist()
+            if (len(files) != 1 or files[0].filename != "edge-promotion-receipt.json"
+                    or files[0].is_dir() or files[0].file_size > 4096
+                    or (files[0].external_attr >> 16) & 0o170000 not in (0, 0o100000)):
+                raise ReleasePolicyError("Unexpected Edge receipt archive contents")
+            with bundle.open(files[0]) as stream:
+                data = stream.read(4097)
+            if len(data) > 4096:
+                raise ReleasePolicyError("Edge receipt exceeds size bound")
+        return json.loads(data.decode("utf-8"))
+    except (zipfile.BadZipFile, UnicodeError, json.JSONDecodeError, RuntimeError) as exc:
+        raise ReleasePolicyError("Invalid Edge receipt archive") from exc
+
+
 def read_edge_receipt(edge_run):
     name = f"edge-promotion-receipt-{edge_run['run_attempt']}"
     pages = api(f"actions/runs/{edge_run['id']}/artifacts?per_page=100", paginate=True)
@@ -126,21 +149,22 @@ def read_edge_receipt(edge_run):
                if artifact["name"] == name]
     if len(matches) != 1 or matches[0].get("expired") is not False:
         raise ReleasePolicyError("Exact Edge promotion receipt missing, ambiguous or expired")
-    size = matches[0].get("size_in_bytes")
-    if type(size) is not int or not 0 < size <= 16384:
-        raise ReleasePolicyError("Unexpected Edge promotion receipt artifact size")
-    with tempfile.TemporaryDirectory() as directory:
-        subprocess.run(
-            ["gh", "run", "download", str(edge_run["id"]), "--repo", REPOSITORY,
-             "--name", name, "--dir", directory],
-            check=True, timeout=60,
-        )
-        file = Path(directory) / "edge-promotion-receipt.json"
-        if list(Path(directory).iterdir()) != [file] or file.is_symlink() or not file.is_file():
-            raise ReleasePolicyError("Unexpected Edge promotion receipt files")
-        if file.stat().st_size > 4096:
-            raise ReleasePolicyError("Edge promotion receipt too large")
-        return json.loads(file.read_text(encoding="utf-8"))
+    artifact = matches[0]
+    size, digest, artifact_id = (artifact.get(key) for key in ("size_in_bytes", "digest", "id"))
+    if (type(size) is not int or not 0 < size <= 16384
+            or not isinstance(digest, str) or not re.fullmatch(DIGEST, digest)
+            or type(artifact_id) is not int or artifact_id <= 0):
+        raise ReleasePolicyError("Unexpected Edge receipt artifact metadata")
+    run = artifact.get("workflow_run") or {}
+    if (run.get("id") != edge_run["id"] or run.get("head_sha") != edge_run["head_sha"]
+            or run.get("head_branch") != "main" or run.get("repository_id") != 1309214441
+            or run.get("head_repository_id") != 1309214441):
+        raise ReleasePolicyError("Edge receipt artifact belongs to another run or repository")
+    archive = subprocess.check_output(
+        ["gh", "api", "--method", "GET", f"repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip"],
+        timeout=60,
+    )
+    return decode_edge_receipt(archive, digest, size)
 
 
 def read_registry_digest(image, selected):
@@ -188,6 +212,10 @@ def require_retired_publisher():
             or workflow.get("path") != ".github/workflows/publish-amd64.yml"
             or workflow.get("state") != "disabled_manually"):
         raise ReleasePolicyError("Legacy tag publisher must be explicitly disabled")
+    for status in ("queued", "in_progress", "requested", "waiting", "pending"):
+        pages = api(f"actions/workflows/{LEGACY_WORKFLOW}/runs?status={status}&per_page=100", paginate=True)
+        if not pages or any(page["total_count"] != 0 or page["workflow_runs"] for page in pages):
+            raise ReleasePolicyError("Legacy publisher has unfinished or unverified runs")
 
 
 def read_tag(tag, selected):
@@ -216,6 +244,17 @@ def require_current_main(selected):
             or response["object"]["type"] != "commit"
             or response["object"]["sha"] != selected):
         raise ReleasePolicyError("Reviewed main changed; dispatch again")
+
+
+def require_fresh_release(tag, selected):
+    # Use the same registry guard as promotion; no candidate or alias is written.
+    if find_release(tag) is not None:
+        raise ReleasePolicyError("Release already exists; no duplicate publication")
+    read_tag(tag, selected)
+    subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("guard-stable-promotion.py")),
+         "--tag", tag, "--preflight-only"], check=True, timeout=900,
+    )
 
 
 def ensure_tag(tag, selected):
@@ -329,12 +368,12 @@ def main(argv=None):
         raise ReleasePolicyError("main changed during workflow validation")
     print(f"Stable dispatch identity, required workflows and accepted Edge verified: {tag} at {selected}")
     if args.mode == "validate":
-        read_tag(tag, selected)
+        require_fresh_release(tag, selected)
     elif args.mode == "prepare-tag":
-        if find_release(tag) is not None:
-            raise ReleasePolicyError("Release already exists; no duplicate publication")
+        require_fresh_release(tag, selected)
         ensure_tag(tag, selected)
     elif args.mode == "require-tag":
+        require_fresh_release(tag, selected)
         require_tag(tag, selected)
     else:
         finalize_release(tag, selected, os.environ["STABLE_BASE_DIGEST"],

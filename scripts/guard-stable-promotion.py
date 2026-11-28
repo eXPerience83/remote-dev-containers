@@ -46,7 +46,9 @@ def read_tag(image: str, tag: str) -> str | None:
             ref + ": manifest not found",
         )
         normalized = re.sub(r"^(?:ERROR:\s*)", "", message, flags=re.I).strip()
-        if any(normalized.lower() == item.lower() for item in missing):
+        if result.returncode == 1 and not result.stdout.strip() and any(
+            normalized.lower() == item.lower() for item in missing
+        ):
             return None
         # Never print raw registry stderr: token, account and credential
         # context can be included by an upstream docker helper.
@@ -95,15 +97,9 @@ def compare(old: str, new: str) -> bool:
     return tuple(map(int, a.groups())) < tuple(map(int, z.groups()))
 
 
-def validate(tag: str, base_ref: str, runtime_ref: str) -> dict:
-    demand(VERSION.fullmatch(tag) is not None, "tag must be canonical vMAJOR.MINOR.PATCH")
-    demand(bool(IMAGE.fullmatch(base_ref)) and "/remote-dev-base@" in base_ref,
-           "invalid immutable base candidate")
-    demand(bool(IMAGE.fullmatch(runtime_ref)) and "/remote-dev@" in runtime_ref,
-           "invalid immutable runtime candidate")
-    base_digest, runtime_digest = base_ref.split("@")[1], runtime_ref.split("@")[1]
+def read_aliases(tag: str) -> dict:
     # Read all tags *before* any write. A failed lookup is not permission to overwrite.
-    tags = {
+    return {
         "base-version": read_tag("remote-dev-base", tag),
         "base-stable-amd64": read_tag("remote-dev-base", "stable-amd64"),
         "runtime-version": read_tag("remote-dev", tag),
@@ -111,6 +107,44 @@ def validate(tag: str, base_ref: str, runtime_ref: str) -> dict:
         "runtime-stable-amd64": read_tag("remote-dev", "stable-amd64"),
         "runtime-latest": read_tag("remote-dev", "latest"),
     }
+
+
+def validate_fresh_aliases(tag: str, tags: dict) -> str | None:
+    demand(tags["base-version"] is None and tags["runtime-version"] is None,
+           "version tag already published; reconcile instead of rebuilding")
+    alias_values = [tags[k] for k in (
+        "runtime-stable", "runtime-stable-amd64", "runtime-latest")]
+    demand(len(set(alias_values)) == 1, "existing stable aliases disagree")
+    old_digest = alias_values[0]
+    if old_digest is None:
+        demand(tags["base-stable-amd64"] is None,
+               "base stable tag exists without runtime stable")
+        previous = None
+    else:
+        demand(tags["base-stable-amd64"] is not None,
+               "runtime stable exists without base stable")
+        previous = image_release(f"{NAMESPACE}/remote-dev@{old_digest}")
+        old_base_version = image_release(
+            f"{NAMESPACE}/remote-dev-base@{tags['base-stable-amd64']}")
+        demand(old_base_version == previous, "base/runtime stable version mismatch")
+        demand(compare(previous, tag),
+               f"release rollback or same-version overwrite forbidden: {previous} -> {tag}")
+    return previous
+
+
+def preflight_only(tag: str) -> None:
+    demand(VERSION.fullmatch(tag) is not None, "tag must be canonical vMAJOR.MINOR.PATCH")
+    validate_fresh_aliases(tag, read_aliases(tag))
+
+
+def validate(tag: str, base_ref: str, runtime_ref: str) -> dict:
+    demand(VERSION.fullmatch(tag) is not None, "tag must be canonical vMAJOR.MINOR.PATCH")
+    demand(bool(IMAGE.fullmatch(base_ref)) and "/remote-dev-base@" in base_ref,
+           "invalid immutable base candidate")
+    demand(bool(IMAGE.fullmatch(runtime_ref)) and "/remote-dev@" in runtime_ref,
+           "invalid immutable runtime candidate")
+    base_digest, runtime_digest = base_ref.split("@")[1], runtime_ref.split("@")[1]
+    tags = read_aliases(tag)
     existing_base, existing_runtime = tags["base-version"], tags["runtime-version"]
     demand((existing_base is None) == (existing_runtime is None),
            "partial version-tag publication needs manual reconciliation")
@@ -123,23 +157,7 @@ def validate(tag: str, base_ref: str, runtime_ref: str) -> dict:
                "rerun is not idempotent: aliases changed; manual reconciliation needed")
         mode = "idempotent"
     else:
-        alias_values = [tags[k] for k in (
-            "runtime-stable", "runtime-stable-amd64", "runtime-latest")]
-        demand(len(set(alias_values)) == 1, "existing stable aliases disagree")
-        old_digest = alias_values[0]
-        if old_digest is None:
-            demand(tags["base-stable-amd64"] is None,
-                   "base stable tag exists without runtime stable")
-            previous = None
-        else:
-            demand(tags["base-stable-amd64"] is not None,
-                   "runtime stable exists without base stable")
-            previous = image_release(f"{NAMESPACE}/remote-dev@{old_digest}")
-            old_base_version = image_release(
-                f"{NAMESPACE}/remote-dev-base@{tags['base-stable-amd64']}")
-            demand(old_base_version == previous, "base/runtime stable version mismatch")
-            demand(compare(previous, tag),
-                   f"release rollback or same-version overwrite forbidden: {previous} -> {tag}")
+        previous = validate_fresh_aliases(tag, tags)
         mode = "fresh"
     return {"mode": mode, "tag": tag, "base_candidate": base_ref,
             "runtime_candidate": runtime_ref, "before": tags,
@@ -149,11 +167,21 @@ def validate(tag: str, base_ref: str, runtime_ref: str) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--tag", required=True)
-    p.add_argument("--base", required=True)
-    p.add_argument("--runtime", required=True)
-    p.add_argument("--journal", required=True, type=Path)
+    p.add_argument("--base")
+    p.add_argument("--runtime")
+    p.add_argument("--journal", type=Path)
+    p.add_argument("--preflight-only", action="store_true")
     args = p.parse_args()
+    if args.preflight_only:
+        if any(value is not None for value in (args.base, args.runtime, args.journal)):
+            p.error("--preflight-only takes no candidate or journal arguments")
+    elif any(value is None for value in (args.base, args.runtime, args.journal)):
+        p.error("--base, --runtime and --journal are required for promotion")
     try:
+        if args.preflight_only:
+            preflight_only(args.tag)
+            print("Stable publication preflight: fresh")
+            return 0
         record = validate(args.tag, args.base, args.runtime)
     except (ValueError, subprocess.TimeoutExpired, OSError) as exc:
         print("ERROR: stable release promotion preflight: " + str(exc))
