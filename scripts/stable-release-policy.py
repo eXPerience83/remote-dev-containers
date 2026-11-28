@@ -397,7 +397,9 @@ def main(argv=None):
     if args.mode == "validate":
         restricted = tag_creation_restricted()
         require_fresh_release(tag, selected)
+        require_current_main(selected)
         print("Tag creation restriction: " + ("active" if restricted else "not in reviewed ruleset"))
+        print("Read-only Stable release preflight passed")
     elif args.mode == "prepare-tag":
         require_fresh_release(tag, selected)
         ensure_tag(tag, selected)

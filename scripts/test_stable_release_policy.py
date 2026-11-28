@@ -425,5 +425,173 @@ class FinalizationTests(unittest.TestCase):
                 policy.finalize_release(self.tag, SHA, self.base, self.runtime, self.edge)
             write.assert_not_called()
 
+
+class ReleaseFlowTests(unittest.TestCase):
+    """Exercise the CLI flow with fake external commands, never GitHub/GHCR."""
+
+    def setUp(self):
+        self.base = "sha256:" + "1" * 64
+        self.runtime = "sha256:" + "2" * 64
+        self.stable_base = "sha256:" + "3" * 64
+        self.stable_runtime = "sha256:" + "4" * 64
+        self.tag = ENV["RELEASE_TAG"]
+        self.main_sha = SHA
+        self.tag_exists = False
+        self.release = None
+        self.creation_restricted = True
+        self.legacy_state = "disabled_manually"
+        self.registry_mismatch = False
+        self.change_main_on_preflight = False
+        self.posts = []
+        self.alias_reads = []
+        self.preflights = 0
+        self.runs = WorkflowTests().fixtures()
+        self.edge_run = next(run for run in self.runs
+                             if run["workflow_id"] == policy.EDGE_WORKFLOW)
+        receipt = {
+            "source_sha": SHA, "run_id": str(self.edge_run["id"]),
+            "run_attempt": str(self.edge_run["run_attempt"]),
+            "base_digest": self.base, "runtime_digest": self.runtime,
+        }
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("edge-promotion-receipt.json", json.dumps(receipt))
+        self.archive = archive.getvalue()
+        self.artifact = {
+            "name": "edge-promotion-receipt-1", "expired": False, "id": 321,
+            "size_in_bytes": len(self.archive),
+            "digest": "sha256:" + hashlib.sha256(self.archive).hexdigest(),
+            "workflow_run": {"id": self.edge_run["id"], "head_sha": SHA,
+                             "head_branch": "main", "repository_id": 1309214441,
+                             "head_repository_id": 1309214441},
+        }
+
+    def fake_response(self, endpoint):
+        if endpoint == "git/ref/heads/main":
+            return {"ref": "refs/heads/main", "object": {"type": "commit", "sha": self.main_sha}}
+        if endpoint == f"git/matching-refs/tags/{self.tag}":
+            return [{"ref": f"refs/tags/{self.tag}", "object": {"type": "commit", "sha": SHA}}] if self.tag_exists else []
+        if endpoint == f"actions/runs?head_sha={SHA}&per_page=100":
+            return [{"workflow_runs": self.runs}]
+        for run in self.runs:
+            if endpoint == f"actions/runs/{run['id']}/attempts/1/jobs?per_page=100":
+                return [{"jobs": [{"name": name, "status": "completed", "conclusion": "success"}
+                                  for name in policy.REQUIRED_WORKFLOWS[run["workflow_id"]][2]]}]
+        if endpoint == f"actions/runs/{self.edge_run['id']}/artifacts?per_page=100":
+            return [{"artifacts": [self.artifact]}]
+        if endpoint == f"rulesets/{policy.TAG_RULESET}":
+            names = ["update", "deletion", "non_fast_forward"]
+            if self.creation_restricted:
+                names.append("creation")
+            return {"id": policy.TAG_RULESET, "target": "tag", "enforcement": "active",
+                    "source_type": "Repository", "source": ENV["GITHUB_REPOSITORY"],
+                    "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+                    "rules": [{"type": name} for name in names]}
+        if endpoint == f"actions/workflows/{policy.LEGACY_WORKFLOW}":
+            return {"id": policy.LEGACY_WORKFLOW, "path": ".github/workflows/publish-amd64.yml",
+                    "state": self.legacy_state}
+        if endpoint.startswith(f"actions/workflows/{policy.LEGACY_WORKFLOW}/runs?status="):
+            return [{"total_count": 0, "workflow_runs": []}]
+        if endpoint == "releases?per_page=100":
+            return [[self.release] if self.release else []]
+        if endpoint == "releases/latest":
+            return self.release
+        self.fail(f"unexpected fixture GET: {endpoint}")
+
+    def command(self, argv, **kwargs):
+        if argv == ["git", "rev-parse", "HEAD"]:
+            return SHA + "\n"
+        if argv[:2] == ["gh", "api"]:
+            prefix = "repos/" + policy.REPOSITORY + "/"
+            endpoint = next(arg[len(prefix):] for arg in argv if arg.startswith(prefix))
+            method = argv[argv.index("--method") + 1]
+            if method == "GET":
+                if endpoint == "actions/artifacts/321/zip":
+                    return self.archive
+                return json.dumps(self.fake_response(endpoint))
+            self.assertEqual(method, "POST")
+            payload = json.loads(kwargs["input"])
+            self.posts.append((endpoint, payload))
+            if endpoint == "git/refs":
+                self.tag_exists = True
+                return json.dumps({"ref": payload["ref"], "object": {"type": "commit", "sha": payload["sha"]}})
+            if endpoint == "releases":
+                self.release = dict(payload, id=42)
+                return json.dumps(self.release)
+            self.fail(f"unexpected fixture POST: {endpoint}")
+        if argv[:3] == ["docker", "buildx", "imagetools"]:
+            self.assertEqual(argv[3], "inspect")
+            image, tag = argv[4].rsplit(":", 1)
+            is_base = image.endswith("/remote-dev-base")
+            if tag == "sha-" + SHA:
+                return json.dumps(self.base if is_base else self.runtime)
+            self.alias_reads.append((image, tag))
+            digest = self.stable_base if is_base else self.stable_runtime
+            if self.registry_mismatch and tag == "latest":
+                digest = self.runtime
+            return json.dumps(digest)
+        self.fail(f"unexpected fixture command: {argv}")
+
+    def preflight(self, argv, **kwargs):
+        self.assertEqual(argv[-3:], ["--tag", self.tag, "--preflight-only"])
+        self.assertTrue(kwargs["check"])
+        self.preflights += 1
+        if self.change_main_on_preflight:
+            self.main_sha = OTHER
+
+    def invoke(self, mode, dry_run=False):
+        env = dict(ENV, DRY_RUN="true" if dry_run else "false",
+                   ACCEPTED_EDGE_DIGEST=self.runtime, STABLE_BASE_DIGEST=self.stable_base,
+                   STABLE_RUNTIME_DIGEST=self.stable_runtime)
+        with patch.dict(policy.os.environ, env, clear=True), \
+             patch.object(policy.Path, "read_text", return_value=PINS), \
+             patch.object(policy.subprocess, "check_output", side_effect=self.command), \
+             patch.object(policy.subprocess, "run", side_effect=self.preflight):
+            policy.main(["--mode", mode])
+
+    def test_complete_dry_run_reads_only(self):
+        self.invoke("validate", dry_run=True)
+        self.assertEqual(self.preflights, 1)
+        self.assertEqual(self.posts, [])
+        self.assertFalse(self.tag_exists)
+
+    def test_dry_run_rechecks_main_after_registry_preflight(self):
+        self.change_main_on_preflight = True
+        with self.assertRaisesRegex(policy.ReleasePolicyError, "main changed"):
+            self.invoke("validate", dry_run=True)
+        self.assertEqual(self.posts, [])
+
+    def test_prepare_tag_stops_on_retirement_or_creation_restriction(self):
+        self.legacy_state = "active"
+        with self.assertRaisesRegex(policy.ReleasePolicyError, "explicitly disabled"):
+            self.invoke("prepare-tag")
+        self.legacy_state = "disabled_manually"
+        with self.assertRaisesRegex(policy.ReleasePolicyError, "creation is restricted"):
+            self.invoke("prepare-tag")
+        self.assertEqual(self.posts, [])
+
+    def test_tag_and_release_flow_and_duplicate_protection(self):
+        self.creation_restricted = False
+        self.invoke("prepare-tag")
+        self.assertEqual(self.posts, [("git/refs", {"ref": "refs/tags/" + self.tag, "sha": SHA})])
+        self.invoke("require-tag")
+        self.invoke("finalize")
+        self.assertEqual([endpoint for endpoint, _ in self.posts], ["git/refs", "releases"])
+        self.assertEqual(len(set(self.alias_reads)), 6)
+        self.assertEqual(self.release["make_latest"], "true")
+        self.invoke("finalize")
+        self.assertEqual(len(self.posts), 2)
+        with self.assertRaisesRegex(policy.ReleasePolicyError, "Release already exists"):
+            self.invoke("prepare-tag")
+        self.assertEqual(len(self.posts), 2)
+
+    def test_alias_mismatch_blocks_release_post(self):
+        self.tag_exists = True
+        self.registry_mismatch = True
+        with self.assertRaisesRegex(policy.ReleasePolicyError, "Stable alias differs"):
+            self.invoke("finalize")
+        self.assertEqual(self.posts, [])
+
+
 if __name__ == "__main__":
     unittest.main()
