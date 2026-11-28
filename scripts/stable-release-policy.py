@@ -178,6 +178,134 @@ def verify_required_workflows(selected, accepted_digest):
         raise ReleasePolicyError("Required workflow evidence changed; dispatch again")
 
 
+LEGACY_WORKFLOW = 318438492
+
+
+def require_retired_publisher():
+    workflow = api(f"actions/workflows/{LEGACY_WORKFLOW}")
+    if (workflow.get("id") != LEGACY_WORKFLOW
+            or workflow.get("path") != ".github/workflows/publish-amd64.yml"
+            or workflow.get("state") != "disabled_manually"):
+        raise ReleasePolicyError("Legacy tag publisher must be explicitly disabled")
+
+
+def read_tag(tag, selected):
+    """An absent tag is distinct from a conflicting tag or failed API read."""
+    ref = f"refs/tags/{tag}"
+    matches = [item for item in api(f"git/matching-refs/tags/{tag}")
+               if item["ref"] == ref]
+    if not matches:
+        return False
+    if (len(matches) != 1 or matches[0]["object"]["type"] != "commit"
+            or matches[0]["object"]["sha"] != selected):
+        raise ReleasePolicyError("Existing tag does not name the exact reviewed commit")
+    return True
+
+
+def write_api(endpoint, payload):
+    return json.loads(subprocess.check_output(
+        ["gh", "api", "--method", "POST", f"repos/{REPOSITORY}/{endpoint}", "--input", "-"],
+        input=json.dumps(payload), text=True, timeout=60,
+    ))
+
+
+def require_current_main(selected):
+    response = api("git/ref/heads/main")
+    if (response["ref"] != "refs/heads/main"
+            or response["object"]["type"] != "commit"
+            or response["object"]["sha"] != selected):
+        raise ReleasePolicyError("Reviewed main changed; dispatch again")
+
+
+def ensure_tag(tag, selected):
+    require_retired_publisher()
+    require_current_main(selected)
+    if not read_tag(tag, selected):
+        write_api("git/refs", {"ref": f"refs/tags/{tag}", "sha": selected})
+    if not read_tag(tag, selected):
+        raise ReleasePolicyError("Release tag readback failed")
+
+
+def require_tag(tag, selected):
+    require_retired_publisher()
+    require_current_main(selected)
+    if not read_tag(tag, selected):
+        raise ReleasePolicyError("Exact release tag must exist before publishing")
+
+
+def read_image_tag_digest(image, tag):
+    raw = subprocess.check_output(
+        ["docker", "buildx", "imagetools", "inspect",
+         f"ghcr.io/experience83/{image}:{tag}", "--format", "{{json .Manifest.Digest}}"],
+        text=True, timeout=90,
+    )
+    digest = json.loads(raw)
+    if not isinstance(digest, str) or not re.fullmatch(DIGEST, digest):
+        raise ReleasePolicyError("Malformed Stable index digest")
+    return digest
+
+
+def verify_stable_aliases(tag, base, runtime):
+    for digest in (base, runtime):
+        if not re.fullmatch(DIGEST, digest):
+            raise ReleasePolicyError("Expected exact published Stable index digests")
+    for image, aliases, expected in (
+        ("remote-dev-base", (tag, "stable-amd64"), base),
+        ("remote-dev", (tag, "stable", "stable-amd64", "latest"), runtime),
+    ):
+        for alias in aliases:
+            if read_image_tag_digest(image, alias) != expected:
+                raise ReleasePolicyError(f"Stable alias differs from published digest: {image}:{alias}")
+
+
+def release_fields(tag, selected, base, runtime, accepted_edge):
+    body = (
+        f"Reviewed source: {selected}\n\n"
+        f"[Changelog](https://github.com/{REPOSITORY}/blob/{selected}/CHANGELOG.md)\n\n"
+        f"- Accepted Edge runtime: {accepted_edge}\n"
+        f"- Stable base: ghcr.io/experience83/remote-dev-base@{base}\n"
+        f"- Stable runtime: ghcr.io/experience83/remote-dev@{runtime}\n"
+    )
+    return {"tag_name": tag, "name": tag, "body": body, "draft": False, "prerelease": False}
+
+
+def find_release(tag):
+    matches = [item for page in api("releases?per_page=100", paginate=True)
+               for item in page if item["tag_name"] == tag]
+    if len(matches) > 1:
+        raise ReleasePolicyError("Multiple GitHub Releases for exact tag")
+    return matches[0] if matches else None
+
+
+def verify_release_record(release, expected):
+    if not isinstance(release, dict) or any(
+        release.get(key) != value for key, value in expected.items()
+    ):
+        raise ReleasePolicyError("GitHub Release differs from exact expected publication")
+    if type(release.get("id")) is not int:
+        raise ReleasePolicyError("Invalid GitHub Release identity")
+
+
+def finalize_release(tag, selected, base, runtime, accepted_edge):
+    require_tag(tag, selected)
+    verify_stable_aliases(tag, base, runtime)
+    expected = release_fields(tag, selected, base, runtime, accepted_edge)
+    existing = find_release(tag)
+    if existing is None:
+        require_tag(tag, selected)
+        verify_stable_aliases(tag, base, runtime)
+        created = write_api("releases", {**expected, "target_commitish": selected, "make_latest": "true"})
+        verify_release_record(created, expected)
+    else:
+        verify_release_record(existing, expected)
+    actual = find_release(tag)
+    verify_release_record(actual, expected)
+    if api("releases/latest").get("id") != actual["id"]:
+        raise ReleasePolicyError("Exact GitHub Release is not latest; manual reconciliation required")
+    require_tag(tag, selected)
+    verify_stable_aliases(tag, base, runtime)
+
+
 def main():
     # No mutation; GH_TOKEN needs read access only. Do not source versions.env.
     checkout_sha = subprocess.check_output(

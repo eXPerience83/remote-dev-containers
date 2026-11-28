@@ -215,5 +215,94 @@ class EdgeAcceptanceTests(unittest.TestCase):
                         with self.assertRaises(policy.ReleasePolicyError):
                             policy.verify_accepted_edge(SHA, self.edge_run, self.runtime)
 
+
+class FinalizationTests(unittest.TestCase):
+    def setUp(self):
+        self.tag = "v0.4.0"
+        self.base = "sha256:" + "1" * 64
+        self.runtime = "sha256:" + "2" * 64
+        self.edge = "sha256:" + "3" * 64
+        self.ref = {"ref": "refs/tags/" + self.tag,
+                    "object": {"type": "commit", "sha": SHA}}
+        self.record = dict(policy.release_fields(
+            self.tag, SHA, self.base, self.runtime, self.edge), id=123)
+
+    def test_tag_readback_exact_not_prefix(self):
+        for refs, expected in (([], False), ([self.ref], True),
+                               ([dict(self.ref, ref=self.ref["ref"] + "-extra")], False)):
+            with patch.object(policy, "api", return_value=refs):
+                self.assertEqual(policy.read_tag(self.tag, SHA), expected)
+
+    def test_tag_conflict_rejected(self):
+        for refs in ([dict(self.ref, object={"type": "commit", "sha": OTHER})],
+                     [dict(self.ref, object={"type": "tag", "sha": SHA})],
+                     [self.ref, self.ref]):
+            with patch.object(policy, "api", return_value=refs):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.read_tag(self.tag, SHA)
+
+    def test_legacy_requires_explicit_disable(self):
+        record = {"id": policy.LEGACY_WORKFLOW, "path": ".github/workflows/publish-amd64.yml",
+                  "state": "disabled_manually"}
+        with patch.object(policy, "api", return_value=record):
+            policy.require_retired_publisher()
+        for state in ("active", "disabled_inactivity", "deleted"):
+            with patch.object(policy, "api", return_value=dict(record, state=state)):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.require_retired_publisher()
+
+    def test_tag_creation_is_idempotent_and_requires_readback(self):
+        for existing, after in ((True, True), (False, True), (False, False)):
+            with patch.object(policy, "require_retired_publisher"), \
+                 patch.object(policy, "require_current_main"), \
+                 patch.object(policy, "read_tag", side_effect=[existing, after]), \
+                 patch.object(policy, "write_api") as write:
+                if not after:
+                    with self.assertRaises(policy.ReleasePolicyError):
+                        policy.ensure_tag(self.tag, SHA)
+                else:
+                    policy.ensure_tag(self.tag, SHA)
+                if existing:
+                    write.assert_not_called()
+                else:
+                    write.assert_called_once_with("git/refs", {"ref": self.ref["ref"], "sha": SHA})
+
+    def test_all_six_stable_aliases_required(self):
+        expected = [self.base] * 2 + [self.runtime] * 4
+        with patch.object(policy, "read_image_tag_digest", side_effect=expected) as read:
+            policy.verify_stable_aliases(self.tag, self.base, self.runtime)
+            self.assertEqual(read.call_count, 6)
+        for i in range(6):
+            bad = expected.copy()
+            bad[i] = self.edge
+            with patch.object(policy, "read_image_tag_digest", side_effect=bad):
+                with self.assertRaises(policy.ReleasePolicyError):
+                    policy.verify_stable_aliases(self.tag, self.base, self.runtime)
+
+    def test_release_existing_or_created_must_match_and_be_latest(self):
+        for existing in (None, self.record):
+            with patch.object(policy, "require_tag"), \
+                 patch.object(policy, "verify_stable_aliases"), \
+                 patch.object(policy, "find_release", side_effect=[existing, self.record]), \
+                 patch.object(policy, "write_api", return_value=self.record) as write, \
+                 patch.object(policy, "api", return_value={"id": 123}):
+                policy.finalize_release(self.tag, SHA, self.base, self.runtime, self.edge)
+                self.assertEqual(write.call_count, 0 if existing else 1)
+
+    def test_no_release_on_alias_failure_or_conflicting_record(self):
+        with patch.object(policy, "require_tag"), \
+             patch.object(policy, "verify_stable_aliases", side_effect=policy.ReleasePolicyError("alias")), \
+             patch.object(policy, "write_api") as write:
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.finalize_release(self.tag, SHA, self.base, self.runtime, self.edge)
+            write.assert_not_called()
+        with patch.object(policy, "require_tag"), \
+             patch.object(policy, "verify_stable_aliases"), \
+             patch.object(policy, "find_release", return_value=dict(self.record, draft=True)), \
+             patch.object(policy, "write_api") as write:
+            with self.assertRaises(policy.ReleasePolicyError):
+                policy.finalize_release(self.tag, SHA, self.base, self.runtime, self.edge)
+            write.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
