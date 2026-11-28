@@ -84,7 +84,7 @@ def main() -> None:
     # Renovate updates these references together. A full SHA is mandatory, but
     # testing one literal SHA would break every legitimate digest update.
     for relative in (
-        ".github/workflows/publish-amd64.yml",
+        ".github/workflows/release-stable-amd64.yml",
         ".github/workflows/publish-edge-amd64.yml",
         ".github/workflows/publish-pr-candidate-worker-amd64.yml",
     ):

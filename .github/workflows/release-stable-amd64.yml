@@ -1,59 +1,125 @@
-name: Publish AMD64
+name: Release Stable AMD64
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Exact stable tag matching BASE_VERSION (vMAJOR.MINOR.PATCH)"
+        required: true
+        type: string
+      release_sha:
+        description: "Full reviewed current main SHA"
+        required: true
+        type: string
+      accepted_edge_digest:
+        description: "Owner-accepted Edge runtime OCI index digest (sha256:...)"
+        required: true
+        type: string
+      dry_run:
+        description: "Read-only validation; do not create tags, images or releases"
+        required: true
+        type: boolean
+        default: true
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
 
 concurrency:
   group: publish-stable-amd64
   cancel-in-progress: false
 
+env:
+  RELEASE_TAG: ${{ inputs.release_tag }}
+  RELEASE_SHA: ${{ inputs.release_sha }}
+  ACCEPTED_EDGE_DIGEST: ${{ inputs.accepted_edge_digest }}
+  DRY_RUN: ${{ inputs.dry_run }}
+
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      publication_authorized: ${{ steps.publication_boundary.outputs.authorized }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Validate stable release tag
+      - name: Require trusted manual dispatch
         run: |
           set -euo pipefail
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "ERROR: stable publication requires an exact vMAJOR.MINOR.PATCH tag; got $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-          # Parse the exact literal source pin without executing tag-controlled
-          # versions.env before the main-ancestry guard has run.
-          source_version="$(sed -nE 's/^BASE_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' versions.env)"
-          if [[ ! "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "ERROR: versions.env must contain exactly one stable BASE_VERSION" >&2
-            exit 1
-          fi
-          if [[ "$GITHUB_REF_NAME" != "v${source_version}" ]]; then
-            echo "ERROR: stable tag $GITHUB_REF_NAME does not match source BASE_VERSION=$source_version" >&2
-            exit 1
-          fi
+          [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_ACTOR_ID" == 16572400 && "$GITHUB_RUN_ATTEMPT" == 1 ]]
 
-      - name: Require the tagged commit from main history
-        run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
-            echo "ERROR: stable publication requires a tag whose commit belongs to main history" >&2
-            exit 1
-          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Validate owner, current source, required CI and accepted Edge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py
 
       - name: Validate repository configuration
         run: |
           bash scripts/validate-publication-source.sh stable
+
+      - name: Permit validation-only while finalization is incomplete
+        id: publication_boundary
+        # Temporary fail-closed boundary until tag authorization and Release
+        # finalization are implemented and reviewed in this same draft.
+        run: |
+          set -euo pipefail
+          [[ "$DRY_RUN" == true ]] || {
+            echo "ERROR: Stable publication finalization is not enabled" >&2
+            exit 1
+          }
+          echo "authorized=false" >> "$GITHUB_OUTPUT"
+
+  prepare-tag:
+    needs: validate
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Create and read back exact release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py --mode prepare-tag
+
+  publish:
+    needs: [validate, prepare-tag]
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs:
+      base_digest: ${{ steps.base.outputs.digest }}
+      runtime_digest: ${{ steps.runtime.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Recheck exact owner authorization before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py --mode require-tag
 
       - name: Prepare isolated SPDX validator before registry login
         run: |
@@ -66,8 +132,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Resolve lowercase GHCR namespace
         id: registry
@@ -127,7 +191,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ inputs.release_tag }}
             io.github.experience83.remote-dev.channel=stable
           provenance: mode=max
           sbom: true
@@ -140,7 +204,7 @@ jobs:
         run: |
           set -euo pipefail
           ref="$(bash scripts/resolve-oci-platform-manifest.sh \
-            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64)"
+            "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" linux amd64 --wait-for-push)"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 
@@ -157,13 +221,13 @@ jobs:
             CODEX_RELEASE_TAG=${{ steps.versions.outputs.codex_tag }}
             CODEX_AMD64_SHA256=${{ steps.versions.outputs.codex_amd64_sha256 }}
             CODEX_ARM64_SHA256=${{ steps.versions.outputs.codex_arm64_sha256 }}
-            PROJECT_VERSION=${{ github.ref_name }}
+            PROJECT_VERSION=${{ inputs.release_tag }}
             PROJECT_CHANNEL=stable
             SOURCE_REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ inputs.release_tag }}
             io.github.experience83.remote-dev.channel=stable
           provenance: mode=max
           sbom: true
@@ -176,7 +240,7 @@ jobs:
         run: |
           set -euo pipefail
           ref="$(bash scripts/resolve-oci-platform-manifest.sh \
-            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64)"
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" linux amd64 --wait-for-push)"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=${ref##*@}" >> "$GITHUB_OUTPUT"
 
@@ -188,7 +252,7 @@ jobs:
           BASE_MANIFEST_REF: ${{ steps.base_manifest.outputs.ref }}
           REMOTE_DEV_DIGEST: ${{ steps.runtime.outputs.digest }}
           REMOTE_DEV_MANIFEST_REF: ${{ steps.runtime_manifest.outputs.ref }}
-          PROJECT_VERSION: ${{ github.ref_name }}
+          PROJECT_VERSION: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           bash scripts/validate-edge-publication-candidate.sh \
@@ -294,6 +358,11 @@ jobs:
           python3 scripts/validate-trivy-image-report.py trivy-publish-remote-dev.json \
             --expect-image "$REMOTE_DEV_MANIFEST_REF" --expect-ubuntu "$UBUNTU_VERSION"
 
+      - name: Recheck exact source and tag before stable promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/stable-release-policy.py --mode require-tag
+
       - name: Guard stable promotion against overwrite or downgrade
         id: promotion_guard
         env:
@@ -303,7 +372,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/guard-stable-promotion.py \
-            --tag "$GITHUB_REF_NAME" \
+            --tag "$RELEASE_TAG" \
             --base "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_MANIFEST_INDEX}" \
             --runtime "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_MANIFEST_INDEX}" \
             --journal stable-promotion-preflight.json
@@ -318,7 +387,7 @@ jobs:
           set -euo pipefail
           bash scripts/promote-publication-indexes.sh stable \
             "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
-            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_REF_NAME"
+            "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$RELEASE_TAG"
 
       - name: Upload stable promotion preflight and results
         if: always()
@@ -331,3 +400,25 @@ jobs:
             runtime-promotion.json
           if-no-files-found: ignore
           retention-days: 14
+
+  finalize:
+    needs: [validate, publish]
+    if: inputs.dry_run == false && needs.validate.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Verify all six aliases and publish exact GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE_BASE_DIGEST: ${{ needs.publish.outputs.base_digest }}
+          STABLE_RUNTIME_DIGEST: ${{ needs.publish.outputs.runtime_digest }}
+        run: python3 scripts/stable-release-policy.py --mode finalize

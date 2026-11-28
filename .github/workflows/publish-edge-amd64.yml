@@ -300,3 +300,28 @@ jobs:
           bash scripts/promote-publication-indexes.sh edge \
             "ghcr.io/${NAMESPACE}/remote-dev-base@${BASE_DIGEST}" \
             "ghcr.io/${NAMESPACE}/remote-dev@${REMOTE_DEV_DIGEST}" "$GITHUB_SHA"
+
+      # Only a successful promotion (including registry readback) may produce
+      # this small receipt. The owner must separately accept the runtime digest.
+      - name: Record exact promoted Edge identity
+        env:
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          RUNTIME_DIGEST: ${{ steps.runtime.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for digest in "$BASE_DIGEST" "$RUNTIME_DIGEST"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+          done
+          jq -n --arg source "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg base "$BASE_DIGEST" --arg runtime "$RUNTIME_DIGEST" \
+            '{source_sha:$source,run_id:$run_id,run_attempt:$attempt,base_digest:$base,runtime_digest:$runtime}' \
+            > edge-promotion-receipt.json
+
+      - name: Upload exact promoted Edge identity
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: edge-promotion-receipt-${{ github.run_attempt }}
+          path: edge-promotion-receipt.json
+          if-no-files-found: error
+          retention-days: 90

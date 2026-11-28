@@ -13,7 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/validate-publication-source.sh"
 WORKFLOWS = {
-    "stable": ".github/workflows/publish-amd64.yml",
+    "stable": ".github/workflows/release-stable-amd64.yml",
     "edge": ".github/workflows/publish-edge-amd64.yml",
     "candidate": ".github/workflows/publish-pr-candidate-worker-amd64.yml",
 }

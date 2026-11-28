@@ -14,9 +14,9 @@ El orden permanente de madurez es:
 dev -> edge -> stable = latest
 ```
 
-Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable v0.2.0 se publicó el 5/11/2026, seguida de v0.3.0 el 22/11/2026 (alcance y aceptación en #346). El siguiente corte de código preparado es `0.3.1`, una actualización de mantenimiento y seguridad seguida en #377. Preparar el código **no** publica una imagen ni mueve `stable`/`latest`. Edge conserva su identidad fechada.
+Estos conceptos permanecen separados de la identidad legible del build y de la procedencia inmutable. La primera estable v0.2.0 se publicó el 5/11/2026, seguida de v0.3.0 el 22/11/2026 (alcance y aceptación en #346). La estable v0.3.1 se publicó el 24/11/2026 como actualización de mantenimiento y seguridad seguida en #377. Preparar el código **no** publica una imagen ni mueve `stable`/`latest`. Edge conserva su identidad fechada.
 
-Para cada estable, utiliza el publicador protegido en el tag SemVer exacto revisado que coincida con `versions.env`. Los workflows históricos activados por tags todavía pueden escribir alias estables si no se controlan externamente las rutas obsoletas o sus reejecuciones. Antes de crear un tag de release, verifica las reglas efectivas de creación/modificación/borrado de tags `v*` y todos los escritores GHCR autorizados; no relances publicadores obsoletos. Hasta la publicación autorizada, conserva los últimos índices OCI estables. La promoción no es atómica: un fallo parcial exige inventariar y reconciliar los seis alias. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
+Para nuevas estables, utiliza el workflow Release Stable AMD64 descrito más abajo, lanzado por el propietario con la versión exacta revisada que coincida con `versions.env`. Durante la migración #380 solo permite validar. Los workflows históricos activados por tags todavía pueden escribir alias estables si no se controlan externamente las rutas obsoletas o sus reejecuciones. Antes de crear un tag de release, verifica las reglas efectivas de creación/modificación/borrado de tags `v*` y todos los escritores GHCR autorizados; no relances publicadores obsoletos. Hasta la publicación autorizada, conserva los últimos índices OCI estables. La promoción no es atómica: un fallo parcial exige inventariar y reconciliar los seis alias. Utiliza `edge`/`edge-amd64` solo para pruebas experimentales.
 
 ## Capas de identidad
 
@@ -154,8 +154,80 @@ La fase histórica `0.2.0-beta.1` fue una aceptación local, no una prerelease S
 ## Stable y latest
 
 La publicación estable exige un tag exacto `vMAJOR.MINOR.PATCH` que coincida
-con `versions.env` en el historial de `main`. Edge y Stable pueden compartir
-un SHA de código, pero construyen candidatos distintos con su versión y canal.
+con `versions.env` en el commit actual revisado de `main`. Edge y Stable pueden
+compartir un SHA, pero construyen candidatos distintos con su versión y canal.
+
+### Workflow de release lanzado por el propietario (#380)
+
+**Estado de transición: solo validación.** El nuevo workflow todavía no puede
+crear tags, subir candidatos ni publicar GitHub Releases. Las ejecuciones sin
+dry run fallan explícitamente. No utilices el publicador histórico para sortearlo.
+
+Cuando el workflow esté en `main` de confianza y el corte de release haya
+superado el checklist inferior, utiliza **Actions → Release Stable AMD64 →
+Run workflow**, en la rama `main`:
+
+| Entrada | Valor |
+| --- | --- |
+| `release_tag` | Versión estable exacta, p. ej. `v0.4.0`, igual a `BASE_VERSION` |
+| `release_sha` | SHA completo del commit actual revisado de main (40 caracteres hexadecimales en minúscula) |
+| `accepted_edge_digest` | Digest exacto del **índice** OCI runtime aceptado en TrueNAS, `sha256:…` |
+| `dry_run` | Mantener activado para validar en solo lectura; desactivar únicamente para un corte estable autorizado por separado tras resolver la transición |
+
+El propietario debe registrar la aceptación real del despliegue por separado;
+indicar un digest no demuestra pruebas en TrueNAS. Las últimas ejecuciones
+Build, Edge y CodeQL del SHA exacto de main deben superar todos los jobs
+requeridos. Edge sube un pequeño artefacto `edge-promotion-receipt-<attempt>`
+tras completar la promoción y releer el registro, con el SHA, ejecución/intento
+y digests de los índices base/runtime. Stable contrasta el comprobante con
+el digest runtime aceptado y ambos tags `sha-<full-sha>` del registro. Si no
+hay comprobante, ha caducado, hay una ejecución Edge posterior pendiente o
+fallida, o una reconstrucción cambia el digest aceptado, detenerse; obtener
+evidencia válida nueva y renovar la aceptación si cambia el digest. No
+sustituirlo por el tag mutable `edge` actual.
+
+Dry run utiliza acceso de GitHub en solo lectura e inspección del registro;
+no construye ni publica imágenes, crea referencias o modifica releases.
+Comprueba el ruleset activo conocido, informa de su restricción de creación,
+verifica el ZIP de evidencia Edge por ID de artefacto, metadatos de ejecución
+y SHA-256, y rechaza releases existentes, alias de versión ya publicados,
+versiones anteriores o alias Stable incoherentes antes de escribir tags Git.
+Se exige un lanzamiento nuevo del propietario; se rechazan reejecuciones del
+workflow y SHA de main obsoletos.
+
+La secuencia de escritura prevista (actualmente deshabilitada) es: validación
+en solo lectura; creación y relectura del tag Git ligero exacto en un job
+separado con escritura de contenidos; construcción, análisis y promoción
+protegida de Stable en un job con escritura de paquetes; y un job separado
+de finalización con escritura de contenidos que relee de forma independiente
+los seis alias antes de crear la GitHub Release determinista y verifica
+después la release y su condición latest. No se prevén tokens adicionales
+de larga duración ni una GitHub App propia.
+
+### Control administrativo de transición
+
+Antes de habilitar escrituras o relajar la protección de creación de tags,
+el propietario debe registrar en #380 un inventario revisado de identidades
+y rutas históricas de workflows, disparadores, reejecuciones, jobs activos y
+escritores de ambos paquetes GHCR. El workflow histórico
+`.github/workflows/publish-amd64.yml` (ID 318438492) debe estar deshabilitado
+explícitamente y todas las rutas obsoletas de escritura y ejecuciones activas
+controladas. El nuevo publicador comprueba el estado deshabilitado y las
+ejecuciones no terminadas; es necesario, pero no demuestra todo el inventario.
+Verificar que la identidad del workflow sigue siendo consultable y está
+deshabilitada tras la migración; eliminarlo o renombrarlo en main por sí solo
+no basta. La comprobación del ruleset en ejecución no acredita las excepciones
+administrativas ni los permisos de paquetes GHCR.
+
+Mantener las restricciones actuales hasta revisar esa evidencia y autorizar
+explícitamente la transición administrativa. El modelo previsto con token
+nativo solo relajaría la creación si se cierra el límite histórico; se
+conserva la protección frente a modificación, borrado y non-fast-forward.
+El diseño previsto no necesita actores de bypass nuevos ni tokens más
+amplios. Si no se puede cerrar ese límite, mantener la restricción de creación
+y reevaluar una autorización acotada. Que el conector no pueda consultar un
+endpoint administrativo no constituye una comprobación favorable. No probar
+el control creando tags reales de release ni moviendo alias.
 
 El publicador verifica la identidad y los avisos de los dos manifiestos AMD64.
 El arranque, la autenticación y el aislamiento se prueban sobre el manifiesto
@@ -204,9 +276,7 @@ no es atómica. Un fallo puede dejar actualizado un subconjunto de los seis.
    decidir otro intento.
 
 Consultar la [guía de borrado y restauración de versiones de GitHub](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
-Antes de publicar, verificar la protección de creación, modificación y
-borrado de tags `v*` y el control de reejecuciones históricas.
-Los workflows de tags anteriores a la guarda carecen de ese control.
+Antes de publicar, verificar las reglas efectivas de `v*` y el control administrativo de transición anterior. Los workflows de tags anteriores a la guarda carecen de ese control.
 
 ## Elección de canal por el operador
 
@@ -254,7 +324,8 @@ Antes de crear el primer tag Git de versión estable (o uno posterior), verifica
 1. Construir los candidatos independientes de base y runtime stable; vincular los digests del índice OCI y los manifiestos AMD64 exactos al SHA, versión y canal del código etiquetado; ejecutar smoke de arranque, autenticación y aislamiento sobre ese candidato.
 2. Validar avisos y ambos SPDX, incluida la evidencia suplementaria del paquete/archivos Chromium, y los dos informes Trivy vinculados al candidato con cobertura de paquetes Ubuntu y lenguajes. Rechazar hallazgos `CRITICAL` corregibles.
 3. Ejecutar la guarda de inmutabilidad de tags SemVer y avance monótono de stable; después, promocionar y releer todos los alias de base/runtime. Comprobar que el índice OCI promocionado contiene el manifiesto AMD64 exacto ya probado. Las escrituras registrales no son atómicas: un job fallido puede haber movido algunos alias y exigir reconciliación humana por digest inmutable.
-4. Comprobar la imagen estable resultante en TrueNAS conforme a la aceptación del operador antes de dar la release por completada.
+4. Releer de forma independiente los seis alias, crear la GitHub Release exacta y verificar su identidad y condición latest. Si existe el tag sin release completada o la promoción fue parcial, reconciliar los digests registrados antes de otro intento; no reconstruir, sobrescribir ni relanzar el publicador histórico a ciegas.
+5. Comprobar la imagen estable resultante en TrueNAS conforme a la aceptación del operador antes de dar la release por completada.
 
 El trabajo opcional/futuro #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 no se convierte automáticamente en bloqueo estable salvo que #31 o su issue correspondiente identifique una dependencia concreta para la release.
 

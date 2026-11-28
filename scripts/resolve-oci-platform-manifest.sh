@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 3 )); then
-  echo "Usage: $0 <repository@index-digest> <os> <architecture>" >&2
+if (( $# != 3 && $# != 4 )) || { (( $# == 4 )) && [[ "$4" != --wait-for-push ]]; }; then
+  echo "Usage: $0 <repository@index-digest> <os> <architecture> [--wait-for-push]" >&2
   exit 2
 fi
 
@@ -22,8 +22,29 @@ fail() {
 [[ "$expected_arch" =~ ^[a-z0-9][a-z0-9._-]*$ ]] \
   || fail "invalid architecture selector"
 
-raw_index="$(docker buildx imagetools inspect "$index_ref" --raw)" \
-  || fail "could not inspect OCI index $index_ref"
+if [[ "${4:-}" == --wait-for-push ]]; then
+  # Only a just-pushed immutable index may use this bounded visibility wait.
+  # Do not retry authentication, mixed/unknown errors, timeouts or validation.
+  error_file="$(mktemp)"
+  trap 'rm -f -- "$error_file"' EXIT
+  delays=(2 4 8)
+  for (( attempt=0; ; attempt++ )); do
+    if raw_index="$(timeout --kill-after=5s 30s docker buildx imagetools inspect "$index_ref" --raw 2>"$error_file")"; then
+      break
+    else
+      status=$?
+    fi
+    error="$(cat "$error_file")"
+    if [[ "$status" != 1 || -n "$raw_index" || "$error" != "ERROR: $index_ref: not found" ]] || (( attempt >= ${#delays[@]} )); then
+      fail "could not inspect newly pushed OCI index $index_ref"
+    fi
+    echo "Waiting ${delays[attempt]}s for visibility of immutable OCI index $index_ref" >&2
+    sleep "${delays[attempt]}"
+  done
+else
+  raw_index="$(docker buildx imagetools inspect "$index_ref" --raw)" \
+    || fail "could not inspect OCI index $index_ref"
+fi
 
 media_type="$(jq -r '.mediaType // empty' <<<"$raw_index")" \
   || fail "could not parse OCI index media type"

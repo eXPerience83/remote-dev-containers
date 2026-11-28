@@ -143,6 +143,8 @@ jobs:
           python3 scripts/test_guard_stable_promotion.py
           python3 scripts/test_trivy_image_report.py
           python3 scripts/test_runtime_publication_probes.py
+          python3 scripts/test_new_oci_index_visibility.py
+          python3 -O scripts/test_stable_release_policy.py
           python3 scripts/test_promote_publication_indexes.py
           python3 scripts/update-third-party-inventory.py --check
           python3 scripts/compact-python-runtime-notices.py --check
@@ -199,7 +201,7 @@ jobs:
             -shellcheck= -pyflakes= \
             /review/.github/workflows/build-amd64.yml \
             /review/.github/workflows/publish-edge-amd64.yml \
-            /review/.github/workflows/publish-amd64.yml
+            /review/.github/workflows/release-stable-amd64.yml
 
       - name: Measure PR2 before/after image delta
         if: github.event_name == 'workflow_dispatch' && inputs.compare_images == true
