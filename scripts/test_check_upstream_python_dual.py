@@ -25,7 +25,10 @@ REQUIRED_ONCE = (
     'replace_mise_tool node "$latest_node"',
     'replace_mise_tool uv "$latest_uv"',
     'git commit -m "chore: update upstream versions and review evidence"',
-    'git push --force-with-lease -u origin "$branch"',
+    'git push --force-with-lease="refs/heads/$branch:$expected_head" -u origin "HEAD:refs/heads/$branch"',
+    'git merge-base --is-ancestor "$base_sha" "$expected_head"',
+    'verify_remote_refs "$expected_head"',
+    'verify_remote_refs "$branch_head"',
     'gh pr create \\',
     'gh pr edit "$existing_pr" \\',
     'python3 scripts/sync-python-cli-notices.py --write',
@@ -209,6 +212,89 @@ def simulate_post_update_pin_fixture(body: str, root: Path) -> None:
     simulate_version_updates(body, root, fixture_content=fixture)
 
 
+
+def simulate_publication(body: str) -> None:
+    """Exercise the actual publication guards against disposable Git refs."""
+    verify_start = body.index("verify_remote_refs() {")
+    verify_end = body.index("if git diff --cached --quiet; then", verify_start)
+    push_start = body.index('if [[ -n "$expected_head" ]] &&', verify_end)
+    push_end = body.index('branch_head="$(git rev-parse HEAD)"', push_start)
+    guard_start = body.index('bot_email="41898282+github-actions[bot]')
+    guard_end = body.index('git show "$remote_ref:', guard_start)
+    ownership = body[guard_start:guard_end]
+    script = "set -euo pipefail\n" + ownership + "\n" + body[verify_start:verify_end] + body[push_start:push_end]
+    bot = "41898282+github-actions[bot]@users.noreply.github.com"
+    branch = "automation/update-upstreams"
+    for scenario in ("current", "stale", "changed", "create", "main-race", "branch-race", "manual", "evidence"):
+        with tempfile.TemporaryDirectory(prefix="upstream-publication-") as tmp:
+            root = Path(tmp)
+            remote = root / "remote.git"
+            checkout = root / "checkout"
+            subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+            subprocess.run(["git", "init", "-b", "main", str(checkout)], check=True, capture_output=True)
+
+            def git(*args: str) -> str:
+                return subprocess.run(
+                    ["git", *args], cwd=checkout, check=True, text=True, capture_output=True
+                ).stdout.strip()
+
+            git("config", "user.name", "github-actions[bot]")
+            git("config", "user.email", bot)
+            git("remote", "add", "origin", str(remote))
+            git("commit", "--allow-empty", "-m", "base")
+            initial = git("rev-parse", "HEAD")
+            git("push", "origin", "main")
+            git("checkout", "-b", branch)
+            (checkout / "versions.env").write_text("new\n", encoding="utf-8")
+            git("add", "versions.env")
+            git("commit", "-m", "chore: update upstream versions and review evidence")
+            if scenario == "manual":
+                git("-c", "user.email=human@example.invalid", "commit", "--allow-empty", "-m", "manual edit")
+            if scenario == "evidence":
+                git("commit", "--allow-empty", "-m", "chore: refresh Antigravity reviewed evidence")
+            old_head = git("rev-parse", "HEAD")
+            if scenario != "create":
+                git("push", "origin", branch)
+            git("checkout", "main")
+            if scenario == "stale":
+                git("commit", "--allow-empty", "-m", "main advances")
+                git("push", "origin", "main")
+            base = git("rev-parse", "HEAD")
+            git("checkout", "-B", branch)
+            (checkout / "versions.env").write_text(
+                "different\n" if scenario == "changed" else "new\n", encoding="utf-8"
+            )
+            git("add", "versions.env")
+            git("commit", "-m", "chore: update upstream versions and review evidence")
+            candidate = git("rev-parse", "HEAD")
+            expected = "" if scenario == "create" else old_head
+            if scenario == "main-race":
+                git("push", "origin", f"{candidate}:refs/heads/main")
+            if scenario == "branch-race":
+                git("push", "--force", "origin", f"{initial}:refs/heads/{branch}")
+            # Creation has no previous commit; the workflow skips ownership checks.
+            active_script = script if expected else "set -euo pipefail\n" + body[verify_start:verify_end] + body[push_start:push_end]
+            setup = (
+                f'base_sha="{base}"\nexpected_head="{expected}"\n'
+                f'branch="{branch}"\n'
+            )
+            result = subprocess.run(
+                ["bash", "-c", setup + active_script], cwd=checkout, text=True,
+                capture_output=True, check=False, timeout=20,
+            )
+            remote_ref = git("ls-remote", "origin", f"refs/heads/{branch}")
+            actual = remote_ref.split()[0] if remote_ref else ""
+            if scenario in ("manual", "main-race", "branch-race"):
+                if result.returncode == 0 or actual != (initial if scenario == "branch-race" else old_head):
+                    raise AssertionError(f"unsafe publication accepted: {scenario}: {result.stderr}")
+            else:
+                wanted = old_head if scenario in ("current", "evidence") else candidate
+                if result.returncode or actual != wanted:
+                    raise AssertionError(f"publication failed: {scenario}: {result.stderr}")
+                if git("merge-base", base, actual) != base:
+                    raise AssertionError(f"published head is behind main: {scenario}")
+
+
 def expect_rejection(body: str) -> None:
     try:
         validate_step(body)
@@ -225,6 +311,7 @@ def main() -> int:
     validate_step(body)
     simulate_version_updates(body, root)
     simulate_post_update_pin_fixture(body, root)
+    simulate_publication(body)
     expect_rejection(body.replace(GUARD, GUARD.replace("' mise.toml; then", ""), 1))
     expect_rejection(body + '\ngit commit -m "chore: update upstream versions and review evidence"\n')
     expect_rejection(body.replace('replace_env PYTHON_315_VERSION "$latest_python_315"', "# removed 3.15 update", 1))

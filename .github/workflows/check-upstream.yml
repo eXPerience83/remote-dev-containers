@@ -197,6 +197,7 @@ jobs:
           PLAYWRIGHT_ARM64: ${{ runner.temp }}/playwright-discovery/arm64.json
         run: |
           set -euo pipefail
+          base_sha="$(git rev-parse HEAD)"
           python3 scripts/test_update_upstream_changelog.py
           python3 scripts/test_update_context7_review.py
           python3 scripts/test_reconcile_antigravity_review_state.py
@@ -454,6 +455,7 @@ jobs:
             --jq '.[0].number // empty')"
 
           remote_ref="refs/remotes/origin/$branch"
+          expected_head=""
           set +e
           git ls-remote --exit-code --heads origin "$branch" >/dev/null
           remote_status=$?
@@ -461,6 +463,19 @@ jobs:
           case "$remote_status" in
             0)
               git fetch origin "refs/heads/$branch:$remote_ref"
+              expected_head="$(git rev-parse "$remote_ref")"
+              # Both updater and Antigravity review may write this branch.
+              bot_email="41898282+github-actions[bot]@users.noreply.github.com"
+              branch_commits="$(git log --format='%ae %ce %s' "$base_sha..$expected_head")"
+              if [[ -n "$branch_commits" ]]; then
+                while IFS= read -r commit; do
+                  case "$commit" in
+                    "$bot_email $bot_email chore: update upstream versions and review evidence"|\
+                    "$bot_email $bot_email chore: refresh Antigravity reviewed evidence") ;;
+                    *) echo "ERROR: unexpected automation branch commit; reconcile manually" >&2; exit 1 ;;
+                  esac
+                done <<< "$branch_commits"
+              fi
               git show "$remote_ref:third_party/antigravity-cli-inspection.json" \
                 > "$workdir/proposed-antigravity-reviewed.json" 2>/dev/null || true
               git show "$remote_ref:third_party/antigravity-cli-candidate.json" \
@@ -663,6 +678,17 @@ jobs:
           else
             git add -u third_party/antigravity-cli-candidate.json 2>/dev/null || true
           fi
+          verify_remote_refs() {
+            local expected="$1" refs observed_main observed_head
+            refs="$(git ls-remote origin refs/heads/main "refs/heads/$branch")"
+            observed_main="$(awk '$2 == "refs/heads/main" {print $1}' <<< "$refs")"
+            observed_head="$(awk -v ref="refs/heads/$branch" '$2 == ref {print $1}' <<< "$refs")"
+            [[ "$observed_main" == "$base_sha" && "$observed_head" == "$expected" ]] || {
+              echo "ERROR: main or automation branch moved; rerun upstream maintenance" >&2
+              exit 1
+            }
+          }
+          verify_remote_refs "$expected_head"
           if git diff --cached --quiet; then
             echo "No upstream release, digest, runtime artifact, review metadata, changelog, inventory, notice or standalone-inspection changes."
             if [[ -n "$existing_pr" ]]; then
@@ -674,12 +700,13 @@ jobs:
 
           git commit -m "chore: update upstream versions and review evidence"
 
-          if git rev-parse --verify "$remote_ref" >/dev/null 2>&1 &&
-             [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$remote_ref^{tree}")" ]]; then
-            echo "The automation branch already contains the desired update."
-            git reset --hard "$remote_ref"
+          if [[ -n "$expected_head" ]] &&
+             git merge-base --is-ancestor "$base_sha" "$expected_head" &&
+             [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "$expected_head^{tree}")" ]]; then
+            echo "The automation branch already contains the desired update on current main."
+            git reset --hard "$expected_head"
           else
-            git push --force-with-lease -u origin "$branch"
+            git push --force-with-lease="refs/heads/$branch:$expected_head" -u origin "HEAD:refs/heads/$branch"
           fi
 
           branch_head="$(git rev-parse HEAD)"
@@ -719,6 +746,7 @@ jobs:
               --head "$branch"
           fi
 
+          verify_remote_refs "$branch_head"
           # GitHub deliberately gates pull_request workflows created by GITHUB_TOKEN.
           # workflow_dispatch is an explicit exception, so dispatch the required build
           # against the exact automation branch without introducing a PAT or app secret.
