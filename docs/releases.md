@@ -14,9 +14,9 @@ The permanent maturity order is:
 dev -> edge -> stable = latest
 ```
 
-These concepts stay separate from human-readable build identity and immutable provenance. Stable v0.2.0 was first published on 2026-11-05, followed by v0.3.0 on 2026-11-22 (accepted scope and evidence: #346). The next prepared source cut is `0.3.1`, a maintenance/security patch tracked in #377. Source preparation alone does **not** publish an image or move `stable`/`latest`. Edge retains its dated build identity.
+These concepts stay separate from human-readable build identity and immutable provenance. Stable v0.2.0 was first published on 2026-11-05, followed by v0.3.0 on 2026-11-22 (accepted scope and evidence: #346). Stable v0.3.1 was published on 2026-11-24 as the maintenance/security patch tracked in #377. Source preparation alone does **not** publish an image or move `stable`/`latest`. Edge retains its dated build identity.
 
-For every stable release, use the guarded publisher at the exact reviewed SemVer tag matching `versions.env`. Historical tag-triggered workflows may still write stable aliases if obsolete publication paths or reruns are not controlled externally. Before creating a release tag, verify the effective `v*` tag creation/update/deletion rules and every authorized GHCR writer; do not rerun obsolete publishers. Until authorized publication, preserve the last stable OCI indexes. Promotion is non-atomic: a partial failure requires inventory and reconciliation of all six aliases. Use `edge`/`edge-amd64` only for experimental testing.
+For new stable releases, use the owner-dispatched Release Stable AMD64 workflow described below, with the exact reviewed version matching `versions.env`. During the #380 migration it is validation-only. Historical tag-triggered workflows may still write stable aliases if obsolete publication paths or reruns are not controlled externally. Before creating a release tag, verify the effective `v*` tag creation/update/deletion rules and every authorized GHCR writer; do not rerun obsolete publishers. Until authorized publication, preserve the last stable OCI indexes. Promotion is non-atomic: a partial failure requires inventory and reconciliation of all six aliases. Use `edge`/`edge-amd64` only for experimental testing.
 
 ## Identity layers
 
@@ -154,8 +154,67 @@ The historical source `0.2.0-beta.1` was an acceptance phase, not a GitHub SemVe
 ## Stable and latest
 
 Stable publication requires an exact `vMAJOR.MINOR.PATCH` tag matching
-`versions.env` on a commit in `main` history. Edge and Stable can share a source
+`versions.env` at the exact reviewed current `main` commit. Edge and Stable can share a source
 SHA, but they build separate candidates with their own version and channel.
+
+### Owner-dispatched release workflow (#380)
+
+**Transition status: validation-only.** The new workflow cannot yet create tags,
+push candidates or publish GitHub Releases. Non-dry-run dispatches fail explicitly.
+Do not use the historical tag publisher as a workaround.
+
+Once the workflow is on trusted `main` and the release cut has passed the
+checklist below, use **Actions → Release Stable AMD64 → Run workflow**, on
+the `main` branch:
+
+| Input | Value |
+| --- | --- |
+| `release_tag` | Exact stable version, e.g. `v0.4.0`, matching `BASE_VERSION` |
+| `release_sha` | Full reviewed current main commit SHA (40 lowercase hexadecimal characters) |
+| `accepted_edge_digest` | Exact OCI runtime **index** digest accepted on TrueNAS, `sha256:…` |
+| `dry_run` | Keep enabled for read-only validation; disable only for a separately authorized stable cut after the transition gate is cleared |
+
+The owner must record genuine deployment acceptance separately; a supplied
+digest does not prove TrueNAS testing. The latest successful exact-main Build,
+Edge and CodeQL runs must pass all required jobs. Edge uploads a small
+`edge-promotion-receipt-<attempt>` artifact after successful promotion and
+registry readback, containing the exact source, run/attempt and base/runtime
+index digests. Stable checks the receipt against the accepted runtime digest and
+both `sha-<full-sha>` registry tags. If Edge has no receipt, the receipt has
+expired, a later Edge run is pending/failed, or a rebuild changes the accepted
+digest, stop; obtain fresh valid evidence and renewed acceptance when the
+digest changes. Do not substitute the current mutable `edge` tag.
+
+Dry run uses read-only GitHub access and registry inspection; it does not build
+or publish images, create refs or edit releases. A fresh owner dispatch is
+required; workflow reruns and stale main SHAs are rejected.
+
+The intended write sequence (currently disabled) is: read-only validation;
+exact lightweight Git tag creation/readback in a separate contents-write job;
+independent Stable image build, scan and guarded promotion in a packages-write
+job; then a separate contents-write finalization job that independently reads
+all six aliases before creating the deterministic GitHub Release and verifies
+the release and latest designation afterward. No additional long-lived token
+or GitHub App is intended.
+
+### Administrative transition gate
+
+Before enabling writes or relaxing tag creation protection, the owner must
+record a reviewed inventory of historical workflow identities/paths, triggers,
+reruns, active jobs and both GHCR packages' writers in #380. The legacy
+`.github/workflows/publish-amd64.yml` (workflow ID 318438492) must be explicitly
+disabled and all obsolete write paths/in-flight runs controlled. The new
+publisher's retirement check is necessary, not proof of the whole inventory.
+Removing or renaming a workflow in current main alone is insufficient.
+
+Keep the existing tag restrictions in force until that evidence is reviewed
+and an explicit administrative transition is authorized. The intended native
+token model would relax only creation if the historical boundary is closed;
+update/deletion/non-fast-forward protection remains. No new bypass actor or
+broader token is needed by the intended design. If that boundary cannot be
+closed, retain creation restriction and revisit narrowly scoped authorization.
+The connector's inability to inspect an administrative endpoint is not a pass.
+Never test the gate by creating a real release tag or by moving an alias.
 
 The publisher verifies identity and notices on both exact AMD64 child
 manifests. Startup, authentication and isolation run on the Runtime child.
@@ -204,9 +263,7 @@ leave a subset of the six aliases updated.
    another attempt.
 
 See GitHub's [package-version deletion and restoration guidance](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package).
-Before a new release, administrators must verify protection for creation,
-modification and deletion of `v*` tags and control their historical reruns.
-Older tag workflows predate the guard.
+Before a new release, administrators must verify the effective `v*` rules and the administrative transition gate above. Older tag workflows predate the guard.
 
 ## Operator channel choices
 
@@ -254,7 +311,8 @@ Before creating the first or any later **Git stable-version tag**, verify on one
 1. Build the separate stable base and runtime candidates and bind the index and exact runnable AMD64 manifest digests to the tagged source SHA, channel and version; run startup, authentication and isolation smoke tests on that candidate.
 2. Verify notices and both SPDX documents, including supplemental Chromium package/file provenance, and validate both candidate-bound Trivy image reports with Ubuntu and language-package scan coverage. Reject fixable `CRITICAL` findings.
 3. Run the immutable SemVer tag/monotonic-stable promotion guard, then promote and read back all base/runtime registry aliases. Verify that the promoted OCI index contains the exact tested AMD64 child. Registry updates are non-atomic: a failed job can have moved some aliases, requiring human reconciliation by immutable digest.
-4. Test the resulting stable image on TrueNAS under the operator's acceptance plan before declaring the release complete.
+4. Independently reread all six aliases, create the exact GitHub Release and verify its identity and latest designation. If a tag exists without a completed release or promotion was partial, reconcile the recorded digests before a new attempt; never blindly rebuild, overwrite or rerun the historical publisher.
+5. Test the resulting stable image on TrueNAS under the operator's acceptance plan before declaring the release complete.
 
 Optional/future #181/#170/#124/#95/#159/#71/#112/#121/#148/#151 work is not automatically a stable blocker unless #31 or the corresponding issue identifies a concrete dependency for the release claim.
 
